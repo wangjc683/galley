@@ -44,10 +44,18 @@
 //!   replay form ([`replay_lines`]) as its `summary`, announced as
 //!   `user-message-persisted`, dispatched on the shared runner path
 //!   (segments included) as Core's send does. The page hides the row.
+//!   The reports it carried are in flight until the turn it started ends
+//!   ([`record_wake_run_end`], main chat PRD ruling 178).
 //! - **Not delivered**: when the runner does not start or does not take
 //!   the message, the reports stay and are tried again on the main
 //!   chat's next run signal or the next report; the desktop is told once
-//!   per report, and falls back to the subtask's own notification.
+//!   per report, and falls back to the subtask's own notification. When
+//!   the turn a wake started ends on an error before a reply
+//!   (`DONE_WITHOUT_EXIT`, its runner exiting), the subtasks' reports it
+//!   carried did not reach the assistant either: the desktop is told the
+//!   same way, once per report, and they are not tried again (ruling 178;
+//!   a retry waits in `docs/devlog/deferred.md`). Any other end of that
+//!   turn delivered them.
 //! - **Silent replies**: when the assistant only sent the subtask back or
 //!   answered for the user, its reply is `<no-reply/>`, which the turn
 //!   derivation strips (`turn_persistence::derive`); the raw reply keeps
@@ -1109,9 +1117,11 @@ struct State {
     waiting: HashMap<String, Vec<Waiting>>,
     /// Keys reported in this process.
     seen: HashSet<String>,
-    /// Per main chat, the due tasks a delivered wake carried, until the
-    /// turn it started ends ([`record_wake_run_end`]).
-    in_flight: HashMap<String, Vec<SubtaskReport>>,
+    /// Per main chat, the reports a delivered wake carried — due tasks and
+    /// subtasks' alike, each with whether the desktop was told before that
+    /// it could not be delivered — until the turn it started ends
+    /// ([`record_wake_run_end`]).
+    in_flight: HashMap<String, Vec<Waiting>>,
 }
 
 /// The reports waiting for their main chat, in memory. One per process,
@@ -1187,7 +1197,7 @@ impl SubtaskReports {
         due.into_iter().map(|w| w.report).collect()
     }
 
-    fn set_in_flight(&self, main_chat_id: &str, reports: Vec<SubtaskReport>) {
+    fn set_in_flight(&self, main_chat_id: &str, reports: Vec<Waiting>) {
         let mut state = self.lock();
         if reports.is_empty() {
             state.in_flight.remove(main_chat_id);
@@ -1196,19 +1206,19 @@ impl SubtaskReports {
         }
     }
 
-    fn take_in_flight(&self, main_chat_id: &str) -> Vec<SubtaskReport> {
+    fn take_in_flight(&self, main_chat_id: &str) -> Vec<Waiting> {
         self.lock()
             .in_flight
             .remove(main_chat_id)
             .unwrap_or_default()
     }
 
-    /// The due tasks a delivered wake carried whose turn has not ended.
+    /// The reports a delivered wake carried whose turn has not ended.
     pub fn in_flight(&self, main_chat_id: &str) -> Vec<SubtaskReport> {
         self.lock()
             .in_flight
             .get(main_chat_id)
-            .cloned()
+            .map(|list| list.iter().map(|w| w.report.clone()).collect())
             .unwrap_or_default()
     }
 
@@ -1403,7 +1413,7 @@ pub async fn take_due(
 /// again, then ensure the main chat's runner, write the message and
 /// dispatch it. Every way out but delivery releases the gate; a failure
 /// keeps the reports for the next try and tells the desktop, except due
-/// tasks, which are consumed and handed to a notification. Due tasks
+/// tasks, which are consumed and handed to a notification. The reports
 /// that went out wait for the turn they start ([`record_wake_run_end`]).
 pub async fn deliver(reports: &SubtaskReports, host: &RunnerHost<'_>, job: WakeJob) -> WakeOutcome {
     let WakeJob {
@@ -1428,11 +1438,6 @@ pub async fn deliver(reports: &SubtaskReports, host: &RunnerHost<'_>, job: WakeJ
                 .clone()
                 .or_else(|| r.due().map(|d| d.task_id.clone()))
         })
-        .collect();
-    let due_tasks: Vec<SubtaskReport> = carried
-        .iter()
-        .filter(|r| r.due().is_some())
-        .cloned()
         .collect();
     let text = report_text(&carried);
 
@@ -1471,7 +1476,7 @@ pub async fn deliver(reports: &SubtaskReports, host: &RunnerHost<'_>, job: WakeJ
     };
     announce_message(host, &main, &message, "pending");
     // Before the dispatch, so the turn's end cannot outrun it.
-    reports.set_in_flight(&main, due_tasks);
+    reports.set_in_flight(&main, due.clone());
     let dispatched = host
         .runner
         .send_command(
@@ -1772,12 +1777,15 @@ async fn drop_review_wake(
 }
 
 /// The drain task's hook for a run signal of the main chat, before the
-/// queue step: when a delivered wake carried due tasks, the turn it
-/// started has ended. A turn that ended on an error or lost its runner
-/// before replying did not deliver them — they are handed to a
-/// notification, with the error the runner reported when there is one;
-/// any other end delivered them (a `<no-reply/>`, a stop by the user
-/// included).
+/// queue step: when a delivered wake carried reports, the turn it started
+/// has ended. A turn that ended on an error or lost its runner before
+/// replying did not deliver them: due tasks are handed to a notification,
+/// with the error the runner reported when there is one, and the desktop
+/// is told the subtasks' reports could not be delivered, once per report,
+/// so it falls back to the subtasks' own notifications; they are not
+/// tried again (main chat PRD ruling 178). Any other end delivered them
+/// (a `<no-reply/>`, a stop by the user included): due tasks are settled,
+/// subtasks' reports are done with.
 pub async fn record_wake_run_end(
     reports: &SubtaskReports,
     galley: &SqliteGalley,
@@ -1792,6 +1800,9 @@ pub async fn record_wake_run_end(
     if carried.is_empty() {
         return;
     }
+    let (due_tasks, mut subtasks): (Vec<Waiting>, Vec<Waiting>) =
+        carried.into_iter().partition(|w| w.report.due().is_some());
+    let due_tasks: Vec<SubtaskReport> = due_tasks.into_iter().map(|w| w.report).collect();
     let state = runner.run_state(session_id).await;
     if matches!(
         run_end(signal, &state),
@@ -1801,14 +1812,21 @@ pub async fn record_wake_run_end(
         return_due_tasks(
             galley,
             notifier,
-            carried,
+            due_tasks,
             ReminderUndeliveredReason::NoReply,
             error.as_deref(),
         )
         .await;
+        // As when the runner does not take the message: told once per
+        // report (one already told while waiting is not told again), and
+        // a tag that started no session has no subtask to name.
+        announce_undelivered(notifier, session_id, mark_announced(&mut subtasks));
         return;
     }
-    for report in &carried {
+    if due_tasks.is_empty() {
+        return;
+    }
+    for report in &due_tasks {
         let Some(due) = report.due() else {
             continue;
         };

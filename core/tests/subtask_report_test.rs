@@ -13,6 +13,11 @@
 //!   the report row and dispatched on the shared runner path;
 //! - a wake that cannot be delivered keeps its reports, tells the desktop
 //!   once, and goes out on the next try;
+//! - a wake whose turn ends on an error before a reply, or loses its
+//!   runner, tells the desktop its subtasks' reports were not delivered,
+//!   once per report, hands its reminders to a notification as before,
+//!   and tries nothing again; any other end of that turn delivered them
+//!   (main chat ticket 129);
 //! - send-backs: counted from the rows, an answer not counted, announced
 //!   on the assistant's send;
 //! - the main chat's replayed history (and the turns a new segment
@@ -25,10 +30,14 @@
 //! `turn_persistence::derive` and the shared golden fixtures.
 
 use async_trait::async_trait;
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{Duration as ChronoDuration, Local, Utc};
+use galley_core_lib::api::schedule::{
+    instant_to_utc_iso, CreateScheduledTaskInput, ScheduleTarget, ScheduledTaskRepeat,
+    ScheduledWake, SCHEDULED_REMINDER_UNDELIVERED_EVENT, SCHEDULED_TASKS_CHANGED_EVENT,
+};
 use galley_core_lib::api::{
-    CreateSessionInput, GalleyApi, MessageVisibility, Origin, RuntimeKind, SearchScope, SessionId,
-    SubtaskDispatch, SubtaskFailure, ASSISTANT_SUPERVISOR, SUBTASK_DISPATCHED_EVENT,
+    CreateSessionInput, GalleyApi, MessageVisibility, Origin, OriginVia, RuntimeKind, SearchScope,
+    SessionId, SubtaskDispatch, SubtaskFailure, ASSISTANT_SUPERVISOR, SUBTASK_DISPATCHED_EVENT,
     SUBTASK_REPORT_SUPERVISOR, SUBTASK_REPORT_UNDELIVERED_EVENT,
 };
 use galley_core_lib::db::{MainChatSeed, PersistAssistantMessage, RenameTitleSource, SqliteGalley};
@@ -38,12 +47,13 @@ use galley_core_lib::runner_manager::{
     is_side_question, BroadcastItem, HeldClose, QueueOffer, ReadySnapshot, RunSignal, RunState,
     RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
 };
+use galley_core_lib::scheduler::{due_at, fire_reminder};
 use galley_core_lib::session_runner::{RunnerHost, SpawnEnv};
 use galley_core_lib::socket_listener::RunnerPort;
 use galley_core_lib::subtask::announce_send_back;
 use galley_core_lib::subtask_report::{
-    deliver, record_not_started, record_run_end, take_due, wake_if_due, ReportOutcome,
-    SubtaskReports, WakeOutcome,
+    deliver, record_not_started, record_run_end, record_wake_run_end, restore_pending_reminders,
+    take_due, wake_if_due, ReportOutcome, SubtaskReports, WakeOutcome,
 };
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
@@ -1119,6 +1129,288 @@ async fn a_wake_that_cannot_be_delivered_is_kept_said_once_and_sent_next_time() 
     ));
     assert_eq!(runner.user_messages(MAIN).len(), 1);
     assert!(reports.waiting(MAIN).is_empty());
+}
+
+// ---------------- a wake whose turn fails (ticket 129) ----------------
+
+/// The record of tag `ordinal` of the main chat's turn 3 that started
+/// nothing (no session) or whose session's runner did not start.
+fn not_started(ordinal: i64, session_id: Option<&str>, failure: SubtaskFailure) -> SubtaskDispatch {
+    SubtaskDispatch {
+        parent_session_id: MAIN.into(),
+        turn_index: 3,
+        ordinal,
+        message_id: SubtaskDispatch::reply_message_id(MAIN, 3),
+        session_id: session_id.map(str::to_string),
+        title: "查报价".into(),
+        failure: Some(failure),
+        failure_detail: None,
+        created_at: "t".into(),
+        send_backs: 0,
+    }
+}
+
+/// A one-off reminder the assistant set that went off a minute ago, read
+/// into `reports` as the scheduler's tick does.
+async fn due_reminder(
+    pool: &SqlitePool,
+    galley: &SqliteGalley,
+    reports: &SubtaskReports,
+    id: &str,
+    prompt: &str,
+) {
+    let origin = Origin {
+        via: OriginVia::Supervisor,
+        supervisor: Some(ASSISTANT_SUPERVISOR.into()),
+        reason: Some("reminder".into()),
+        client: None,
+    };
+    galley
+        .create_scheduled_task(
+            CreateScheduledTaskInput {
+                id: id.into(),
+                project_id: None,
+                prompt: prompt.into(),
+                repeat: ScheduledTaskRepeat::Once,
+                time_of_day: String::new(),
+                llm_name: None,
+                enabled: true,
+                fire_at: Some(instant_to_utc_iso(
+                    &(Utc::now() + ChronoDuration::minutes(10)),
+                )),
+                target: ScheduleTarget::Assistant,
+            },
+            origin,
+        )
+        .await
+        .expect("reminder");
+    // Its time came a minute ago (a time in the past is refused when set).
+    sqlx::query("UPDATE scheduled_tasks SET fire_at = ? WHERE id = ?")
+        .bind(instant_to_utc_iso(
+            &(Utc::now() - ChronoDuration::minutes(1)),
+        ))
+        .bind(id)
+        .execute(pool)
+        .await
+        .expect("move fire_at");
+    let task = galley.scheduled_task(id).await.expect("task");
+    let now = Local::now();
+    let at = due_at(&task, &Local, &now).expect("due");
+    assert!(fire_reminder(galley, &Recorder::default(), &task, &at, &now).await);
+    assert_eq!(
+        restore_pending_reminders(reports, galley).await.as_deref(),
+        Some(MAIN)
+    );
+}
+
+async fn wake_state(galley: &SqliteGalley, id: &str) -> Option<ScheduledWake> {
+    galley.scheduled_task(id).await.expect("task").last_wake
+}
+
+/// How the turn a wake started ends.
+#[derive(Debug, Clone, Copy)]
+enum WakeTurn {
+    Replied,
+    /// `<no-reply/>`: the assistant only acted, as the run gate sees it a
+    /// turn that ended as any other.
+    Silent,
+    /// The user stopped it.
+    Stopped,
+    /// The model errored: the engine's task ended without an exit.
+    Errored,
+    /// Its runner exited mid-turn.
+    RunnerExited,
+}
+
+/// A wake carrying one report of each kind — a subtask that finished, a
+/// tag that started nothing, a subtask whose runner did not start, a due
+/// reminder — whose turn then ends as `end`, through the drain task's
+/// hook and the queue step.
+async fn a_wake_whose_turn_ends(end: WakeTurn) -> (SqliteGalley, Runner, Arc<Recorder>) {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    finished_subtask(&galley, &runner, "s-sub", "把 PDF 分类", "分好了").await;
+    drain(&reports, &galley, &runner, complete("s-sub")).await;
+    subtask(&galley, "s-dead", "查报价").await;
+    record_not_started(
+        &reports,
+        &[
+            not_started(0, None, SubtaskFailure::Empty),
+            not_started(1, Some("s-dead"), SubtaskFailure::StartFailed),
+        ],
+    );
+    due_reminder(&pool, &galley, &reports, "sched_water", "提醒用户喝水").await;
+    assert_eq!(reports.waiting(MAIN).len(), 4);
+
+    let host = host(&galley, &runner, &env, rec.clone());
+    let Some(WakeOutcome::Delivered {
+        reports: carried, ..
+    }) = wake_if_due(&reports, &host, MAIN).await
+    else {
+        panic!("not delivered");
+    };
+    assert_eq!(carried.len(), 4);
+    // All of them wait for the turn, not only the reminder.
+    assert_eq!(reports.in_flight(MAIN), carried);
+    let signal = match end {
+        WakeTurn::Replied => {
+            runner.run_ended(MAIN, "CURRENT_TASK_DONE", false);
+            complete(MAIN)
+        }
+        WakeTurn::Silent => {
+            let turn = last_user_turn(&galley, MAIN).await;
+            step(&galley, MAIN, turn, Some("<no-reply/>"), None, json!([])).await;
+            runner.run_ended(MAIN, "CURRENT_TASK_DONE", false);
+            complete(MAIN)
+        }
+        WakeTurn::Stopped => {
+            runner.run_ended(MAIN, "ABORTED", false);
+            complete(MAIN)
+        }
+        WakeTurn::Errored => {
+            runner.run_ended(MAIN, "DONE_WITHOUT_EXIT", false);
+            complete(MAIN)
+        }
+        // The wake's run is still open when its runner goes.
+        WakeTurn::RunnerExited => RunSignal::Closed {
+            session_id: MAIN.into(),
+        },
+    };
+    record_wake_run_end(&reports, &galley, &runner, rec.as_ref(), &signal).await;
+    runner.settle(MAIN);
+    // Whatever the end, nothing is in flight or tried again.
+    assert!(reports.in_flight(MAIN).is_empty());
+    assert!(reports.waiting(MAIN).is_empty());
+    assert!(wake_if_due(&reports, &host, MAIN).await.is_none());
+    assert_eq!(runner.user_messages(MAIN).len(), 1);
+    drop(host);
+    (galley, runner, rec)
+}
+
+#[tokio::test]
+async fn a_wake_whose_turn_errors_says_its_subtask_reports_were_not_delivered() {
+    for end in [WakeTurn::Errored, WakeTurn::RunnerExited] {
+        let (galley, _runner, rec) = a_wake_whose_turn_ends(end).await;
+        // Each subtask named once; the tag that started no session has no
+        // subtask to name (the desktop finds a record by its session).
+        assert_eq!(
+            rec.named(SUBTASK_REPORT_UNDELIVERED_EVENT),
+            vec![json!({"mainChatId": MAIN, "subtaskIds": ["s-sub", "s-dead"]})],
+            "{end:?}"
+        );
+        // The reminder is handed to a notification, as before.
+        assert_eq!(
+            rec.named(SCHEDULED_REMINDER_UNDELIVERED_EVENT),
+            vec![json!({"taskId": "sched_water", "prompt": "提醒用户喝水", "reason": "no_reply"})],
+            "{end:?}"
+        );
+        assert_eq!(
+            wake_state(&galley, "sched_water").await,
+            Some(ScheduledWake::Notified),
+            "{end:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_wake_whose_turn_ends_otherwise_delivered_its_reports() {
+    for end in [WakeTurn::Replied, WakeTurn::Silent, WakeTurn::Stopped] {
+        let (galley, _runner, rec) = a_wake_whose_turn_ends(end).await;
+        assert!(
+            rec.named(SUBTASK_REPORT_UNDELIVERED_EVENT).is_empty(),
+            "{end:?}"
+        );
+        assert!(
+            rec.named(SCHEDULED_REMINDER_UNDELIVERED_EVENT).is_empty(),
+            "{end:?}"
+        );
+        assert_eq!(
+            wake_state(&galley, "sched_water").await,
+            Some(ScheduledWake::Delivered),
+            "{end:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_report_is_told_once_across_a_failed_wake_and_the_paths_around_it() {
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let host = host(&galley, &runner, &env, rec.clone());
+    let told = || rec.named(SUBTASK_REPORT_UNDELIVERED_EVENT);
+    let wake_errors = || async {
+        assert!(matches!(
+            wake_if_due(&reports, &host, MAIN).await,
+            Some(WakeOutcome::Delivered { .. })
+        ));
+        runner.run_ended(MAIN, "DONE_WITHOUT_EXIT", false);
+        record_wake_run_end(&reports, &galley, &runner, rec.as_ref(), &complete(MAIN)).await;
+        runner.settle(MAIN);
+    };
+
+    // Told while the main chat waited for its answer; once answered, a
+    // wake carries it and its turn errors: not told again.
+    runner.edit_gate(MAIN, |g| g.ask_pending = true);
+    finished_subtask(&galley, &runner, "s-a", "甲", "甲好了").await;
+    drain(&reports, &galley, &runner, complete("s-a")).await;
+    assert!(take_due(&reports, &host, MAIN).await.is_none());
+    assert_eq!(
+        told(),
+        vec![json!({"mainChatId": MAIN, "subtaskIds": ["s-a"]})]
+    );
+    runner.edit_gate(MAIN, |g| g.ask_pending = false);
+    wake_errors().await;
+    assert_eq!(told().len(), 1, "s-a told once");
+
+    // Told by the failed wake; the same end is not reported again, and a
+    // later wake that cannot be delivered names only what it carries.
+    finished_subtask(&galley, &runner, "s-b", "乙", "乙好了").await;
+    drain(&reports, &galley, &runner, complete("s-b")).await;
+    wake_errors().await;
+    assert_eq!(
+        told()[1],
+        json!({"mainChatId": MAIN, "subtaskIds": ["s-b"]})
+    );
+    runner.run_ended("s-b", "CURRENT_TASK_DONE", false);
+    assert_eq!(
+        drain(&reports, &galley, &runner, complete("s-b")).await,
+        None
+    );
+    finished_subtask(&galley, &runner, "s-c", "丙", "丙好了").await;
+    drain(&reports, &galley, &runner, complete("s-c")).await;
+    // Its runner is up; the message is refused.
+    runner.fail_dispatch.store(true, Ordering::SeqCst);
+    assert!(matches!(
+        wake_if_due(&reports, &host, MAIN).await,
+        Some(WakeOutcome::Failed(_))
+    ));
+    assert_eq!(
+        told(),
+        vec![
+            json!({"mainChatId": MAIN, "subtaskIds": ["s-a"]}),
+            json!({"mainChatId": MAIN, "subtaskIds": ["s-b"]}),
+            json!({"mainChatId": MAIN, "subtaskIds": ["s-c"]}),
+        ]
+    );
+
+    // Its next try goes through and the turn replies: nothing more is
+    // said, and with no reminder carried no task changed either.
+    runner.fail_dispatch.store(false, Ordering::SeqCst);
+    assert!(matches!(
+        wake_if_due(&reports, &host, MAIN).await,
+        Some(WakeOutcome::Delivered { .. })
+    ));
+    runner.run_ended(MAIN, "CURRENT_TASK_DONE", false);
+    record_wake_run_end(&reports, &galley, &runner, rec.as_ref(), &complete(MAIN)).await;
+    assert_eq!(told().len(), 3);
+    assert!(rec.named(SCHEDULED_TASKS_CHANGED_EVENT).is_empty());
+    assert!(reports.in_flight(MAIN).is_empty());
 }
 
 // ---------------- send-backs ----------------

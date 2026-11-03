@@ -99,10 +99,12 @@ pub struct SubtaskDispatchedPayload {
 /// Tauri event, payload [`SubtaskReportUndeliveredPayload`]: reports of
 /// these subtasks could not wake the main chat (ticket 29,
 /// [`crate::subtask_report`]) — its runner did not start or did not take
-/// the message, or the main chat is waiting for the user's answer. The
-/// desktop falls back to the subtasks' own notifications. Each subtask is
-/// named once per report, however often it is retried; the report stays
-/// and goes out on a later try. Desktop only, like
+/// the message, or the main chat is waiting for the user's answer; then
+/// the report stays and goes out on a later try. Since main chat PRD
+/// ruling 178 also when the turn a wake started ended on an error before
+/// a reply: then the report is not tried again. The desktop falls back to
+/// the subtasks' own notifications. Each subtask is named once per
+/// report, however often it is retried. Desktop only, like
 /// [`SUBTASK_DISPATCHED_EVENT`].
 pub const SUBTASK_REPORT_UNDELIVERED_EVENT: &str = "subtask-report-undelivered";
 
