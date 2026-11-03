@@ -618,7 +618,9 @@ export function Conversation({
   const afterAnswer = (messageId: string) => {
     const node = renderAfterAnswer?.(messageId);
     return assistant && node ? (
-      <div className={ASSISTANT_BUBBLE_MAX}>{node}</div>
+      <div data-role="reply-cards" className={ASSISTANT_BUBBLE_MAX}>
+        {node}
+      </div>
     ) : (
       node
     );

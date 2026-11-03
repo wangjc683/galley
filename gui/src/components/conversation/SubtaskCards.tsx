@@ -8,6 +8,8 @@ import { useShallow } from "zustand/react/shallow";
 
 import { AskUserBubble } from "@/components/conversation/AskUserBubble";
 import { IconButton } from "@/components/ui/button";
+// TEMP variant switcher (main chat 131): the demo states.
+import { useReplyCardsDemoState } from "@/dev/reply-cards-trial";
 import { useCopy } from "@/lib/i18n";
 import { isImeCompositionKeydown } from "@/lib/ime";
 import { StatusIcon } from "@/lib/status-icon";
@@ -82,6 +84,13 @@ export function SubtaskCards({
   );
 }
 
+// TEMP variant switcher (main chat 131): in a dev build a card may draw
+// a demo state instead of its own (the pill's 状态,
+// src/dev/reply-cards-trial.tsx); a production build draws its own.
+const useShownState = import.meta.env.DEV
+  ? useReplyCardsDemoState
+  : (state: SubtaskCardState, _ordinal: number) => state;
+
 /** Sessions whose history a card already asked to read, this page
  * lifetime: a read that brings nothing back must not loop. */
 const restoreRequested = new Set<string>();
@@ -122,18 +131,19 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
   const askInCard = useSubtasksStore((s) =>
     sid && sid in s.askInCard ? s.askInCard[sid] : undefined,
   );
-  const state = deriveSubtaskCard(dispatch, session, {
+  const derived = deriveSubtaskCard(dispatch, session, {
     ...live,
     ...runtime,
     runError,
     askInCard,
   });
+  const state = useShownState(derived, dispatch.ordinal);
 
   // A subtask from before this page (a restart, a reload) has history
   // the page has not read: read its latest page once, so the card can
   // tell done from asking from stopped short.
   const needsRestore =
-    state.kind === "loading" && !live.restoring && sid !== null;
+    derived.kind === "loading" && !live.restoring && sid !== null;
   useEffect(() => {
     if (!needsRestore || !sid || restoreRequested.has(sid)) return;
     restoreRequested.add(sid);
