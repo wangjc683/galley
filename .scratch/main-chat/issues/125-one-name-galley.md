@@ -1,6 +1,6 @@
 # 125 界面上这条对话只叫「Galley」
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-03 快进合入 `1a96f1b0`，三个提交 `b48c11d6`、`81525fef`、`1a96f1b0`。代理在 worktree 跑过：cargo test 1291 条过、vitest 244 个文件 2718 条过、typecheck / lint / diff --check 干净；主会话复跑 typecheck、lint、diff --check 干净，推送范围扫过无私有路径与主机名；055 的 SQL 在真实库的副本上跑过，只有主对话一行从「主聊天」变成「Galley」，`updated_at` 不动。偏离票面五处主会话认可：`db_test.rs` 拆出 `pool_through_054()` 以便种「055 之前」的库；`ScopeTag` 去掉没人用的 `scope` 参数；⌘F 命中列表那条断言改成 `not.toContain("Galley")`，防的仍是命中第一行写会话标题；文案规范的重置表补了「标题菜单」与「此前」两行；051 专项测试的列表不加 055。代理「看到没改」里 `docs/managed-ga-runtime/code-state-and-patches.md:84` 的设置路径主会话合入后顺手改了；其余留着：Core 的英文错误详情（如 "there is no main chat to reset"，经「复制详情」或 CLI 露出）、给模型看的英文提示词与手册、代码注释里的旧菜单名、文案规范「新对话」那一行还提已撤掉的忙时选择。等 JC 在 tauri dev 里看通知开头、设置与标题菜单的重置、⌘F 的范围标签）
 
 来源：[主对话 PRD](../PRD.md) 裁决 173。改 Core 的主对话标题（常量 + 一条数据迁移）、GUI 的几处文案与 ⌘K 范围标签、它们的测试与文案规范；Agent API 结构、手册、runner、managed-ga 不动。只影响内置运行时；外置运行时没有主对话，零变化。
 

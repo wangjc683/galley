@@ -81,7 +81,7 @@ Application Support/app.galley/
 > are managed-runtime only; attach mode never touches a user-owned `temp/`.
 
 > **`memory/` is rewritten whole on one path only: the user resetting the main
-> chat** (Settings → 运行环境 → 更多 → 重置主对话, main chat ticket 15,
+> chat** (Settings → 运行环境 → 更多 → 重置和 Galley 的对话, main chat ticket 15,
 > `core/src/main_chat_reset.rs`). It puts `memory/` back to the installed seed
 > (`managed_runtime::stage_memory_reset`): the old directory is renamed aside,
 > the seed is copied into a fresh one, and the old one is deleted only after the
