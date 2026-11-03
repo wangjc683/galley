@@ -46,10 +46,10 @@ import { cn } from "@/lib/utils";
  * docs/design/layout-and-chrome.md 「子任务」 entry's 「待真机定」 line.
  */
 
-type Look = "A" | "B" | "B2" | "C";
+type Look = "A" | "B" | "B2" | "B3" | "C";
 type Data = "real" | "one" | "three" | "seven";
 
-const LOOKS: readonly Look[] = ["A", "B", "B2", "C"];
+const LOOKS: readonly Look[] = ["A", "B", "B2", "B3", "C"];
 const DATA: readonly Data[] = ["real", "one", "three", "seven"];
 const DATA_NAMES: Record<Data, string> = {
   real: "真实",
@@ -71,6 +71,15 @@ const LOOK_CSS: Record<Look, string> = {
     '[data-role="sidebar-subtask"]{min-height:1.75rem;padding-top:0.25rem;padding-bottom:0.25rem}',
     '[data-role="sidebar-subtask-title"]{font-size:12px}',
     '[data-role="sidebar-subtask"][data-state="running"] [data-role="sidebar-subtask-title"]{font-weight:500}',
+  ].join(""),
+  // B3 (11-03): B2, and a running row's spinner in muted ink instead of
+  // brand-strong: a column of brand spinners was the loudest thing left.
+  // It still turns; colour stays for the rows that need you.
+  B3: [
+    '[data-role="sidebar-subtask"]{min-height:1.75rem;padding-top:0.25rem;padding-bottom:0.25rem}',
+    '[data-role="sidebar-subtask-title"]{font-size:12px}',
+    '[data-role="sidebar-subtask"][data-state="running"] [data-role="sidebar-subtask-title"]{font-weight:500}',
+    '[data-role="sidebar-subtask"][data-state="running"] svg{color:var(--color-ink-muted)}',
   ].join(""),
   C: '[data-role="sidebar-subtasks"]{padding-left:1.5rem}',
 };
