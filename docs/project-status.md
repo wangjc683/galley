@@ -897,13 +897,17 @@ errands gave three tags both times, 21 titles of 6–14 characters; JC sent
 two in tauri dev, 2026-11-03). Galley's subtasks that are running or
 asking you are listed under its card in the sidebar; one that stops leaves
 at once, and a subtask's error no longer counts as needing you (rulings 176
-and 177, ticket 128). The subtask card under a reply is a one-line receipt
-in the to-do card's frame (ruling 179, ticket 130). A wake turn that ends
+and 177, ticket 128). The cards under a main chat reply (files, subtasks, to-dos, reminders,
+memos) sit in one frame per reply, the process card's, one 24px line each,
+as wide as the widest line; the subtask's is a one-line receipt (rulings
+179–182, tickets 130–133; JC compared three styles in tauri dev,
+2026-11-03). A wake turn that ends
 on an error now tells the desktop its subtask reports were not delivered,
 so a failed subtask still notifies (ruling 178, ticket 129). Owed:
 ticket 04's second real-machine step, stopping a workbench run you watch
-(no workbench run in the database since the merge); the running and asking
-states of ticket 130's card; the notifications of tickets 125 and 129, which
+(no workbench run in the database since the merge); ticket 133's frame in daily use (a lone item still reading as a
+card, 12px file names, two frames when 过程 is open; long titles and
+whole-line clicks only checked on a static page); the notifications of tickets 125 and 129, which
 a dev build does not send. Still owed from
 `v0.7.2`'s scope: ticket 98's noticed interest (the 「看你……常问」 memo has
 no live record yet).
