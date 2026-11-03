@@ -669,6 +669,11 @@ bridge 不再在 dispatch 前阻塞等待用户决定。`tool_call_pending` 事�
 其余消息不变，`ask_user` / `ask_user_response` 保留。`WorkbenchHandler`
 （`GenericAgentHandler` 子类）仍安装，只合成轮次信号与 `tool_num` 兼容转发，
 不改工具派发或结果。决策记录见 [devlog](./devlog/2026-10-05-remove-approval.md)。
+唯一例外只在内置运行时的主对话（票 135，主对话 PRD 裁决 184）：带
+`GALLEY_MAIN_CHAT=1` 的 runner 不执行 `web_` 开头的浏览器工具，直接回一条
+「交给子任务」的工具结果；不加新事件，这一步照常出现在 `turn_end` 的
+`toolCalls` / `toolResults` 里。见
+[运行时模式](./managed-ga-runtime/runtime-modes-and-sessions.md#the-main-chat-does-not-browse)。
 
 ## 7. Session Resume Flow
 

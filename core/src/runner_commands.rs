@@ -81,7 +81,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::broadcast::error::RecvError;
@@ -344,23 +344,12 @@ pub(crate) async fn prepare_managed_runtime_context(
             detail: format!("resolving managed bridge cwd failed: {e}"),
         }
     })?;
-    let env = vec![
-        ("GALLEY_RUNTIME_KIND".into(), "managed".into()),
-        ("PYTHONDONTWRITEBYTECODE".into(), "1".into()),
-        (
-            "GALLEY_GA_STATE_ROOT".into(),
-            diagnostics.paths.state_root.clone(),
-        ),
-        (
-            "GALLEY_MANAGED_MODEL_CONFIG_PATH".into(),
-            model_config_path.to_string_lossy().into_owned(),
-        ),
-        (
-            "GALLEY_RUNTIME_PROMPT_TEXT".into(),
-            managed_prompt::compose_runtime_prompt(&app.package_info().version.to_string()),
-        ),
-        ("GALLEY_MANAGED_MODEL_CONFIG_JSON".into(), runtime_config),
-    ];
+    let env = managed_runtime_env(
+        &diagnostics.paths.state_root,
+        &model_config_path,
+        managed_prompt::compose_runtime_prompt(&app.package_info().version.to_string()),
+        runtime_config,
+    );
 
     Ok(ManagedRuntimeProcessContext {
         diagnostics,
@@ -368,6 +357,53 @@ pub(crate) async fn prepare_managed_runtime_context(
         env,
         requested_model_index,
     })
+}
+
+/// The env var that marks the main chat's runner (main chat ticket 135,
+/// PRD ruling 184): `1` on that runner and absent on every other one.
+/// `runner/handlers.py` reads it and, in the managed runtime, answers a
+/// browser tool call (`web_*`) with "hand this to a subtask" instead of
+/// running it. Only [`prepare_managed_spawn_args`] sets it, for the
+/// session [`crate::session_runner::segment::prompt_state`] says is the
+/// main chat; workbench sessions, subtasks and the IM channels start
+/// from [`managed_runtime_env`] without it. Attach mode has no main chat
+/// (PRD ruling 3) and its spawns never come through here, so an external
+/// GA never sees it.
+pub(crate) const MAIN_CHAT_ENV: &str = "GALLEY_MAIN_CHAT";
+
+/// Every managed runner's env: session runners and the IM channels
+/// alike. Nothing in it marks the main chat ([`mark_main_chat_env`]
+/// does that, for its runner only).
+fn managed_runtime_env(
+    state_root: &str,
+    model_config_path: &Path,
+    runtime_prompt: String,
+    runtime_config: String,
+) -> Vec<(String, String)> {
+    vec![
+        ("GALLEY_RUNTIME_KIND".into(), "managed".into()),
+        ("PYTHONDONTWRITEBYTECODE".into(), "1".into()),
+        ("GALLEY_GA_STATE_ROOT".into(), state_root.to_string()),
+        (
+            "GALLEY_MANAGED_MODEL_CONFIG_PATH".into(),
+            model_config_path.to_string_lossy().into_owned(),
+        ),
+        ("GALLEY_RUNTIME_PROMPT_TEXT".into(), runtime_prompt),
+        ("GALLEY_MANAGED_MODEL_CONFIG_JSON".into(), runtime_config),
+    ]
+}
+
+/// A managed runner's env made the main chat's: its runtime prompt in
+/// place of the one every managed session gets, and [`MAIN_CHAT_ENV`]
+/// set to `1` (ticket 135).
+fn mark_main_chat_env(env: &mut Vec<(String, String)>, runtime_prompt: String) {
+    if let Some(entry) = env
+        .iter_mut()
+        .find(|(key, _)| key == "GALLEY_RUNTIME_PROMPT_TEXT")
+    {
+        entry.1 = runtime_prompt;
+    }
+    env.push((MAIN_CHAT_ENV.into(), "1".into()));
 }
 
 async fn shared_credential_ipc_config(
@@ -444,19 +480,19 @@ pub(crate) async fn prepare_managed_spawn_args(
                 None
             }
         };
-        if let Some(entry) = context
-            .env
-            .iter_mut()
-            .find(|(key, _)| key == "GALLEY_RUNTIME_PROMPT_TEXT")
-        {
-            entry.1 = managed_prompt::compose_main_chat_runtime_prompt(
+        // Its own prompt, and the mark its runner refuses browser tools
+        // by (ticket 135, PRD ruling 184: the main chat does not go on
+        // the web, it hands that to a subtask).
+        mark_main_chat_env(
+            &mut context.env,
+            managed_prompt::compose_main_chat_runtime_prompt(
                 &app.package_info().version.to_string(),
                 &main_chat,
                 in_hand.as_deref(),
                 memo.as_deref(),
                 &manual_dir.to_string_lossy(),
-            );
-        }
+            ),
+        );
     }
     if requested_model_id.is_some() {
         // The selected managed model may have been deleted or lost its
@@ -1034,6 +1070,127 @@ mod tests {
         assert!(runtime_credential_usable(api_key, Some("sk-test")));
         assert!(!runtime_credential_usable(api_key, Some("  ")));
         assert!(!runtime_credential_usable(api_key, None));
+    }
+
+    fn env_value<'a>(env: &'a [(String, String)], key: &str) -> Vec<&'a str> {
+        env.iter()
+            .filter(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+            .collect()
+    }
+
+    /// Ticket 135: the env every managed runner starts from carries no
+    /// main chat mark; marking it swaps in the main chat's prompt and
+    /// adds `GALLEY_MAIN_CHAT=1`, once.
+    #[test]
+    fn only_marking_adds_the_main_chat_flag() {
+        let mut env = managed_runtime_env(
+            "/state",
+            Path::new("/state/models.json"),
+            "workbench prompt".into(),
+            "{}".into(),
+        );
+        assert!(env_value(&env, MAIN_CHAT_ENV).is_empty());
+        assert_eq!(env_value(&env, "GALLEY_RUNTIME_KIND"), ["managed"]);
+        mark_main_chat_env(&mut env, "main chat prompt".into());
+        assert_eq!(env_value(&env, MAIN_CHAT_ENV), ["1"]);
+        assert_eq!(
+            env_value(&env, "GALLEY_RUNTIME_PROMPT_TEXT"),
+            ["main chat prompt"]
+        );
+        assert_eq!(
+            MAIN_CHAT_ENV, "GALLEY_MAIN_CHAT",
+            "runner/handlers.py reads this name"
+        );
+    }
+
+    /// Ticket 135: of the managed runners, only the main chat's is marked.
+    /// `prepare_managed_spawn_args` marks the env when
+    /// `segment::prompt_state` answers for the session (it needs the Tauri
+    /// app, so the gate is replayed here on a real database): the main
+    /// chat yes; a workbench session, a subtask of the main chat and an
+    /// external session no.
+    #[tokio::test]
+    async fn only_the_main_chat_runner_gets_the_flag() {
+        use crate::api::{CreateSessionInput, Origin, SessionId};
+        use crate::db::{MainChatSeed, RenameTitleSource};
+
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite");
+        sqlx::raw_sql("PRAGMA foreign_keys = ON;")
+            .execute(&pool)
+            .await
+            .expect("enable foreign keys");
+        crate::apply_all_migrations_for_tests(&pool)
+            .await
+            .expect("migrate");
+        let galley = SqliteGalley::from_pool(pool);
+        galley
+            .set_pref_json("active_runtime_kind", serde_json::json!("managed"))
+            .await
+            .expect("managed runtime");
+        let gui = || Origin {
+            via: crate::api::OriginVia::Gui,
+            supervisor: None,
+            reason: None,
+            client: None,
+        };
+        let input = |id: &str, runtime: RuntimeKind| CreateSessionInput {
+            id: id.into(),
+            title: id.into(),
+            project_id: None,
+            selected_llm_index: None,
+            selected_llm_key: None,
+            selected_llm_display_name: None,
+            ga_runtime_kind: Some(runtime),
+            ga_runtime_id: None,
+            prompt_profile: None,
+        };
+        galley
+            .get_or_create_main_chat("s-main", gui(), &MainChatSeed { greeting: None })
+            .await
+            .expect("main chat");
+        galley
+            .create_session(input("s-side", RuntimeKind::Managed), gui())
+            .await
+            .expect("workbench session");
+        galley
+            .create_session(input("s-external", RuntimeKind::External), gui())
+            .await
+            .expect("external session");
+        galley
+            .create_subtask_session(
+                input("s-subtask", RuntimeKind::Managed),
+                Origin::subtask(),
+                &SessionId("s-main".into()),
+                Some("查明天的天气".into()),
+                RenameTitleSource::User,
+            )
+            .await
+            .expect("subtask");
+
+        for (id, main_chat) in [
+            ("s-main", true),
+            ("s-side", false),
+            ("s-subtask", false),
+            ("s-external", false),
+        ] {
+            let mut env = managed_runtime_env(
+                "/state",
+                Path::new("/state/models.json"),
+                "workbench prompt".into(),
+                "{}".into(),
+            );
+            if crate::session_runner::segment::prompt_state(&galley, id)
+                .await
+                .is_some()
+            {
+                mark_main_chat_env(&mut env, "main chat prompt".into());
+            }
+            let expected: &[&str] = if main_chat { &["1"] } else { &[] };
+            assert_eq!(env_value(&env, MAIN_CHAT_ENV), expected, "{id}");
+        }
     }
 
     #[test]

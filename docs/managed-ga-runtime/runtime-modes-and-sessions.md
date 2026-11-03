@@ -214,6 +214,41 @@ about the tag reaches GA, which keeps no subtask tool and no patch for it.
   reaches the phone as the session appearing.
 - Attach mode has no main chat, so nothing here runs there.
 
+### The Main Chat Does Not Browse
+
+Work that needs the web is a subtask's (main chat PRD ruling 184, ticket
+135, `.scratch/main-chat/issues/135-main-chat-browser-guard.md`). The entry
+layer says so; a guard in the runner makes it hold:
+
+- **The mark**: Core gives the main chat's runner one more env var,
+  `GALLEY_MAIN_CHAT=1`, where it swaps in the main chat's prompt
+  (`runner_commands::prepare_managed_spawn_args`, `MAIN_CHAT_ENV`). Every
+  other managed runner (workbench sessions, subtasks, the IM channels)
+  starts without it, and attach-mode spawns never pass through there.
+- **The guard** (`runner/handlers.py`, `WorkbenchHandler.dispatch`): when
+  the mark is exactly `1`, the runtime is the managed one
+  (`GALLEY_RUNTIME_KIND=managed`) and the tool's name starts with `web_`
+  (`web_scan`, `web_execute_js`, and any browser tool upstream adds later),
+  the tool does not run and GA's dispatch is not called. The model gets GA's
+  error envelope, `{"status": "error", "msg": …}`, saying the main chat does
+  not go online at all, neither with the browser nor with commands such as
+  `curl` in `code_run`, and telling it to hand the work to a subtask with
+  `<subtask title="…">`, with everything the subtask needs, and to tell the
+  user in a sentence; `next_prompt` is `"\n"`, as in GA's own refusal of a
+  whole-file L1 write. Each attempt costs one step. The wake rounds (subtask
+  reports, the morning review) run in the main chat and do not browse
+  either.
+- **Still a step**: the turn signal goes out and the call and its result
+  reach `turn_end` like any tool's, so `messages.tool_calls` keeps the
+  `web_*` call and `messages.tool_results` the refusal; the desktop draws it
+  as a failed tool. No new event.
+- **Not guarded**: `code_run`, the file tools, `ask_user` and the rest run
+  as everywhere. A `curl` inside `code_run`, or a GA subagent it starts
+  (GA's own handler, not Galley's), still reaches the web; the clause is the
+  only fence there.
+- Attach mode is untouched (Rule 1): without `GALLEY_RUNTIME_KIND=managed`
+  the guard is inert even if the mark were set.
+
 ### Subtask Reports
 
 A subtask's result comes back to the main chat by itself (ticket 29,

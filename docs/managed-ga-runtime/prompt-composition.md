@@ -29,7 +29,10 @@ section (below): `compose_main_chat_runtime_prompt`, chosen in
 when there are any (since ticket 95), and, after them, the main chat entry
 layer (below). Since ticket 36 its static rules also
 differ in one paragraph of "What Only The User Changes In Galley"
-(below); every other session's prompt is unchanged byte for byte.
+(below); every other session's prompt is unchanged byte for byte. Since
+ticket 135 the same place also gives the main chat's runner, and no other,
+`GALLEY_MAIN_CHAT=1`, which the runner reads to refuse browser tools
+([runtime modes](./runtime-modes-and-sessions.md#the-main-chat-does-not-browse)).
 
 ## Admission Test For Static Clauses
 

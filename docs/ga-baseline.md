@@ -1216,7 +1216,11 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
 2. Whether `BaseHandler.dispatch` calls callbacks or `plugins.hooks`
 3. Galley's `WorkbenchHandler.dispatch` wrapper around `super()`: turn-signal
    synthesis and `tool_num` forwarding only (the pre-dispatch approval gate
-   was removed 2026-10-05; tools always run directly)
+   was removed 2026-10-05; tools always run directly), except the managed
+   main chat's browser guard (ticket 135): a `web_*` call there gets a
+   `StepOutcome` back without `super()` being called, so the browser tools'
+   `web_` prefix and `StepOutcome(data, next_prompt)` are part of this
+   surface
 4. `BaseHandler.turn_end_callback`
 5. `agent._turn_end_hooks`
 6. `agentmain.GenericAgentHandler` import path
@@ -1475,7 +1479,7 @@ start the audit there instead of grepping the bridge:
   file top to bottom against the new baseline.
 - **[`runner/handlers.py`](../runner/handlers.py)** — items 1–4: the
   `WorkbenchHandler` subclass and its dispatch assumptions (turn-signal
-  synthesis, `tool_num` detection).
+  synthesis, `tool_num` detection, the managed main chat's browser guard).
 - **`runner/workbench_bridge.py::_on_turn_end`** — items 14 and 17: the
   `response.thinking` read and the `handler.max_turns` read.
 - **`runner/workbench_bridge.py::_close_run_without_exit`** — item 17:
