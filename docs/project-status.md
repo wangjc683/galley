@@ -894,7 +894,12 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.5..HEAD`. Merged since `v0.7.5`
+Release-scope truth is `git log v0.7.5..HEAD`. Hold: `v0.7.6` waits for
+main chat PRD ruling 186 (tickets 136-139: interjecting mid-run, a line
+mid-run, subtasks that carry the chat, then the entry layer cut to a few
+judgments and ticket 135's guard removed), which turns ruling 184 back;
+JC chose to ship both together rather than 184 first (2026-11-03).
+Merged since `v0.7.5`
 (2026-11-03), not dogfooded yet: the main chat does not go online (main
 chat PRD ruling 184, replacing 183's sort by the nature of the request):
 anything that needs the web, the weather included, and anything that
