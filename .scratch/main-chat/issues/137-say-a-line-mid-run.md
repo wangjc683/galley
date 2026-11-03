@@ -136,3 +136,69 @@ worktree 里跑 runner 测试借主树的 venv：在 worktree 根目录用 `<主
 ### 评测设计
 
 在 `.scratch/main-chat/entry-layer-eval/` 加一套 `tell-user`（`run.py --suite tell-user`）：沙盒、假 `galley`、下载文件夹占位文件同派活判据那套；提示词用主对话现在的那份（`dispatch-criterion/galley-prompt/main_chat.v4.txt`，票 134 第四轮之后 `managed_prompt.rs` 的主对话部分没改过）加浏览器闸；工具表补上 runner 自己的 `tell_user` 声明，调用由 runner 的同一段代码回结果；插话照 runner 的写法（Core 的 `INTERJECTION_PREAMBLE` 加用户的话，`runner/interject.py` 的 `compose`）在指定那一步结束时写进 `intervene`。用例三类：插话后手上的事还长（用不用、先说了什么、接着做得对不对）；不插话的短事（滥用）；不插话的长事（是否每步都发）。模型 `mm_1792576875658`，每个用例 3 遍。
+
+## 报告
+
+（2026-11-03，执行代理。分支 `t137-say-a-line`，已 rebase 到 main `4bab8f38`（含票 140、141），无冲突。没有加 GA 补丁，补丁栈与 manifest 没动。）
+
+### 做成了什么
+
+照上面「设计」做的，偏离两处：工具说明改成第二版（见下「评测」，原因写在「设计」里那一条后面）；JC 加的「会响」测试（见下）。
+
+- **runner**：新 `runner/tell_user.py`（工具的声明、中英两版说明、结果、`offered_here` 判据）；`ga_session.py` 加 `offer_tool`（耦合点写进文件头）；`handlers.py` 的 `WorkbenchHandler.dispatch` 在交给 GA 之前接住 `tell_user`（发出转弯信号，回结果与 GA 的下一步提示）；`workbench_bridge.py` 每次 `put_task` 前补声明、`_tell_user` 在 `_run_complete_lock` 下发 `tell_user` 事件（一轮已关就不发）；`ipc.py` 加 `TellUserEvent`。
+- **Core**：新 `core/src/tell_user.rs`（再核「内置运行时的主对话」，写行）；`SqliteGalley::persist_told_line`（`msg_{session}_{turn}_tell_{index}`，`sequence` 取已有最大值加一、至少 2，同 id 不重写，可见时进搜索）；runner watcher 收 `TellUser` 时写库；`ipc.rs` 加事件。「一步 / 这一轮的回复」只看 `sequence = 1` 的四处：`latest_reply`（派子任务）、`main_chat_segment_facts` 的停在提问上、分页的 `run_opener_at_or_before`、删除后重算摘要的 `latest_reply`；`message_unit` 把先说的一句当单独一条消息（删回复不带走它）。
+- **GUI**：`AgentTurn.interim`；`tell_user` 事件 → `appendInterimTurn`（插话之前），这一步的 `turn_end` 落在它自己那几句前面（`withLandedStep`）；`rowsToTurns` 把 `sequence > 1` 的 assistant 行读成它（直播与恢复同一个 `interimTurn`）；`run-groups` 的 `isStep`（不计步、不算回答 / 提问、不切段、不是「最后一步」）；`assistantLinePlan` 画成气泡；三点下面那一行、提问的回答查找、待回答的提问、叫醒那一轮的「不出声」、删除都跳过它；过程卡片里调用它的那一步工具条是「给你发消息」。
+- **文档**：`docs/architecture.md`、`docs/ipc-protocol.md`（§4.21）、`gui/src/types/ipc.ts` 镜像、`docs/managed-ga-runtime/runtime-modes-and-sessions.md`（新一节）与 `prompt-composition.md`、`docs/ga-baseline.md` 契约第 22 条（含「会响」测试的名字、升级先跑）、`docs/agent-api/session-commands.md`（加法：主对话里一轮中间的 agent 消息）、`docs/design/conversation.md`「在跑时它先说的一句」。
+- **「会响」测试**（JC 选甲的条件）：`runner/tests/test_tell_user.py` 的 `test_tell_user_survives_gas_tool_list_reload` 在子进程里跑内置 payload 自己的 `agentmain.run()` → `agent_runner_loop` → `NativeToolClient.chat`，假后端记下每次请求拿到的工具清单：主对话两轮三次请求都有且只有一个 `tell_user`，第二轮在 GA 自己的 `next_llm` 重新载入工具表之后（同时断言那次重新载入换了清单、里面没有它），那句话作为 `tell_user` 事件出来；`test_tell_user_never_reaches_a_request_elsewhere` 断言工作台会话与外置模式的两次请求里都没有。做过一次变异：把 runner 改成只补一次，前一条立刻红。
+
+### 评测（真模型，`mm_1792576875658`，推理强度 high，`run.py --suite tell-user`）
+
+66 次运行（现行 60 次，被替换的 6 次），181 次模型调用，输入 1,196,014 token（缓存 601,088），输出 60,084 token。提示词是主对话今天的那份（v4）加浏览器闸。说明三组：r1 第一版；r2 现行（加半句「在最后回复之前，你写的别的话用户都看不到」）；r3 是 r2 加改过的插话开场白（只评测，产品没改）。每格 3 遍：
+
+| 用例 | r1 | r2 | r3 | 怎么处理的 |
+|---|---|---|---|---|
+| `i-question`：分类整理时问「扫描件存 PDF 还是 PNG」 | 0/3 | 0/3 | 0/3 | 9 遍都把整理派给子任务，问题在派活的回复里一起答 |
+| `i-howlong`：每 20 秒看一次文件夹、看 4 次时问「还要多久？」 | 0/3 | 1/3 | 1/3 | 用了的先说「还需要约 80 秒……」「还需要约 1 分钟……」再做完；没用的 7 遍都把这句写在调用工具那一步的文字里，主对话不画，用户看不到 |
+| `i-correction`：「只数 PDF 和图片就行」 | 0/3 | 0/3 | 0/3 | 直接按新范围做完、回复里说明（一两步的事） |
+| `i-todo`：整理报销清单时说「记一下：周五下午三点前给许明远回电话」 | 0/3 | 0/3 | 0/3 | 先记待办（多 3 步、约 1 分钟）再回复，整理派给子任务；r2 有 1 遍插话没读到（第一步就派了、回复） |
+| `n-short`、`n-chat`（短事，不插话） | 0/6 | 0/6 | — | 没用（合格） |
+| `n-long`（分类整理，不插话） | 0/3 | 0/3 | — | 都派了子任务 |
+| `n-wait`（等 80 秒，不插话） | 0/3 | 0/3 | — | 自己做完，没发进展（合格；不算滥用） |
+
+- **滥用**：24 遍不插话的运行一次都没用。
+- **用了之后接着做**：用了的 2 遍都接着把检查做完，最终回复给结果、不重复那句。
+- **要点**：现在的派活条款下，手上的长活几乎都派出去了，这只手主要剩「等」这类主对话自己做的事；票 139 收条款以后这一套要重跑。模型把要对用户说的话写进调用工具那一步的文字里（用户看不到），r2 的事实半句只多换来 1 遍。
+- `--dry-test`：本套 15 条全过；整个 dry test 另有 7 条不过，是 main 上原有的（票 134 第四轮派活判据的标注），在 main `725704c1` 上单独跑过、同样 7 条。
+- 文件：`.scratch/main-chat/entry-layer-eval/tell-user/`（`cases.json`、`results.json`、`results.md`、`composed/`），README「先说一句（票 137）」一节。
+
+### 验证（rebase 到 `4bab8f38` 之后，数字照抄输出）
+
+- `cargo test --manifest-path core/Cargo.toml --workspace`：47 组 `test result`，合计 1333 passed，0 failed（之后只按 rustfmt 改了自己的两处格式，`cargo check --workspace` 通过）
+- `.venv/bin/python -m pytest`：`738 passed, 6 deselected`
+- `.venv/bin/python -m mypy runner`：`Success: no issues found in 41 source files`
+- `.venv/bin/ruff check runner`：`All checks passed!`
+- `pnpm --dir gui typecheck`、`pnpm --dir gui lint`：通过
+- `TZ=UTC pnpm --dir gui exec vitest run`：`Test Files 253 passed (253)`，`Tests 2810 passed (2810)`
+- `node scripts/check-managed-ga-payload.mjs`：`[managed-ga-payload] OK`
+- `node scripts/check-ga-baseline-drift.mjs`：`[ga-baseline-drift] OK (d66509bf)`
+- `node scripts/check-docs-links.mjs`：`docs link gate OK: 493 files checked.`
+- 另跑：`check-ipc-protocol-drift`（`python: 18 events, 9 commands; rust: 18 events, 9 commands; ts: 18 events, 9 commands`）、`check-supervisor-sop-drift`、`check-version-consistency`：都过
+- `git diff --check`：无输出
+- 只对自己改过的 Rust 文件跑 `rustfmt --check`（新文件整篇，旧文件只改自己的 hunk；`core/src/lib.rs` 在 main 上本来就不干净，没动），GUI 旧文件只格式化自己的 hunk。`managed-ga/` 下没有 `__pycache__`。
+
+新测试：runner `test_tell_user.py` 32 条（声明与中英配对、只在内置主对话、handler 的发出 / 空消息 / 一轮已关 / 别处走 GA 的「未知工具」、`offer_tool` 重新载入后再补、事件往返、bridge 的步号与句号与停止赛跑、两条「会响」）；Core `a_line_told_mid_run_lands_after_its_step`、`a_line_told_outside_the_managed_main_chat_is_dropped`、`a_line_told_beside_a_question_hides_neither`、`a_line_told_mid_run_is_a_message_of_its_own`、`tell_user_wire_parses`；GUI `tell-user.test.ts` 11 条与 `Conversation.assistant.test.tsx` 2 条。
+
+### Open risks（看到但没改的）
+
+1. **跟提问同一步说的那句排在提问后面**：模型在同一次回复里既 `tell_user` 又 `ask_user` 时，库里那句（`sequence` 2）排在提问那一步（`sequence` 1）之后，对话里画在提问气泡下面，虽然它先说。查询都改成只看 `sequence = 1`、GUI 都跳过它，所以「停在提问上」「你的回答」「分页」都不受影响，只是画的顺序反了。评测里没出现过。
+2. **落下时没有动效**：先说的一句直接出现在三点上面，三点和下面那一行被推下去；没上切换器、没在真机比。
+3. **用得少**：见评测。现在的派活条款下长活都派出去了；`i-howlong` 里 7/9 遍把「还需要约 80 秒」写在调用工具那一步的文字里，主对话不画（三点下面那一行有时恰好显示那一步 `<summary>` 的后半句）。这是这票之前就有的缺口，要不要画、或者再怎么提示，没定。
+4. **说明里那半句**：「until your final reply, nothing else you write reaches them」是我按评测加的事实（过程卡片在落定后能看到步骤的字，三点下面那一行显示 summary 的半句，严格说不是「都看不到」）；r1 → r2 只多用了 1 遍。可能被认为像规则。
+5. **插话开场白没改**：r3（开场白的选项里加上这只手）没有比 r2 多用，没进产品。
+6. **不发通知**：人不在跟前时，先说的那句不会弹系统通知，这一轮结束时照旧。
+7. **先说的那句里写 `<subtask>` 不会派活**：Core 只从最后的回复派；显示时标签被洗掉。评测里没出现。
+8. **只有标签的那句画不出来**：`message` 洗完是空（比如只有 `<summary>`），行照写，GUI 不画（`finalAnswer` 为空），模型却拿到「已发」。
+9. **手机**：靠 `runner.event` 里原样转发的 `tell_user` 事件与冷读时 `sequence` ≥ 2 的 assistant 行；没有专门的手机事件，手机 App 还没有对话画法。
+10. **Agent API**：`session show` 多了这种 agent 消息（加法，已写进文档）；默认的 `session wait` 本来就会被中间一步的文字触发，`--until-idle` 不受影响。
+11. **工具条的字与图标是我定的**：「给你发消息」/「Message you」，图标 `ChatCircleText`。
+12. **评测的工具调用上限不算 `tell_user`**：真实主对话没有这个上限（GA 180 步）。
