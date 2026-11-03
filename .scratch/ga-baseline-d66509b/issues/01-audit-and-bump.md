@@ -1,6 +1,6 @@
 # 01 GA 基线 a9a36b4 → d66509b：审计、补丁栈重放、重建内置 GA
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-03 快进合入 `06950b8c`。主会话验收：读过补丁 `0001` 新加的那一行（`managed-ga/code/ga.py:542` 改从状态根读 L0）；worktree 里 `check-managed-ga-payload`、`check-ga-baseline-drift`、`git diff --check` 过，新回归测试 `runner/tests/test_managed_ga_l0_path.py` 2 条过，`managed-ga/` 下没有 `__pycache__`，新增行没有本机路径。合入时 dev 与安装版的 Core 都没开。要真机走：dev 里一个真实浏览器任务；一个会调 `start_long_term_update` 的长任务，看提纯读到 L0（`This is L0:`），飞书、Telegram、Discord 任一渠道让它记一件事同样看一次）
 
 来源：2026-11-03 v0.7.5 发版讨论。v0.7.5 跳过了基线升级（上游 `llmcore.py` 的拆分正好落在补丁 `0007`、`0030` 所在的文件，单开一轮）；JC：「按建议推进」，与主对话票 134 同时跑，一起进 v0.7.6。外置运行时的耦合点要一起审（用户自己的 GA 更新到这个版本后，Galley 照样能用）。
 
