@@ -19,12 +19,35 @@ import {
 const done: SubtaskCardState = { kind: "done", line: null };
 
 describe("the saved pick", () => {
-  it("defaults to 乙 · 40 · 真实 · 真实", () => {
+  it("defaults to 一框列表 (乙 · 40 kept for 有框) · 真实 · 真实, folded", () => {
     expect(parsePick(null)).toEqual({
+      style: "list",
       width: "yi",
       height: "40",
       demo: "real",
       data: "real",
+      folded: true,
+    });
+  });
+
+  // A pick saved by ticket 131's switcher has no style and no fold.
+  it("reads a pick from before the style group", () => {
+    expect(
+      parsePick(
+        JSON.stringify({
+          width: "yi",
+          height: "32",
+          demo: "real",
+          data: "mixed",
+        }),
+      ),
+    ).toEqual({
+      style: "list",
+      width: "yi",
+      height: "32",
+      demo: "real",
+      data: "mixed",
+      folded: true,
     });
   });
 
@@ -32,13 +55,27 @@ describe("the saved pick", () => {
     expect(
       parsePick(
         JSON.stringify({
+          style: "rows",
           width: "bing",
           height: "32",
           demo: "nope",
           data: "mixed",
+          folded: "yes",
         }),
       ),
-    ).toEqual({ width: "bing", height: "32", demo: "real", data: "mixed" });
+    ).toEqual({
+      style: "rows",
+      width: "bing",
+      height: "32",
+      demo: "real",
+      data: "mixed",
+      folded: true,
+    });
+    expect(parsePick(JSON.stringify({ style: "box", folded: false }))).toEqual({
+      ...DEFAULT_PICK,
+      style: "box",
+      folded: false,
+    });
     expect(parsePick("{not json")).toBe(DEFAULT_PICK);
     expect(parsePick("7")).toBe(DEFAULT_PICK);
   });
@@ -147,6 +184,33 @@ describe("the style", () => {
   // A :has() inside a :has() is invalid: the browser drops the rule.
   it("never nests :has()", () => {
     expect(css).not.toMatch(/:has\([^)]*:has\(/);
+  });
+
+  // 有框 is ticket 131 as it was: nothing keyed on the style touches it,
+  // and the width and height rules do not look at the style (the pill
+  // writes them onto <html> under 有框 only).
+  it("keys 一框列表 and 无框行 on the style, and nothing on 有框", () => {
+    const lines = css.split("\n");
+    expect(css).not.toContain('data-reply-cards-style="box"');
+    for (const line of lines) {
+      const style = line.includes("data-reply-cards-style");
+      const size =
+        line.includes("data-reply-cards-width") ||
+        line.includes("data-reply-cards-height");
+      expect(style && size).toBe(false);
+      expect(style || size).toBe(true);
+    }
+    expect(css).toContain('html[data-reply-cards-style="list"]');
+    expect(css).toContain('html[data-reply-cards-style="rows"]');
+  });
+
+  it("sends a list that is answered in place to the cap, and its card in 无框行", () => {
+    expect(css).toContain(
+      `html[data-reply-cards-style="list"] [data-role="reply-cards"]:has([data-role="subtask-card"] [data-role="ask-user-bubble"]){width:auto}`,
+    );
+    expect(css).toContain(
+      `html[data-reply-cards-style="rows"] [data-role="reply-cards"] ${answering}{width:auto}`,
+    );
   });
 
   // Ruling 101's fallback: a subtask answered in its card keeps the
