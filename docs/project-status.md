@@ -903,10 +903,13 @@ Merged since `v0.7.5`
 (2026-11-03), not dogfooded yet: the main chat does not go online (main
 chat PRD ruling 184, replacing 183's sort by the nature of the request):
 anything that needs the web, the weather included, and anything that
-changes things on the user's computer or accounts goes to a subtask; it
-talks, answers from what it knows or from the conversation, keeps the
-notebook and takes a read-only look on the computer itself (ticket 134,
-entry layer; eval v3: a browser as the first tool 0 of 60 runs). A
+changes things on the user's computer or accounts goes to a subtask, and
+so does a question about a fact in the world, even one it thinks it knows,
+answered with its sources (ruling 185); it talks, explains, gives its
+view, answers from the conversation, keeps the notebook and takes a
+read-only look on the computer itself, and handing off it does not cite
+the rule (ticket 134, entry layer; eval v4: a browser as the first tool
+0 of 72 runs, rule talk 0 of 72). A
 reminder that says to check something hands the check to a subtask and
 stays silent until it is back; the morning review's look-ups go the same
 way (ruling 184 point 9; `wake.md`, `unasked.md`). Answer-like results
