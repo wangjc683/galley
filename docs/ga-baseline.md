@@ -1463,6 +1463,26 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     between `put_task` and the first LLM request other than `run()`'s
     task start; (c) `next_llm`'s `is_running` guard and `llm_no`
     semantics.
+21. `agent.intervene` and the turn-end hook locals `injprompt` /
+    `exit_reason` (2026-11-03, main chat ticket 136; managed main chat
+    only, no managed patch). Galley writes the user's mid-run words to
+    `agent.intervene` (`GaSession.set_intervene`, from
+    `runner/interject.py`); `GenericAgentHandler.turn_end_callback` reads
+    it (`self.parent.intervene or consume_file(task_dir, '_intervene')`),
+    appends `[MASTER] …` to the next step's prompt, sets it to `None`, then
+    calls `_turn_end_hooks` with its locals, where `injprompt` is what it
+    took (`GaSession.injected_intervene`). The loop's last call
+    (`agent_loop.py`: after the loop, `turn_end_callback(..., '',
+    exit_reason)`) reads it too and its prompt is discarded: Galley counts
+    a read as delivered only when the run goes on (no `exit_reason`, and
+    below `handler.max_turns`, item 17). Upstream's own TUI judges it the
+    same way (`frontends/tuiapp_v2.py` `_install_intervene_replay_hook`).
+    Assumes `_done_hooks` stays empty (nothing in GA or Galley adds one):
+    a done hook would make an in-loop call with `exit_reason` set whose
+    prompt is used. Re-check on upgrade: (a) the read-append-clear order
+    and the hook call after it; (b) the local is still named `injprompt`;
+    (c) the post-loop call still reads `intervene`; (d) `_done_hooks`
+    still unused.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -1473,10 +1493,14 @@ Since 2026-07-11 the agent-object couplings have a single code home —
 start the audit there instead of grepping the bridge:
 
 - **[`runner/ga_session.py`](../runner/ga_session.py)** — items 5, 6, 7,
-  11, 12: every internal/underscore/backend touch (`_turn_end_hooks`,
+  11, 12, 21: every internal/underscore/backend touch (`_turn_end_hooks`,
   `backend.history` set + context estimation, the `GenericAgentHandler`
-  module rebinding, the one-shot `backend.ask` image wrapper). Read the
+  module rebinding, the one-shot `backend.ask` image wrapper, the main
+  chat's `intervene` write and `injprompt` read). Read the
   file top to bottom against the new baseline.
+- **[`runner/interject.py`](../runner/interject.py)** and
+  **`runner/workbench_bridge.py::_on_turn_end`** — item 21: what counts
+  as delivered.
 - **[`runner/handlers.py`](../runner/handlers.py)** — items 1–4: the
   `WorkbenchHandler` subclass and its dispatch assumptions (turn-signal
   synthesis, `tool_num` detection, the managed main chat's browser guard).

@@ -27,7 +27,9 @@ import type { Session } from "@/types/session";
  *     claimed by Core's `pending` broadcast, retracted if Core queues it;
  *   - `side_question`: the transient `/btw` turn (never persisted);
  *   - `none`: nothing — a send into an open run, which Core queues (the
- *     queue bar shows it) or, when the run just ended, dispatches (the
+ *     queue bar shows it; in the main chat it also hands it to the
+ *     running run and the conversation draws it from the queue snapshot,
+ *     main chat ticket 136) or, when the run just ended, dispatches (the
  *     row arrives through `user-message-persisted`).
  */
 export type SendEcho = "turn" | "side_question" | "none";
@@ -129,9 +131,14 @@ export async function sendThroughCore(
       dispatch: "dispatched",
       clientRequestId,
     });
-  } else if (result.outcome === "queued" && clientRequestId) {
+  } else if (
+    (result.outcome === "queued" || result.outcome === "interjected") &&
+    clientRequestId
+  ) {
     // The page thought the session idle; Core found a run open and
-    // queued the text. The queue bar shows it now.
+    // queued the text. The queue bar shows it now — or, handed to the
+    // main chat's run (main chat ticket 136), the conversation, from the
+    // queue snapshot.
     latest.retractUserTurn(sid, clientRequestId);
   }
   return result.outcome;

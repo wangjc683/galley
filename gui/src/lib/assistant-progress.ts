@@ -111,6 +111,9 @@ export function streamedStepSummary(inFlightContent: string): string | null {
 function settledStepHalf(turns: readonly Turn[]): string | null {
   for (let i = turns.length - 1; i >= 0; i--) {
     const turn = turns[i];
+    // What you said while it worked (main chat ticket 136) is inside the
+    // stretch: the line goes on saying what it was doing.
+    if (turn.role === "user" && turn.interjected) continue;
     if (turn.role === "user") break;
     if (turn.role !== "agent" || isFinalAnswerTurn(turn.tools)) continue;
     const half = assistantProgressHalf(turn.summary);
@@ -123,7 +126,8 @@ function settledStepHalf(turns: readonly Turn[]): string | null {
  * What the line under the typing bubble says it is doing (rulings 134,
  * 135), for a round you started; null for a round Core woke it for (no
  * line: nobody is waiting on it). Within this stretch — from your last
- * message, or from your answer to its question:
+ * message, or from your answer to its question; what you said while it
+ * worked (main chat ticket 136) opens none, the line runs on under it:
  *
  *   1. writing words now (`assistantWriting`): 「正在写回复」;
  *   2. else this step's dispatch has shown with a closed summary before

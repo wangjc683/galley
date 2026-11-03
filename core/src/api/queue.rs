@@ -34,6 +34,19 @@ pub struct QueuedMessage {
     pub origin: Option<Origin>,
     /// ISO 8601 enqueue instant.
     pub queued_at: String,
+    /// Also handed to the session's running run (main chat ticket 136,
+    /// [`crate::interject`]): the managed main chat reads it at its next
+    /// step, and it leaves the queue then, written where it was read. Not
+    /// read by the time the run ends, it goes out as the next turn, as any
+    /// queued message. Pages draw it as a sent message, not in the queue
+    /// bar. Written only when true.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub interjected: bool,
+    /// The sender's own id for this send (Core's send, ticket 02c), echoed
+    /// on the `user-message-persisted` that writes the item, whenever that
+    /// is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_request_id: Option<String>,
 }
 
 /// Payload of [`SESSION_QUEUE_CHANGED_EVENT`].

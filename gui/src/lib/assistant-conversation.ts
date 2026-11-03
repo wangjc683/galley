@@ -31,8 +31,12 @@ import type { Turn } from "@/types/conversation";
  *   process   while it works, the typing bubble at the conversation's
  *             end (three dots, `typingBubbleShown`: a round you
  *             started from the send on, a woken one only while it
- *             writes words), and in a round you started a line under
+ *             writes words — until you write into it), and in a round
+ *             you started a line under
  *             it, 「{在做什么} · {用时}」 (lib/assistant-progress.ts);
+ *             what you say while it works (main chat ticket 136) is
+ *             your bubble at the end, the dots and the line under it,
+ *             going on; the reply answers it with the rest;
  *             no steps, no streaming prose. The bubble grows into the
  *             reply, the line fading out with the dots
  *             (lib/typing-bubble-handoff.ts). The header's second line
@@ -133,12 +137,24 @@ let reportCache: { turns: readonly Turn[]; report: boolean } | null = null;
 
 /** `inReportRound`, kept for the last turns array: the card's selector
  * runs on every store write (each chunk), and the turns change only
- * when a row lands. */
+ * when a row lands. A woken round you wrote into while it worked (main
+ * chat ticket 136) reads as one you started from then on: you are
+ * waiting on it now. */
 function cachedReportRound(turns: readonly Turn[]): boolean {
   if (reportCache?.turns === turns) return reportCache.report;
-  const report = inReportRound(turns);
+  const report = inReportRound(turns) && !endsInYourWordsMidRound(turns);
   reportCache = { turns, report };
   return report;
+}
+
+/** Whether the latest user turn is words said while the round worked
+ * (main chat ticket 136). */
+function endsInYourWordsMidRound(turns: readonly Turn[]): boolean {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const turn = turns[i];
+    if (turn.role === "user") return turn.interjected === true;
+  }
+  return false;
 }
 
 /**

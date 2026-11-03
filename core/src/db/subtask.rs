@@ -433,14 +433,15 @@ impl SqliteGalley {
             .unwrap_or(0))
     }
 
-    /// The visible assistant rows of a session's latest run — from its
-    /// latest user message on — oldest first.
+    /// The visible assistant rows of a session's latest run — from the
+    /// user message that opened it on (what the user said mid-run, main
+    /// chat ticket 136, opens none) — oldest first.
     pub async fn latest_run_replies(&self, session_id: &SessionId) -> Result<Vec<RunReply>> {
         sqlx::query_as::<_, RunReply>(
             "SELECT turn_index, final_answer, preamble, tool_calls FROM messages \
              WHERE session_id = ? AND role = 'assistant' AND visibility = 'visible' \
                AND turn_index >= COALESCE( \
-                 (SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user'), \
+                 (SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user' AND sequence = 0), \
                  0) \
              ORDER BY turn_index, sequence",
         )
@@ -478,7 +479,7 @@ impl SqliteGalley {
     }
 
     /// The last visible assistant row of `session_id`'s latest run — from
-    /// its latest user message on — if it wrote one.
+    /// the user message that opened it on — if it wrote one.
     pub async fn latest_run_last_reply(
         &self,
         session_id: &SessionId,
@@ -487,7 +488,7 @@ impl SqliteGalley {
             "SELECT tool_calls FROM messages \
              WHERE session_id = ? AND role = 'assistant' AND visibility = 'visible' \
                AND turn_index >= COALESCE( \
-                 (SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user'), \
+                 (SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user' AND sequence = 0), \
                  0) \
              ORDER BY turn_index DESC, sequence DESC LIMIT 1",
         )

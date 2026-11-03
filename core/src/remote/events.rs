@@ -205,6 +205,8 @@ struct UserMessagePersistedIn {
     dispatch: String,
     #[serde(default)]
     client_request_id: Option<String>,
+    #[serde(default)]
+    queue_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -464,6 +466,7 @@ impl Mapper {
                     message,
                     dispatch,
                     client_request_id,
+                    queue_id,
                 } = serde_json::from_value(payload)?;
                 if !self.is_shown(&session_id).await {
                     return Ok(Mapped::Nothing);
@@ -473,6 +476,7 @@ impl Mapper {
                     message: convert::brief_message(message),
                     dispatch: convert::dispatch(dispatch),
                     client_request_id,
+                    queue_id,
                 });
                 Mapped::State(Some(session_id), event)
             }

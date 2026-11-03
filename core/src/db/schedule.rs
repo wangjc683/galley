@@ -848,7 +848,7 @@ impl SqliteGalley {
                  updated_at = ? \
              WHERE created_in_session_id = ? AND created_in_turn_index IS NULL \
                AND created_in_run_turn = ( \
-                   SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user') \
+                   SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user' AND sequence = 0) \
                AND EXISTS ( \
                    SELECT 1 FROM messages m \
                    WHERE m.session_id = ? AND m.role = 'assistant' \

@@ -292,6 +292,36 @@ class SystemMessageEvent:
     kind: str = "system_message"
 
 
+@dataclass
+class InterjectDeliveredEvent:
+    """Messages the user sent mid-run reached the model (main chat ticket
+    136): GA read them at the end of step `turnIndex` and put them in the
+    next step's prompt. Sent right after that step's `turn_end`.
+    `absoluteTurnIndex` is that step's session-wide index (the `turn_end`'s
+    own), where Core writes the messages, after the step."""
+
+    sessionId: str
+    ids: list[str]
+    turnIndex: int
+    absoluteTurnIndex: int | None = None
+    timestamp: str = field(default_factory=_now_iso)
+    kind: str = "interject_delivered"
+
+
+@dataclass
+class InterjectReturnedEvent:
+    """Messages handed over with `interject` that the model did not read:
+    the run ended first (it was writing its last reply, asked, stopped or
+    failed), or none was running, or this runner may not take them. Sent
+    before the run's `run_complete`. Core keeps them in its queue, so they
+    go out as the next turn; this event is for its log."""
+
+    sessionId: str
+    ids: list[str]
+    timestamp: str = field(default_factory=_now_iso)
+    kind: str = "interject_returned"
+
+
 Event = (
     ReadyEvent
     | TurnStartEvent
@@ -308,6 +338,8 @@ Event = (
     | ReasoningEffortChangedEvent
     | TitleGeneratedEvent
     | SystemMessageEvent
+    | InterjectDeliveredEvent
+    | InterjectReturnedEvent
 )
 
 
@@ -384,6 +416,20 @@ class GenerateTitleCommand:
     kind: str = "generate_title"
 
 
+@dataclass
+class InterjectCommand:
+    """Messages the user sent while the main chat's run is going (main chat
+    ticket 136), for the run's next step: the runner puts them in GA's
+    `intervene`, which GA reads at the end of each step. `items` are
+    `{"id": <Core's queue id>, "text": <the message>}` in the order sent;
+    `preamble` is what goes before them, once. Managed runtime's main chat
+    only; anything else answers `interject_returned`."""
+
+    items: list[dict[str, Any]]
+    preamble: str = ""
+    kind: str = "interject"
+
+
 Command = (
     UserMessageCommand
     | AskUserResponseCommand
@@ -393,6 +439,7 @@ Command = (
     | SetReasoningEffortCommand
     | ShutdownCommand
     | GenerateTitleCommand
+    | InterjectCommand
 )
 
 
@@ -415,6 +462,8 @@ EVENT_KINDS: dict[str, type] = {
     "reasoning_effort_changed": ReasoningEffortChangedEvent,
     "title_generated": TitleGeneratedEvent,
     "system_message": SystemMessageEvent,
+    "interject_delivered": InterjectDeliveredEvent,
+    "interject_returned": InterjectReturnedEvent,
 }
 
 COMMAND_KINDS: dict[str, type] = {
@@ -426,6 +475,7 @@ COMMAND_KINDS: dict[str, type] = {
     "set_reasoning_effort": SetReasoningEffortCommand,
     "shutdown": ShutdownCommand,
     "generate_title": GenerateTitleCommand,
+    "interject": InterjectCommand,
 }
 
 

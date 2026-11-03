@@ -27,6 +27,13 @@ upgrade can silently move:
 - ``agent.llmclient.backend.ask`` one-shot wrapper → arm_image_delivery /
                                     disarm_image_delivery (attach-mode
                                     image input; Rule 1 lists this seam)
+- ``agent.intervene``             → set_intervene (managed main chat
+                                    only, main chat ticket 136: what the
+                                    user said mid-run, for the next step)
+- turn-end hook locals ``injprompt`` / ``exit_reason`` → injected_intervene
+                                    (read-only: what GA's
+                                    ``turn_end_callback`` took from
+                                    ``intervene``, ``ga.py:594``)
 
 GA's *public* API (``next_llm``, ``verbose``, ``inc_out``, ``put_task``,
 ``list_llms``) stays direct on ``bridge.agent`` — the constitution
@@ -148,6 +155,26 @@ class GaSession:
         if not hasattr(self.agent, "_turn_end_hooks"):
             self.agent._turn_end_hooks = {}
         self.agent._turn_end_hooks[key] = fn
+
+    # ---------------- mid-run messages (main chat ticket 136) ----------------
+    # GA's own seam for a message that reaches a running task: every
+    # step's `turn_end_callback` reads `agent.intervene`, appends it to
+    # the next step's prompt as `[MASTER] …` and sets it to None, then
+    # calls the turn-end hooks with its locals (`injprompt` is what it
+    # took). Managed runtime's main chat only (runner/interject.py): the
+    # constitution lets attach mode read hook locals but never write GA
+    # state.
+
+    def set_intervene(self, text: str | None) -> None:
+        """Write `agent.intervene` (None clears it)."""
+        self.agent.intervene = text
+
+    @staticmethod
+    def injected_intervene(ctx: dict[str, Any]) -> str | None:
+        """What GA's `turn_end_callback` took from `intervene` this step
+        (its `injprompt` local), or None."""
+        value = ctx.get("injprompt")
+        return value if isinstance(value, str) and value else None
 
     # ---------------- backend history ----------------
 

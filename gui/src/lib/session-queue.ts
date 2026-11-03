@@ -23,6 +23,20 @@ export interface QueuedMessage {
   text: string;
   origin?: Origin;
   queuedAt: string;
+  /** Handed to the main chat's running run as well (main chat ticket
+   * 136): drawn as your sent message at the conversation's end, not in
+   * the queue bar. Written only when true. */
+  interjected?: boolean;
+  /** The sender's id for the send, when Core's send queued it. */
+  clientRequestId?: string;
+}
+
+/** The items the queue bar shows: the ones not handed to a running run
+ * (those are drawn as sent messages, main chat ticket 136). */
+export function queueBarItems(items: QueuedMessage[]): QueuedMessage[] {
+  return items.some((item) => item.interjected)
+    ? items.filter((item) => !item.interjected)
+    : items;
 }
 
 /** Mirror of core/src/api/queue.rs SessionQueueChangedPayload. */

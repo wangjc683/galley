@@ -439,6 +439,39 @@ pub(super) async fn insert_message_inner(
             });
         }
     };
+    check_session_writable(conn, &session_id).await?;
+    // One past the highest index, and never below `turn_count`: deleting
+    // the main chat's latest rows (ticket 32) leaves a hole instead of
+    // handing its indices out again (`NEXT_TURN_INDEX_SQL`).
+    let next_turn: i64 = sqlx::query_scalar(NEXT_TURN_INDEX_SQL)
+        .bind(&session_id.0)
+        .bind(&session_id.0)
+        .fetch_one(&mut *conn)
+        .await
+        .map_err(map_sqlx_err)?;
+    let msg_id = format!("msg_{}_{}_{}", session_id.0, next_turn, role_sql);
+    write_message_row(
+        conn,
+        MessageRowWrite {
+            msg_id,
+            session_id,
+            turn_index: next_turn,
+            sequence: 0,
+            role,
+            role_sql,
+            content,
+            origin,
+            visibility,
+        },
+    )
+    .await
+}
+
+/// The session exists and is not archived.
+pub(super) async fn check_session_writable(
+    conn: &mut SqliteConnection,
+    session_id: &SessionId,
+) -> Result<()> {
     let row: Option<(String, String)> =
         sqlx::query_as("SELECT id, status FROM sessions WHERE id = ?")
             .bind(&session_id.0)
@@ -453,17 +486,74 @@ pub(super) async fn insert_message_inner(
             message: format!("session {} is archived", session_id.0),
         });
     }
-    // One past the highest index, and never below `turn_count`: deleting
-    // the main chat's latest rows (ticket 32) leaves a hole instead of
-    // handing its indices out again (`NEXT_TURN_INDEX_SQL`).
-    let next_turn: i64 = sqlx::query_scalar(NEXT_TURN_INDEX_SQL)
-        .bind(&session_id.0)
-        .bind(&session_id.0)
-        .fetch_one(&mut *conn)
-        .await
-        .map_err(map_sqlx_err)?;
+    Ok(())
+}
+
+/// What the user said mid-run, written where the run read it (main chat
+/// ticket 136, [`crate::interject`]): a `user` row on the `turn_index` of
+/// the step whose end read it, `sequence` 2 and up, so it sorts after that
+/// step's row (`sequence` 1) and before the next step's. It takes no
+/// index of its own (`turn_count`, `--after-turn` and the next message's
+/// index are unchanged); a `sequence` above 0 is what tells it from a
+/// message that opens a run. Id `msg_{session}_{turn}_user_{sequence}`.
+/// The caller checks the session ([`check_session_writable`]).
+pub(super) async fn insert_interjection_inner(
+    conn: &mut SqliteConnection,
+    session_id: SessionId,
+    turn_index: i64,
+    sequence: i64,
+    content: String,
+    origin: Origin,
+) -> Result<MessageBrief> {
+    let msg_id = format!("msg_{}_{}_user_{}", session_id.0, turn_index, sequence);
+    write_message_row(
+        conn,
+        MessageRowWrite {
+            msg_id,
+            session_id,
+            turn_index,
+            sequence,
+            role: MessageRole::User,
+            role_sql: "user",
+            content,
+            origin,
+            visibility: MessageVisibility::Visible,
+        },
+    )
+    .await
+}
+
+/// One standalone row as [`write_message_row`] writes it.
+struct MessageRowWrite {
+    msg_id: String,
+    session_id: SessionId,
+    turn_index: i64,
+    sequence: i64,
+    role: MessageRole,
+    role_sql: &'static str,
+    content: String,
+    origin: Origin,
+    visibility: MessageVisibility,
+}
+
+/// Insert one user / system row with its search row, and move the
+/// session's last activity.
+async fn write_message_row(
+    conn: &mut SqliteConnection,
+    row: MessageRowWrite,
+) -> Result<MessageBrief> {
+    let MessageRowWrite {
+        msg_id,
+        session_id,
+        turn_index: next_turn,
+        sequence,
+        role,
+        role_sql,
+        content,
+        origin,
+        visibility,
+    } = row;
     let now = chrono_now_iso();
-    let msg_id = format!("msg_{}_{}_{}", session_id.0, next_turn, role_sql);
     sqlx::query(
         "INSERT INTO messages \
          (id, session_id, turn_index, sequence, role, content, created_at, \
@@ -473,7 +563,7 @@ pub(super) async fn insert_message_inner(
     .bind(&msg_id)
     .bind(&session_id.0)
     .bind(next_turn)
-    .bind(0_i64)
+    .bind(sequence)
     .bind(role_sql)
     .bind(&content)
     .bind(&now)

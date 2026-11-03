@@ -19,6 +19,7 @@ mod db_migrations;
 pub mod discovery;
 pub mod error;
 pub mod im_supervisor;
+pub mod interject;
 pub mod ipc;
 pub mod local_file;
 mod log_excerpt;

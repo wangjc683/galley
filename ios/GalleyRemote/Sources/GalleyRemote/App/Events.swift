@@ -36,6 +36,9 @@ public enum Dispatch: String, Codable, Sendable, Hashable, CaseIterable {
     case dispatched
     /// Saved, but nothing is running it.
     case persistedOnly = "persisted_only"
+    /// Said while the main chat's run worked, and read by it mid-way:
+    /// saved after the step that read it. The run goes on.
+    case interjected
     case unknown
 
     public init(from decoder: any Decoder) throws {
@@ -52,6 +55,9 @@ public struct MessagePersistedEvent: Codable, Sendable, Hashable {
     public var dispatch: Dispatch
     /// The sender's own id for the send; `nil` from other senders.
     public var clientRequestId: String?
+    /// The queue item this message was, when it waited in the queue (a
+    /// queued message going out, or one the main chat's run read mid-way).
+    public var queueId: String? = nil
 
     public func encode(to encoder: any Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -59,6 +65,7 @@ public struct MessagePersistedEvent: Codable, Sendable, Hashable {
         try c.encode(message, forKey: .message)
         try c.encode(dispatch, forKey: .dispatch)
         try c.encode(clientRequestId, forKey: .clientRequestId)
+        try c.encodeIfPresent(queueId, forKey: .queueId)
     }
 }
 

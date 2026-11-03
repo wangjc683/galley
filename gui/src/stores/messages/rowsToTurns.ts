@@ -27,7 +27,10 @@ import type { MessageRow } from "@/types/db";
  * (turn_index, sequence) order — user rows (sequence=0) become
  * UserTurn; assistant rows (sequence=1) become AgentTurn with
  * tool_calls / tool_results JSON re-hydrated into
- * ConversationToolEvent[].
+ * ConversationToolEvent[]. A user row with a higher sequence is what the
+ * user said while the run worked (main chat ticket 136), written after
+ * the step that read it: an `interjected` UserTurn, which neither opens a
+ * run nor restarts its step count.
  *
  * `system` and `tool` rows are skipped — V0.1 collapses tools into the
  * assistant row's JSON columns; future Memory Inspector work can
@@ -51,7 +54,9 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
   const stepper = makeMessageStepper();
   for (const row of rows) {
     if (row.role === "user") {
-      stepper.onUserRow(row.turn_index);
+      const interjected = row.sequence > 0;
+      // GA's step count goes on across words the run read mid-way.
+      if (!interjected) stepper.onUserRow(row.turn_index);
       const userTurn: UserTurn = {
         role: "user",
         messageId: row.id,
@@ -59,6 +64,7 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
         attachments: row.attachments,
         createdAt: row.created_at,
       };
+      if (interjected) userTurn.interjected = true;
       const origin = originFromRow(row);
       if (origin) userTurn.origin = origin;
       turns.push(userTurn);

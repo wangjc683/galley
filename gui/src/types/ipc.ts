@@ -326,6 +326,35 @@ export interface TitleGeneratedEvent {
   timestamp: string;
 }
 
+/**
+ * Messages the user sent mid-run reached the model (main chat ticket
+ * 136): GA read them at the end of step `turnIndex`, for the next step.
+ * Sent right after that step's `turn_end`. Core writes them after that
+ * step and announces each as `user-message-persisted` with `dispatch:
+ * "interjected"`; the page acts on that, not on this.
+ */
+export interface InterjectDeliveredEvent {
+  kind: "interject_delivered";
+  sessionId: string;
+  /** Core's queue ids, in the order sent. */
+  ids: string[];
+  turnIndex: number;
+  absoluteTurnIndex?: number | null;
+  timestamp: string;
+}
+
+/**
+ * Messages handed over with `interject` that the run did not read (it
+ * ended first). Sent before its `run_complete`; Core's queue still holds
+ * them and sends them as the next turn. For the log.
+ */
+export interface InterjectReturnedEvent {
+  kind: "interject_returned";
+  sessionId: string;
+  ids: string[];
+  timestamp: string;
+}
+
 export type IPCEvent =
   | ReadyEvent
   | TurnStartEvent
@@ -341,7 +370,9 @@ export type IPCEvent =
   | LLMChangedEvent
   | ReasoningEffortChangedEvent
   | TitleGeneratedEvent
-  | SystemMessageEvent;
+  | SystemMessageEvent
+  | InterjectDeliveredEvent
+  | InterjectReturnedEvent;
 
 // ---------------- Commands (desktop → bridge) ----------------
 
@@ -403,6 +434,19 @@ export interface GenerateTitleCommand {
   finalAnswer?: string;
 }
 
+/**
+ * Core-only (main chat ticket 136, `crate::interject`): what the user sent
+ * while the main chat's run is going, for its next step (GA's
+ * `intervene`). `items` in the order sent; `preamble` goes before them.
+ * The page never sends it; mirrored because this file is the ts surface
+ * of the full wire protocol.
+ */
+export interface InterjectCommand {
+  kind: "interject";
+  items: { id: string; text: string }[];
+  preamble: string;
+}
+
 export type IPCCommand =
   | UserMessageCommand
   | AskUserResponseCommand
@@ -411,4 +455,5 @@ export type IPCCommand =
   | SetLLMCommand
   | SetReasoningEffortCommand
   | ShutdownCommand
-  | GenerateTitleCommand;
+  | GenerateTitleCommand
+  | InterjectCommand;

@@ -346,7 +346,7 @@ impl SqliteGalley {
 
     /// The turn of the visible user row that opens the run turn `turn`
     /// belongs to: the latest user row at or before it that does not
-    /// answer an `ask_user`. The rule is `buildRunGroups`
+    /// answer an `ask_user` and was not said mid-run. The rule is `buildRunGroups`
     /// (`gui/src/lib/run-groups.ts`) read backwards: a user row answers
     /// when the last user or assistant row before it (system rows are
     /// bystanders) is an assistant row with an `ask_user` call. `None`
@@ -361,9 +361,12 @@ impl SqliteGalley {
         // `turn`"; after a reply it is "before that reply".
         let mut bound = (turn.saturating_add(1), i64::MIN);
         loop {
+            // What the user said mid-run (`sequence` above 0, main chat
+            // ticket 136) is inside a run, never its opener.
             let user: Option<(i64, i64)> = sqlx::query_as(
                 "SELECT turn_index, sequence FROM messages \
                  WHERE session_id = ? AND visibility = 'visible' AND role = 'user' \
+                   AND sequence = 0 \
                    AND (turn_index, sequence) < (?, ?) \
                  ORDER BY turn_index DESC, sequence DESC \
                  LIMIT 1",
@@ -1029,6 +1032,51 @@ impl SqliteGalley {
         Ok(msg)
     }
 
+    /// Write what the user said mid-run where the run read it (main chat
+    /// ticket 136, [`crate::interject`]): one row per message, in the
+    /// order given, on `turn_index` (the step whose end read them) after
+    /// whatever that index already holds (`sequence` 2 and up; see
+    /// `insert_interjection_inner`). One transaction.
+    pub async fn persist_interjections(
+        &self,
+        session_id: &SessionId,
+        turn_index: i64,
+        messages: &[(String, crate::api::Origin)],
+    ) -> Result<Vec<MessageBrief>> {
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(map_sqlx_err)?;
+        check_session_writable(&mut tx, session_id).await?;
+        let taken: Option<i64> = sqlx::query_scalar(
+            "SELECT MAX(sequence) FROM messages WHERE session_id = ? AND turn_index = ?",
+        )
+        .bind(session_id.as_str())
+        .bind(turn_index)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(map_sqlx_err)?;
+        let mut sequence = taken.map_or(2, |s| (s + 1).max(2));
+        let mut briefs = Vec::with_capacity(messages.len());
+        for (content, origin) in messages {
+            briefs.push(
+                insert_interjection_inner(
+                    &mut tx,
+                    session_id.clone(),
+                    turn_index,
+                    sequence,
+                    content.clone(),
+                    origin.clone(),
+                )
+                .await?,
+            );
+            sequence += 1;
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
+        Ok(briefs)
+    }
+
     pub(super) async fn send_message_with_visibility_db(
         &self,
         session_id: SessionId,
@@ -1263,12 +1311,15 @@ impl SqliteGalley {
         .map_err(map_sqlx_err)
     }
 
-    /// `turn_index` of the latest user row — the base of the message
-    /// block a runner step belongs to. Fallback for a `turn_end` that
-    /// carries no `absoluteTurnIndex` ([`crate::turn_persistence`]).
+    /// `turn_index` of the latest user row that opens a run (`sequence`
+    /// 0: what the user said mid-run, main chat ticket 136, is inside
+    /// one) — the base of the message block a runner step belongs to.
+    /// Fallback for a `turn_end` that carries no `absoluteTurnIndex`
+    /// ([`crate::turn_persistence`]), and the run a CLI write mid-run is
+    /// made in.
     pub async fn latest_user_turn_index(&self, id: &str) -> Result<Option<i64>> {
         sqlx::query_scalar(
-            "SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user'",
+            "SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user' AND sequence = 0",
         )
         .bind(id)
         .fetch_one(&self.pool)

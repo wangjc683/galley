@@ -375,19 +375,18 @@ export function lastVisibleMessage(
   let live = liveRound;
   for (let i = turns.length - 1; i >= 0; i -= 1) {
     const turn = turns[i];
-    if (
+    // A `/btw` question carries no key (messages.ts's isLatestRunTurn
+    // rule): it is not part of the conversation. Words still waiting for
+    // the run to read them (`queueId`, main chat ticket 136) are.
+    const yours =
       turn.role === "user" &&
-      (turn.messageId !== undefined || turn.clientRequestId !== undefined)
-    ) {
-      live = false;
-    }
+      (turn.messageId !== undefined ||
+        turn.clientRequestId !== undefined ||
+        turn.queueId !== undefined);
+    if (yours) live = false;
     if (turn.role === "system" || hidden.has(i)) continue;
     if (turn.role === "user") {
-      // A `/btw` question carries neither key (messages.ts's
-      // isLatestRunTurn rule): it is not part of the conversation.
-      if (turn.messageId === undefined && turn.clientRequestId === undefined) {
-        continue;
-      }
+      if (!yours) continue;
       // Your own words: the quotes a message opens with are the
       // assistant's (ticket 07), named only when nothing else is there.
       const { quotes, body } = splitQuotedMessage(turn.content);

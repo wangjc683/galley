@@ -209,6 +209,27 @@ replays queues behind it instead of reaching the runner ahead of its
 history. Stopping is `stop_session_run`: `abort` when a run is open or a
 turn is going.
 
+In the managed main chat a text message sent while a run is open goes to
+that run as well (main chat ticket 136,
+[`interject.rs`](../core/src/interject.rs)): Core queues it marked
+`interjected` (only while no stop is on its way and nothing but
+interjections waits) and hands it to the runner as `interject`; the
+runner puts it in GA's own `intervene`, which GA reads at the end of each
+step into the next step's prompt. When the runner reports that a step read
+it (`interject_delivered`, after that step's `turn_end`), the runner
+watcher takes it out of the queue and writes it right after that step:
+same `turn_index`, `sequence` 2 and up, so the transcript and the replayed
+history put it where the model read it, and it takes no index of its own.
+A run that ends before reading it hands it back (`interject_returned`,
+`intervene` cleared before `run_complete`), and the still-queued item goes
+out next as any queued message — as the answer when the run ended on a
+question; the interjections still queued are handed to the run that opens.
+Rows that open a run are therefore the user rows with `sequence` 0; every
+"latest run" query reads past interjections. The GUI, the phone and socket
+`session send` (`dispatch: "interjected"`) all take this path; workbench
+sessions, subtasks, the IM channels and the external runtime queue as
+before.
+
 Socket `session send` keeps its own contract next to this one;
 [ADR-0003](./adr/0003-gui-and-phone-send-through-core.md) records why. The
 first-message title is shared: every path that persists a user message

@@ -489,6 +489,36 @@ GA 在切换时会把 `backend.history` 从旧 client 复制到新 client，**�
 desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / 覆盖」墨色；持久化的
 覆盖值本身由 Core 持有（`sessions.reasoning_effort`），本事件只是运行时回执。
 
+### 4.19 `interject_delivered`
+
+主对话跑着时用户发的话（`interject`，§5.15），在某一步结束时被 GA 读进下一步的提示（主对话票 136）。紧跟在那一步的 `turn_end` 之后发出。
+
+```json
+{
+  "kind": "interject_delivered",
+  "sessionId": "sess_abc123",
+  "ids": ["qm_18f3a9c2e1d00001", "qm_18f3a9c2e1d00002"],
+  "turnIndex": 2,
+  "absoluteTurnIndex": 11,
+  "timestamp": "..."
+}
+```
+
+- `ids`：Core 的队列 id，按发出顺序；同一步读到的几句一起报。
+- `turnIndex` / `absoluteTurnIndex`：读到它们的那一步（与那一步 `turn_end` 的同名字段相同）。
+- 只在这一轮还会继续时发：GA 结束循环的那次回调也会读 `intervene`，但那一步的提示被丢掉（`agent_loop.py` 循环后的 `turn_end_callback(..., '', exit_reason)`），读到的算没送到，走 §4.20。
+- 消费方是 Core 的 runner watcher（`core/src/interject.rs`）：把这些项移出队列，写成 user 行，`turn_index` = `absoluteTurnIndex`、`sequence` 从 2 起（排在那一步 `(t, 1)` 之后、下一步之前），再广播 `user-message-persisted`（`dispatch: "interjected"`）。GUI 的 runner-event 分发器对本事件 no-op。
+
+### 4.20 `interject_returned`
+
+交给 runner 的话这一轮没读到：一轮在它读到之前结束（正在写最后的回复、问用户、停止、出错、步数上限、斜杠命令），或收到时没有一轮在跑，或这个 runner 不收（不是内置运行时的主对话）。在这一轮的 `run_complete` 之前发；没有一轮在跑时立刻发。
+
+```json
+{ "kind": "interject_returned", "sessionId": "sess_abc123", "ids": ["qm_18f3a9c2e1d00001"], "timestamp": "..." }
+```
+
+发之前 runner 已清掉 `intervene`，它们到不了下一轮的第一步。Core 只记日志：这些项一直在队列里，`run_complete` 之后照常作为下一轮发出（上一轮停在 `ask_user` 上时作为回答）。
+
 ## 5. Commands (workbench → bridge)
 
 每个命令必有 `kind` 字段。
@@ -513,7 +543,8 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 拒绝，不入 GA task_queue（旧行为会静默排队且事件流谎报 turn_start）。
 出站排队由 Galley Core 的会话消息队列负责——Core 只在收到
 `run_complete` 后出队下发，正常流量不会触发该拒绝。`/btw` 旁路
-不受影响。
+不受影响。主对话跑着时发的话另走 `interject`（§5.15），不是第二条
+`user_message`。
 
 ### 5.2 `approval_response`（已删除）
 
@@ -660,6 +691,23 @@ self.system`，所以系统提示的常驻输出要求依然生效——`assets/
 成功时 emit `title_generated`（见 4.17）；任何失败（超时 / LLM 错误 / 清洗后为空）
 **静默**丢弃，仅 stderr 记日志——Core 会在下次 `run_complete` 时重试，失败不该
 成为用户可见的错误噪音。
+
+### 5.15 `interject`
+
+主对话跑着时用户发的话，交给正在跑的这一轮（主对话票 136）。只有 Core 发，只发给内置运行时的主对话（`core/src/interject.rs`）；运行中也接受，这正是它的用途。
+
+```json
+{
+  "kind": "interject",
+  "items": [{ "id": "qm_18f3a9c2e1d00001", "text": "上海的" }],
+  "preamble": "The user sent this while you were working. It is your call whether to carry on, change course, or hand what you are doing to a subtask and answer them first."
+}
+```
+
+- runner（`runner/interject.py`）把还没送到的几句按发出顺序拼成一段——`preamble`、空行、各句（句间空行）——写进 GA 的 `agent.intervene`；GA 在每一步结束时读它、以 `[MASTER] …` 接进下一步的提示并清空（`ga.py` `turn_end_callback`）。钩子从 `ctx["injprompt"]` 判断读走的是哪一段，报 `interject_delivered`（§4.19）；GA 读完到清空之间新到的会被清掉，钩子按「还没送到的」重写回去。
+- 按 `id` 去重：同一轮里同一 id 只收一次（Core 在开新一轮后会把队里剩下的插话再交一次）。
+- 不收就退回：没有一轮在跑，或不满足「内置运行时（`GALLEY_RUNTIME_KIND=managed`）且 `GALLEY_MAIN_CHAT=1`」（与主对话浏览器闸门同一组条件），立刻回 `interject_returned`；外置运行时永远不写 `intervene`（宪法 Rule 1）。
+- 一轮结束的每个出口都在 `run_complete` 之前清 `intervene`、退回没送到的（§4.20）；新一轮开始时再清一次。
 
 ## 6. Approval Flow（已删除）
 

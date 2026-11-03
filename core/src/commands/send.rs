@@ -136,6 +136,14 @@ pub(crate) async fn send_user_message(
             queue: Some(QueuedPlacement { queue_id, position }),
             runner: None,
         },
+        // The main chat's running run takes it mid-way (main chat ticket
+        // 136): queued until it is read, drawn as a sent message.
+        SendOutcome::Interjected { queue_id, position } => SendUserMessageResult {
+            outcome: "interjected",
+            message: None,
+            queue: Some(QueuedPlacement { queue_id, position }),
+            runner: None,
+        },
         SendOutcome::SideQuestion { runner } => SendUserMessageResult {
             outcome: "side_question",
             message: None,

@@ -198,4 +198,10 @@ pub struct QueuedMessage {
     pub queue_id: String,
     pub text: String,
     pub queued_at: String,
+    /// Handed to the main chat's running run as well (main chat ticket
+    /// 136): draw it as a sent message, not as a queued one. It leaves
+    /// the queue when the run reads it (`message.persisted`, `dispatch:
+    /// interjected`) or goes out as the next turn. Absent when false.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub interjected: bool,
 }

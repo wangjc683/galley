@@ -118,6 +118,12 @@ pub enum SendOutcome {
     Dispatched,
     /// Waiting behind an open run (text only).
     Queued,
+    /// Handed to the main chat's running run as well (main chat ticket
+    /// 136): written where the run reads it (`message.persisted`,
+    /// `dispatch: interjected`), or sent as the next turn if the run ends
+    /// first. Waits in the queue meanwhile (`queue.changed`, the item
+    /// marked `interjected`).
+    Interjected,
     /// A `/btw` side question: dispatched, not persisted.
     SideQuestion,
     #[serde(other)]
@@ -141,7 +147,7 @@ pub struct SessionSendResult {
     pub outcome: SendOutcome,
     /// The persisted row, on `dispatched`.
     pub message: Option<Message>,
-    /// On `queued`.
+    /// On `queued` and `interjected`.
     pub queue: Option<QueuedPlacement>,
 }
 

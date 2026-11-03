@@ -29,6 +29,19 @@
 //! completes. This is the GUI composer's behavior (it bypasses the
 //! queue while a question is pending), so CLI and GUI agree.
 //!
+//! Interjections (main chat ticket 136, [`crate::interject`]): in the
+//! managed main chat a message sent while a run is open is queued marked
+//! `interjected` and handed to the running run as well. It holds its
+//! place in the queue until the runner reports that the run read it
+//! (then it leaves the queue and is persisted where it was read) or the
+//! run ends (then it is an ordinary queued item and goes out next). Only
+//! while nothing but interjections waits and no stop is on its way
+//! (`stopping`), so a message never overtakes one queued before it. The
+//! one difference at the drain: an interjection at the front goes out as
+//! the answer when the run ended on a question (`ask_pending`), where an
+//! ordinary item is held — the user wrote it while the question was
+//! being asked.
+//!
 //! Queue entries survive bridge crash / respawn (they hang off the
 //! session key, not the process). They do not survive Core restart —
 //! decided scope (PRD 定案 2): a queued message has the standing of an
@@ -55,6 +68,11 @@ pub(super) struct SessionQueueState {
     /// run opens. What a subtask report says went wrong (ticket 29,
     /// `crate::subtask_report`).
     pub(super) last_error: Option<String>,
+    /// Core sent `abort` and the run has not completed yet: a send then
+    /// queues as it always did, it does not interject (main chat ticket
+    /// 136; 「停止中的排队」 stays as it was). Cleared when the run
+    /// completes or closes, or a run opens.
+    pub(super) stopping: bool,
 }
 
 impl SessionQueueState {
@@ -66,6 +84,14 @@ impl SessionQueueState {
     /// [`RunnerManager::queue_try_reserve`]: crate::runner_manager::RunnerManager::queue_try_reserve
     pub(super) fn may_dispatch_now(&self) -> bool {
         !self.open_run && (self.items.is_empty() || self.ask_pending)
+    }
+
+    /// Whether a new message may go to the running run as well
+    /// (`RunnerManager::queue_offer_interjection`): a run is open, no
+    /// stop is on its way, and only interjections wait — none queued
+    /// before it would be overtaken.
+    pub(super) fn may_interject(&self) -> bool {
+        self.open_run && !self.stopping && self.items.iter().all(|m| m.interjected)
     }
 
     /// Fold a `RunCompleteEvent`'s `exitReason` into the state (called by
@@ -96,6 +122,10 @@ pub enum QueueOffer {
     /// concurrent offer routes behind this message; on dispatch failure
     /// the caller must call [`RunnerManager::queue_release_run`].
     DispatchNow,
+    /// Queued marked `interjected` (main chat ticket 136): the caller
+    /// hands it to the running run too ([`crate::interject::hand_over`]).
+    /// Only from [`RunnerManager::queue_offer_interjection`].
+    Interjected { queue_id: String, position: usize },
 }
 
 /// Outcome of [`RunnerManager::queue_jump`].

@@ -71,3 +71,60 @@ git diff --check
 ## 回报
 
 写在本文件末尾的「## 报告」一节，并在最后一条消息里给主会话：设计要点；改了哪些文件；测试与验证结果（数字照抄命令输出）；提交号（照抄 `git log --oneline -1`）；看到但没改的（Open risks），原样列出。
+
+## 设计
+
+（2026-11-03，执行代理写于实现之前。）
+
+### 一句话
+
+插话 = 主对话跑着时进了 Core 队列、同时交给正在跑的那一轮的一句话。它在队里占着位置，直到 runner 报「送到了」（这时才落库、出队）；一轮结束还没送到，它就是普通的排队项，照旧作为下一轮发出。「恰好一次」靠的是同一个事实：只有 `interject_delivered` 能把它移出队列落库，drain 只发队里的项。
+
+### 数据流
+
+1. **入口**（GUI 的 `send_user_message`、手机、socket `session.send`，都经 Core）：文字、非 `/btw`、不带图、不是 `--jump`。目标会话是主对话（`sessions.main_chat`）且是内置运行时，Core 用 `queue_offer_interjection`：一轮开着、Core 没在停止（发出 `abort` 到这一轮的 RunComplete 之间算停止）、队里没有非插话项，就入队并标 `interjected: true`，返回 `Interjected { queueId, position }`；否则与 `queue_offer` 完全相同（排队，或立即发出，或作为回答）。工作台、子任务、外置运行时只走 `queue_offer`，零变化。
+2. **交给 runner**：Core 发 IPC 命令 `interject { items: [{ id, text }], preamble }`（`id` 是队列 id）。发不出去只记日志，项仍在队里。
+3. **runner 写 `intervene`**（`runner/interject.py` 管账，`ga_session.py` 管 GA 的属性）：只在一轮在跑、内置运行时、`GALLEY_MAIN_CHAT=1` 三者都成立时接受；把还没送到的几句按发出顺序拼成一段：`preamble`、空行、各句（句与句之间空行），写进 `agent.intervene`。不接受的立刻发 `interject_returned { ids }`。按 id 去重。
+4. **送到**：GA 每一步结束时在 `turn_end_callback` 里读 `intervene`，拼成 `[MASTER] …` 接进下一步的提示，清空，然后调 `_turn_end_hooks`（`ga.py:594-598`）。runner 的钩子读 `ctx["injprompt"]`：等于自己写过的某一段，且这一轮还会继续（`exit_reason` 为空、没到步数上限），那一段里的几句就送到了。先发这一步的 `turn_end`，再发 `interject_delivered { ids, turnIndex, absoluteTurnIndex }`（`absoluteTurnIndex` = 读到它的这一步的）。剩下的（GA 读完到清空之间新到的）重新写回 `intervene`。
+5. **退回**：一轮结束的所有出口（自然结束、`ask_user`、步数上限、停止、`DONE_WITHOUT_EXIT`、斜杠命令），在发 `run_complete` 之前，清掉 `intervene`，把没送到的发 `interject_returned { ids }`。GA 的结束回调也会读走 `intervene`（`agent_loop.py:105`，这时下一步的提示被丢掉），钩子见 `exit_reason` 非空就不算送到——上游自己的 TUI 也按这一条判（`frontends/tuiapp_v2.py` `_install_intervene_replay_hook`）。
+6. **Core 落库**（runner watcher，同一个有序消费者，这一步的 `turn_end` 已落库）：收到 `interject_delivered`，按 id 把这些项移出队列，在一个事务里落成 user 行（见下），广播 `user-message-persisted`（`dispatch: "interjected"`，带 `queueId` 与发送方的 `clientRequestId`），再广播队列快照。`interject_returned` 只记日志：队列本来就是权威。
+7. **退回的那句怎么发出**：RunComplete 后 drain 照常取队首。队首是插话项、而这一轮停在 `ask_user` 上，它作为回答发出（`ask_user_response`；「上海的」正是这种）；否则作为下一轮的 `user_message`。发出（不论哪条路）后，队里剩下的插话项再交给 runner 一次，送进这一新轮。
+
+### 落库与顺序
+
+- **插话行**：`role = 'user'`，`turn_index` = 读到它的那一步的 `turn_index`，`sequence` = 2、3、…（同一步送到的几句按发出顺序），id `msg_{session}_{turn}_user_{sequence}`。按 `(turn_index, sequence)` 排：第 k 步 `(t, 1)`、插话 `(t, 2…)`、第 k+1 步 `(t+1, 1)`。不新占 `turn_index`，不动 `turn_count`：`--after-turn`、`NEXT_TURN_INDEX_SQL`、回放的 `turn_index > turn_count` 过滤都不受影响。不新开迁移。
+- **一轮的开头 = `sequence = 0` 的 user 行**，插话行（`sequence > 0`）是这一轮中间的话。凡是「最新一条 user 行 = 这一轮的开头」的查询都加 `sequence = 0`：`latest_user_turn_index`（turn 落库的兜底、CLI 写入记在哪一轮）、待办 / 备忘 / 定时的 settle、`latest_run_replies` / `latest_run_last_reply`（子任务派发读回复）、分页的 `run_opener_at_or_before`。删除一条消息（`message_delete.rs`）把插话行算作这一轮的成员（同 `ask_user` 的回答）。carry 不改：它本来就让每条 user 行（含 `ask_user` 的回答）开一个 turn。
+- **对话里的顺序**：送到的那句在读到它的那一步之后；画面上步骤不显示，所以就是「你的上一句、这一句、它的回复」。退回的那句是下一轮的开头行，在上一轮的回复之后（那条回复写的时候它还没看到这句）。
+
+### 回放
+
+不改转换规则，只靠顺序：…第 k 步（assistant）、插话（user）、第 k+1 步（assistant）… 交替；同一步送到的几句是相邻的 user 行，按既有规则合成一条（空行隔开），正是模型当时看到的那一段（回放里不带 `preamble`：那是给它的提示，不是对话）。退回的那句在上一轮回复之后，也是它看到的顺序。不会出现两条相邻 user 消息（相邻的已合并），也不会以 user 结尾之外的新形状。
+
+### 退回的竞态
+
+- 命令（命令线程）与一轮结束（agent 线程或命令线程）共用 `_run_complete_lock`；送到的记账（钩子，agent 线程）与写入共用 `_interject_lock`。锁序固定：先 `_run_complete_lock` 后 `_interject_lock`。
+- GA 读完 `intervene` 到清空之间写进来的会被清掉：钩子按「还没送到的」重写，所以不会丢。
+- 命令晚到（runner 已发 `run_complete`）：runner 立刻退回；Core 的项还在队里，RunComplete 之后作为下一轮发出。
+- 不漏进下一轮第一步：结束时清；新一轮 `put_task` 前再清一次（防御）；只在一轮在跑时接受。
+- 不重复：送到才出队落库；drain 只发队里的项；runner 按 id 去重（第 7 步会把剩下的插话项再交一次）。
+
+### Agent API 与 IPC
+
+- IPC（加法）：命令 `interject`；事件 `interject_delivered`、`interject_returned`。`docs/ipc-protocol.md`、`runner/ipc.py`、`core/src/ipc.rs`、`gui/src/types/ipc.ts` 同步。
+- `session send`（加法）：主对话跑着时 `dispatch: "interjected"`，`message: null`，`queue: { queueId, position }`；`queued` 的含义不变（插话以外的排队照旧）。`stability-and-versioning.md` 的 `dispatch` 表加这个取值；`--jump` 不插话。
+- 事件（加法）：`session-queue:changed` 的项加 `interjected: true`（只在为真时写）与 `clientRequestId`（有才写）；`user-message-persisted` 加 `dispatch: "interjected"` 与 `queueId`。Tauri `send_user_message` 的 `outcome` 加 `"interjected"`（带 `queue`）。手机（`remote-protocol/`）：`SendOutcome::Interjected`、`Dispatch::Interjected`、`QueuedMessage.interjected`，原有的 `Unknown` 兜底照旧；Swift 包同步。
+- 不改已有字段的含义。
+
+### 宪法 Rule 1
+
+`intervene` 是 GA 自己的属性。只有 Core 判为「内置运行时的主对话」才发 `interject`；runner 再按 `_main_chat_refuses` 同一组条件（`GALLEY_MAIN_CHAT=1` 且 `is_managed_runtime()`）把关，外置永远不写。读 `ctx["injprompt"]`、`ctx["exit_reason"]` 是读 GA 钩子的局部变量，只读；写 `intervene` 与读这两项都收在 `runner/ga_session.py`（升级基线时的复核面），作为耦合点写进它的文件头。
+
+### GUI 画法
+
+- 队列里标了 `interjected` 的项不进输入框上方的队列条，作为你的气泡放在对话末尾（消息 store 里一条待送的 user 轮，`queueId`、`interjected`），出现时放发送动效（`userSubmitTick`，滚到底）。CLI、手机发来的插话同样画（出自队列快照）。
+- 待送气泡一直在末尾：等它的时候落下的步骤、回复插在它前面。送到（`dispatch: "interjected"`）时原地认领（拿到 messageId 与库里的时间），之后的步骤接在后面。
+- 三点与进展小字在对话末尾，也就是你这句下面；进展小字跨过插话接着说上一步在做什么（`settledStepHalf` 跳过插话），用时不重置。
+- 回复落在你这句之后，一条回复回应全部；`buildRunGroups` 把插话当这一轮的成员（同 `ask_user` 的回答），过程卡片挂在回复下、含插话前后所有步骤；`segmentClosers` 不在插话处切段（GA 没有重开循环），用时与 token 照算。
+- 退回：这一轮的回复落在你这句之上（它写那条回复时没看到你这句），你的气泡留在原处不动，下一轮开始时认领为下一轮的开头，回复跟在后面。这时回复不在对话末尾，不做「三点长成回复」的过渡，三点原地淡出。
+- 叫醒的轮次（子任务汇报、到点提醒、巡看）里你插了话：从这一刻起按「你开的一轮」画三点与进展小字（原来只在它写字时出三点），因为你在等它了。
+- 工作台的队列条与排队、带图片的发送、`/btw`、回答提问、停止键、停止中的排队，都不变。

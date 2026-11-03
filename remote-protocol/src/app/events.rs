@@ -53,6 +53,10 @@ pub enum Dispatch {
     Dispatched,
     /// Saved, but nothing is running it.
     PersistedOnly,
+    /// Said while the main chat's run worked, and read by it mid-way (main
+    /// chat ticket 136): saved after the step that read it. The run goes
+    /// on; it did not start one.
+    Interjected,
     #[serde(other)]
     Unknown,
 }
@@ -68,6 +72,11 @@ pub struct MessagePersistedEvent {
     pub dispatch: Dispatch,
     /// The sender's own id for the send; `null` from other senders.
     pub client_request_id: Option<String>,
+    /// The queue item this message was (`queue.changed`), when it waited
+    /// in the queue: a queued message going out, or one the main chat's
+    /// run read mid-way (main chat ticket 136). Absent otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queue_id: Option<String>,
 }
 
 /// `message.deleted`: messages left the database (the desktop deleted one

@@ -11,8 +11,9 @@
 //! answer), so the bubble the page removes and the rows Core deletes are
 //! the same set; the page removes exactly the ids this returns.
 //!
-//! - A user row (what you said, or your answer to its question): that
-//!   row, and its attachment files.
+//! - A user row (what you said, your answer to its question, or what you
+//!   said while it worked, main chat ticket 136): that row, and its
+//!   attachment files.
 //! - The greeting: that row.
 //! - Any row of its reply — the answer, a question it asked, a step of
 //!   the process the process card lists: every assistant row of that run,
@@ -215,10 +216,11 @@ struct Run {
 /// The rows grouped into runs exactly as the main chat's conversation
 /// groups its turns (`buildRunGroups` with `splitAfterAnswer`): a user
 /// row opens a run unless it answers the question the run's last reply
-/// step asked; an assistant row after an answer (a closing step) starts a
-/// run of its own, which only happens once the user row between them was
-/// deleted; system rows join the run they are in. Other roles are no
-/// turn and belong to no run.
+/// step asked or was said while the run worked (`sequence` above 0, main
+/// chat ticket 136); an assistant row after an answer (a closing step)
+/// starts a run of its own, which only happens once the user row between
+/// them was deleted; system rows join the run they are in. Other roles
+/// are no turn and belong to no run.
 fn runs(rows: &[MessageUnitRow]) -> Vec<Run> {
     let mut runs = Vec::new();
     let mut current: Option<Run> = None;
@@ -229,7 +231,7 @@ fn runs(rows: &[MessageUnitRow]) -> Vec<Run> {
     for (index, row) in rows.iter().enumerate() {
         match row.role.as_str() {
             "user" => {
-                if awaiting_reply {
+                if awaiting_reply || row.sequence > 0 {
                     if let Some(run) = current.as_mut() {
                         run.members.push(index);
                         awaiting_reply = false;
@@ -559,6 +561,7 @@ mod tests {
             id: id.into(),
             role: role.into(),
             turn_index: turn,
+            sequence: if role == "user" { 0 } else { 1 },
             tool_calls: None,
             final_answer: None,
             created_via: None,
@@ -613,6 +616,30 @@ mod tests {
 
     fn ids(unit: &MessageUnit) -> Vec<&str> {
         unit.ids.iter().map(String::as_str).collect()
+    }
+
+    /// What the user said while the run worked (main chat ticket 136).
+    fn interjection(id: &str, turn: i64) -> MessageUnitRow {
+        MessageUnitRow {
+            sequence: 2,
+            ..row(id, "user", turn)
+        }
+    }
+
+    #[test]
+    fn a_reply_spans_what_you_said_while_it_worked() {
+        let rows = vec![
+            user("u0", 0),
+            step("s0", 0),
+            interjection("i0", 0),
+            step("s1", 1),
+            answer("a2", 2),
+        ];
+        let unit = message_unit(&rows, "a2").unwrap();
+        assert_eq!(ids(&unit), ["s0", "s1", "a2"]);
+        assert_eq!(unit.reply_turns, [0, 1, 2]);
+        // …and your words stay a message of their own.
+        assert_eq!(ids(&message_unit(&rows, "i0").unwrap()), ["i0"]);
     }
 
     #[test]

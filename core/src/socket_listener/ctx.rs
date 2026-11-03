@@ -136,6 +136,19 @@ pub trait RunnerPort: Send + Sync {
     ) -> QueueOffer {
         QueueOffer::DispatchNow
     }
+    /// [`Self::queue_offer`] for a session whose running run may take the
+    /// message mid-way (`RunnerManager::queue_offer_interjection`, main
+    /// chat ticket 136). Default: exactly `queue_offer`, so a fake never
+    /// interjects.
+    async fn queue_offer_interjection(
+        &self,
+        session_id: &str,
+        text: String,
+        origin: Option<crate::api::Origin>,
+        _client_request_id: Option<String>,
+    ) -> QueueOffer {
+        self.queue_offer(session_id, text, origin).await
+    }
     /// `queue_offer`'s dispatch-now branch without its queue branch
     /// (`RunnerManager::queue_try_reserve`): reserve the run gate when an
     /// offer would dispatch now, else change nothing. Core's send uses it
@@ -246,6 +259,16 @@ impl RunnerPort for RunnerManager {
         origin: Option<crate::api::Origin>,
     ) -> QueueOffer {
         RunnerManager::queue_offer(self, session_id, text, origin).await
+    }
+    async fn queue_offer_interjection(
+        &self,
+        session_id: &str,
+        text: String,
+        origin: Option<crate::api::Origin>,
+        client_request_id: Option<String>,
+    ) -> QueueOffer {
+        RunnerManager::queue_offer_interjection(self, session_id, text, origin, client_request_id)
+            .await
     }
     async fn queue_try_reserve(&self, session_id: &str) -> bool {
         RunnerManager::queue_try_reserve(self, session_id).await

@@ -178,6 +178,9 @@ public enum SendOutcome: String, Codable, Sendable, Hashable, CaseIterable {
     case dispatched
     /// Waiting behind an open run (text only).
     case queued
+    /// Handed to the main chat's running run as well: saved where the run
+    /// reads it, or sent as the next turn if the run ends first.
+    case interjected
     /// A `/btw` side question: dispatched, not persisted.
     case sideQuestion = "side_question"
     case unknown

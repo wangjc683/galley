@@ -726,6 +726,15 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       return;
     }
 
+    case "interject_delivered":
+    case "interject_returned": {
+      // Main chat ticket 136: Core acts on these (it writes what the run
+      // read, keeps what it did not in the queue) and the page hears the
+      // result as `user-message-persisted` / `session-queue:changed`.
+      console.debug(`[ipc] ${event.kind}`, event);
+      return;
+    }
+
     case "title_generated": {
       // Core's auto-title watcher owns this event: it CAS-writes the DB
       // and mirrors the accepted title through `session-updated-external`,

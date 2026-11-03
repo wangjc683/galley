@@ -22,6 +22,13 @@
 // (and, since 2026-09-18, its steps continue the earlier run's
 // numbering instead of restarting at 1).
 //
+// Interjections (main chat ticket 136): what the user said while the
+// run worked (`UserTurn.interjected`, durable as the row's `sequence`
+// above 0) is a member of that run, like an ask_user reply, but unlike
+// one it does not end a GA loop: GA read it between two steps of the
+// same `agent_runner_loop`, so it splits no segment and restarts no step
+// count.
+//
 // Segments (2026-09-18): every ask_user pause ends one GA
 // `agent_runner_loop` and the reply starts another, so a run with N
 // answered questions is N+1 GA loops. The runner's per-loop clock and
@@ -126,6 +133,8 @@ function segmentClosers(
   for (const i of memberIndices) {
     if (i === openerIndex) continue;
     const t = turns[i];
+    // Words the run read mid-way: the same GA loop goes on.
+    if (t.role === "user" && t.interjected) continue;
     if (t.role === "user") {
       if (last) closers.push({ turn: last, answered: true });
       last = null;
@@ -280,6 +289,12 @@ export function buildRunGroups(
         // Reply to the pending ask_user — stays inside the run.
         current.memberIndices.push(index);
         current.awaitingReply = false;
+        return;
+      }
+      if (current && turn.interjected) {
+        // Said while the run worked (main chat ticket 136): the run read
+        // it mid-way (or is about to), so it stays inside the run.
+        current.memberIndices.push(index);
         return;
       }
       if (current) finalize(current);

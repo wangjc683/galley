@@ -5,6 +5,7 @@ import type { SubmitSource } from "@/lib/live-tail";
 import { logPerf, perfNow } from "@/lib/perf";
 import { pendingReplyStepBase } from "@/lib/run-groups";
 import { turnOrdinals } from "@/lib/turn-ordinals";
+import type { QueuedMessage } from "@/lib/session-queue";
 import type { UserMessagePersistedPayload } from "@/lib/session-send";
 import { isSubtaskReport } from "@/lib/subtasks";
 import { useSessionsStore } from "@/stores/sessions";
@@ -376,6 +377,20 @@ interface MessagesActions {
    */
   applyUserMessagePersisted: (payload: UserMessagePersistedPayload) => void;
   /**
+   * Draw the main chat's interjections from Core's queue snapshot (main
+   * chat ticket 136): each item marked `interjected` this page does not
+   * draw yet becomes your message at the conversation's end — a user turn
+   * with its `queueId`, `interjected`, no row id — and plays the send
+   * (`userSubmitTick`, source `queued`: the main chat lands it at the
+   * bottom; the face reacts to the queue). Turns that land while it waits
+   * go in before it (`appendAgentTurn`), so it stays last until the row
+   * that writes it takes it over in place (`applyUserMessagePersisted`
+   * with its `queueId`). Every sender's: the composer's, the CLI's, the
+   * phone's. Never takes one away: an item leaves the queue only by
+   * being written (or with Core itself).
+   */
+  syncInterjections: (sid: string, items: QueuedMessage[]) => void;
+  /**
    * Append a transient user message for `/btw` side questions.
    * Distinct from `appendUserTurn`:
    *   - Doesn't touch agentRunning / inFlightContent /
@@ -476,14 +491,43 @@ function findLastUserTurn(
   return -1;
 }
 
+/** An interjection drawn before its row exists (main chat ticket 136):
+ * a queue item the run has not read yet. */
+export function isPendingInterjection(turn: Turn): turn is UserTurn {
+  return (
+    turn.role === "user" &&
+    turn.queueId !== undefined &&
+    turn.messageId === undefined
+  );
+}
+
+/** Where the trailing run of pending interjections starts (`turns.length`
+ * when there is none): a turn landing while they wait goes in there, so
+ * they stay at the conversation's end. */
+function pendingInterjectionsStart(turns: Turn[]): number {
+  let start = turns.length;
+  while (start > 0 && isPendingInterjection(turns[start - 1])) start -= 1;
+  return start;
+}
+
+/** `turns` with `turn` added at the end, before any pending
+ * interjection. */
+function withLandedTurn(turns: Turn[], turn: Turn): Turn[] {
+  const at = pendingInterjectionsStart(turns);
+  if (at === turns.length) return [...turns, turn];
+  return [...turns.slice(0, at), turn, ...turns.slice(at)];
+}
+
 /** Whether the user turn at `index` opened the latest main-agent run:
  * no main user turn (persisted, or an optimistic send) came after it.
- * `/btw` turns carry neither key and do not count. */
+ * `/btw` turns carry neither key and do not count, nor do words said
+ * while the run worked (main chat ticket 136): they are inside it. */
 function isLatestRunTurn(turns: Turn[], index: number): boolean {
   for (let i = index + 1; i < turns.length; i += 1) {
     const turn = turns[i];
     if (
       turn.role === "user" &&
+      !turn.interjected &&
       (turn.messageId !== undefined || turn.clientRequestId !== undefined)
     ) {
       return false;
@@ -518,6 +562,9 @@ function withDispatch(
       return m.agentRunning && isPreDispatchPhase(m.sendPhase)
         ? { ...m, sendPhase: "waiting_agent" }
         : m;
+    case "interjected":
+      // Read mid-run (main chat ticket 136): the run goes on as it was.
+      return m;
     case "persisted_only":
     case "spawn_failed":
       return {
@@ -530,6 +577,51 @@ function withDispatch(
         isStopping: false,
       };
   }
+}
+
+/**
+ * The run state a user row opens a run with when this page did not echo
+ * it: a row another writer persisted, a queued message going out (one
+ * drawn as an interjection included, main chat ticket 136). `before`: the
+ * turns ahead of it, for the step base of an ask_user answer.
+ */
+function runOpenedBy(
+  m: PerSessionMessages,
+  row: {
+    sid: string;
+    dispatch: PersistDispatch;
+    turnIndex: number | null;
+    createdAt: string | undefined;
+    report: boolean;
+    before: Turn[];
+  },
+): Partial<PerSessionMessages> {
+  const { sid, dispatch, turnIndex, createdAt, report, before } = row;
+  const running = dispatch === "pending" || dispatch === "dispatched";
+  const currentTurnCount =
+    useSessionsStore.getState().sessions.find((s) => s.id === sid)?.turnCount ??
+    0;
+  return {
+    agentRunning: running,
+    currentRunStartedAtMs: running
+      ? (createdAtToMs(createdAt) ?? Date.now())
+      : null,
+    inFlightContent: "",
+    currentTurnIndex: null,
+    pendingAskUser: null,
+    sendPhase:
+      dispatch === "pending"
+        ? "starting"
+        : dispatch === "dispatched"
+          ? "waiting_agent"
+          : null,
+    turnIndexOffset: turnIndex !== null ? turnIndex - 1 : currentTurnCount,
+    runStepBase: pendingReplyStepBase(before),
+    // This row owns the run state now, not an earlier optimistic echo.
+    optimisticRequestId: null,
+    nextSuggestion: report ? m.nextSuggestion : null,
+    pausedAtStepLimit: false,
+  };
 }
 
 function createdAtToMs(createdAt?: string): number | null {
@@ -849,6 +941,53 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
       return;
     }
 
+    // 1b. A queued message this page draws as sent (main chat ticket
+    //     136): its row takes the turn over in place. Read mid-run
+    //     (`interjected`), the run goes on as it was; gone out as a turn
+    //     of its own (the run ended before reading it) — or as the
+    //     answer to the question it ended on — it opens that turn now.
+    //     Either way it already played its send.
+    const queuedAt =
+      payload.queueId === undefined
+        ? -1
+        : findLastUserTurn(
+            turns,
+            (turn) =>
+              turn.queueId === payload.queueId && turn.messageId === undefined,
+          );
+    if (queuedAt !== -1) {
+      const { byId } = patchMessages(state, sid, (m) => {
+        const claimed = m.turns.slice();
+        const turn: UserTurn = {
+          ...(claimed[queuedAt] as UserTurn),
+          messageId,
+          createdAt:
+            message.createdAt ?? (claimed[queuedAt] as UserTurn).createdAt,
+        };
+        if (dispatch === "interjected") {
+          turn.interjected = true;
+          claimed[queuedAt] = turn;
+          return { ...m, turns: claimed };
+        }
+        delete turn.interjected;
+        claimed[queuedAt] = turn;
+        return {
+          ...m,
+          ...runOpenedBy(m, {
+            sid,
+            dispatch,
+            turnIndex,
+            createdAt: message.createdAt,
+            report: false,
+            before: m.turns.slice(0, queuedAt),
+          }),
+          turns: claimed,
+        };
+      });
+      set({ byId });
+      return;
+    }
+
     // 2. This page's optimistic echo of it: claim, don't append.
     const ownAt =
       clientRequestId === undefined
@@ -896,9 +1035,6 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
 
     // 3. First sight of a row another writer persisted (or one whose
     //    echo this page no longer holds).
-    const currentTurnCount =
-      useSessionsStore.getState().sessions.find((s) => s.id === sid)
-        ?.turnCount ?? 0;
     const userTurn: UserTurn = { role: "user", content: message.content };
     if (messageId !== undefined) userTurn.messageId = messageId;
     if (message.attachments && message.attachments.length > 0) {
@@ -906,7 +1042,17 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     }
     if (message.origin) userTurn.origin = message.origin;
     if (message.createdAt) userTurn.createdAt = message.createdAt;
-    const running = dispatch === "pending" || dispatch === "dispatched";
+    if (dispatch === "interjected") {
+      // Read mid-run, never drawn here as waiting (main chat ticket
+      // 136): it joins the run where it is; the run goes on as it was.
+      userTurn.interjected = true;
+      const { byId } = patchMessages(state, sid, (m) => ({
+        ...m,
+        turns: withLandedTurn(m.turns, userTurn),
+      }));
+      set({ byId });
+      return;
+    }
     // A subtask report (main chat ticket 31) is Core waking the main
     // chat, not the user sending: it moves no viewport and keeps the
     // last reply's ghost suggestion, which a reply that says nothing
@@ -914,26 +1060,15 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const report = isSubtaskReport(message.origin);
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
+      ...runOpenedBy(m, {
+        sid,
+        dispatch,
+        turnIndex,
+        createdAt: message.createdAt,
+        report,
+        before: m.turns,
+      }),
       turns: [...m.turns, userTurn],
-      agentRunning: running,
-      currentRunStartedAtMs: running
-        ? (createdAtToMs(message.createdAt) ?? Date.now())
-        : null,
-      inFlightContent: "",
-      currentTurnIndex: null,
-      pendingAskUser: null,
-      sendPhase:
-        dispatch === "pending"
-          ? "starting"
-          : dispatch === "dispatched"
-            ? "waiting_agent"
-            : null,
-      turnIndexOffset: turnIndex !== null ? turnIndex - 1 : currentTurnCount,
-      runStepBase: pendingReplyStepBase(m.turns),
-      // This row owns the run state now, not an earlier optimistic echo.
-      optimisticRequestId: null,
-      nextSuggestion: report ? m.nextSuggestion : null,
-      pausedAtStepLimit: false,
     }));
     // Only the ACTIVE session's submit moves the viewport: external
     // submits into background sessions (supervisor / CLI) used to
@@ -956,6 +1091,47 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
               via === "cli" || via === "supervisor" || via === "system"
                 ? "external"
                 : "queued",
+          }
+        : { byId },
+    );
+  },
+
+  syncInterjections: (sid, items) => {
+    const state = get();
+    const turns = state.byId[sid]?.turns ?? EMPTY_TURNS;
+    const drawn = new Set<string>();
+    for (const turn of turns) {
+      if (turn.role === "user" && turn.queueId !== undefined) {
+        drawn.add(turn.queueId);
+      }
+    }
+    const fresh = items.filter(
+      (item) => item.interjected && !drawn.has(item.queueId),
+    );
+    if (fresh.length === 0) return;
+    const { byId } = patchMessages(state, sid, (m) => ({
+      ...m,
+      turns: [
+        ...m.turns,
+        ...fresh.map((item) => {
+          const turn: UserTurn = {
+            role: "user",
+            content: item.text,
+            interjected: true,
+            queueId: item.queueId,
+            createdAt: item.queuedAt,
+          };
+          if (item.origin) turn.origin = item.origin;
+          return turn;
+        }),
+      ],
+    }));
+    set(
+      useSessionsStore.getState().activeSessionId === sid
+        ? {
+            byId,
+            userSubmitTick: state.userSubmitTick + 1,
+            lastSubmitSource: "queued",
           }
         : { byId },
     );
@@ -990,7 +1166,9 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const state = get();
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
-      turns: [...m.turns, turn],
+      // Before any interjection still waiting to be read (main chat
+      // ticket 136): it stays at the conversation's end.
+      turns: withLandedTurn(m.turns, turn),
       // turn_end is per-step inside GA's agent_runner_loop, NOT the
       // terminal signal — a single user message can produce 20+
       // turn_end events before the run actually exits. Keep
@@ -1022,7 +1200,7 @@ export const useMessagesStore = create<MessagesStore>((set, get) => ({
     const state = get();
     const { byId } = patchMessages(state, sid, (m) => ({
       ...m,
-      turns: [...m.turns, turn],
+      turns: withLandedTurn(m.turns, turn),
     }));
     set({ byId });  },
 

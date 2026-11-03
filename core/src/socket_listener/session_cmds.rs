@@ -100,11 +100,50 @@ pub(super) async fn dispatch_session_send(
     // `--jump` converts the hold into "abort current, run me first".
     // While an ask_user question is pending and no run is open, the
     // offer dispatches at once — this send is the answer (galley#30).
-    match ctx
-        .runner
-        .queue_offer(&parsed.session_id, parsed.content.clone(), Some(origin.clone()))
-        .await
+    // In the managed main chat a send while a run is open goes to that
+    // run as well (`dispatch: "interjected"`, main chat ticket 136,
+    // `crate::interject`); `--jump` keeps its own meaning.
+    let offer = if !parsed.jump
+        && crate::interject::takes_interjections(&galley, &parsed.session_id).await
     {
+        ctx.runner
+            .queue_offer_interjection(
+                &parsed.session_id,
+                parsed.content.clone(),
+                Some(origin.clone()),
+                None,
+            )
+            .await
+    } else {
+        ctx.runner
+            .queue_offer(
+                &parsed.session_id,
+                parsed.content.clone(),
+                Some(origin.clone()),
+            )
+            .await
+    };
+    match offer {
+        QueueOffer::Interjected { queue_id, position } => {
+            emit_queue_changed(ctx, &parsed.session_id).await;
+            crate::interject::hand_over(
+                ctx.runner,
+                &parsed.session_id,
+                vec![crate::ipc::InterjectItem {
+                    id: queue_id.clone(),
+                    text: parsed.content,
+                }],
+            )
+            .await;
+            SocketResponse::ok(
+                request_id,
+                serde_json::json!({
+                    "message": Value::Null,
+                    "dispatch": crate::interject::DISPATCH_INTERJECTED,
+                    "queue": { "queueId": queue_id, "position": position },
+                }),
+            )
+        }
         QueueOffer::Queued { queue_id, position } => {
             let mut position = position;
             if parsed.jump {
@@ -246,6 +285,9 @@ async fn send_now(
         false
     };
     let dispatch_status = if sent {
+        // What the user said mid-run that an earlier run never read, still
+        // queued (main chat ticket 136): this run reads it.
+        crate::interject::hand_over_queued(ctx.runner, session_id).await;
         "dispatched"
     } else {
         ctx.runner.queue_release_run(session_id).await;

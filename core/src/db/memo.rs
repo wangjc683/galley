@@ -517,7 +517,7 @@ impl SqliteGalley {
                      AND m.turn_index >= memos.created_in_run_turn) \
              WHERE created_in_session_id = ? AND created_in_turn_index IS NULL \
                AND created_in_run_turn = ( \
-                   SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user') \
+                   SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user' AND sequence = 0) \
                AND EXISTS ( \
                    SELECT 1 FROM messages m \
                    WHERE m.session_id = ? AND m.role = 'assistant' \
@@ -541,7 +541,7 @@ impl SqliteGalley {
                      AND m.turn_index >= memo_events.run_turn) \
              WHERE session_id = ? AND turn_index IS NULL \
                AND run_turn = ( \
-                   SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user') \
+                   SELECT MAX(turn_index) FROM messages WHERE session_id = ? AND role = 'user' AND sequence = 0) \
                AND EXISTS ( \
                    SELECT 1 FROM messages m \
                    WHERE m.session_id = ? AND m.role = 'assistant' \

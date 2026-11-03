@@ -59,6 +59,7 @@ import { isImeCompositionKeydown } from "@/lib/ime";
 import { findPromptFillSlot } from "@/lib/saved-prompts";
 import { isSideQuestion } from "@/lib/side-question";
 import { cn } from "@/lib/utils";
+import { queueBarItems } from "@/lib/session-queue";
 import { useQueueStore } from "@/stores/queue";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
@@ -437,9 +438,12 @@ export const Composer = forwardRef<ComposerHandle, ComposerProps>(
     // through every host (MainView / EmptyState) buys no reuse: the
     // empty screen has no active session and renders no strip.
     const activeSessionId = useSessionsStore((s) => s.activeSessionId);
-    const queueItems = useQueueStore((s) =>
+    const queueSnapshot = useQueueStore((s) =>
       activeSessionId ? (s.bySession[activeSessionId] ?? EMPTY_QUEUE) : EMPTY_QUEUE,
     );
+    // What the main chat's running run takes mid-way is drawn as your sent
+    // message in the conversation, not here (main chat ticket 136).
+    const queueItems = queueBarItems(queueSnapshot);
 
     // Ghost text (next-step suggestion): a derived condition, not a
     // one-shot event — typing hides it, deleting everything brings it

@@ -144,6 +144,8 @@ impl Runner {
                 text: "排着队的话".into(),
                 origin: None,
                 queued_at: "2026-10-14T00:00:00Z".into(),
+                interjected: false,
+                client_request_id: None,
             });
     }
 }

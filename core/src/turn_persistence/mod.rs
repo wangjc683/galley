@@ -240,7 +240,11 @@ fn is_contention(e: &GalleyError) -> bool {
     text.contains("database is locked") || text.contains("busy")
 }
 
-async fn with_contention_retry<T, F, Fut>(label: &str, ids: &str, mut write: F) -> Option<T>
+pub(crate) async fn with_contention_retry<T, F, Fut>(
+    label: &str,
+    ids: &str,
+    mut write: F,
+) -> Option<T>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = crate::error::Result<T>>,

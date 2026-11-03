@@ -111,7 +111,7 @@ Write commands:
 | Command | Use |
 |---|---|
 | `"$GALLEY" session new "<task>" --supervisor=<id> --reason=<why>` | Create a session and send the first task |
-| `"$GALLEY" session send <id> "<text>" --supervisor=<id> --reason=<why>` | Send follow-up to a session; mid-run sends return `dispatch:"queued"` and run next. While `live.askPending` and no run is open it dispatches at once as the answer, ahead of earlier queued messages |
+| `"$GALLEY" session send <id> "<text>" --supervisor=<id> --reason=<why>` | Send follow-up to a session; mid-run sends return `dispatch:"queued"` and run next (to the main chat, `dispatch:"interjected"`: its running task reads it at the next step). While `live.askPending` and no run is open it dispatches at once as the answer, ahead of earlier queued messages |
 | `"$GALLEY" session send <id> "<text>" --jump --supervisor=<id> --reason=<why>` | Mid-run: abort the current task and run this message first; no run open: dispatch now. For the user's interrupt, or when the task is superseded, done elsewhere, or going the wrong way; put the stop and the follow-up in one message |
 | `"$GALLEY" session btw <id> "<question>" --supervisor=<id> --reason=<why>` | Ask a temporary side question; not persisted |
 | `"$GALLEY" session stop <id> --supervisor=<id> --reason=<why>` | Abort the running task (`abort_sent`; queued messages then run); `already_stopped` when the agent is not running, releasing nothing |

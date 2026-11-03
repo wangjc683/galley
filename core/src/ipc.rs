@@ -66,6 +66,8 @@ pub enum IpcEvent {
     TitleGenerated(TitleGeneratedEvent),
     SystemMessage(SystemMessageEvent),
     ReasoningEffortChanged(ReasoningEffortChangedEvent),
+    InterjectDelivered(InterjectDeliveredEvent),
+    InterjectReturned(InterjectReturnedEvent),
 }
 
 impl IpcEvent {
@@ -88,6 +90,8 @@ impl IpcEvent {
             IpcEvent::TitleGenerated(e) => &e.session_id,
             IpcEvent::SystemMessage(e) => &e.session_id,
             IpcEvent::ReasoningEffortChanged(e) => &e.session_id,
+            IpcEvent::InterjectDelivered(e) => &e.session_id,
+            IpcEvent::InterjectReturned(e) => &e.session_id,
         }
     }
 }
@@ -357,6 +361,35 @@ fn default_system_variant() -> String {
     "system".to_string()
 }
 
+/// Messages the user sent mid-run reached the model (main chat ticket
+/// 136): GA read them at the end of step `turn_index` and put them in the
+/// next step's prompt. Sent right after that step's `turn_end`;
+/// `absolute_turn_index` is that step's session-wide index, where Core
+/// writes them (`crate::interject`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterjectDeliveredEvent {
+    pub session_id: String,
+    /// Core's queue ids, in the order sent.
+    pub ids: Vec<String>,
+    pub turn_index: i64,
+    #[serde(default)]
+    pub absolute_turn_index: Option<i64>,
+    pub timestamp: String,
+}
+
+/// Messages handed over with `interject` that the model did not read (the
+/// run ended first, none was running, or the runner may not take them).
+/// Sent before the run's `run_complete`. Core's queue still holds them;
+/// this is for the log.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterjectReturnedEvent {
+    pub session_id: String,
+    pub ids: Vec<String>,
+    pub timestamp: String,
+}
+
 // ---------------- Commands (Galley Core -> runner) ----------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -370,6 +403,7 @@ pub enum IpcCommand {
     SetReasoningEffort(SetReasoningEffortCommand),
     Shutdown,
     GenerateTitle(GenerateTitleCommand),
+    Interject(InterjectCommand),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -427,9 +461,55 @@ pub struct GenerateTitleCommand {
     pub final_answer: Option<String>,
 }
 
+/// What the user sent while the main chat's run is going (main chat
+/// ticket 136), for the run's next step: the runner puts it in GA's
+/// `intervene`. Managed runtime's main chat only (`crate::interject`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterjectCommand {
+    /// In the order sent.
+    pub items: Vec<InterjectItem>,
+    /// What goes before them, once.
+    pub preamble: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterjectItem {
+    /// Core's queue id.
+    pub id: String,
+    pub text: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn interject_wire_round_trips() {
+        let cmd = IpcCommand::Interject(InterjectCommand {
+            items: vec![InterjectItem {
+                id: "qm_1".into(),
+                text: "上海的".into(),
+            }],
+            preamble: "p".into(),
+        });
+        assert_eq!(
+            serde_json::to_string(&cmd).unwrap(),
+            r#"{"kind":"interject","items":[{"id":"qm_1","text":"上海的"}],"preamble":"p"}"#
+        );
+        let delivered = r#"{"kind":"interject_delivered","sessionId":"s","ids":["qm_1","qm_2"],"turnIndex":2,"absoluteTurnIndex":11,"timestamp":"t"}"#;
+        let IpcEvent::InterjectDelivered(e) = serde_json::from_str(delivered).unwrap() else {
+            panic!("expected InterjectDelivered");
+        };
+        assert_eq!(e.ids, vec!["qm_1", "qm_2"]);
+        assert_eq!(e.absolute_turn_index, Some(11));
+        let returned =
+            r#"{"kind":"interject_returned","sessionId":"s","ids":["qm_1"],"timestamp":"t"}"#;
+        let event: IpcEvent = serde_json::from_str(returned).unwrap();
+        assert_eq!(event.session_id(), "s");
+        assert!(matches!(event, IpcEvent::InterjectReturned(_)));
+    }
 
     #[test]
     fn parse_ready_event() {

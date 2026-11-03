@@ -42,7 +42,7 @@ pub mod run_state_events;
 pub use error::{RunnerSpawnError, SendCommandError, ShutdownError};
 pub use manager::{
     is_side_question, RunSignal, RunState, RunnerCommandHandle, RunnerCommandSink, RunnerManager,
-    SpawnArgs,
+    SpawnArgs, TakenItem,
 };
 pub use process::{BroadcastItem, HeldClose, RunnerProcess};
 pub use queue::{QueueJump, QueueOffer};

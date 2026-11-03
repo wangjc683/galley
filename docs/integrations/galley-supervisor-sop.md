@@ -186,6 +186,9 @@ Read `dispatch` on the send:
 - `queued` — the session was mid-run; Galley holds the message and runs it
   automatically when the current task finishes (`queue.position` tells you
   where). Do not resend.
+- `interjected` — the main chat was mid-run; its running task reads the
+  message at its next step and its reply answers it (if the task ends first,
+  the message runs next, as a queued one would). Do not resend.
 - `persisted_only` — saved, but no live runner consumed it. Report that
   distinction; do not resend blindly.
 
@@ -320,8 +323,8 @@ CLI errors are JSON on stdout.
 | `5 runner_error` | Runner could not start or receive command | Inspect session; ask before retrying |
 | `1 internal` | Galley internal error | Report; do not loop |
 
-Never blindly retry. Exit `0` with `dispatch:"queued"`, `"persisted_only"`,
-or `"already_stopped"` is not an error (`already_stopped`: the agent was not
+Never blindly retry. Exit `0` with `dispatch:"queued"`, `"interjected"`,
+`"persisted_only"`, or `"already_stopped"` is not an error (`already_stopped`: the agent was not
 running, so nothing was aborted and nothing queued was released).
 Distinguish `dispatched`, `queued`, `persisted_only`, `already_stopped`,
 `completed`, `timed_out`, `session_error`, and `session_cancelled`.

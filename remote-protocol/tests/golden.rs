@@ -988,6 +988,7 @@ fn golden_app_messages() {
             message: user_message(),
             dispatch: Dispatch::Pending,
             client_request_id: Some("crq_ios_0001".into()),
+            queue_id: None,
         },
     );
     s.event(
@@ -1021,6 +1022,7 @@ fn golden_app_messages() {
                 queue_id: "qm_01".into(),
                 text: "再检查一遍".into(),
                 queued_at: "2026-10-10T08:30:05.000Z".into(),
+                interjected: false,
             }],
         },
     );

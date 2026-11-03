@@ -13,6 +13,9 @@ pub struct MessageUnitRow {
     pub id: String,
     pub role: String,
     pub turn_index: i64,
+    /// Above 0 on a user row: said mid-run (main chat ticket 136), a
+    /// member of its run, never its opener.
+    pub sequence: i64,
     pub tool_calls: Option<String>,
     pub final_answer: Option<String>,
     pub created_via: Option<String>,
@@ -44,7 +47,7 @@ impl SqliteGalley {
     /// order the desktop reads them in, `persisted_message_rows`).
     pub async fn message_unit_rows(&self, session_id: &SessionId) -> Result<Vec<MessageUnitRow>> {
         sqlx::query_as::<_, MessageUnitRow>(
-            "SELECT id, role, turn_index, tool_calls, final_answer, created_via, supervisor \
+            "SELECT id, role, turn_index, sequence, tool_calls, final_answer, created_via, supervisor \
              FROM messages \
              WHERE session_id = ? AND visibility = 'visible' \
              ORDER BY turn_index ASC, sequence ASC, id ASC",

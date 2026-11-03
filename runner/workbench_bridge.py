@@ -34,6 +34,7 @@ from typing import IO, Any, TextIO, cast
 from runner import _watchdog, managed_runtime, process_command
 from runner.ga_print_forward import GaPrintForwarder
 from runner.ga_session import GaSession
+from runner.interject import Interjections
 from runner.ipc import (
     PROTOCOL_VERSION,
     REASONING_EFFORT_TIERS,
@@ -44,6 +45,9 @@ from runner.ipc import (
     ErrorEvent,
     GenerateTitleCommand,
     HistoryLoadedEvent,
+    InterjectCommand,
+    InterjectDeliveredEvent,
+    InterjectReturnedEvent,
     IPCProtocolError,
     LLMChangedEvent,
     LoadHistoryCommand,
@@ -675,6 +679,11 @@ class Bridge:
         # not close the newer run, nor pre-empt Abort's ABORTED (a user
         # stop must reach Core as ABORTED, e.g. `live.lastExit`).
         self._run_generation: int = 0
+        # What the user said while the main chat's run is going (main chat
+        # ticket 136, runner/interject.py): its writes go to GA's
+        # `intervene`. Taken under `_run_complete_lock` (`_handle_interject`)
+        # so a message never lands in a run that has already ended.
+        self._interjections = Interjections(lambda text: self.ga.set_intervene(text))
 
     def _current_absolute_turn_index(self, turn_index: int) -> int | None:
         if self._current_message_turn_base is None:
@@ -1336,6 +1345,7 @@ class Bridge:
                                     self._run_generation == run_generation
                                     and self.run_in_progress.is_set()
                                 ):
+                                    self._return_unread_interjections()
                                     self._emit(
                                         RunCompleteEvent(
                                             sessionId=self.session_id,
@@ -1389,6 +1399,51 @@ class Bridge:
 
         threading.Thread(target=drain, daemon=True).start()
 
+    def _return_unread_interjections(self) -> None:
+        """A run is ending: clear GA's `intervene` and report the messages
+        it never read (`interject_returned`), before the run's
+        `run_complete`, so none reaches the next run's first step and Core
+        sends them as the next turn (main chat ticket 136). Every path
+        that ends a run calls this right before emitting `run_complete`,
+        under `_run_complete_lock`."""
+        unread = self._interjections.take_unread()
+        if unread:
+            self._emit(InterjectReturnedEvent(sessionId=self.session_id, ids=unread))
+
+    @staticmethod
+    def _interjections_allowed() -> bool:
+        """Whether this runner may put mid-run messages in GA's
+        `intervene`: Galley's managed runtime, the main chat's runner —
+        the conditions of the main chat's browser guard
+        (`runner.handlers._main_chat_refuses`). Core sends `interject`
+        only there; this keeps attach mode inert even if it did not
+        (CLAUDE.md Rule 1)."""
+        from runner.handlers import MAIN_CHAT_ENV
+
+        return os.environ.get(MAIN_CHAT_ENV) == "1" and managed_runtime.is_managed_runtime()
+
+    def _handle_interject(self, cmd: InterjectCommand) -> None:
+        """Take messages for the running run's next step, or hand them
+        straight back (`interject_returned`): no run going, or a runner
+        that may not take them."""
+        items: list[tuple[str, str]] = []
+        for raw in cmd.items:
+            if not isinstance(raw, dict):
+                continue
+            item_id, text = raw.get("id"), raw.get("text")
+            if isinstance(item_id, str) and item_id and isinstance(text, str):
+                items.append((item_id, text))
+        with self._run_complete_lock:
+            if self.run_in_progress.is_set() and self._interjections_allowed():
+                self._interjections.add(items, cmd.preamble)
+                return
+        if items:
+            self._emit(
+                InterjectReturnedEvent(
+                    sessionId=self.session_id, ids=[item_id for item_id, _ in items]
+                )
+            )
+
     def _close_run_without_exit(self, run_generation: int, done_text: str) -> None:
         """Safety net for a GA task that ended without reporting an exit
         (galley#29): the task loop raised, a `_stop` file broke it, or any
@@ -1421,6 +1476,7 @@ class Bridge:
                     category="runtime",
                     context="task_end",
                 )
+            self._return_unread_interjections()
             self._emit(
                 RunCompleteEvent(
                     sessionId=self.session_id,
@@ -1514,6 +1570,14 @@ class Bridge:
                 if response is not None
                 else ""
             ) or None
+            # Mid-run messages GA read at this step's end, for the next
+            # step (main chat ticket 136). Only when the loop goes on: the
+            # call that ends GA's loop reads `intervene` too, and its
+            # prompt goes nowhere. Reported after this step's turn_end, so
+            # Core writes them after the step.
+            interjected = self._interjections.step_ended(
+                self.ga.injected_intervene(ctx), run_goes_on=not exit_reason
+            )
 
             self._emit(
                 TurnEndEvent(
@@ -1537,6 +1601,16 @@ class Bridge:
                     responseThinking=response_thinking,
                 )
             )
+
+            if interjected:
+                self._emit(
+                    InterjectDeliveredEvent(
+                        sessionId=self.session_id,
+                        ids=interjected,
+                        turnIndex=turn,
+                        absoluteTurnIndex=self._current_absolute_turn_index(turn),
+                    )
+                )
 
             # ask_user is an explicit interaction request: emit AskUserEvent
             # so desktop can prompt the user.
@@ -1567,6 +1641,7 @@ class Bridge:
                         )
                         if _TOOL_MARKUP_START_RE.match(final_content):
                             final_content = ""
+                        self._return_unread_interjections()
                         self._emit(
                             RunCompleteEvent(
                                 sessionId=self.session_id,
@@ -1683,6 +1758,9 @@ class Bridge:
             # run isn't suppressed when the previous run also ended at
             # turn 1.
             self._last_emitted_turn = 0
+            # Nothing of an earlier run may reach this one's first step
+            # (main chat ticket 136); its end already cleared it.
+            self._return_unread_interjections()
             self._current_message_visibility = cmd.visibility or "visible"
             self._current_message_turn_base = cmd.absoluteTurnIndex
             self._begin_run_tracking()
@@ -1709,6 +1787,7 @@ class Bridge:
             # Same as UserMessage above — ask_user response triggers a
             # fresh agent_runner_loop with turn counter restarting at 1.
             self._last_emitted_turn = 0
+            self._return_unread_interjections()
             self._current_message_visibility = "visible"
             self._current_message_turn_base = cmd.absoluteTurnIndex
             self._begin_run_tracking()
@@ -1729,6 +1808,7 @@ class Bridge:
             self.agent.abort()
             with self._run_complete_lock:
                 if self.run_in_progress.is_set():
+                    self._return_unread_interjections()
                     self._emit(
                         RunCompleteEvent(
                             sessionId=self.session_id,
@@ -1774,6 +1854,8 @@ class Bridge:
             self._handle_set_reasoning_effort(cmd)
         elif isinstance(cmd, GenerateTitleCommand):
             self._handle_generate_title(cmd)
+        elif isinstance(cmd, InterjectCommand):
+            self._handle_interject(cmd)
         elif isinstance(cmd, ShutdownCommand):
             self.shutdown_event.set()
 

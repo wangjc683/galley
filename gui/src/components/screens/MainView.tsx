@@ -83,7 +83,11 @@ import {
 } from "@/lib/typing-bubble-handoff";
 import { cn } from "@/lib/utils";
 import { hiddenRowIds, useMessageDeleteStore } from "@/stores/message-delete";
-import { EMPTY_ORDINALS, useMessagesStore } from "@/stores/messages";
+import {
+  EMPTY_ORDINALS,
+  isPendingInterjection,
+  useMessagesStore,
+} from "@/stores/messages";
 import { useUiStore } from "@/stores/ui";
 import type {
   PendingAskUser,
@@ -522,7 +526,11 @@ function MainViewContent({
       settled: roundSettled,
       silent: silentReport,
     });
-    if (kind) {
+    // What you said while it wrote its last step waits under the reply
+    // (main chat ticket 136): the reply lands above it, not where the
+    // dots were, so it does not grow out of them; the dots fade.
+    const last = turns[turns.length - 1];
+    if (kind && !(last && isPendingInterjection(last))) {
       setHandoff({
         tick: (handoff?.tick ?? 0) + 1,
         kind,

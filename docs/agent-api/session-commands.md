@@ -252,6 +252,22 @@ does. Before the fix, such a send queued behind the held messages and
 nothing ever released them. A send that arrives while the asking run is
 still open (`live.openRun` is `true`) queues as usual.
 
+**Interjecting into the main chat (`dispatch: "interjected"`, additive
+since 2026-11-03, main chat ticket 136)**: a send to the main chat (Galley's
+managed runtime) while its run is open, with no stop on its way and only
+interjections waiting, is held in the queue as above and also handed to
+the running run, which reads it at the end of its current step and decides
+what to do about it. The response is `dispatch: "interjected"`, `message:
+null`, and the `queue` object. Once the run reads it, the message is
+persisted right after the step that read it (same `turnIndex` as that
+step), and that run's reply answers it: `session wait --after-turn=N`
+with `N` read before the send returns on that reply. If the run ends
+before reading it (it was writing its last step, it asked, it stopped), it
+runs as the next turn, as a queued message would — as the answer when the
+run ended on a question. `--jump` never interjects. Every other session
+answers as before; `queued` keeps its meaning. Handle unknown `dispatch`
+values per the stability rules.
+
 **Starting a runner (`--ensure-runner`, additive since 2026-10-16)**:
 without it, a send to a session with no live runner (never started,
 LRU-evicted, crashed, or every session after a Galley restart) persists
@@ -295,9 +311,9 @@ Response shape:
 
 | Field      | Type          | Notes                                                                             |
 | ---------- | ------------- | --------------------------------------------------------------------------------- |
-| `message`  | `MessageBrief \| null` | The persisted row, including server-assigned `id` + `createdAt`. **`null` when `dispatch == "queued"`** — the row is minted at dequeue time. |
-| `dispatch` | string enum   | `"dispatched"` if the runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned) and `--ensure-runner` was not given or could not start one — the row is in SQLite either way; `"queued"` if a run is open or older messages are queued, and the message is held in Core's queue (additive value — handle unknowns per §stability) |
-| `queue`    | object        | Present only when `dispatch == "queued"`: `{ "queueId": "qm_…", "position": 0 }` (0-based; `--jump` yields position 0) |
+| `message`  | `MessageBrief \| null` | The persisted row, including server-assigned `id` + `createdAt`. **`null` when `dispatch == "queued"` or `"interjected"`** — the row is minted at dequeue time, or when the run reads it. |
+| `dispatch` | string enum   | `"dispatched"` if the runner received the command on stdin; `"persisted_only"` if no runner is alive (LRU-evicted / crashed / never spawned) and `--ensure-runner` was not given or could not start one — the row is in SQLite either way; `"queued"` if a run is open or older messages are queued, and the message is held in Core's queue (additive value — handle unknowns per §stability); `"interjected"` if the target is the main chat and its running run takes the message mid-way (additive 2026-11-03, see above) |
+| `queue`    | object        | Present only when `dispatch == "queued"` or `"interjected"`: `{ "queueId": "qm_…", "position": 0 }` (0-based; `--jump` yields position 0) |
 
 **Semantics**: fire-and-forget. The CLI returns as soon as the message
 is persisted; it does **not** wait for the runner to complete the

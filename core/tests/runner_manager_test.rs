@@ -2332,3 +2332,566 @@ async fn run_state_events_follow_a_run_and_an_ask_without_repeats() {
         assert_ne!(pair[0], pair[1], "repeated snapshot in {states:#?}");
     }
 }
+
+// ---------------- interjections (main chat ticket 136) ----------------
+
+use galley_core_lib::message_queue::dispatch_queued_item;
+use galley_core_lib::session_runner::rows_to_conversation_messages;
+
+/// Mock runner that answers `interject` the way the real bridge does
+/// (`runner/interject.py`): on `work` it does a step, waits for the
+/// message, reports the next step read it (`interject_delivered` right
+/// after that step's `turn_end`) and answers; on `quick` and `askme` the
+/// message arrives while it writes its last step, so it hands it back
+/// (`interject_returned`) before `run_complete`, `askme` ending on a
+/// question. Any other message, and an `ask_user_response`, gets a
+/// one-step reply quoting it. Each command is logged to `commands.jsonl`.
+fn write_interjecting_runner(dir: &std::path::Path) {
+    let runner_dir = dir.join("runner");
+    fs::create_dir_all(&runner_dir).expect("mkdir runner");
+    fs::write(runner_dir.join("__init__.py"), "").expect("write __init__");
+    let script = r##"
+import argparse
+import json
+import os
+import sys
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--ga-path", required=True)
+parser.add_argument("--session-id", required=True)
+parser.add_argument("--cwd", required=False)
+parser.add_argument("--llm-no", type=int, default=0)
+args = parser.parse_args()
+LOG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "commands.jsonl")
+
+def emit(obj):
+    obj["sessionId"] = args.session_id
+    obj.setdefault("timestamp", "2026-11-03T00:00:00+00:00")
+    print(json.dumps(obj), flush=True)
+
+emit({"kind": "ready", "protocolVersion": "0.1", "gaCommit": "mock",
+      "gaCommitDate": "2026-11-03T00:00:00+00:00", "gaPath": args.ga_path,
+      "llmName": "mock-llm", "cwd": os.getcwd(), "pid": os.getpid(),
+      "availableLLMs": []})
+
+READ = [{"args": {"path": "a.md"}, "toolName": "file_read", "toolUseId": "call-r"}]
+
+def step(n, base, summary, exit_reason=None, tools=None, content=None):
+    emit({"kind": "turn_end", "turnIndex": n, "summary": summary,
+          "toolCalls": READ if tools is None and exit_reason is None else (tools or []),
+          "toolResults": [], "responseContent": content or summary,
+          "exitReason": exit_reason, "visibility": "visible",
+          "absoluteTurnIndex": base + n - 1})
+
+def done(result="CURRENT_TASK_DONE"):
+    emit({"kind": "run_complete", "exitReason": {"result": result, "data": None},
+          "finalContent": "", "totalTurns": 1, "visibility": "visible"})
+
+FINISH = {"result": "CURRENT_TASK_DONE", "data": None}
+
+def next_cmd():
+    for line in sys.stdin:
+        try:
+            cmd = json.loads(line)
+        except ValueError:
+            continue
+        with open(LOG, "a") as f:
+            f.write(json.dumps(cmd) + "\n")
+        return cmd
+    return None
+
+waiting = None  # (text, base) of a run waiting for an interjection
+while True:
+    cmd = next_cmd()
+    if cmd is None or cmd.get("kind") == "shutdown":
+        break
+    kind = cmd.get("kind")
+    if kind in ("user_message", "ask_user_response"):
+        text = cmd.get("text", "")
+        base = cmd.get("absoluteTurnIndex")
+        emit({"kind": "turn_start", "turnIndex": 1, "visibility": "visible"})
+        if kind == "user_message" and text in ("work", "quick", "askme"):
+            if text == "work":
+                step(1, base, "读文件")
+            waiting = (text, base)
+            continue
+        step(1, base, "回复", FINISH, content="收到：" + text)
+        done()
+    elif kind == "interject" and waiting is not None:
+        text, base = waiting
+        waiting = None
+        ids = [item["id"] for item in cmd["items"]]
+        if text == "work":
+            step(2, base, "再读一个")
+            emit({"kind": "interject_delivered", "ids": ids, "turnIndex": 2,
+                  "absoluteTurnIndex": base + 1})
+            step(3, base, "答案", FINISH, content="按你说的改了。")
+            done()
+        elif text == "quick":
+            step(1, base, "答案", FINISH, content="三点了。")
+            emit({"kind": "interject_returned", "ids": ids})
+            done()
+        else:
+            ask = [{"toolName": "ask_user", "toolUseId": "call-ask",
+                    "args": {"question": "哪个城市？", "candidates": []}}]
+            step(1, base, "询问用户", {"result": "EXITED", "data": None}, tools=ask,
+                 content="哪个城市？")
+            emit({"kind": "ask_user", "question": "哪个城市？", "candidates": []})
+            emit({"kind": "interject_returned", "ids": ids})
+            done("EXITED")
+    elif kind == "interject":
+        emit({"kind": "interject_returned", "ids": [i["id"] for i in cmd["items"]]})
+"##;
+    fs::write(runner_dir.join("workbench_bridge.py"), script).expect("write mock");
+}
+
+/// The managed main chat, with a manager wired as the app wires it and a
+/// notifier that keeps every broadcast.
+async fn interjecting_main_chat(
+    sid: &str,
+) -> (
+    TempDir,
+    TempDir,
+    SqliteGalley,
+    RunnerManager,
+    mpsc::UnboundedReceiver<RunSignal>,
+    Arc<RecordingNotifier>,
+) {
+    let bridge = TempDir::new().expect("tempdir");
+    write_interjecting_runner(bridge.path());
+    let (db, pool, galley) = persistence_db().await;
+    seed_session(&pool, sid).await;
+    sqlx::query("UPDATE sessions SET ga_runtime_kind = 'managed', main_chat = 1 WHERE id = ?")
+        .bind(sid)
+        .execute(&pool)
+        .await
+        .expect("make it the main chat");
+    let notifier = Arc::new(RecordingNotifier::default());
+    let mgr = RunnerManager::new();
+    mgr.set_turn_store(galley.clone(), notifier.clone());
+    let (tx, rx) = mpsc::unbounded_channel();
+    mgr.set_run_signal(tx);
+    spawn_persisting(&mgr, sid, bridge.path()).await;
+    (bridge, db, galley, mgr, rx, notifier)
+}
+
+async fn send_as_desktop(
+    mgr: &RunnerManager,
+    galley: &SqliteGalley,
+    notifier: &Arc<RecordingNotifier>,
+    sid: &str,
+    text: &str,
+    request: &str,
+) -> SendOutcome {
+    let notifier: Arc<dyn Notifier> = notifier.clone();
+    let host = RunnerHost {
+        galley,
+        runner: mgr,
+        notifier,
+        env: None,
+    };
+    send_user_message(
+        &host,
+        SendRequest {
+            session_id: sid.into(),
+            text: text.into(),
+            images: Vec::new(),
+            client_request_id: Some(request.into()),
+            origin: Origin::desktop(),
+            via: "gui",
+            llm_override: None,
+            ga_config: None,
+            timeouts: Default::default(),
+        },
+    )
+    .await
+    .expect("send")
+}
+
+/// (role, turn_index, sequence, content) of every row, in order.
+async fn transcript(galley: &SqliteGalley, sid: &str) -> Vec<(String, i64, i64, String)> {
+    galley
+        .persisted_message_rows(&SessionId(sid.into()))
+        .await
+        .expect("rows")
+        .into_iter()
+        .map(|r| (r.role, r.turn_index, r.sequence, r.content))
+        .collect()
+}
+
+fn persisted_events(notifier: &RecordingNotifier) -> Vec<serde_json::Value> {
+    notifier
+        .events
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|(name, _)| name == "user-message-persisted")
+        .map(|(_, p)| p.clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn an_interjection_lands_after_the_step_that_read_it() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let sid = "s-interject";
+    let (bridge, _db, galley, mgr, mut signals, notifier) = interjecting_main_chat(sid).await;
+    let base = dispatch(&mgr, &galley, sid, "work", MessageVisibility::Visible).await;
+    let base = i64::from(base);
+
+    // Sent mid-run: queued, marked, and handed to the run — not a run of
+    // its own.
+    let outcome = send_as_desktop(&mgr, &galley, &notifier, sid, "上海的", "crq-1").await;
+    let SendOutcome::Interjected { queue_id, position } = outcome else {
+        panic!("expected Interjected, got {outcome:?}");
+    };
+    assert_eq!(position, 0);
+
+    assert_eq!(next_run_complete(&mut signals).await, sid);
+    assert!(
+        mgr.queue_snapshot(sid).await.is_empty(),
+        "read, so out of the queue"
+    );
+
+    // Right after the step that read it, on that step's index.
+    let rows = transcript(&galley, sid).await;
+    let shape: Vec<(&str, i64, i64)> = rows
+        .iter()
+        .map(|(role, turn, seq, _)| (role.as_str(), *turn, *seq))
+        .collect();
+    assert_eq!(
+        shape,
+        vec![
+            ("user", base, 0),
+            ("assistant", base, 1),
+            ("assistant", base + 1, 1),
+            ("user", base + 1, 2),
+            ("assistant", base + 2, 1),
+        ]
+    );
+    assert_eq!(rows[3].3, "上海的");
+    // It took no index of its own: the turn count is the run's steps.
+    assert_eq!(turn_count(&galley, sid).await, 3);
+
+    // Announced once, as interjected, with its queue id and the sender's id.
+    let persisted = persisted_events(&notifier);
+    let mine: Vec<_> = persisted
+        .iter()
+        .filter(|p| p["message"]["content"] == "上海的")
+        .collect();
+    assert_eq!(mine.len(), 1, "{persisted:#?}");
+    assert_eq!(mine[0]["dispatch"], "interjected");
+    assert_eq!(mine[0]["queueId"], queue_id.as_str());
+    assert_eq!(mine[0]["clientRequestId"], "crq-1");
+    assert_eq!(
+        mine[0]["message"]["id"],
+        format!("msg_{sid}_{}_user_2", base + 1)
+    );
+
+    // The runner got it once, with the preamble.
+    let commands = read_log(bridge.path(), "commands.jsonl");
+    let interjects: Vec<_> = commands
+        .iter()
+        .filter(|c| c["kind"] == "interject")
+        .collect();
+    assert_eq!(interjects.len(), 1);
+    assert_eq!(interjects[0]["items"][0]["text"], "上海的");
+    assert!(interjects[0]["preamble"]
+        .as_str()
+        .unwrap()
+        .starts_with("The user sent this while you were working."));
+
+    // A cold replay gives the model what it saw: steps, then the words,
+    // then the rest — alternating, no two user messages in a row.
+    let replay_rows = galley
+        .persisted_message_rows(&SessionId(sid.into()))
+        .await
+        .unwrap();
+    let history = rows_to_conversation_messages(
+        replay_rows.into_iter().map(Into::into),
+        i64::from(turn_count(&galley, sid).await),
+    );
+    let roles: Vec<&str> = history.iter().map(|m| m.role.as_str()).collect();
+    assert_eq!(roles, vec!["user", "assistant", "user", "assistant"]);
+    assert_eq!(history[2].content, "上海的");
+    assert!(history[1].content.contains("再读一个"));
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn an_interjection_the_run_never_read_goes_out_next_exactly_once() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let sid = "s-returned";
+    let (_bridge, _db, galley, mgr, mut signals, notifier) = interjecting_main_chat(sid).await;
+    let base = i64::from(dispatch(&mgr, &galley, sid, "quick", MessageVisibility::Visible).await);
+    let outcome = send_as_desktop(&mgr, &galley, &notifier, sid, "顺便说下星期几", "crq-2").await;
+    let SendOutcome::Interjected { queue_id, .. } = outcome else {
+        panic!("expected Interjected, got {outcome:?}");
+    };
+
+    let done = next_run_complete(&mut signals).await;
+    // Not read: still queued, still marked.
+    let queued = mgr.queue_snapshot(sid).await;
+    assert_eq!(queued.len(), 1);
+    assert!(queued[0].interjected);
+    assert!(
+        !transcript(&galley, sid)
+            .await
+            .iter()
+            .any(|(_, _, _, c)| c == "顺便说下星期几"),
+        "not written while unread"
+    );
+
+    // The drain sends it as the next turn.
+    let taken = mgr
+        .queue_take_next_item(&RunSignal::RunComplete { session_id: done })
+        .await
+        .expect("the front item goes out");
+    assert!(!taken.answer);
+    let as_dyn: Arc<dyn Notifier> = notifier.clone();
+    dispatch_queued_item(&galley, &mgr, &as_dyn, sid, taken).await;
+    assert_eq!(next_run_complete(&mut signals).await, sid);
+
+    let rows = transcript(&galley, sid).await;
+    let shape: Vec<(&str, i64, i64, &str)> = rows
+        .iter()
+        .map(|(role, turn, seq, c)| (role.as_str(), *turn, *seq, c.as_str()))
+        .collect();
+    assert_eq!(
+        shape,
+        vec![
+            ("user", base, 0, "quick"),
+            ("assistant", base, 1, "三点了。"),
+            ("user", base + 1, 0, "顺便说下星期几"),
+            ("assistant", base + 1, 1, "收到：顺便说下星期几"),
+        ]
+    );
+    // Its broadcast carries the queue id and the sender's id, so the page
+    // drawing it takes it over in place.
+    let persisted = persisted_events(&notifier);
+    let mine: Vec<_> = persisted
+        .iter()
+        .filter(|p| p["message"]["content"] == "顺便说下星期几")
+        .collect();
+    assert_eq!(mine.len(), 1);
+    assert_eq!(mine[0]["dispatch"], "dispatched");
+    assert_eq!(mine[0]["queueId"], queue_id.as_str());
+    assert_eq!(mine[0]["clientRequestId"], "crq-2");
+    assert!(mgr.queue_snapshot(sid).await.is_empty());
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn an_interjection_unread_when_the_run_asks_is_the_answer() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let sid = "s-answer";
+    let (bridge, _db, galley, mgr, mut signals, notifier) = interjecting_main_chat(sid).await;
+    dispatch(&mgr, &galley, sid, "askme", MessageVisibility::Visible).await;
+    send_as_desktop(&mgr, &galley, &notifier, sid, "上海的", "crq-3").await;
+    let done = next_run_complete(&mut signals).await;
+    assert!(mgr.run_state(sid).await.ask_pending);
+
+    let taken = mgr
+        .queue_take_next_item(&RunSignal::RunComplete { session_id: done })
+        .await
+        .expect("an interjection is not held by the question");
+    assert!(taken.answer);
+    let as_dyn: Arc<dyn Notifier> = notifier.clone();
+    dispatch_queued_item(&galley, &mgr, &as_dyn, sid, taken).await;
+    assert_eq!(next_run_complete(&mut signals).await, sid);
+
+    let commands = read_log(bridge.path(), "commands.jsonl");
+    let answer = commands.last().expect("a command");
+    assert_eq!(answer["kind"], "ask_user_response");
+    assert_eq!(answer["text"], "上海的");
+    assert!(!mgr.run_state(sid).await.ask_pending);
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+#[tokio::test]
+async fn a_workbench_session_still_queues() {
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let bridge = TempDir::new().expect("tempdir");
+    write_interjecting_runner(bridge.path());
+    let (_db, pool, galley) = persistence_db().await;
+    seed_session(&pool, "s-bench").await;
+    let notifier = Arc::new(RecordingNotifier::default());
+    let mgr = RunnerManager::new();
+    mgr.set_turn_store(galley.clone(), notifier.clone());
+    let (tx, _rx) = mpsc::unbounded_channel();
+    mgr.set_run_signal(tx);
+    spawn_persisting(&mgr, "s-bench", bridge.path()).await;
+    dispatch(&mgr, &galley, "s-bench", "work", MessageVisibility::Visible).await;
+
+    let outcome = send_as_desktop(&mgr, &galley, &notifier, "s-bench", "再看看", "crq-4").await;
+    assert!(matches!(outcome, SendOutcome::Queued { .. }), "{outcome:?}");
+    let queued = mgr.queue_snapshot("s-bench").await;
+    assert_eq!(queued.len(), 1);
+    assert!(!queued[0].interjected);
+    let commands = read_log(bridge.path(), "commands.jsonl");
+    assert!(commands.iter().all(|c| c["kind"] != "interject"));
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+/// The CLI's `session send` to the main chat mid-run interjects too
+/// (`dispatch: "interjected"`, additive), and the run reads it; `--jump`
+/// keeps its own meaning.
+#[tokio::test]
+async fn socket_session_send_interjects_into_the_main_chat() {
+    use galley_core_lib::socket_listener::{
+        dispatch_line_with, DbSource, DispatchResult, HandlerCtx,
+    };
+    if mock_python_path().is_none() {
+        eprintln!("[skip] no python on this machine");
+        return;
+    }
+    let sid = "s-cli-interject";
+    let (bridge, _db, galley, mgr, mut signals, notifier) = interjecting_main_chat(sid).await;
+    let db = DbSource::Pool(galley.clone());
+    let ctx = HandlerCtx {
+        db: &db,
+        runner: &mgr,
+        notifier: notifier.clone(),
+        app: None,
+    };
+    let send = |content: &str| {
+        let line = serde_json::to_string(&json!({
+            "id": "r1", "command": "session.send", "schemaVersion": 3,
+            "args": {"sessionId": sid, "content": content},
+        }))
+        .unwrap();
+        let ctx = &ctx;
+        async move {
+            match dispatch_line_with(ctx, &line).await {
+                DispatchResult::Unary(resp) => resp,
+                DispatchResult::Stream { .. } => panic!("expected unary response"),
+            }
+        }
+    };
+
+    let first = send("work").await;
+    assert_eq!(first.result.unwrap()["dispatch"], "dispatched");
+    let mid = send("算了，查后天").await.result.unwrap();
+    assert_eq!(mid["dispatch"], "interjected");
+    assert_eq!(mid["message"], serde_json::Value::Null);
+    assert_eq!(mid["queue"]["position"], 0);
+
+    assert_eq!(next_run_complete(&mut signals).await, sid);
+    let rows = transcript(&galley, sid).await;
+    let words = rows
+        .iter()
+        .find(|(_, _, _, c)| c == "算了，查后天")
+        .expect("written");
+    assert_eq!(words.0, "user");
+    assert_eq!(words.2, 2, "after the step that read it");
+    let interjects = read_log(bridge.path(), "commands.jsonl")
+        .into_iter()
+        .filter(|c| c["kind"] == "interject")
+        .count();
+    assert_eq!(interjects, 1);
+
+    mgr.shutdown_all(Duration::from_secs(1)).await;
+}
+
+/// What the user said mid-run is inside the run: every query that finds
+/// "the run's opener" reads past it (`sequence = 0`), so the run's replies,
+/// the turn a CLI write mid-run is filed under and the step-index fallback
+/// are those of the whole run.
+#[tokio::test]
+async fn an_interjection_opens_no_run() {
+    let (_db, pool, galley) = persistence_db().await;
+    seed_session(&pool, "s-open").await;
+    let sid = SessionId("s-open".into());
+    let opener = galley
+        .send_message(
+            sid.clone(),
+            "work".into(),
+            Origin {
+                via: OriginVia::Gui,
+                supervisor: None,
+                reason: None,
+                client: None,
+            },
+        )
+        .await
+        .unwrap();
+    let base = i64::from(opener.turn_index.unwrap());
+    for (offset, answer) in [(0, None), (1, None), (2, Some("好了"))] {
+        galley
+            .persist_assistant_message(PersistAssistantMessage {
+                session_id: sid.clone(),
+                turn_index: u32::try_from(base + offset).unwrap(),
+                content: format!("step {offset}"),
+                tool_calls: None,
+                tool_results: None,
+                thinking: None,
+                final_answer: answer.map(Into::into),
+                summary: None,
+                preamble: None,
+                visibility: MessageVisibility::Visible,
+                telemetry: None,
+            })
+            .await
+            .unwrap();
+        if offset == 0 {
+            let written = galley
+                .persist_interjections(
+                    &sid,
+                    base,
+                    &[
+                        ("上海的".into(), Origin::desktop()),
+                        ("算了".into(), Origin::desktop()),
+                    ],
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                written.iter().map(|m| m.id.0.as_str()).collect::<Vec<_>>(),
+                [
+                    format!("msg_s-open_{base}_user_2"),
+                    format!("msg_s-open_{base}_user_3")
+                ]
+            );
+        }
+    }
+    assert_eq!(
+        galley.latest_user_turn_index("s-open").await.unwrap(),
+        Some(base)
+    );
+    let replies = galley.latest_run_replies(&sid).await.unwrap();
+    assert_eq!(
+        replies.len(),
+        3,
+        "the whole run, the steps before the words too"
+    );
+    // The next message still lands at the next free index.
+    let next = galley
+        .send_message(
+            sid.clone(),
+            "next".into(),
+            Origin {
+                via: OriginVia::Gui,
+                supervisor: None,
+                reason: None,
+                client: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(i64::from(next.turn_index.unwrap()), base + 3);
+}

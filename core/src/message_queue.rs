@@ -24,27 +24,14 @@ use crate::api::{
     SESSION_QUEUE_CHANGED_EVENT,
 };
 use crate::db::SqliteGalley;
-use crate::ipc::{IpcCommand, UserMessageCommand};
+use crate::ipc::{AskUserResponseCommand, IpcCommand, UserMessageCommand};
 use crate::notify::Notifier;
-use crate::runner_manager::{RunSignal, RunnerManager};
+use crate::runner_manager::{RunSignal, RunnerManager, TakenItem};
+use crate::session_send::{UserMessagePersistedPayload, USER_MESSAGE_PERSISTED_EVENT};
 use crate::socket_listener::RunnerPort;
-use serde::Serialize;
 use std::sync::Arc;
 use tauri::AppHandle;
 use tokio::sync::mpsc;
-
-/// Wire twin of the socket layer's `user-message-persisted` payload
-/// (socket_listener/session_cmds.rs `UserMessagePersistedPayload` —
-/// keep the shape in sync). Re-declared here because queue dispatches
-/// happen outside any socket request context, but the GUI listener
-/// must see the exact same event shape either way.
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-struct QueueDispatchPersistedPayload {
-    session_id: String,
-    message: crate::api::MessageBrief,
-    dispatch: &'static str,
-}
 
 /// Broadcast one session's full queue snapshot. Called after every
 /// mutation — enqueue sites, remove, jump, and the drain task.
@@ -88,6 +75,32 @@ pub async fn dispatch_queued_message(
     session_id: &str,
     item: QueuedMessage,
 ) {
+    dispatch_queued_item(
+        galley,
+        manager,
+        notifier,
+        session_id,
+        TakenItem {
+            item,
+            answer: false,
+        },
+    )
+    .await;
+}
+
+/// [`dispatch_queued_message`] for what the drain popped: an
+/// interjection the run never read that goes out as the answer to the
+/// question the run ended on (`answer`, main chat ticket 136) is sent as
+/// `ask_user_response`. Once the run is open, it is handed the
+/// interjections still queued ([`crate::interject::hand_over_queued`]).
+pub async fn dispatch_queued_item(
+    galley: &SqliteGalley,
+    manager: &RunnerManager,
+    notifier: &Arc<dyn Notifier>,
+    session_id: &str,
+    taken: TakenItem,
+) {
+    let TakenItem { item, answer } = taken;
     let origin = item.origin.clone().unwrap_or(Origin {
         via: OriginVia::Gui,
         supervisor: None,
@@ -106,18 +119,21 @@ pub async fn dispatch_queued_message(
             return;
         }
     };
-    let dispatch = match manager
-        .send_command(
-            session_id,
-            &IpcCommand::UserMessage(UserMessageCommand {
-                text: item.text.clone(),
-                images: vec![],
-                visibility: None,
-                absolute_turn_index: brief.turn_index.map(i64::from),
-            }),
-        )
-        .await
-    {
+    let absolute_turn_index = brief.turn_index.map(i64::from);
+    let cmd = if answer {
+        IpcCommand::AskUserResponse(AskUserResponseCommand {
+            text: item.text.clone(),
+            absolute_turn_index,
+        })
+    } else {
+        IpcCommand::UserMessage(UserMessageCommand {
+            text: item.text.clone(),
+            images: vec![],
+            visibility: None,
+            absolute_turn_index,
+        })
+    };
+    let dispatch = match manager.send_command(session_id, &cmd).await {
         Ok(()) => "dispatched",
         Err(e) => {
             eprintln!("[queue {session_id}] dispatch failed: {e}");
@@ -129,13 +145,20 @@ pub async fn dispatch_queued_message(
     };
     crate::notify::notify(
         notifier.as_ref(),
-        "user-message-persisted",
-        &QueueDispatchPersistedPayload {
+        USER_MESSAGE_PERSISTED_EVENT,
+        &UserMessagePersistedPayload {
             session_id: session_id.to_string(),
             message: brief,
             dispatch,
+            // A page drawing the item (an interjection is drawn as a sent
+            // message, main chat ticket 136) takes it over in place.
+            client_request_id: item.client_request_id.clone(),
+            queue_id: Some(item.queue_id.clone()),
         },
     );
+    if dispatch == "dispatched" {
+        crate::interject::hand_over_queued(manager, session_id).await;
+    }
     // A session's first message may well be a queued one (ticket 02c:
     // Core derives the title wherever it persists a user message).
     crate::session_title::derive_and_announce(galley, notifier.as_ref(), session_id, &item.text)
@@ -249,10 +272,10 @@ pub fn spawn_queue_drain_task(
                 }
                 Err(e) => eprintln!("[queue {session_id}] settling memos failed: {e}"),
             }
-            let next = manager.queue_take_next(&signal).await;
+            let next = manager.queue_take_next_item(&signal).await;
             let took_next = next.is_some();
-            if let Some(item) = next {
-                dispatch_queued_message(&galley, &manager, &notifier, &session_id, item).await;
+            if let Some(taken) = next {
+                dispatch_queued_item(&galley, &manager, &notifier, &session_id, taken).await;
             }
             if let Some(main) = report_to {
                 crate::subtask_report::spawn_wake_if_due(

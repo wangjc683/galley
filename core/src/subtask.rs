@@ -736,6 +736,7 @@ fn announce_message(
             message: message.clone(),
             dispatch,
             client_request_id: None,
+            queue_id: None,
         },
     );
 }

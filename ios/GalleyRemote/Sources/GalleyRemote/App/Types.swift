@@ -265,4 +265,7 @@ public struct QueuedMessage: Codable, Sendable, Hashable {
     public var queueId: String
     public var text: String
     public var queuedAt: String
+    /// Handed to the main chat's running run as well: draw it as a sent
+    /// message, not as a queued one. Absent when false.
+    public var interjected: Bool? = nil
 }

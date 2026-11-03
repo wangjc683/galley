@@ -13,7 +13,10 @@
 //! 2. a `/btw` side question ([`is_side_question`]) is neither persisted
 //!    nor gated: ensure a runner, dispatch it as it is (no images);
 //! 3. the run gate: a text message goes through `queue_offer` (queued
-//!    while a run is open, like every other sender); a message with
+//!    while a run is open, like every other sender) — in the managed main
+//!    chat `queue_offer_interjection`, which also hands a message sent
+//!    mid-run to the running run (main chat ticket 136,
+//!    [`crate::interject`]); a message with
 //!    images may not wait in the queue (items are text only), so it
 //!    either reserves the gate at once (`queue_try_reserve`) or is
 //!    refused;
@@ -31,7 +34,9 @@
 //!    too);
 //! 6. ensure a runner with the session's history in it
 //!    ([`crate::session_runner`], `holds_run_gate`);
-//! 7. dispatch, and broadcast the same message again as `dispatched`.
+//! 7. dispatch, and broadcast the same message again as `dispatched`;
+//!    hand the run the interjections still queued
+//!    ([`crate::interject::hand_over_queued`]).
 //!
 //! Every failure after step 3 releases the gate, and every failure after
 //! step 5 broadcasts the message again as `persisted_only` — it is saved,
@@ -81,6 +86,11 @@ pub struct UserMessagePersistedPayload {
     /// can match the row to its optimistic echo.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_request_id: Option<String>,
+    /// The queue item this row was (a queued message going out, or one
+    /// the run read mid-way, main chat ticket 136), so a page drawing the
+    /// item takes it over in place.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue_id: Option<String>,
 }
 
 /// One user send.
@@ -118,6 +128,11 @@ pub enum SendOutcome {
     /// Held in the session's queue (a run is open); persisted when it is
     /// dispatched. Text only.
     Queued { queue_id: String, position: usize },
+    /// Held in the main chat's queue and handed to its running run (main
+    /// chat ticket 136, [`crate::interject`]): persisted where the run
+    /// reads it, or, if the run ends first, sent as the next turn. Text
+    /// only.
+    Interjected { queue_id: String, position: usize },
     /// A `/btw` side question went to the runner; nothing persisted.
     SideQuestion { runner: EnsureOutcome },
 }
@@ -192,11 +207,39 @@ pub async fn send_user_message(
     }
 
     if req.images.is_empty() {
-        match host
-            .runner
-            .queue_offer(&sid, req.text.clone(), Some(req.origin.clone()))
-            .await
-        {
+        let offer = if crate::interject::takes_interjections(host.galley, &sid).await {
+            host.runner
+                .queue_offer_interjection(
+                    &sid,
+                    req.text.clone(),
+                    Some(req.origin.clone()),
+                    req.client_request_id.clone(),
+                )
+                .await
+        } else {
+            host.runner
+                .queue_offer(&sid, req.text.clone(), Some(req.origin.clone()))
+                .await
+        };
+        match offer {
+            QueueOffer::Interjected { queue_id, position } => {
+                crate::message_queue::notify_queue_changed_via(
+                    host.runner,
+                    host.notifier.as_ref(),
+                    &sid,
+                )
+                .await;
+                crate::interject::hand_over(
+                    host.runner,
+                    &sid,
+                    vec![crate::ipc::InterjectItem {
+                        id: queue_id.clone(),
+                        text: req.text,
+                    }],
+                )
+                .await;
+                return Ok(SendOutcome::Interjected { queue_id, position });
+            }
             QueueOffer::Queued { queue_id, position } => {
                 crate::message_queue::notify_queue_changed_via(
                     host.runner,
@@ -271,6 +314,7 @@ async fn send_reserved(host: &RunnerHost<'_>, req: SendRequest) -> Result<SendOu
                 message: message.clone(),
                 dispatch,
                 client_request_id: req.client_request_id.clone(),
+                queue_id: None,
             },
         );
     };
@@ -330,6 +374,9 @@ async fn send_reserved(host: &RunnerHost<'_>, req: SendRequest) -> Result<SendOu
         return Err(SendError::DispatchFailed(e.to_string()));
     }
     announce("dispatched");
+    // What the user said mid-run that an earlier run never read, still
+    // queued behind this answer (main chat ticket 136): this run reads it.
+    crate::interject::hand_over_queued(host.runner, sid).await;
     Ok(SendOutcome::Dispatched { message, runner })
 }
 

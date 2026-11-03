@@ -359,11 +359,14 @@ pub(super) fn queued_message(item: QueuedMessage) -> phone::QueuedMessage {
         text,
         origin: _,
         queued_at,
+        interjected,
+        client_request_id: _,
     } = item;
     phone::QueuedMessage {
         queue_id,
         text,
         queued_at,
+        interjected,
     }
 }
 
@@ -405,7 +408,8 @@ pub(super) fn history_replay(payload: HistoryReplayPayload) -> phone::HistoryRep
 }
 
 /// `user-message-persisted`'s `dispatch` (`pending` | `dispatched` |
-/// `persisted_only`); a value this build does not know reads as `Unknown`.
+/// `persisted_only` | `interjected`); a value this build does not know
+/// reads as `Unknown`.
 pub(super) fn dispatch(value: String) -> phone::Dispatch {
     serde_json::from_value(Value::String(value)).unwrap_or(phone::Dispatch::Unknown)
 }

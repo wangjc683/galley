@@ -329,6 +329,14 @@ async fn session_send(
                 position: u32::try_from(position).unwrap_or(u32::MAX),
             }),
         },
+        SendOutcome::Interjected { queue_id, position } => phone::SessionSendResult {
+            outcome: phone::SendOutcome::Interjected,
+            message: None,
+            queue: Some(phone::QueuedPlacement {
+                queue_id,
+                position: u32::try_from(position).unwrap_or(u32::MAX),
+            }),
+        },
         SendOutcome::SideQuestion { .. } => phone::SessionSendResult {
             outcome: phone::SendOutcome::SideQuestion,
             message: None,

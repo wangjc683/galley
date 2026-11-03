@@ -102,7 +102,7 @@ mislead. SOPs branch per command:
 
 | Command                          | Possible `dispatch` values                         |
 | -------------------------------- | -------------------------------------------------- |
-| `session send`                   | `dispatched` / `persisted_only` / `queued` (additive since v0.4.6-dev; mid-run sends hold in Core's in-memory queue — see session-commands §5.5a) |
+| `session send`                   | `dispatched` / `persisted_only` / `queued` (additive since v0.4.6-dev; mid-run sends hold in Core's in-memory queue — see session-commands §5.5a) / `interjected` (additive 2026-11-03: the main chat's running run takes it mid-way — see session-commands §5.5a) |
 | `session new`                    | `dispatched` (exit 5 if runner cannot start/send)  |
 | `session btw`                    | `dispatched` (only — exit 5 on no bridge)          |
 | `session stop`                   | `abort_sent` / `already_stopped`                   |

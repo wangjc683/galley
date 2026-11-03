@@ -187,6 +187,20 @@ export interface UserTurn {
    */
   clientRequestId?: string;
   attachments?: MessageAttachment[];
+  /**
+   * Said while the run worked (main chat ticket 136): a member of that
+   * run, not the opener of one — the run read it mid-way. Persisted rows
+   * carry it as `sequence` above 0 (rowsToTurns).
+   */
+  interjected?: boolean;
+  /**
+   * Core's queue id of a message drawn before it is persisted: the main
+   * chat's interjection waiting for the run to read it (messages store
+   * `syncInterjections`). The row that writes it carries the same id
+   * (`user-message-persisted`'s `queueId`) and takes the turn over in
+   * place. In memory only.
+   */
+  queueId?: string;
   /** Audit origin for the user message. When it came in through Galley
    * CLI (`supervisor` / `cli`), MessageUser renders a small provenance
    * icon, Galley or Galley CLI (B4 M7; lib/origin-marker). Absent /

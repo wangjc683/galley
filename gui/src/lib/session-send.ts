@@ -20,8 +20,14 @@ import {
 } from "@/lib/bridge";
 import type { MessageAttachment, Origin } from "@/types/conversation";
 
-/** How Core settled a `send_user_message`. */
-export type SendOutcome = "dispatched" | "queued" | "side_question";
+/** How Core settled a `send_user_message`. `interjected`: the main
+ * chat's running run takes it mid-way (main chat ticket 136); it waits in
+ * the queue, marked, until the run reads it or ends. */
+export type SendOutcome =
+  | "dispatched"
+  | "queued"
+  | "interjected"
+  | "side_question";
 
 /** Arguments of Core's `send_user_message` Tauri command. */
 export interface SendUserMessageArgs {
@@ -66,7 +72,7 @@ export interface SendUserMessageResult {
   outcome: SendOutcome;
   /** The persisted row when `dispatched` (same shape as the event's). */
   message: PersistedMessageBrief | null;
-  /** Where the text landed when `queued`. */
+  /** Where the text landed when `queued` or `interjected`. */
   queue: { queueId: string; position: number } | null;
   /** The session's runner when `dispatched` / `side_question`. */
   runner: RunnerHandle | null;
@@ -81,14 +87,27 @@ export interface SendUserMessageResult {
  * could not start, restore or take the message (the row stays, no run
  * opened). Both carry the send's `clientRequestId`. Socket sends (CLI)
  * and queue drains broadcast once, with `dispatched`,
- * `persisted_only` or `spawn_failed` and no `clientRequestId`. Absent
+ * `persisted_only` or `spawn_failed`. Absent
  * `dispatch` (older Cores) means dispatched.
+ *
+ * `interjected` (main chat ticket 136): a message sent while the main
+ * chat's run worked, written once the run read it, right after the step
+ * that did; the run goes on, it opened none. A row that waited in the
+ * queue (that one, or a queued message going out) carries its `queueId`
+ * (and the sender's `clientRequestId` when Core's send queued it), so
+ * the page drawing the item takes it over in place.
  */
 export interface UserMessagePersistedPayload {
   sessionId: string;
   message: PersistedMessageBrief;
-  dispatch?: "pending" | "dispatched" | "persisted_only" | "spawn_failed";
+  dispatch?:
+    | "pending"
+    | "dispatched"
+    | "persisted_only"
+    | "spawn_failed"
+    | "interjected";
   clientRequestId?: string;
+  queueId?: string;
 }
 
 /** A failed `send_user_message`: Core's error tag and readable message. */

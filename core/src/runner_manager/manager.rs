@@ -113,6 +113,39 @@ pub enum RunSignal {
     Closed { session_id: String },
 }
 
+/// What [`RunnerManager::queue_take_next_item`] popped.
+#[derive(Debug, Clone)]
+pub struct TakenItem {
+    pub item: QueuedMessage,
+    /// It goes out as the answer to the question the run ended on
+    /// (`ask_user_response`), not as a new message.
+    pub answer: bool,
+}
+
+/// The body of [`RunnerManager::queue_take_interjections`], shared with
+/// the runner watcher.
+async fn take_interjections(
+    queues: &QueueMap,
+    session_id: &str,
+    ids: &[String],
+) -> Vec<QueuedMessage> {
+    let mut q = queues.lock().await;
+    let Some(state) = q.get_mut(session_id) else {
+        return Vec::new();
+    };
+    let mut taken = Vec::new();
+    let mut kept = std::collections::VecDeque::with_capacity(state.items.len());
+    for item in state.items.drain(..) {
+        if item.interjected && ids.contains(&item.queue_id) {
+            taken.push(item);
+        } else {
+            kept.push_back(item);
+        }
+    }
+    state.items = kept;
+    taken
+}
+
 impl Default for RunnerManager {
     fn default() -> Self {
         Self::new()
@@ -319,6 +352,46 @@ impl RunnerManager {
                         turn,
                     )
                     .await;
+                }
+                // What the user said mid-run, read at the end of a step
+                // (main chat ticket 136): out of the queue and into the
+                // transcript right after that step, whose row the
+                // `turn_end` before it has just written.
+                if let (IpcEvent::InterjectDelivered(delivered), Some((galley, notifier))) =
+                    (&event, &store)
+                {
+                    let items = take_interjections(&queues, &sid, &delivered.ids).await;
+                    {
+                        crate::interject::persist_delivered(
+                            galley,
+                            notifier.as_ref(),
+                            &sid,
+                            delivered,
+                            items,
+                        )
+                        .await;
+                        let snapshot = queues
+                            .lock()
+                            .await
+                            .get(&sid)
+                            .map(|s| s.items.iter().cloned().collect())
+                            .unwrap_or_default();
+                        crate::notify::notify(
+                            notifier.as_ref(),
+                            crate::api::SESSION_QUEUE_CHANGED_EVENT,
+                            &crate::api::SessionQueueChangedPayload {
+                                session_id: sid.clone(),
+                                items: snapshot,
+                            },
+                        );
+                    }
+                }
+                if let IpcEvent::InterjectReturned(returned) = &event {
+                    // Still queued: it goes out after the run completes.
+                    eprintln!(
+                        "[interject {sid}] not read before the run ended, sent next: {:?}",
+                        returned.ids
+                    );
                 }
                 if let Some(tx) = &signal_tx {
                     if !queue_bookkeeping(&queues, &sid, tx, event).await {
@@ -739,10 +812,55 @@ impl RunnerManager {
                     text,
                     origin,
                     queued_at: now_iso(),
+                    interjected: false,
+                    client_request_id: None,
                 });
                 QueueOffer::Queued {
                     queue_id,
                     position: state.items.len() - 1,
+                }
+            } else {
+                state.open_run = true;
+                QueueOffer::DispatchNow
+            }
+        };
+        self.run_state_feed.touch(session_id);
+        offer
+    }
+
+    /// [`Self::queue_offer`] for a session whose running run may take the
+    /// message mid-way (the managed main chat, main chat ticket 136,
+    /// [`crate::interject`]): with a run open, no stop on its way and only
+    /// interjections waiting, the message is queued marked `interjected`
+    /// (`QueueOffer::Interjected`) and the caller hands it to the run.
+    /// Otherwise exactly `queue_offer`. `client_request_id` rides on the
+    /// item to the broadcast that persists it.
+    pub async fn queue_offer_interjection(
+        &self,
+        session_id: &str,
+        text: String,
+        origin: Option<crate::api::Origin>,
+        client_request_id: Option<String>,
+    ) -> QueueOffer {
+        let offer = {
+            let mut q = self.queues.lock().await;
+            let state = q.entry(session_id.to_string()).or_default();
+            let interjected = state.may_interject();
+            if interjected || !state.may_dispatch_now() {
+                let queue_id = mint_queue_id();
+                state.items.push_back(QueuedMessage {
+                    queue_id: queue_id.clone(),
+                    text,
+                    origin,
+                    queued_at: now_iso(),
+                    interjected,
+                    client_request_id,
+                });
+                let position = state.items.len() - 1;
+                if interjected {
+                    QueueOffer::Interjected { queue_id, position }
+                } else {
+                    QueueOffer::Queued { queue_id, position }
                 }
             } else {
                 state.open_run = true;
@@ -857,26 +975,59 @@ impl RunnerManager {
     /// to persist + dispatch. `Closed` never pops — a crashed bridge
     /// holds its queue for manual resume (PRD 定案 4).
     pub async fn queue_take_next(&self, signal: &RunSignal) -> Option<QueuedMessage> {
+        self.queue_take_next_item(signal)
+            .await
+            .map(|taken| taken.item)
+    }
+
+    /// [`Self::queue_take_next`], saying whether the item goes out as the
+    /// answer to the question the run ended on: an interjection the run
+    /// never read (main chat ticket 136) is not held by `ask_pending` as
+    /// an ordinary item is — the user wrote it while the question was
+    /// being asked — it is that question's answer.
+    pub async fn queue_take_next_item(&self, signal: &RunSignal) -> Option<TakenItem> {
         let (session_id, may_pop) = match signal {
             RunSignal::RunComplete { session_id } => (session_id, true),
             RunSignal::Closed { session_id } => (session_id, false),
         };
-        let item = {
+        let taken = {
             let mut q = self.queues.lock().await;
             let state = q.entry(session_id.clone()).or_default();
             state.open_run = false;
-            if !may_pop || state.ask_pending || state.items.is_empty() {
+            state.stopping = false;
+            let answer = state.ask_pending;
+            let front_may_go = state
+                .items
+                .front()
+                .is_some_and(|item| !answer || item.interjected);
+            if !may_pop || !front_may_go {
                 None
             } else {
                 let item = state.items.pop_front();
                 if item.is_some() {
                     state.open_run = true;
                 }
-                item
+                item.map(|item| TakenItem { item, answer })
             }
         };
         self.run_state_feed.touch(session_id);
-        item
+        taken
+    }
+
+    /// Take the interjections `ids` out of the queue, in queue order (main
+    /// chat ticket 136): the run read them, and they are persisted where
+    /// it did ([`crate::interject::persist_delivered`]). An id no longer
+    /// queued is skipped.
+    pub async fn queue_take_interjections(
+        &self,
+        session_id: &str,
+        ids: &[String],
+    ) -> Vec<QueuedMessage> {
+        let taken = take_interjections(&self.queues, session_id, ids).await;
+        if !taken.is_empty() {
+            self.run_state_feed.touch(session_id);
+        }
+        taken
     }
 
     /// Live run-state snapshot for one session — the truthful busy
@@ -1000,12 +1151,23 @@ async fn send_command_via(
     let mut p = proc.lock().await;
     let result = p.send_command(cmd).await;
     drop(p);
+    if result.is_ok() && matches!(cmd, IpcCommand::Abort) {
+        // A stop is on its way: sends queue until the run completes
+        // (main chat ticket 136; they do not interject).
+        queues
+            .lock()
+            .await
+            .entry(session_id.to_string())
+            .or_default()
+            .stopping = true;
+    }
     if result.is_ok() && RunnerManager::opens_run_gate(cmd) {
         {
             let mut q = queues.lock().await;
             let state = q.entry(session_id.to_string()).or_default();
             state.open_run = true;
             state.ask_pending = false;
+            state.stopping = false;
             state.last_error = None;
             // `last_exit` is deliberately left alone: it keeps saying why
             // the previous run ended until this one completes (galley#30).
@@ -1075,6 +1237,8 @@ fn is_watched(event: &IpcEvent) -> bool {
             | IpcEvent::TurnEnd(_)
             | IpcEvent::Error(_)
             | IpcEvent::RunComplete(_)
+            | IpcEvent::InterjectDelivered(_)
+            | IpcEvent::InterjectReturned(_)
     )
 }
 
@@ -1263,6 +1427,119 @@ mod tests {
         RunSignal::RunComplete {
             session_id: sid.to_string(),
         }
+    }
+
+    // ---------------- interjections (main chat ticket 136) ----------------
+
+    async fn interject(mgr: &RunnerManager, sid: &str, text: &str) -> QueueOffer {
+        mgr.queue_offer_interjection(sid, text.to_string(), None, Some(format!("crq-{text}")))
+            .await
+    }
+
+    #[tokio::test]
+    async fn an_interjection_needs_an_open_run() {
+        let mgr = RunnerManager::new();
+        // Idle: it is a message of its own.
+        assert!(matches!(
+            interject(&mgr, "s", "a").await,
+            QueueOffer::DispatchNow
+        ));
+        // The run it started is open: the next ones go to it, in order.
+        match interject(&mgr, "s", "b").await {
+            QueueOffer::Interjected { position, .. } => assert_eq!(position, 0),
+            other => panic!("expected Interjected, got {other:?}"),
+        }
+        match interject(&mgr, "s", "c").await {
+            QueueOffer::Interjected { position, .. } => assert_eq!(position, 1),
+            other => panic!("expected Interjected, got {other:?}"),
+        }
+        let items = mgr.queue_snapshot("s").await;
+        assert!(items.iter().all(|m| m.interjected));
+        assert_eq!(items[0].client_request_id.as_deref(), Some("crq-b"));
+    }
+
+    #[tokio::test]
+    async fn an_interjection_never_overtakes_an_ordinary_queued_message() {
+        let mgr = RunnerManager::new();
+        assert!(matches!(
+            offer(&mgr, "s", "a").await,
+            QueueOffer::DispatchNow
+        ));
+        assert!(matches!(
+            offer(&mgr, "s", "b").await,
+            QueueOffer::Queued { .. }
+        ));
+        match interject(&mgr, "s", "c").await {
+            QueueOffer::Queued { position, .. } => assert_eq!(position, 1),
+            other => panic!("expected Queued, got {other:?}"),
+        }
+        assert!(mgr.queue_snapshot("s").await.iter().all(|m| !m.interjected));
+    }
+
+    #[tokio::test]
+    async fn a_send_while_stopping_queues() {
+        let mgr = RunnerManager::new();
+        assert!(matches!(
+            interject(&mgr, "s", "a").await,
+            QueueOffer::DispatchNow
+        ));
+        mgr.queues.lock().await.get_mut("s").unwrap().stopping = true;
+        assert!(matches!(
+            interject(&mgr, "s", "b").await,
+            QueueOffer::Queued { .. }
+        ));
+        // The run's end clears the stop.
+        let next = mgr.queue_take_next_item(&rc_signal("s")).await.unwrap();
+        assert_eq!(next.item.text, "b");
+        assert!(!mgr.queues.lock().await["s"].stopping);
+    }
+
+    #[tokio::test]
+    async fn read_interjections_leave_the_queue_in_order() {
+        let mgr = RunnerManager::new();
+        interject(&mgr, "s", "a").await;
+        let ids: Vec<String> = {
+            let mut ids = Vec::new();
+            for text in ["b", "c", "d"] {
+                if let QueueOffer::Interjected { queue_id, .. } = interject(&mgr, "s", text).await {
+                    ids.push(queue_id);
+                }
+            }
+            ids
+        };
+        let taken = mgr
+            .queue_take_interjections("s", &[ids[2].clone(), ids[0].clone()])
+            .await;
+        assert_eq!(
+            taken.iter().map(|m| m.text.as_str()).collect::<Vec<_>>(),
+            ["b", "d"]
+        );
+        let left = mgr.queue_snapshot("s").await;
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].text, "c");
+        // Taken twice: nothing the second time.
+        assert!(mgr
+            .queue_take_interjections("s", &[ids[0].clone()])
+            .await
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn an_unread_interjection_answers_the_question_the_run_ended_on() {
+        let mgr = RunnerManager::new();
+        interject(&mgr, "s", "a").await;
+        interject(&mgr, "s", "b").await;
+        mgr.queues.lock().await.get_mut("s").unwrap().ask_pending = true;
+        let taken = mgr.queue_take_next_item(&rc_signal("s")).await.unwrap();
+        assert_eq!(taken.item.text, "b");
+        assert!(taken.answer);
+
+        // An ordinary queued message stays held by the question.
+        let mgr = RunnerManager::new();
+        offer(&mgr, "t", "a").await;
+        offer(&mgr, "t", "b").await;
+        mgr.queues.lock().await.get_mut("t").unwrap().ask_pending = true;
+        assert!(mgr.queue_take_next_item(&rc_signal("t")).await.is_none());
     }
 
     #[tokio::test]

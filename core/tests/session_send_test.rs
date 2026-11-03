@@ -541,6 +541,8 @@ impl RunnerPort for SendRunner {
             text,
             origin,
             queued_at: "t".into(),
+            interjected: false,
+            client_request_id: None,
         });
         QueueOffer::Queued {
             queue_id,
@@ -788,6 +790,8 @@ async fn images_while_a_run_is_open_are_refused_and_change_nothing() {
                 text: "held".into(),
                 origin: None,
                 queued_at: "t".into(),
+                interjected: false,
+                client_request_id: None,
             }],
             ..Queue::default()
         },
@@ -1435,6 +1439,8 @@ async fn a_queued_first_message_names_the_session_when_it_is_drained() {
             text: "排队的第一条".into(),
             origin: None,
             queued_at: "t".into(),
+            interjected: false,
+            client_request_id: None,
         },
     )
     .await;
