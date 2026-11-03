@@ -173,6 +173,8 @@ describe("混排", () => {
 
 describe("the style", () => {
   const css = replyCardsTrialCss();
+  const both132b =
+    'html:is([data-reply-cards-style="list"],[data-reply-cards-style="rows"]) [data-role="reply-cards"]';
   const answering =
     '[data-role="subtask-card"]:has([data-role="ask-user-bubble"])';
 
@@ -205,7 +207,7 @@ describe("the style", () => {
   });
 
   // A line that opens something opens from anywhere on it: the title's
-  // button stretched over the line; what acts on its own sits above.
+  // button reaches over the line; what acts on its own keeps its click.
   describe("the whole line opens", () => {
     const both =
       'html:is([data-reply-cards-style="list"],[data-reply-cards-style="rows"]) [data-role="reply-cards"]';
@@ -213,43 +215,65 @@ describe("the style", () => {
       ':is([data-role="subtask-card"],[data-role="todo-card"],[data-role="reminder-card"],[data-role="memo-card"])>div:first-child';
     const lines = css.split("\n");
 
-    it("stretches the title's button over its line, in 一框列表 and 无框行 only", () => {
+    // Ticket 132b: not a stretched ::after. WebKit leaves the CJK / Latin
+    // autospace out of the max-content of a box that holds an absolutely
+    // positioned child, so 「制作76人赛季战况网页」 came out 3px short and
+    // was cut. The button reaches over the line by padding that a
+    // negative margin takes back; the line clips it.
+    it("reaches the title's button over its line, with no ::after", () => {
+      expect(css).not.toContain("::after");
+      expect(css).not.toContain("::before");
       expect(css).toContain(
-        `${both} ${line}:has(>span>button){position:relative}`,
+        `${both} ${line}:has(>span>button){overflow:hidden}`,
       );
       expect(css).toContain(
-        `${both} ${line}>span>button::after{content:"";position:absolute;inset:0}`,
+        `${both} ${line}>span>button{max-width:none;margin:0 -100vw 0 -30px;padding:0 100vw 0 30px}`,
       );
-      for (const l of lines.filter((l) => l.includes("::after"))) {
-        expect(l.startsWith(both)).toBe(true);
-      }
     });
 
-    it("keeps the box, 取消 and a word with a reason above it", () => {
-      const lifted = lines.find((l) => l.includes("z-index:1"));
-      expect(lifted).toBeDefined();
-      expect(lifted).toContain(
-        '[data-role="todo-card"]>div:first-child>[data-card-icon] label',
+    it("lets the pointer through the light things, and keeps the box, 取消 and a word with a reason", () => {
+      const through = lines.find(
+        (l) => l.includes("pointer-events:none}") && l.includes("todo-meta"),
+      )!;
+      expect(through).toContain('[data-role="subtask-card-word"]:not([title])');
+      expect(through).toContain('[data-role="memo-card-state"]');
+      expect(through).toContain(":is(:nth-child(2),:nth-child(4))");
+      // A word with a reason (「出错」「没有开始」) and 「取消」 come after
+      // the button and keep their own pointer; the box, before it, is
+      // lifted.
+      expect(through).not.toContain('[data-role="subtask-card-word"][title]');
+      expect(through).not.toMatch(/reminder-card"\]>div:first-child>button/);
+      expect(css).toContain(
+        `${both} [data-role="todo-card"]>div:first-child>[data-card-icon] label{position:relative;z-index:1}`,
       );
-      expect(lifted).toContain(
-        '[data-role="reminder-card"]>div:first-child>button',
-      );
-      // Only a word with a reason (its hover title): 「出错」「没有开始」.
-      expect(lifted).toContain('[data-role="subtask-card-word"][title]');
-      expect(lifted).toMatch(/\{position:relative;z-index:1\}$/);
     });
 
-    // A line that opens nothing has its title as a span: no button, so no
-    // ::after and no hover ground (both rules need a button in a span).
+    // A line that opens nothing has its title as a span: no button to
+    // reach over it, no hover ground (both rules need a button in a span).
     it("gives a line that opens nothing neither", () => {
-      const after = lines.find((l) => l.includes("::after"))!;
-      expect(after).toContain(">span>button::after");
+      const reach = lines.find((l) => l.includes("margin:0 -100vw"))!;
+      expect(reach).toContain(">span>button{");
       const lit = lines.find((l) =>
         l.includes("{background-color:var(--color-hover)}"),
       )!;
       expect(lit).toContain(":has(>span>button):hover");
       expect(lit).toContain(":has(>span>button:focus-visible)");
     });
+  });
+
+  // Ticket 132b: a percentage cap is not known while a box sizes itself to
+  // its content, so a long folder set the frame (or 甲 / 乙's cards) at its
+  // full length and was then cut to the share. Where width follows the
+  // content the caps are lengths.
+  it("caps the folder and a to-do's day with a length where width follows content", () => {
+    expect(css).toContain(
+      `${both132b} :is([data-role="todo-meta"],[data-role="file-card"]:not([data-file-kind])>button>span:nth-child(3)){max-width:16em}`,
+    );
+    expect(css).toContain(
+      `html:is([data-reply-cards-width="jia"],[data-reply-cards-width="yi"]) [data-role="reply-cards"] [data-role="file-card"]:not([data-file-kind])>button>span:nth-child(3){max-width:16em}`,
+    );
+    // (100% only keeps a card inside the bubble's cap.)
+    expect(css).not.toMatch(/max-width:(?!100%)\d+%/);
   });
 
   it("sends a list that is answered in place to the cap, and its card in 无框行", () => {

@@ -40,8 +40,8 @@ import type { PendingAskUser } from "@/types/conversation";
  *                     rounded-sm`): the 16px icon column, 6px, the name
  *                     at `--conversation-step-size` in ink-soft, cut to
  *                     the line; then 8px on, in ink-muted, what sat on the
- *                     card's right (the folder, at most 40%; a to-do's day
- *                     and reminder, at most 40%; a reminder's time and
+ *                     card's right (the folder, at most 16em; a to-do's
+ *                     day and reminder, at most 16em; a reminder's time and
  *                     state, its words now first), a subtask's word in its
  *                     own colour; 「取消」 at the line's end, 20px tall
  *                     (`h-5`, 6px across). No card frame, ground, radius
@@ -59,14 +59,15 @@ import type { PendingAskUser } from "@/types/conversation";
  *                     on a line that opens something opens it: a file
  *                     line is one button as before; a subtask, a to-do, a
  *                     memo, a reminder whose title or words are a button
- *                     have that button stretched over the line (a
- *                     `::after`, `inset: 0`), so its icon, the light
- *                     things, a word without a reason (「等你回复」
- *                     「没有跑完」) and the empty end open it too; the
- *                     to-do's box, 「取消」 and a word with a reason on
- *                     hover (「出错」「没有开始」) sit above it
- *                     (`relative z-index 1`) and keep their own click and
- *                     hover. Tab still lands on the title's button.
+ *                     have that button reach over the whole line (padding
+ *                     taken back by a negative margin, the line clipping
+ *                     it; ticket 132b), so its icon, the light things, a
+ *                     word without a reason (「等你回复」「没有跑完」, the
+ *                     pointer passing through them) and the empty end open
+ *                     it too; the to-do's box (lifted), 「取消」 and a word
+ *                     with a reason on hover (「出错」「没有开始」) keep their
+ *                     own click and hover. Tab still lands on the title's
+ *                     button.
  *                     「在文件夹中显示」 floats just outside the right edge
  *                     (of the frame in 一框列表: 9px past the line, the
  *                     frame's 4px and border then 4px; of the line in
@@ -163,7 +164,10 @@ import type { PendingAskUser } from "@/types/conversation";
  *       the 「在文件夹中显示」 holder `left-full right-auto pl-1` instead of
  *       `right-1.5`, plus `pointer-events-none
  *       group-hover/file-card:pointer-events-auto
- *       group-focus-within/file-card:pointer-events-auto`.
+ *       group-focus-within/file-card:pointer-events-auto`; its
+ *       FolderPathText `max-w-[16em]` instead of `max-w-[45%]` (a
+ *       percentage is not known while the card sizes itself to its
+ *       content: a long folder set the card's width, ticket 132b).
  *   32  the line of SubtaskCard, TodoCard, ReminderCard and MemoCard
  *       `min-h-[30px] py-0` instead of `min-h-10 py-1.5`; FileCard's
  *       button `min-h-8 py-0`; ReminderCard's 「取消」 `h-6 py-0`.
@@ -180,14 +184,16 @@ import type { PendingAskUser } from "@/types/conversation";
  *       [font-size:var(--conversation-step-size)]`, its icon span `mr-1.5`,
  *       its name `min-w-0` (no `flex-1`) in `text-ink-soft`, the light
  *       things `ml-2 shrink-0 text-ink-muted` (FileCard's FolderPathText
- *       and TodoCard's meta `max-w-[40%]`, the meta `truncate`), the
+ *       and TodoCard's meta `max-w-[16em]`, the meta `truncate`), the
  *       subtask word `ml-2`; a line that opens something `group
  *       hover:bg-hover has-[button:focus-visible]:bg-hover`, its name
  *       `group-hover:text-ink`, its title button without `hover:underline`
- *       and the focus ring, stretched over the line (the line `relative`,
- *       the button `after:absolute after:inset-0 after:content-['']`),
- *       TodoCheck's label, 「取消」 and CardWord when it has a reason
- *       `relative z-10`; ReminderCard's spans reordered (words, time,
+ *       and the focus ring, reaching over the line (the line
+ *       `overflow-hidden`, the button `max-w-none -ml-[30px] pl-[30px]
+ *       -mr-[100vw] pr-[100vw]`; not a stretched `::after`, which WebKit
+ *       sizes without the CJK / Latin autospace), the light things after
+ *       it and CardWord without a reason `pointer-events-none`, TodoCheck's
+ *       label `relative z-10`; ReminderCard's spans reordered (words, time,
  *       state) and 「取消」 `ml-auto h-5 px-1.5 py-0`; FileCard's button the
  *       line's classes without its frame, its 在文件夹中显示 holder
  *       `left-full right-auto pl-[9px]` with the pointer-events gating
@@ -463,6 +469,10 @@ export function replyCardsTrialCss(): string {
     // (:has() cannot nest, so the bubble is matched inside the card).
     `${width("yi")}{width:fit-content}`,
     `${width("yi")}:has([data-role="subtask-card"] [data-role="ask-user-bubble"]){width:auto}`,
+    // 甲 / 乙 size the cards to their content: the folder's cap a length
+    // (45% is not known then; a long folder set the card's width at its
+    // full length, ticket 132b). 16em: 192px at its 12px.
+    `${floating}>button>span:nth-child(3){max-width:16em}`,
     // 甲 / 乙: 在文件夹中显示 floats outside the file card's right edge.
     `${floating}>button{padding-right:0.625rem}`,
     `${floating}>div{right:auto;left:100%;padding-left:0.25rem;pointer-events:none}`,
@@ -513,7 +523,12 @@ function styleCss(): string[] {
     `${both} ${line} .text-ink,${both} ${file} [data-role="file-name"].text-ink{color:var(--color-ink-soft)}`,
     `${both} ${objects}{margin-left:0.5rem}`,
     `${both} ${reminder}>span:nth-child(2){color:var(--color-ink-muted)}`,
-    `${both} :is([data-role="todo-meta"],${fileLine}>span:nth-child(3)){max-width:40%}`,
+    // The cap a length, not a share of the line: a percentage is not
+    // known while the frame (or line) sizes itself to its content, so a
+    // long folder would set the frame's width at its full length and
+    // then be cut to the share, leaving the frame half empty (ticket
+    // 132b). 16em: 192px at the standard step size.
+    `${both} :is([data-role="todo-meta"],${fileLine}>span:nth-child(3)){max-width:16em}`,
     `${both} [data-role="todo-meta"]{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}`,
     // A reminder: its words, then the time and the state, 取消 at the end.
     `${both} ${reminder}>span:nth-child(3){order:1}`,
@@ -528,15 +543,24 @@ function styleCss(): string[] {
     `${both} ${line}>span>button:hover:not(.line-through){text-decoration-line:none}`,
     `${both} ${line}>span>button.line-through:hover{text-decoration-line:line-through}`,
     `${both} ${line}>span>button:focus-visible,${both} ${fileLine}:focus-visible{box-shadow:none}`,
-    // …and it opens from anywhere on it: the title's button stretched
-    // over the line (a ::after; the line, positioned, is its containing
-    // block, so the button's own overflow does not clip it). What acts
-    // on its own sits above it: the to-do's box, 「取消」, a word with a
-    // reason on hover (「出错」「没有开始」). A line that opens nothing has
-    // no such button, so no ::after.
-    `${both} ${opens}{position:relative}`,
-    `${both} ${line}>span>button::after{content:"";position:absolute;inset:0}`,
-    `${both} [data-role="todo-card"]>div:first-child>[data-card-icon] label,${both} ${reminder}>button,${both} [data-role="subtask-card-word"][title]{position:relative;z-index:1}`,
+    // …and it opens from anywhere on it: the title's button reaches over
+    // the whole line — 30px back over the icon (the line's 8px, the
+    // 16px column, 6px) and on past the line's end — by padding that a
+    // negative margin of the same size takes back, so it lays out and
+    // sizes itself as its words; the line clips what reaches past it.
+    // Not a stretched ::after: WebKit leaves the CJK / Latin autospace
+    // out of the max-content of a box holding an absolutely positioned
+    // child, so the name came out a few pixels short and was cut
+    // (「制作76人赛季战况网页」, ticket 132b). What comes after the name
+    // and should open the line lets the pointer through to the button;
+    // a word with a reason on hover (「出错」「没有开始」) and 「取消」 come
+    // after it and stay on top with their own click and hover; the
+    // to-do's box, before it, is lifted above it. A line that opens
+    // nothing has no such button.
+    `${both} ${opens}{overflow:hidden}`,
+    `${both} ${line}>span>button{max-width:none;margin:0 -100vw 0 -30px;padding:0 100vw 0 30px}`,
+    `${both} ${opens}>:is([data-role="subtask-card-word"]:not([title]),[data-role="todo-meta"],[data-role="memo-card-state"]),${both} ${reminder}:has(>span>button)>span:is(:nth-child(2),:nth-child(4)){pointer-events:none}`,
+    `${both} [data-role="todo-card"]>div:first-child>[data-card-icon] label{position:relative;z-index:1}`,
     `${both} ${file}[data-file-state="present"]:hover>button,${both} ${file}[data-file-state="present"]>button:focus-visible{background-color:var(--color-hover)}`,
     `${both} ${file}[data-file-state="present"]:is(:hover,:has(>button:focus-visible)) [data-role="file-name"]{color:${ink}}`,
     // 在文件夹中显示 outside the right edge, the hover unbroken on the way.
