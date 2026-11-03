@@ -31,9 +31,11 @@ layer (below). Since ticket 36 its static rules also
 differ in one paragraph of "What Only The User Changes In Galley"
 (below); every other session's prompt is unchanged byte for byte. Since
 ticket 135 the same place also gives the main chat's runner, and no other,
-`GALLEY_MAIN_CHAT=1`, which the runner reads to refuse browser tools
-([runtime modes](./runtime-modes-and-sessions.md#the-main-chat-does-not-browse))
-and, since ticket 137, to offer its own `tell_user` tool
+`GALLEY_MAIN_CHAT=1`, which the runner read to refuse browser tools until
+ticket 139 removed that guard
+([runtime modes](./runtime-modes-and-sessions.md#the-main-chats-browser-guard-removed)),
+reads since ticket 136 to take interjections and, since ticket 137, to
+offer its own `tell_user` tool
 ([runtime modes](./runtime-modes-and-sessions.md#the-main-chat-can-tell-you-something-mid-run)):
 a tool entry, not prompt text, so the prompt is unchanged.
 Since ticket 138 a subtask the main chat dispatched gets one more section
@@ -515,38 +517,32 @@ that finishes a task and restates the result. The layer says three things:
   the core prompt's reply shape as the IM layer).
 - **Pick up what a break left open** (ticket 11's carried turns) when the
   user comes back to it, without recapping it unasked.
-- **Hand the web, facts and changes to a subtask** (ticket 06a, PRD
-  rulings 52, 53; the test since ticket 134's third and fourth rounds,
-  main chat PRD rulings 184, 185):
-  the main chat does not go online, neither with the browser nor any other
-  way (curl and the like in `code_run`); anything that needs the web goes
-  to a subtask, always, the weather or a score included, and so does a
-  question about a fact in the world (a person, an event, a game, the
-  news, a figure, a price, how someone is doing lately), even one the
-  model thinks it knows, unless this conversation already answers it, its
-  sources asked for and given with the answer, and anything that changes
-  things on the user's computer or accounts (files sorted, renamed or
-  written, an order placed, a form filled, something sent) and anything
-  the user asks to hand off. Everything else stays: talking, explaining
-  an idea, a reason or how to do something, giving its view, answering
-  from this conversation (what a subtask brought back included) without
-  checking it again, to-dos, reminders and memos, the time, a read-only
-  look on the computer, and writing up what the two discussed, even into
-  a file (a subtask cannot see this conversation). Ticket 135's runner
-  guard answers a browser tool in the main chat with the same hand-off
-  instead of running it;
-  `code_run` it cannot tell apart, so there the words do the work. Until
-  ticket 115 the test was "work that would keep the chat busy for a long
-  time (many steps, several websites, a long batch of files)", quick work
-  staying: the model cannot tell how long work will take before it
-  starts. From ticket 115 to ticket 134 (ruling 160) a question was
-  answered here however long it took and only errands went; ruling 183
-  then sent everything past a step or two, by kind, and its eval kept
-  needing new examples; ruling 184 draws the line by what the work
-  touches, which the model can tell up front; under it the model answered
-  "does this need the web" by whether it thought it knew, and told stories
-  from memory with no source, so ruling 185 adds what is asked: a fact in
-  the world. A hand-off ends the reply
+- **Do it yourself or hand it off, by judgment** (ticket 06a, PRD
+  rulings 52, 53; since ticket 139, main chat PRD ruling 186): the model
+  may do the work itself, the web included, or hand it to subtasks,
+  several at once. The user can talk to it at any time and what they say
+  reaches it at its next step (ticket 136); when they bring up something
+  else and what is in hand will take long, it hands that off and answers
+  them first, or tells them a line now with `tell_user` (ticket 137) and
+  carries on. Two guidelines: a fact in the world (a person, an event, a
+  game, the news, a figure, a price, how someone is doing lately) is
+  looked up before it is told, by the model or a subtask, with its
+  sources (ruling 185's half that stays), while an idea, a reason, how to
+  do something, a view or what this conversation already answers (what a
+  subtask brought back included) is answered directly, without looking it
+  up again; a change on the user's computer or accounts goes by the three
+  levels of authority in `authority.md` (assistant PRD ruling 3). History
+  of the line it replaced: until ticket 115 "work that would keep the chat
+  busy for a long time"; from ticket 115 (ruling 160) a question answered
+  here however long it took and only errands handed off; ruling 183
+  everything past a step or two, by kind; ruling 184 whatever needs the
+  web or changes things, with ticket 135's runner guard refusing browser
+  tools; ruling 185 a fact in the world too. Six versions in a month, each
+  a sentence added for a case the dev machine turned up, all patching one
+  thing: while the main chat worked the user could not reach it. Ruling
+  186 gave it hands for that instead (ticket 136's interjections, ticket
+  137's `tell_user`, ticket 138's background) and took the line, the
+  guard and the sentences written for them out. A hand-off ends the reply
   with
   `<subtask title="a few words">what to do</subtask>` (the title since
   ticket 126, main chat PRD ruling 175: what the user sees in their list, a
@@ -558,14 +554,17 @@ that finishes a task and restates the result. The layer says three things:
   one table, one report, the answer to one question) and parts that need
   the same browser tab or the same files stay in one tag (ticket 127,
   ruling 174; ticket 134, ruling 183);
-  the instructions carry the goal, the facts the user gave, what this
-  conversation already settled that the request leans on (ticket 134), what
-  it has found so far (ticket 115) and what to hand back, with the evidence for it
-  (ticket 30: a confirmation number, a file path, a link, a screenshot
-  path), since the subtask cannot see the main chat; one sentence tells
-  the user it is on its way, without why it is not done here, a rule, or
-  "the main chat" (ruling 185 point 4; the name is internal, ruling 173),
-  and the runner guard's text says the same. Since
+  the subtask carries this conversation's last turns as background
+  (ticket 138), so the instructions carry the goal, what the model has
+  found so far (ticket 115; not in the background, which holds the
+  conversation, not this run's tool results) and what to hand back, with
+  the evidence for it (ticket 30: a confirmation number, a file path, a
+  link, a screenshot path); until ticket 139 they also carried the facts
+  the user gave and what this conversation settled, "since the subtask
+  cannot see the main chat". One sentence tells the user it is on its
+  way, without calling this chat "the main chat" (the name is internal,
+  ruling 173; ruling 185 point 4's "why it is not done here, a rule" went
+  with the rule). Since
   ticket 30 (assistant PRD rulings 2, 8) the clause no longer says "its
   card shows the progress, and you can look it up when they ask": Galley
   wakes the model when a subtask finishes, asks or fails, to check it and
@@ -590,7 +589,13 @@ that finishes a task and restates the result. The layer says three things:
   when Galley wakes it; since ticket 73 `todos.md` and `unasked.md` to note
   a to-do; since ticket 96 "a session, project, model, schedule, to-do or
   memo command", and `memo.md` to note or change what it knows about the
-  user), then "Every write but `llm set` carries
+  user), since ticket 139 "Run with them, in the same step, what the parts
+  will ask for" (`todo list` or `schedule list` before adding one,
+  `todo show <todo-id>` before changing a to-do, `todo list` to say what is
+  left, `date` for a time relative to now; ticket 141 found a runner that had
+  not read the parts yet reading a part first and running the read a step
+  later, two steps of reading in all 14 such runs), then "Every write but
+  `llm set` carries
   `--supervisor=galley-assistant --reason="<why>"`": the one rule every
   part with a write needs and only `cli.md` states. Until ticket 59 it
   read "Before your first Galley CLI write (…), read your manual at
@@ -837,7 +842,7 @@ that finishes a task and restates the result. The layer says three things:
   after writing memory. Ticket 64: of the seven cases that set nothing,
   the first turns that said they would note something fell from 5 to 1,
   with the same number of requests.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4983, no headroom,
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4805, no headroom,
   `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
@@ -881,7 +886,12 @@ that finishes a task and restates the result. The layer says three things:
   and a view, with what a subtask brought back counted as this
   conversation +88; nothing to the user of why, a rule or "the main chat"
   +86): 4912; its eval added 71 (a fact this conversation already answers
-  stays +45, answered from it "without checking it again" +26): 4983.
+  stays +45, answered from it "without checking it again" +26): 4983;
+  ticket 139 took 178 off (ruling 186: the opening a judgment and two
+  guidelines in place of what goes and what stays, 1059 → 809, −250; the
+  instructions sentence leaning on the subtask's background, 361 → 247,
+  −114; "on its way" keeping only the inner name, 136 → 91, −45; the
+  manual paragraph's same-step reads, ticket 141's option 乙, +231): 4805.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 

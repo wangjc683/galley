@@ -539,7 +539,7 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 - `message`：模型写的原文（去掉首尾空白），不会是空串。
 - `turnIndex` / `absoluteTurnIndex`：说出它的那一步（与那一步之后的 `turn_end` 的同名字段相同）。
 - `index`：这一步里的第几句，从 1 起；一轮里每次 `put_task` 重新计。
-- 只在内置运行时的主对话里发（`GALLEY_RUNTIME_KIND=managed` 且 `GALLEY_MAIN_CHAT=1`，与浏览器闸门同一组条件，`runner/tell_user.py`）；别处没有这个工具。runner 在发 `run_complete` 的同一把锁下发它，所以它不会落在 `run_complete` 之后。
+- 只在内置运行时的主对话里发（`GALLEY_RUNTIME_KIND=managed` 且 `GALLEY_MAIN_CHAT=1`，`runner/managed_runtime.py` 的 `is_managed_main_chat`，与插话同一组条件）；别处没有这个工具。runner 在发 `run_complete` 的同一把锁下发它，所以它不会落在 `run_complete` 之后。
 - 消费方：Core 的 runner watcher（`core/src/tell_user.rs`）再核一次「内置运行时的主对话」，写一行 `assistant`：`turn_index` = `absoluteTurnIndex`，`sequence` 取这个 `turn_index` 已有的最大值加一、至少 2（排在那一步 `(t, 1)` 之后，那一步结束时读到的插话之前），`content` 为原文，`final_answer` 为按回复规则洗过的字，id `msg_{session}_{absoluteTurnIndex}_tell_{index}`，同 id 再来不重写；不动 `turn_count`。Core 不另发广播：GUI 的 runner-event 分发器直接把它画成这一轮的一条消息（`interim` agent turn，行 id 同上），手机在 `runner.event` 批里原样收到。
 - `stepText`（2026-11-03 加，主对话票 142；runner 总是写，缺省为 `false`）：为 `true` 时这句不是 `tell_user` 的调用，是那一步自己的回复在标签之外写的字：回复带工具调用、同一步没有 `tell_user` / `ask_user`、洗过（回复的清洗规则）不空，runner 在第一个工具开跑之前发出（`runner/step_text.py`，`WorkbenchHandler.dispatch` 的 `index == 0` 那一次）。只在用户发起的一轮：`user_message` 带 `wake`（§5.1）的那一轮不发，`ask_user_response` 开的一轮算用户的。Core 照上一条写行，另写来源 `created_via = 'system'`、`supervisor = 'galley-step-text'`；这段字已经在那一步自己的行里，所以回放、新段带过来的轮次、子任务的背景都跳过这一行（`ReplayRow.shown_only`，同问候），模型只看到一遍。GUI 画法不变。
 
@@ -732,7 +732,7 @@ self.system`，所以系统提示的常驻输出要求依然生效——`assets/
 
 - runner（`runner/interject.py`）把还没送到的几句按发出顺序拼成一段——`preamble`、空行、各句（句间空行）——写进 GA 的 `agent.intervene`；GA 在每一步结束时读它、以 `[MASTER] …` 接进下一步的提示并清空（`ga.py` `turn_end_callback`）。钩子从 `ctx["injprompt"]` 判断读走的是哪一段，报 `interject_delivered`（§4.19）；GA 读完到清空之间新到的会被清掉，钩子按「还没送到的」重写回去。
 - 按 `id` 去重：同一轮里同一 id 只收一次（Core 在开新一轮后会把队里剩下的插话再交一次）。
-- 不收就退回：没有一轮在跑，或不满足「内置运行时（`GALLEY_RUNTIME_KIND=managed`）且 `GALLEY_MAIN_CHAT=1`」（与主对话浏览器闸门同一组条件），立刻回 `interject_returned`；外置运行时永远不写 `intervene`（宪法 Rule 1）。
+- 不收就退回：没有一轮在跑，或不满足「内置运行时（`GALLEY_RUNTIME_KIND=managed`）且 `GALLEY_MAIN_CHAT=1`」（`runner/managed_runtime.py` 的 `is_managed_main_chat`，与 `tell_user` 同一组条件），立刻回 `interject_returned`；外置运行时永远不写 `intervene`（宪法 Rule 1）。
 - 一轮结束的每个出口都在 `run_complete` 之前清 `intervene`、退回没送到的（§4.20）；新一轮开始时再清一次。
 
 ## 6. Approval Flow（已删除）
@@ -743,11 +743,11 @@ bridge 不再在 dispatch 前阻塞等待用户决定。`tool_call_pending` 事�
 其余消息不变，`ask_user` / `ask_user_response` 保留。`WorkbenchHandler`
 （`GenericAgentHandler` 子类）仍安装，只合成轮次信号与 `tool_num` 兼容转发，
 不改工具派发或结果。决策记录见 [devlog](./devlog/2026-10-05-remove-approval.md)。
-唯一例外只在内置运行时的主对话（票 135，主对话 PRD 裁决 184）：带
-`GALLEY_MAIN_CHAT=1` 的 runner 不执行 `web_` 开头的浏览器工具，直接回一条
-「交给子任务」的工具结果；不加新事件，这一步照常出现在 `turn_end` 的
-`toolCalls` / `toolResults` 里。见
-[运行时模式](./managed-ga-runtime/runtime-modes-and-sessions.md#the-main-chat-does-not-browse)。
+唯一例外只在内置运行时的主对话：它自己的 `tell_user` 工具（票 137，§4.21）由
+runner 接住、不进 GA 的派发。票 135 的浏览器闸门（主对话 PRD 裁决 184：带
+`GALLEY_MAIN_CHAT=1` 的 runner 不执行 `web_` 开头的浏览器工具）已于 2026-11-03
+拆掉（裁决 186，票 139），主对话的浏览器工具照常执行。见
+[运行时模式](./managed-ga-runtime/runtime-modes-and-sessions.md#the-main-chats-browser-guard-removed)。
 
 ## 7. Session Resume Flow
 

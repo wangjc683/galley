@@ -836,9 +836,9 @@ mod tests {
             "- Then do what it says. Do not recite it (「提醒：装修完工」): think what",
             "is of use to the user now, and say that in a sentence or two",
             "A to-do's reminder only reminds: do not tick the to-do off until the",
-            // Ruling 184 point 9: a check that needs the web goes to a
-            // subtask, the round silent until it is back.
-            "- When it says to check something that needs the web (a parcel, a price,",
+            // Ruling 186 (ticket 139): a check is made before it speaks,
+            // by the model or a subtask.
+            "- When it says to check something (a parcel, a price, the weather),",
             "A scheduled task that starts a new conversation (one the user made with",
         ] {
             let at = wake
@@ -949,17 +949,18 @@ mod tests {
         }
     }
 
-    /// Main chat PRD ruling 184 point 9 (ticket 134's third round): the
-    /// main chat does not go online, the rounds Galley wakes it for
-    /// included (ticket 135's guard covers every round). A reminder that
-    /// says to check something online hands the check to a subtask and says
-    /// nothing yet (the tag and `<no-reply/>`), and tells the user once it
-    /// is back; a reminder that only reminds speaks at once. The silent
-    /// reply is allowed there and in the morning review only; the review's
-    /// look at a memo goes to a subtask; quick work this turn is work with
-    /// no web. Single-line fragments only (CRLF on Windows).
+    /// Main chat PRD ruling 184 point 9 (ticket 134's third round) sent a
+    /// reminder's check that needed the web to a subtask, the main chat not
+    /// going online. Ruling 186 (ticket 139) took that back: the check is
+    /// made before the model speaks, by it or by a subtask, as it judges.
+    /// Handed to a subtask, the round says nothing yet (the tag and
+    /// `<no-reply/>`) and the user hears once it is back; the silent reply
+    /// stays allowed there and in the morning review only. The review's
+    /// look at a memo is made by the model or a subtask; quick work
+    /// unasked is done this turn, longer work goes to a subtask, the web
+    /// no longer the line. Single-line fragments only (CRLF on Windows).
     #[test]
-    fn manual_hands_web_checks_on_wake_to_a_subtask() {
+    fn manual_checks_on_wake_by_judgment() {
         let wake = part("wake.md");
         let due = wake.find("## When a reminder comes due").unwrap();
         let scheduled = wake
@@ -967,11 +968,11 @@ mod tests {
             .unwrap();
         let mut at = Vec::new();
         for rule in [
-            "- When it says to check something that needs the web (a parcel, a price,",
-            "the weather), you do not go online here: hand the check to a subtask",
-            "and write nothing for the user yet, the subtask tag and `<no-reply/>`,",
-            "nothing else. Tell them when it is back, in one message, how late it",
-            "came included. Other long work goes to a subtask too.",
+            "- When it says to check something (a parcel, a price, the weather),",
+            "check it before you speak, yourself or by a subtask. Handed to a",
+            "subtask, write nothing for the user yet, the subtask tag and",
+            "`<no-reply/>`, nothing else, and tell them when it is back, in one",
+            "message, how late it came included.",
         ] {
             let found = wake
                 .find(rule)
@@ -986,7 +987,9 @@ mod tests {
         assert!(!wake.contains("look something up first"));
         assert!(!wake.contains("up first when it says to check something"));
         for (name, body) in PARTS {
-            assert!(!body.contains("Quick work you do this turn"), "{name}");
+            assert!(!body.contains("go online"), "{name}");
+            assert!(!body.contains("needs the web"), "{name}");
+            assert!(!body.contains("needs no web"), "{name}");
         }
     }
 
@@ -1027,10 +1030,12 @@ mod tests {
             "## Doing things without being asked",
             "What you do on your own is work, not advice: get something done, then",
             "- **Just do it**: groundwork you can undo, that costs the user no money",
-            // Ruling 184 point 9: quick work this turn only without the web.
-            "putting it together in a file. Quick work that needs no web you do this",
-            "turn; anything that needs the web, and longer work, goes to a subtask",
-            "(see `subtasks.md`), and when it is back Galley wakes you to tell the",
+            // Ruling 186 (ticket 139): quick work this turn, longer work to
+            // a subtask, the web no longer the line (ruling 184 point 9's
+            // "needs no web" taken back).
+            "putting it together in a file. Quick work you do this turn; longer work",
+            "goes to a subtask (see `subtasks.md`), and when it is back Galley wakes",
+            "you to tell the user.",
             "- **Ask first, with the groundwork done**: anything outward-facing",
             "with it in hand (「Banner 草稿做好了，要发群里吗？」).",
             "- **Got nothing done, say nothing**: no offers. Never 「要不要我帮你……」",
@@ -1248,10 +1253,11 @@ mod tests {
             "get done for the user that they would want to know. Most need nothing.",
             "A settled fact or a preference (「不吃香菜」): skip it, and usually a",
             "situation with an end date too (a trip). Something out in the world",
-            // Ruling 184 point 9: the look goes to a subtask.
-            "that changes (a team they follow, a policy they watch): have a subtask",
-            "look it up (you do not go online here), and speak only when there is",
-            "something they would want to know. Something",
+            // Ruling 186 (ticket 139): the look is the model's or a
+            // subtask's (ruling 184 point 9 sent it to a subtask).
+            "that changes (a team they follow, a policy they watch): look it up,",
+            "yourself or by a subtask, and speak only when there is something they",
+            "would want to know. Something",
             "they want to do but gave no next step for (「想学吉他」): speak only with",
             "groundwork you can hand them, never 「要不要我帮你找」. The two subtasks",
             "are for the to-dos and the memos together, the to-dos first.",

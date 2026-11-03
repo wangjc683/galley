@@ -11,8 +11,7 @@ runner (workbench sessions, subtasks, the IM channels), and only the main
 chat gets this tool. The main chat's runner offers it by adding its entry to
 `agentmain.TOOLS_SCHEMA` before each run (`GaSession.offer_tool`), and
 `runner.handlers.WorkbenchHandler.dispatch` takes the call before GA's own
-dispatch, the seam the main chat's browser guard uses (ticket 135). Both
-only in Galley's managed runtime, for the main chat's runner
+dispatch. Both only in Galley's managed runtime, for the main chat's runner
 (`offered_here`): CLAUDE.md Rule 1 keeps attach mode untouched, and there a
 call to `tell_user` reaches GA, which answers that it knows no such tool.
 
@@ -23,7 +22,6 @@ step that said it (`core/src/tell_user.rs`).
 
 from __future__ import annotations
 
-import os
 import re
 from typing import Any
 
@@ -31,28 +29,26 @@ from runner import managed_runtime
 
 TOOL_NAME = "tell_user"
 
-# The main chat's runner (core/src/runner_commands.rs `MAIN_CHAT_ENV`); the
-# same variable the browser guard reads (runner.handlers.MAIN_CHAT_ENV).
-MAIN_CHAT_ENV = "GALLEY_MAIN_CHAT"
+# The main chat's runner (core/src/runner_commands.rs `MAIN_CHAT_ENV`).
+MAIN_CHAT_ENV = managed_runtime.GALLEY_MAIN_CHAT_ENV
 
 # The tool's entry, in GA's own format (assets/tools_schema.json: OpenAI
 # function entries). What it is and when it helps, no rules (ruling 186
-# point 2); GA's terse register. The clause after the semicolon is a fact
-# of the main chat, not a rule: the words of a step that calls tools are
-# never drawn there (only its reply is), and the eval's first wording,
-# without it, had the model answer "还要多久？" in such a step's text, which
-# nobody sees (.scratch/main-chat/entry-layer-eval/tell-user/).
+# point 2); GA's terse register. Ticket 137's eval added a clause after a
+# semicolon, "until your final reply, nothing else you write reaches them",
+# then a fact of the main chat; ticket 142 made a step's words reach the
+# user in a run they started, so ticket 139 went back to the first wording
+# (the eval's r1, .scratch/main-chat/entry-layer-eval/tell-user/).
 DESCRIPTION_EN = (
-    "Send the user a message right away, without ending your turn; until your "
-    "final reply, nothing else you write reaches them. Useful when the user says "
-    "something while you are working, or when what you are doing will take a "
-    "while and they would want to know how it is going."
+    "Send the user a message right away, without ending your turn. Useful when "
+    "the user says something while you are working, or when what you are doing "
+    "will take a while and they would want to know how it is going."
 )
 MESSAGE_EN = "What to tell them: a sentence or a short paragraph."
 # The Chinese pair, for a GA that loaded its Chinese tool list
 # (assets/tools_schema_cn.json), as GA pairs its own.
 DESCRIPTION_CN = (
-    "立即给用户发一条消息，不结束这一轮；在你最后回复之前，你写的别的话用户都看不到。"
+    "立即给用户发一条消息，不结束这一轮。"
     "用户在你干活时说了话，或手上的事要做很久、用户该知道进展时有用。"
 )
 MESSAGE_CN = "要告诉用户的话：一句或一小段。"
@@ -67,10 +63,10 @@ _CJK = re.compile(r"[一-鿿]")
 
 def offered_here() -> bool:
     """Whether this runner offers `tell_user`: the main chat's (the variable
-    exactly "1") in Galley's managed runtime. The browser guard's test
-    (`runner.handlers._main_chat_refuses`), so a stray variable in an
+    exactly "1") in Galley's managed runtime
+    (`managed_runtime.is_managed_main_chat`), so a stray variable in an
     external GA's environment changes nothing."""
-    return os.environ.get(MAIN_CHAT_ENV) == "1" and managed_runtime.is_managed_runtime()
+    return managed_runtime.is_managed_main_chat()
 
 
 def tool_entry(tools: list[Any] | None = None) -> dict[str, Any]:

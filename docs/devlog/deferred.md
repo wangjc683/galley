@@ -151,16 +151,6 @@
 
 ---
 
-## 主对话用代码上网
-
-- **状态**：暂缓（2026-11-03 [主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 184 第 10 条，JC 选甲：先不加机制，看数据）。
-- **提出**：裁决 184 的硬闸（票 135）只拦主对话里 `web_` 开头的浏览器工具；模型被挡后可能改在 `code_run` 里用 curl、wget、requests 之类联网，绕过「上网就派」。闸的提示语与入口层条款都写明任何方式都不上网；票 134 的评测单列「用代码联网」一栏。查库：2026-09 起主对话 111 次 `code_run`，联网 0 次。
-- **启动信号**：票 134、135 合入后，主对话的 `code_run` 联网出现一次（查 `workbench.db` 主对话的 `messages.tool_calls`，`code_run` 的 `script` 里有 curl、wget、requests、urllib、httpx、urlopen、Invoke-WebRequest 或对 http(s) 网址的读取；XML 命名空间网址不算）。
-- **方案**：乙，在 runner 的硬闸里按脚本字面拦这些命令，回同一句「交给子任务」。会误伤（文档里的网址），也绕得过，所以只在信号出现后做。没选：丙，主对话的 `code_run` 系统层断网（最硬最重，macOS 与 Windows 各一套）。
-- **关联**：主聊天 PRD 裁决 184；票 135。
-
----
-
 ## 内置子任务拿掉 `start_long_term_update`
 
 - **状态**：暂缓（2026-11-02 主聊天 PRD 裁决 163 第 4 条：留着）。

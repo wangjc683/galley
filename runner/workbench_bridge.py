@@ -1487,14 +1487,11 @@ class Bridge:
     @staticmethod
     def _interjections_allowed() -> bool:
         """Whether this runner may put mid-run messages in GA's
-        `intervene`: Galley's managed runtime, the main chat's runner —
-        the conditions of the main chat's browser guard
-        (`runner.handlers._main_chat_refuses`). Core sends `interject`
-        only there; this keeps attach mode inert even if it did not
-        (CLAUDE.md Rule 1)."""
-        from runner.handlers import MAIN_CHAT_ENV
-
-        return os.environ.get(MAIN_CHAT_ENV) == "1" and managed_runtime.is_managed_runtime()
+        `intervene`: Galley's managed runtime, the main chat's runner
+        (`managed_runtime.is_managed_main_chat`, the test `tell_user`
+        uses too). Core sends `interject` only there; this keeps attach
+        mode inert even if it did not (CLAUDE.md Rule 1)."""
+        return managed_runtime.is_managed_main_chat()
 
     def _handle_interject(self, cmd: InterjectCommand) -> None:
         """Take messages for the running run's next step, or hand them

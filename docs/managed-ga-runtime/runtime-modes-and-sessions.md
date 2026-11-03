@@ -234,43 +234,32 @@ about the tag reaches GA, which keeps no subtask tool and no patch for it.
   reaches the phone as the session appearing.
 - Attach mode has no main chat, so nothing here runs there.
 
-### The Main Chat Does Not Browse
+### The Main Chat's Browser Guard (Removed)
 
-Work that needs the web is a subtask's (main chat PRD ruling 184, ticket
-135, `.scratch/main-chat/issues/135-main-chat-browser-guard.md`). The entry
-layer says so; a guard in the runner makes it hold:
+From ticket 135 (main chat PRD ruling 184) until 2026-11-03 the runner
+refused browser tools in the main chat: a `web_*` call there did not run
+and the model read, in GA's error envelope, that it should hand the work to
+a subtask. Removed on 2026-11-03 by ticket 139 (main chat PRD ruling 186,
+`.scratch/main-chat/issues/139-entry-layer-judgment-not-rules.md`): the
+main chat goes online again, by the entry layer's judgment
+([prompt composition](./prompt-composition.md#main-chat-entry-layer)), and
+every tool there runs as in any other session. What answered "the main chat
+cannot be reached while it works" is now three hands: interjections
+(ticket 136), `tell_user` (below) and a subtask's background (ticket 138).
 
-- **The mark**: Core gives the main chat's runner one more env var,
+- **The mark stays**: Core gives the main chat's runner one more env var,
   `GALLEY_MAIN_CHAT=1`, where it swaps in the main chat's prompt
   (`runner_commands::prepare_managed_spawn_args`, `MAIN_CHAT_ENV`). Every
   other managed runner (workbench sessions, subtasks, the IM channels)
-  starts without it, and attach-mode spawns never pass through there.
-- **The guard** (`runner/handlers.py`, `WorkbenchHandler.dispatch`): when
-  the mark is exactly `1`, the runtime is the managed one
-  (`GALLEY_RUNTIME_KIND=managed`) and the tool's name starts with `web_`
-  (`web_scan`, `web_execute_js`, and any browser tool upstream adds later),
-  the tool does not run and GA's dispatch is not called. The model gets GA's
-  error envelope, `{"status": "error", "msg": …}`, saying the main chat does
-  not go online at all, neither with the browser nor with commands such as
-  `curl` in `code_run`, and telling it to hand the work to a subtask with
-  `<subtask title="…">`, with everything the subtask needs, and to tell the
-  user in a sentence, without why it is not done here or the rule (main
-  chat PRD ruling 185 point 4; since then it opens "You do not go online
-  in this chat", the entry layer's words, not "This is the main chat", a
-  name the model passed on to the user); `next_prompt` is `"\n"`, as in
-  GA's own refusal of a whole-file L1 write. Each attempt costs one step.
-  The wake rounds (subtask reports, the morning review) run in the main
-  chat and do not browse either.
-- **Still a step**: the turn signal goes out and the call and its result
-  reach `turn_end` like any tool's, so `messages.tool_calls` keeps the
-  `web_*` call and `messages.tool_results` the refusal; the desktop draws it
-  as a failed tool. No new event.
-- **Not guarded**: `code_run`, the file tools, `ask_user` and the rest run
-  as everywhere. A `curl` inside `code_run`, or a GA subagent it starts
-  (GA's own handler, not Galley's), still reaches the web; the clause is the
-  only fence there.
-- Attach mode is untouched (Rule 1): without `GALLEY_RUNTIME_KIND=managed`
-  the guard is inert even if the mark were set.
+  starts without it, and attach-mode spawns never pass through there. The
+  runner reads it in one place, `managed_runtime.is_managed_main_chat`
+  (the mark exactly `1` and `GALLEY_RUNTIME_KIND=managed`, so a mark leaked
+  into an external GA's environment changes nothing, Rule 1), for three
+  things: offering `tell_user` (below), sending a step's words mid-run in a
+  run the user started (ticket 142, below) and taking interjections into a
+  running run (ticket 136, `workbench_bridge._interjections_allowed`).
+- The main chat runner's child processes (`code_run`'s shell, the
+  `galley` CLI) inherit the mark; nothing but the runner reads it.
 
 ### The Main Chat Can Tell You Something Mid-Run
 
@@ -281,17 +270,19 @@ chat PRD ruling 186 point 2, ticket 137,
 
 - **Not in GA's files**: GA's tool list (`assets/tools_schema*.json`) is
   shared by every managed runner, and only the main chat gets this tool, so
-  there is no managed patch. Under the same mark and runtime test as the
-  browser guard, the runner adds the tool's entry to `agentmain.TOOLS_SCHEMA`
+  there is no managed patch. Under the main chat's mark and the managed
+  runtime (above), the runner adds the tool's entry to `agentmain.TOOLS_SCHEMA`
   before every `put_task` (`GaSession.offer_tool`; a model switch reloads
   GA's list, hence every run) and `WorkbenchHandler.dispatch` answers the
   call before GA's own dispatch (GA has no `do_tell_user`). The entry says
-  what the tool is and when it helps, and the fact it rests on: "Send the
-  user a message right away, without ending your turn; until your final
-  reply, nothing else you write reaches them. Useful when the user says
-  something while you are working, or when what you are doing will take a
-  while and they would want to know how it is going." (its Chinese pair
-  beside GA's Chinese tool list). One parameter, `message`.
+  what the tool is and when it helps: "Send the user a message right away,
+  without ending your turn. Useful when the user says something while you
+  are working, or when what you are doing will take a while and they would
+  want to know how it is going." (its Chinese pair beside GA's Chinese tool
+  list). One parameter, `message`. Ticket 137 had added "until your final
+  reply, nothing else you write reaches them" after a semicolon; ticket 142
+  made a step's words reach the user in a run they started, so ticket 139
+  took it out again.
 - **What the model reads back**: `{"status": "success", "msg": "Sent to the
   user. Carry on; your turn has not ended."}` with GA's usual next prompt;
   an empty message, or a run already over (a stop racing it), gets GA's

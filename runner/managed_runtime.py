@@ -17,6 +17,17 @@ GALLEY_RUNTIME_KIND_ENV = "GALLEY_RUNTIME_KIND"
 GALLEY_MANAGED_STATE_ROOT_ENV = "GALLEY_GA_STATE_ROOT"
 GALLEY_MANAGED_MODEL_CONFIG_ENV = "GALLEY_MANAGED_MODEL_CONFIG_JSON"
 GALLEY_RUNTIME_PROMPT_TEXT_ENV = "GALLEY_RUNTIME_PROMPT_TEXT"
+# Core sets this to "1" on the main chat's runner and on no other
+# (core/src/runner_commands.rs `MAIN_CHAT_ENV`; workbench sessions,
+# subtasks and the IM channels never have it). It is read through
+# `is_managed_main_chat` for the main chat's own `tell_user` tool (ticket
+# 137, runner/tell_user.py `offered_here`), a step's words sent mid-run
+# (ticket 142, workbench_bridge `_tell_step_text`, through `offered_here`)
+# and the interjections Core hands a running run (ticket 136,
+# workbench_bridge `_interjections_allowed`).
+# Until 2026-11-03 it also armed the main chat's browser guard (ticket
+# 135), taken out by ticket 139 (main chat PRD ruling 186).
+GALLEY_MAIN_CHAT_ENV = "GALLEY_MAIN_CHAT"
 # Literal Core leaves in prompt templates whose supervisor identity can
 # only be known per agent instance (core/src/managed_prompt.rs).
 SUPERVISOR_ID_PLACEHOLDER = "__GALLEY_SUPERVISOR_ID__"
@@ -25,6 +36,14 @@ _CREDENTIAL_IPC_TIMEOUT_SECS = 10
 
 def is_managed_runtime() -> bool:
     return os.environ.get(GALLEY_RUNTIME_KIND_ENV) == "managed"
+
+
+def is_managed_main_chat() -> bool:
+    """Whether this runner is the main chat's in Galley's managed runtime:
+    the mark exactly "1" and the runtime managed. The second test keeps
+    attach mode inert even if the variable leaked into an external GA's
+    environment (CLAUDE.md Rule 1)."""
+    return os.environ.get(GALLEY_MAIN_CHAT_ENV) == "1" and is_managed_runtime()
 
 
 def managed_state_root() -> str | None:

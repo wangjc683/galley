@@ -6,13 +6,17 @@ synthesizes Galley's live turn signal around dispatch and forwards `tool_num`
 when the loaded GA accepts it. GA upgrades can move internals around; this
 module uses runtime feature detection for the pieces Galley depends on.
 
-Two exceptions, managed runtime only, both the main chat's: its browser
-guard (main chat PRD ruling 184, ticket 135): the runner refuses browser
-tools and tells the model to hand the work to a subtask (see
-`_main_chat_refuses`); and its own tool `tell_user` (ticket 137,
-`runner/tell_user.py`), which GA does not have: the call never reaches GA's
-dispatch. Attach mode never reaches either (CLAUDE.md Rule 1: there the
-subclass only emits signals).
+One exception, managed runtime only: the main chat's own tool `tell_user`
+(ticket 137, `runner/tell_user.py`), which GA does not have: the call never
+reaches GA's dispatch. Attach mode never reaches it (CLAUDE.md Rule 1: there
+the subclass only emits signals). One more signal, read-only: at a step's
+first dispatch, before any of its tools run, the handler hands the step's
+reply to the bridge (ticket 142, `runner/step_text.py`), which in the
+managed main chat, in a run the user started, sends the step's words to the
+user; dispatch and results are untouched. The main chat's browser guard
+(ticket 135) was taken out on 2026-11-03 (main chat PRD ruling 186, ticket
+139): the main chat goes online again, every browser tool running as
+everywhere else.
 
 This module imports GA modules (`agent_loop`, `ga`). The caller must put
 the GA installation path on sys.path before importing this module.
@@ -20,7 +24,6 @@ the GA installation path on sys.path before importing this module.
 from __future__ import annotations
 
 import inspect
-import os
 from collections.abc import Callable, Generator
 from typing import Any
 
@@ -29,7 +32,7 @@ from typing import Any
 from agent_loop import BaseHandler
 from ga import GenericAgentHandler
 
-from runner import managed_runtime, tell_user
+from runner import tell_user
 
 # Upstream GA commit 3205f4a (post-cf65515 baseline) added a `tool_num`
 # kwarg to `BaseHandler.dispatch` so do_* tools can scale output length
@@ -64,64 +67,15 @@ _BASE_DISPATCH_CALLS_TOOL_BEFORE_CALLBACK: bool = (
 )
 
 
-# The main chat's browser guard (main chat PRD ruling 184, ticket 135).
-# The main chat does not go on the web: work that needs the browser is a
-# subtask's. Its prompt says so; this makes it hold. Core sets
-# GALLEY_MAIN_CHAT=1 on the main chat's runner only
-# (core/src/runner_commands.rs `MAIN_CHAT_ENV`); subtasks, workbench
-# sessions and the IM channels never have it.
-MAIN_CHAT_ENV = "GALLEY_MAIN_CHAT"
-# GA's browser tools are `web_scan` and `web_execute_js` today
-# (managed-ga/code/ga.py `do_web_*`); matching the prefix also refuses one
-# upstream adds later.
-BROWSER_TOOL_PREFIX = "web_"
-# What the model reads as the tool's result, in GA's error envelope (the
-# shape GA's own refusal of a whole-file L1 write uses, ga.py
-# `do_file_write`), which the desktop draws as a failed tool.
-# It says the main chat does not go online at all, not only that the
-# browser is off: refused here, the model could otherwise reach for curl
-# in `code_run`, which this guard does not see. Main chat PRD ruling 185
-# point 4: the user hears that it is on its way, not why it is not done
-# here or that a rule says so. It opens with the entry layer's own words
-# for this ("You do not go online in this chat"), not "This is the main
-# chat": the model passed that name on to the user as 「主聊」 (an inner
-# name, ruling 173).
-MAIN_CHAT_BROWSER_REFUSAL = (
-    "You do not go online in this chat, neither with the browser nor with "
-    "commands such as curl in code_run. Hand this to a subtask: end your "
-    'reply with <subtask title="a few words">what to do</subtask>, with '
-    "everything it needs (the goal, the facts the user gave, what this "
-    "conversation already settled). Tell the user in a sentence that it is "
-    "on its way; do not explain why it is not done here or cite this rule."
-)
-
-
-def _main_chat_refuses(tool_name: str) -> bool:
-    """Whether this call is a browser tool in the managed main chat.
-
-    All three must hold: the tool is a browser tool, the runner is the
-    main chat's (GALLEY_MAIN_CHAT is exactly "1"), and the runtime is
-    Galley's managed one (`managed_runtime.is_managed_runtime`, the
-    bridge's own test). The last one keeps attach mode inert even if the
-    variable leaked into an external GA's environment: there the handler
-    subclass may only emit signals, never change dispatch or results
-    (CLAUDE.md Rule 1). `code_run` and every other tool always run; a
-    `curl` inside `code_run` is a known gap this guard does not close.
-    """
-    return (
-        tool_name.startswith(BROWSER_TOOL_PREFIX)
-        and os.environ.get(MAIN_CHAT_ENV) == "1"
-        and managed_runtime.is_managed_runtime()
-    )
-
-
 class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no stubs
     """GA handler that emits Galley's turn signal and forwards `tool_num`.
 
     It must not change tool dispatch or results (CLAUDE.md Rule 1): every
     call is delegated to GA's own dispatch unchanged, except, in the
-    managed runtime's main chat, a browser tool (`_main_chat_refuses`) and
-    the main chat's own `tell_user` (`runner/tell_user.py`).
+    managed runtime's main chat, its own `tell_user` (`runner/tell_user.py`).
+    Before a step's first dispatch it also hands the step's reply, read-only,
+    to `step_text_callback` (ticket 142: the bridge sends the step's words
+    in the main chat's user-started runs).
     """
 
     def __init__(
@@ -206,29 +160,16 @@ class WorkbenchHandler(GenericAgentHandler):  # type: ignore[misc]  # GA has no 
         index: int = 0,
         tool_num: int = 1,
     ) -> Generator[Any, None, Any]:
-        if _main_chat_refuses(tool_name):
-            # Managed main chat only (ruling 184): the tool does not run
-            # and GA's dispatch is not called. The step still shows: its
-            # turn signal goes out here, as GA's dispatch path would have
-            # sent it, and GA's loop records the call and this result for
-            # turn_end like any tool's (returning before the first yield
-            # is how GA's own tools end early; its loop reads the
-            # StopIteration value). next_prompt="\n" as in GA's L1
-            # refusal. Imported here so attach mode never touches it.
-            from agent_loop import StepOutcome
-
-            self.tool_before_callback(tool_name, args, response)
-            return StepOutcome(
-                {"status": "error", "msg": MAIN_CHAT_BROWSER_REFUSAL},
-                next_prompt="\n",
-            )
         if tool_name == tell_user.TOOL_NAME and tell_user.offered_here():
             # The managed main chat's own tool (ticket 137): GA has no
             # `do_tell_user`, so GA's dispatch is not called. The step
             # shows as any tool's (its turn signal here, its call and this
-            # result in turn_end). Sent, the result says so and the run
-            # goes on with GA's usual next prompt; otherwise GA's error
-            # envelope and next_prompt="\n", as its own tools refuse.
+            # result in turn_end; returning before the first yield is how
+            # GA's own tools end early, its loop reading the StopIteration
+            # value). Sent, the result says so and the run goes on with
+            # GA's usual next prompt; otherwise GA's error envelope and
+            # next_prompt="\n", as its own tools refuse. Imported here so
+            # attach mode never touches it.
             from agent_loop import StepOutcome
 
             self.tool_before_callback(tool_name, args, response)

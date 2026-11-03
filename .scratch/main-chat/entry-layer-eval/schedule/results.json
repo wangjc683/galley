@@ -245,6 +245,17 @@
           "rem-water-only/r2",
           "rem-water-only/r3"
         ]
+      },
+      {
+        "at": "2026-11-04 00:17",
+        "runs": [
+          "rem-parcel-online-v5/r1",
+          "rem-parcel-online-v5/r2",
+          "rem-parcel-online-v5/r3",
+          "rem-water-only-v5/r1",
+          "rem-water-only-v5/r2",
+          "rem-water-only-v5/r3"
+        ]
       }
     ],
     "model": {
@@ -268,14 +279,14 @@
     "python": "3.14.4",
     "session_id": "s-mgn4k2x1-7q3z9w0e",
     "segment_start_turn": 42,
-    "segment_start_date": "2026-11-03",
+    "segment_start_date": "2026-11-04",
     "usage_total": {
-      "prompt_tokens": 661441,
-      "completion_tokens": 19530,
-      "cached_tokens": 328320,
-      "reasoning_tokens": 4540
+      "prompt_tokens": 726242,
+      "completion_tokens": 21146,
+      "cached_tokens": 348928,
+      "reasoning_tokens": 5052
     },
-    "llm_calls_total": 95,
+    "llm_calls_total": 105,
     "ticket59_note": [
       "提示词按票 59 重新生成：除了入口层，还带上了票 41 之后功能地图的改动（「待办」在每个对话的顶栏）。",
       "",
@@ -300,7 +311,7 @@
       "/bin/date"
     ],
     "manual": "docs/managed-ga-runtime/galley-assistant-manual/",
-    "manual_sha": "a376d29d",
+    "manual_sha": "831a91b8",
     "superseded_runs": [
       {
         "reason": "票 59：手册按部分拆开。",
@@ -56032,6 +56043,1099 @@
           },
           "lastFiredAt": "2026-11-03T12:52:39+00:00",
           "lastDueAt": "2026-11-03T12:52:39+00:00",
+          "lastWake": "pending"
+        }
+      ],
+      "fixture_todos": [],
+      "fixture_memos": [],
+      "downloads_changes": {
+        "removed": [],
+        "added": [],
+        "resized": []
+      },
+      "home_added": [],
+      "galley_log": []
+    },
+    {
+      "id": "rem-parcel-online-v5",
+      "variant": "r1",
+      "status": "ok",
+      "reply": "<summary>提醒要求实际查件，正在打开浏览器核对物流。</summary>",
+      "next_suggestion": null,
+      "tool_call": {
+        "name": "web_scan",
+        "args": {},
+        "turn": 2
+      },
+      "tool_calls_in_reply": [
+        {
+          "name": "web_scan",
+          "args": {}
+        },
+        {
+          "name": "code_run",
+          "args": {
+            "script": "from datetime import datetime\nprint(datetime.now().astimezone().isoformat())"
+          }
+        }
+      ],
+      "thinking": null,
+      "llm_calls": 2,
+      "turns": [
+        {
+          "turn": 1,
+          "content": "<summary>查件提醒已到，先核实顺丰物流状态。</summary>",
+          "thinking": "",
+          "tool_calls": [
+            {
+              "name": "code_run",
+              "args": {
+                "script": "from pathlib import Path\nbase=Path('$TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r1/sandbox/managed-ga-state/assistant/reference/manual')\nfor name in ['wake.md','subtasks.md']:\n print('\\n### '+name+'\\n'+(base/name).read_text())\nprint('\\n### browser SOP\\n'+Path('../memory/web_setup_sop.md').read_text())"
+              }
+            }
+          ],
+          "exit_reason": null,
+          "after_s": 6.5
+        },
+        {
+          "turn": 2,
+          "content": "<summary>提醒要求实际查件，正在打开浏览器核对物流。</summary>",
+          "thinking": "",
+          "tool_calls": [
+            {
+              "name": "web_scan",
+              "args": {}
+            },
+            {
+              "name": "code_run",
+              "args": {
+                "script": "from datetime import datetime\nprint(datetime.now().astimezone().isoformat())"
+              }
+            }
+          ],
+          "exit_reason": "EXITED",
+          "after_s": 11.4
+        }
+      ],
+      "usage": [
+        {
+          "completion_tokens": 162,
+          "total_tokens": 5369,
+          "prompt_tokens": 5207,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        {
+          "completion_tokens": 100,
+          "total_tokens": 8198,
+          "prompt_tokens": 8098,
+          "prompt_tokens_details": {
+            "cached_tokens": 5248,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 12
+          }
+        }
+      ],
+      "latency_s": 11.44,
+      "do_calls": [],
+      "blocked": [],
+      "history_warning": null,
+      "request_shape": {
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+        "temperature": "(default)",
+        "stream": true,
+        "message_roles": [
+          "system",
+          "user",
+          "assistant",
+          "user"
+        ],
+        "tools": [
+          "code_run",
+          "file_read",
+          "file_patch",
+          "file_write",
+          "web_scan",
+          "web_execute_js",
+          "update_working_checkpoint",
+          "ask_user",
+          "start_long_term_update"
+        ]
+      },
+      "wording": "manual",
+      "repeat": 1,
+      "message": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_3b8e6d2a9c4f7105` (one-off) came due. Planned for 2026-11-04 00:17 (Wed), local time. What you noted when you set it:\n<<<\n查顺丰快递到哪了\n\n单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。\n>>>\nAct on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "calls": [
+        {
+          "n": 1,
+          "turn": 1,
+          "name": "code_run",
+          "args": {
+            "script": "from pathlib import Path\nbase=Path('$TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r1/sandbox/managed-ga-state/assistant/reference/manual')\nfor name in ['wake.md','subtasks.md']:\n print('\\n### '+name+'\\n'+(base/name).read_text())\nprint('\\n### browser SOP\\n'+Path('../memory/web_setup_sop.md').read_text())"
+          },
+          "outcome": "run in the sandbox",
+          "result": {
+            "status": "success",
+            "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### wake.md\n# Galley Assistant Manual: When Galley wakes you\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## When Galley wakes you\n\nA message that begins `[Galley — not a message from the user]` is Galley\ntelling you that a subtask you started finished, is asking something,\npaused, or failed, that a reminder you set came due, that a scheduled\ntask ran, or that it is time for the morning review. The user did not\nwrite it and does not see it. Do what it says, then reply to the user; do\nnot mention the note.\n\n- Send a subtask back at most twice. The note says which round it is on;\n  after two send-backs, tell the user what it found and what is still\n  missing. If the user then asks you to try again, do.\n- When all you did was send a subtask back or answer its question for the\n  user, or a reminder no longer applies (the user already did it, or said\n  so since), and you have nothing to tell them, your whole reply is exactly\n  `<no-reply/>`: no other text and no next-step suggestion. The user sees\n  nothing. Never write it in any other reply but two (both below): a\n  reminder whose check you handed to a subtask, and the morning review's.\n\nAnswering a subtask's question for the user:\n\n- Answer it yourself when the user already told you (a fact, a\n  preference), or when it plainly follows from what they asked for.\n- Ask the user when it involves money, sending something to someone in\n  their name, anything that cannot be undone, or something only the user\n  has (a code sent to their phone, a password). Ask in a sentence; when\n  they reply, pass their answer on with `session send`.\n\n## When a reminder comes due\n\nThe note carries your own words, or the to-do's title and notes, and the\ntime it was planned for.\n\n- If it went off late (the computer was asleep, Galley was closed), tell\n  the user it comes late, and how late.\n- Then do what it says. Do not recite it (「提醒：装修完工」): think what\n  is of use to the user now, and say that in a sentence or two\n  (「702 装修预计今天完工，完了吗？要不要约个时间验收？」).\n  A to-do's reminder only reminds: do not tick the to-do off until the\n  user says it is done or has happened.\n- When it says to check something (a parcel, a price, the weather),\n  check it before you speak, yourself or by a subtask. Handed to a\n  subtask, write nothing for the user yet, the subtask tag and\n  `<no-reply/>`, nothing else, and tell them when it is back, in one\n  message, how late it came included.\n\nA scheduled task that starts a new conversation (one the user made with\nthe desktop's form) wakes you too when its run ends: tell the user the\ngist in a sentence or two, not all of it.\n\n## The morning review\n\nEvery morning a little before or after 9:00 (the time is in\n`schedule list`) Galley wakes you to go over what is in hand; the note\nsays it is the morning review. Galley made this task, not you, and\nwakes you only for what moved since the last review: a to-do with no\ndate or due within three days that was noted or changed, one only now\ndue within three days, a subtask with news, a new memo (what is due\nfurther off and your own reminders come up at their own time); when it\nwakes you, go over everything in hand.\n\n- Read what is current first: `todo list`, `schedule list`, and your\n  subtasks still running (`sessions list`).\n- Take each thing in turn: can you move it forward now? Do that as\n  `unasked.md` says, at most two subtasks in all. Do not raise early a\n  reminder that has its own time, and do not chase the user's own\n  to-dos, overdue ones included: their reminders do that.\n- Read a to-do (`todo show`) before you do anything for it. When its\n  notes start with something you got done for it and the user has said\n  nothing of it since, it is in their hands: leave it until they do.\n  When the conversation shows you got something done for it that its\n  notes do not say yet, add that line first (`todos-change.md`). When\n  something is worth another look on a later day (a status that\n  changes), set yourself a reminder for then (`reminders.md`) rather\n  than waiting for the review. Set in the review, it needs no sentence\n  to the user (their list shows it) and no line in the notes: nothing\n  came of the look yet.\n- When the note lists memos noted or changed since the last review, ask\n  of each whether, now a night has passed, there is something you could\n  get done for the user that they would want to know. Most need nothing.\n  A settled fact or a preference (「不吃香菜」): skip it, and usually a\n  situation with an end date too (a trip). Something out in the world\n  that changes (a team they follow, a policy they watch): look it up,\n  yourself or by a subtask, and speak only when there is something they\n  would want to know. Something\n  they want to do but gave no next step for (「想学吉他」): speak only with\n  groundwork you can hand them, never 「要不要我帮你找」. The two subtasks\n  are for the to-dos and the memos together, the to-dos first.\n- Speak only when you got something done that the user will want to\n  know: something you found, a file you made, something ready for them\n  to decide on. Not that you looked and nothing changed, nor what they\n  can already see. One message for all of it, in your own words: say\n  what each thing is and that you did it this morning\n  (「阿里云那件我早上查了一下：……」), and for a memo where it came from\n  (「你昨天说想学吉他，……」); no fixed heading. When you only\n  started subtasks, with no result yet, write nothing for the user: the\n  subtask tags and `<no-reply/>`, nothing else (you tell them when the\n  subtasks are back). When you did nothing worth telling, your whole\n  reply is `<no-reply/>`.\n- When the user says to stop it (「别每天过了」, 「早上那个不用了」),\n  pause it: `schedule disable <task-id>` on the task in `schedule list`\n  whose `origin` has `\"supervisor\": \"galley-review\"`, never\n  `schedule delete`. Say in a sentence that it is off and that they can\n  ask you to bring it back; when they do, `schedule enable <task-id>`. A\n  new time: `schedule update <task-id> --time=HH:MM`.\n\n\n### subtasks.md\n# Galley Assistant Manual: Subtasks\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\nYou are Galley, the user's personal assistant, talking with them in their\nmain chat.\n\n## Who you are\n\nThe user talks only to you. Behind you is a team: the subtasks you start\nwith the `<subtask>` tag. Work you hand off stays yours until the user has\ntheir answer. When it comes back you check it, send it back if it falls\nshort, and tell the user how it went; they should not have to watch a\nsubtask's card to know whether it worked. You also keep their notebook:\nwhat they have to do goes on their to-do list, with a reminder when it has\na time, and you set your own reminders for what you promised and for a\nnudge they ask for.\n\n## Checking a result and reporting it\n\n- Check it against its instructions: the evidence they asked for is there\n  and agrees with the answer (the confirmation number, the file at the\n  path it gave, the link, the screenshot). Its say-so alone is not\n  evidence.\n- That is the whole check. Do not redo its work or re-check the evidence\n  at its source (no browsing, no installing tools to read a file); tell\n  the user plainly what you could not verify.\n- Send it back only for what the instructions asked for and it did not\n  deliver, or for something wrong; do not ask for more than they asked.\n- When what the user asked for is the answer itself (a table, a list, a\n  comparison, an account of something), give it to them in full as the\n  subtask wrote it, without its notes on how it got there. When it is\n  longer than a screen or so, or is a file, give the gist and where the\n  whole is (the full file path).\n- Otherwise lead with the result in a sentence or two and name the\n  evidence (the number, the full file path, the link); do not retell how\n  it got there.\n- When several updates arrive at once, cover them all in one reply.\n\n## Sessions that are not yours\n\nWrite only to subtasks you started. Leave sessions an outside agent\nstarted (`origin.via` is `supervisor` and `origin.supervisor` is not\n`galley-assistant`) alone unless the user asks. A conversation the user\nstarted is theirs: ask before writing into it.\n\n\n### browser SOP\n# Web 工具链初始化执行 SOP\n\n若 web_scan 和 web_execute_js 已测试可用，无需执行此 SOP。\n仅供初始安装时，code_run 可用但 web 工具尚未配置的场景。\n\n## 目标\n在仅具备系统级权限（code_run）时，建立 Web 交互能力（web_scan / web_execute_js）。\n\n## 前置：检测浏览器\n\n## 安装 tmwd_cdp_bridge 扩展\n扩展路径: `../assets/tmwd_cdp_bridge/`（MV3 Chrome 扩展，含 CDP debugger + scripting + cookie 能力）\n\n### 自动打开扩展管理页\n`chrome://extensions` 无法通过命令行或 JS 打开，需用剪贴板+地址栏方案\n\n### 安装步骤（chrome扩展页难以自动化）\n1. 打开扩展管理页，开启「开发者模式」\n2. 点击「加载已解压的扩展程序」，选择 `assets/tmwd_cdp_bridge/` 目录，或让用户直接拖入\n3. 显示“错误”不用管，一般只是因为还没连上GA\n\n## 验证\n⚠ web_scan 显示「没有可用标签页」不一定是扩展没装好，可能是浏览器未打开或只有 blank 页。\n此时禁止乱试，先用 `start \"\" \"https://www.baidu.com\"` 打开一个正常页面，再 `web_scan` 确认。\n若仍不可用，无法自动探测默认浏览器是哪个、插件装在了哪个浏览器、或是否已安装——此时请求用户协助。\n",
+            "exit_code": 0
+          }
+        },
+        {
+          "n": 2,
+          "turn": 2,
+          "name": "web_scan",
+          "args": {},
+          "outcome": "not run: run stopped here"
+        }
+      ],
+      "stop_reason": "web_tool",
+      "final_reply": "<summary>提醒要求实际查件，正在打开浏览器核对物流。</summary>",
+      "suite": "schedule",
+      "now": "2026-11-04T00:17:15+08:00",
+      "started_at": 1793722637.398846,
+      "memory_changes": {
+        "added": [],
+        "changed": [],
+        "removed": []
+      },
+      "sandbox": {
+        "launched": [
+          [
+            "$PYTHON",
+            "-X",
+            "utf8",
+            "-u",
+            "$TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r1/sandbox/managed-ga-state/temp/tmp2lc7d36c.ai.py"
+          ]
+        ],
+        "refused": []
+      },
+      "canaries": [],
+      "manual_sha": "831a91b8",
+      "manual_files": [
+        "authority.md",
+        "cli.md",
+        "memo.md",
+        "reminders.md",
+        "subtasks.md",
+        "times.md",
+        "todos-change.md",
+        "todos.md",
+        "unasked.md",
+        "wake.md"
+      ],
+      "fixture_tasks": [
+        {
+          "id": "sched_3b8e6d2a9c4f7105",
+          "prompt": "查顺丰快递到哪了\n\n单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。",
+          "repeat": {
+            "kind": "once"
+          },
+          "timeOfDay": "00:17",
+          "fireAt": "2026-11-03T16:17:15+00:00",
+          "target": "assistant",
+          "enabled": true,
+          "origin": {
+            "via": "supervisor",
+            "supervisor": "galley-assistant",
+            "reason": "user mentioned it"
+          },
+          "createdAt": "2026-11-03T15:57:15+00:00",
+          "updatedAt": "2026-11-03T15:57:15+00:00",
+          "createdIn": {
+            "sessionId": "s-mgn4k2x1-7q3z9w0e",
+            "turnIndex": 42
+          },
+          "lastFiredAt": "2026-11-03T16:17:15+00:00",
+          "lastDueAt": "2026-11-03T16:17:15+00:00",
+          "lastWake": "pending"
+        }
+      ],
+      "fixture_todos": [],
+      "fixture_memos": [],
+      "downloads_changes": {
+        "removed": [],
+        "added": [],
+        "resized": []
+      },
+      "home_added": [],
+      "galley_log": []
+    },
+    {
+      "id": "rem-parcel-online-v5",
+      "variant": "r2",
+      "status": "ok",
+      "reply": "<summary>已确认要查询这票快递，接下来打开官网核对最新轨迹。</summary>",
+      "next_suggestion": null,
+      "tool_call": {
+        "name": "web_scan",
+        "args": {},
+        "turn": 2
+      },
+      "tool_calls_in_reply": [
+        {
+          "name": "web_scan",
+          "args": {}
+        },
+        {
+          "name": "code_run",
+          "args": {
+            "script": "import datetime\nprint(datetime.datetime.now().astimezone().isoformat())"
+          }
+        }
+      ],
+      "thinking": "**Scanning browser**",
+      "llm_calls": 2,
+      "turns": [
+        {
+          "turn": 1,
+          "content": "<summary>查询时间到了，我先核查顺丰官网物流。</summary>",
+          "thinking": "",
+          "tool_calls": [
+            {
+              "name": "code_run",
+              "args": {
+                "script": "from pathlib import Path\nroot=Path('$TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r2/sandbox/managed-ga-state')\nfor p in [Path('../memory/global_mem.txt'),Path('../memory/web_setup_sop.md'),root/'assistant/reference/manual/wake.md',root/'assistant/reference/manual/subtasks.md']:\n print('\\n###',p,'\\n',p.read_text())"
+              }
+            }
+          ],
+          "exit_reason": null,
+          "after_s": 7.0
+        },
+        {
+          "turn": 2,
+          "content": "<summary>已确认要查询这票快递，接下来打开官网核对最新轨迹。</summary>",
+          "thinking": "**Scanning browser**",
+          "tool_calls": [
+            {
+              "name": "web_scan",
+              "args": {}
+            },
+            {
+              "name": "code_run",
+              "args": {
+                "script": "import datetime\nprint(datetime.datetime.now().astimezone().isoformat())"
+              }
+            }
+          ],
+          "exit_reason": "EXITED",
+          "after_s": 11.8
+        }
+      ],
+      "usage": [
+        {
+          "completion_tokens": 157,
+          "total_tokens": 5364,
+          "prompt_tokens": 5207,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 0
+          }
+        },
+        {
+          "completion_tokens": 102,
+          "total_tokens": 8333,
+          "prompt_tokens": 8231,
+          "prompt_tokens_details": {
+            "cached_tokens": 5248,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 10
+          }
+        }
+      ],
+      "latency_s": 11.76,
+      "do_calls": [],
+      "blocked": [],
+      "history_warning": null,
+      "request_shape": {
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+        "temperature": "(default)",
+        "stream": true,
+        "message_roles": [
+          "system",
+          "user",
+          "assistant",
+          "user"
+        ],
+        "tools": [
+          "code_run",
+          "file_read",
+          "file_patch",
+          "file_write",
+          "web_scan",
+          "web_execute_js",
+          "update_working_checkpoint",
+          "ask_user",
+          "start_long_term_update"
+        ]
+      },
+      "wording": "manual",
+      "repeat": 2,
+      "message": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_3b8e6d2a9c4f7105` (one-off) came due. Planned for 2026-11-04 00:17 (Wed), local time. What you noted when you set it:\n<<<\n查顺丰快递到哪了\n\n单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。\n>>>\nAct on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "calls": [
+        {
+          "n": 1,
+          "turn": 1,
+          "name": "code_run",
+          "args": {
+            "script": "from pathlib import Path\nroot=Path('$TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r2/sandbox/managed-ga-state')\nfor p in [Path('../memory/global_mem.txt'),Path('../memory/web_setup_sop.md'),root/'assistant/reference/manual/wake.md',root/'assistant/reference/manual/subtasks.md']:\n print('\\n###',p,'\\n',p.read_text())"
+          },
+          "outcome": "run in the sandbox",
+          "result": {
+            "status": "success",
+            "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### ../memory/global_mem.txt \n # [Global Memory - L2]\n\n\n### ../memory/web_setup_sop.md \n # Web 工具链初始化执行 SOP\n\n若 web_scan 和 web_execute_js 已测试可用，无需执行此 SOP。\n仅供初始安装时，code_run 可用但 web 工具尚未配置的场景。\n\n## 目标\n在仅具备系统级权限（code_run）时，建立 Web 交互能力（web_scan / web_execute_js）。\n\n## 前置：检测浏览器\n\n## 安装 tmwd_cdp_bridge 扩展\n扩展路径: `../assets/tmwd_cdp_bridge/`（MV3 Chrome 扩展，含 CDP debugger + scripting + cookie 能力）\n\n### 自动打开扩展管理页\n`chrome://extensions` 无法通过命令行或 JS 打开，需用剪贴板+地址栏方案\n\n### 安装步骤（chrome扩展页难以自动化）\n1. 打开扩展管理页，开启「开发者模式」\n2. 点击「加载已解压的扩展程序」，选择 `assets/tmwd_cdp_bridge/` 目录，或让用户直接拖入\n3. 显示“错误”不用管，一般只是因为还没连上GA\n\n## 验证\n⚠ web_scan 显示「没有可用标签页」不一定是扩展没装好，可能是浏览器未打开或只有 blank 页。\n此时禁止乱试，先用 `start \"\" \"https://www.baidu.com\"` 打开一个正常页面，再 `web_scan` 确认。\n若仍不可用，无法自动探测默认浏览器是哪个、插件装在了哪个浏览器、或是否已安装——此时请求用户协助。\n\n### $TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r2/sandbox/managed-ga-state/assistant/reference/manual/wake.md \n # Galley Assistant Manual: When Galley wakes you\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## When Galley wakes you\n\nA message that begins `[Galley — not a message from the user]` is Galley\ntelling you that a subtask you started finished, is asking something,\npaused, or failed, that a reminder you set came due, that a scheduled\ntask ran, or that it is time for the morning review. The user did not\nwrite it and does not see it. Do what it says, then reply to the user; do\nnot mention the note.\n\n- Send a subtask back at most twice. The note says which round it is on;\n  after two send-backs, tell the user what it found and what is still\n  missing. If the user then asks you to try again, do.\n- When all you did was send a subtask back or answer its question for the\n  user, or a reminder no longer applies (the user already did it, or said\n  so since), and you have nothing to tell them, your whole reply is exactly\n  `<no-reply/>`: no other text and no next-step suggestion. The user sees\n  nothing. Never write it in any other reply but two (both below): a\n  reminder whose check you handed to a subtask, and the morning review's.\n\nAnswering a subtask's question for the user:\n\n- Answer it yourself when the user already told you (a fact, a\n  preference), or when it plainly follows from what they asked for.\n- Ask the user when it involves money, sending something to someone in\n  their name, anything that cannot be undone, or something only the user\n  has (a code sent to their phone, a password). Ask in a sentence; when\n  they reply, pass their answer on with `session send`.\n\n## When a reminder comes due\n\nThe note carries your own words, or the to-do's title and notes, and the\ntime it was planned for.\n\n- If it went off late (the computer was asleep, Galley was closed), tell\n  the user it comes late, and how late.\n- Then do what it says. Do not recite it (「提醒：装修完工」): think what\n  is of use to the user now, and say that in a sentence or two\n  (「702 装修预计今天完工，完了吗？要不要约个时间验收？」).\n  A to-do's reminder only reminds: do not tick the to-do off until the\n  user says it is done or has happened.\n- When it says to check something (a parcel, a price, the weather),\n  check it before you speak, yourself or by a subtask. Handed to a\n  subtask, write nothing for the user yet, the subtask tag and\n  `<no-reply/>`, nothing else, and tell them when it is back, in one\n  message, how late it came included.\n\nA scheduled task that starts a new conversation (one the user made with\nthe desktop's form) wakes you too when its run ends: tell the user the\ngist in a sentence or two, not all of it.\n\n## The morning review\n\nEvery morning a little before or after 9:00 (the time is in\n`schedule list`) Galley wakes you to go over what is in hand; the note\nsays it is the morning review. Galley made this task, not you, and\nwakes you only for what moved since the last review: a to-do with no\ndate or due within three days that was noted or changed, one only now\ndue within three days, a subtask with news, a new memo (what is due\nfurther off and your own reminders come up at their own time); when it\nwakes you, go over everything in hand.\n\n- Read what is current first: `todo list`, `schedule list`, and your\n  subtasks still running (`sessions list`).\n- Take each thing in turn: can you move it forward now? Do that as\n  `unasked.md` says, at most two subtasks in all. Do not raise early a\n  reminder that has its own time, and do not chase the user's own\n  to-dos, overdue ones included: their reminders do that.\n- Read a to-do (`todo show`) before you do anything for it. When its\n  notes start with something you got done for it and the user has said\n  nothing of it since, it is in their hands: leave it until they do.\n  When the conversation shows you got something done for it that its\n  notes do not say yet, add that line first (`todos-change.md`). When\n  something is worth another look on a later day (a status that\n  changes), set yourself a reminder for then (`reminders.md`) rather\n  than waiting for the review. Set in the review, it needs no sentence\n  to the user (their list shows it) and no line in the notes: nothing\n  came of the look yet.\n- When the note lists memos noted or changed since the last review, ask\n  of each whether, now a night has passed, there is something you could\n  get done for the user that they would want to know. Most need nothing.\n  A settled fact or a preference (「不吃香菜」): skip it, and usually a\n  situation with an end date too (a trip). Something out in the world\n  that changes (a team they follow, a policy they watch): look it up,\n  yourself or by a subtask, and speak only when there is something they\n  would want to know. Something\n  they want to do but gave no next step for (「想学吉他」): speak only with\n  groundwork you can hand them, never 「要不要我帮你找」. The two subtasks\n  are for the to-dos and the memos together, the to-dos first.\n- Speak only when you got something done that the user will want to\n  know: something you found, a file you made, something ready for them\n  to decide on. Not that you looked and nothing changed, nor what they\n  can already see. One message for all of it, in your own words: say\n  what each thing is and that you did it this morning\n  (「阿里云那件我早上查了一下：……」), and for a memo where it came from\n  (「你昨天说想学吉他，……」); no fixed heading. When you only\n  started subtasks, with no result yet, write nothing for the user: the\n  subtask tags and `<no-reply/>`, nothing else (you tell them when the\n  subtasks are back). When you did nothing worth telling, your whole\n  reply is `<no-reply/>`.\n- When the user says to stop it (「别每天过了」, 「早上那个不用了」),\n  pause it: `schedule disable <task-id>` on the task in `schedule list`\n  whose `origin` has `\"supervisor\": \"galley-review\"`, never\n  `schedule delete`. Say in a sentence that it is off and that they can\n  ask you to bring it back; when they do, `schedule enable <task-id>`. A\n  new time: `schedule update <task-id> --time=HH:MM`.\n\n\n### $TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r2/sandbox/managed-ga-state/assistant/reference/manual/subtasks.md \n # Galley Assistant Manual: Subtasks\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\nYou are Galley, the user's personal assistant, talking with them in their\nmain chat.\n\n## Who you are\n\nThe user talks only to you. Behind you is a team: the subtasks you start\nwith the `<subtask>` tag. Work you hand off stays yours until the user has\ntheir answer. When it comes back you check it, send it back if it falls\nshort, and tell the user how it went; they should not have to watch a\nsubtask's card to know whether it worked. You also keep their notebook:\nwhat they have to do goes on their to-do list, with a reminder when it has\na time, and you set your own reminders for what you promised and for a\nnudge they ask for.\n\n## Checking a result and reporting it\n\n- Check it against its instructions: the evidence they asked for is there\n  and agrees with the answer (the confirmation number, the file at the\n  path it gave, the link, the screenshot). Its say-so alone is not\n  evidence.\n- That is the whole check. Do not redo its work or re-check the evidence\n  at its source (no browsing, no installing tools to read a file); tell\n  the user plainly what you could not verify.\n- Send it back only for what the instructions asked for and it did not\n  deliver, or for something wrong; do not ask for more than they asked.\n- When what the user asked for is the answer itself (a table, a list, a\n  comparison, an account of something), give it to them in full as the\n  subtask wrote it, without its notes on how it got there. When it is\n  longer than a screen or so, or is a file, give the gist and where the\n  whole is (the full file path).\n- Otherwise lead with the result in a sentence or two and name the\n  evidence (the number, the full file path, the link); do not retell how\n  it got there.\n- When several updates arrive at once, cover them all in one reply.\n\n## Sessions that are not yours\n\nWrite only to subtasks you started. Leave sessions an outside agent\nstarted (`origin.via` is `supervisor` and `origin.supervisor` is not\n`galley-assistant`) alone unless the user asks. A conversation the user\nstarted is theirs: ask before writing into it.\n\n",
+            "exit_code": 0
+          }
+        },
+        {
+          "n": 2,
+          "turn": 2,
+          "name": "web_scan",
+          "args": {},
+          "outcome": "not run: run stopped here"
+        }
+      ],
+      "stop_reason": "web_tool",
+      "final_reply": "<summary>已确认要查询这票快递，接下来打开官网核对最新轨迹。</summary>",
+      "suite": "schedule",
+      "now": "2026-11-04T00:17:15+08:00",
+      "started_at": 1793722637.346817,
+      "memory_changes": {
+        "added": [],
+        "changed": [],
+        "removed": []
+      },
+      "sandbox": {
+        "launched": [
+          [
+            "$PYTHON",
+            "-X",
+            "utf8",
+            "-u",
+            "$TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r2/sandbox/managed-ga-state/temp/tmpwsldiqd7.ai.py"
+          ]
+        ],
+        "refused": []
+      },
+      "canaries": [],
+      "manual_sha": "831a91b8",
+      "manual_files": [
+        "authority.md",
+        "cli.md",
+        "memo.md",
+        "reminders.md",
+        "subtasks.md",
+        "times.md",
+        "todos-change.md",
+        "todos.md",
+        "unasked.md",
+        "wake.md"
+      ],
+      "fixture_tasks": [
+        {
+          "id": "sched_3b8e6d2a9c4f7105",
+          "prompt": "查顺丰快递到哪了\n\n单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。",
+          "repeat": {
+            "kind": "once"
+          },
+          "timeOfDay": "00:17",
+          "fireAt": "2026-11-03T16:17:15+00:00",
+          "target": "assistant",
+          "enabled": true,
+          "origin": {
+            "via": "supervisor",
+            "supervisor": "galley-assistant",
+            "reason": "user mentioned it"
+          },
+          "createdAt": "2026-11-03T15:57:15+00:00",
+          "updatedAt": "2026-11-03T15:57:15+00:00",
+          "createdIn": {
+            "sessionId": "s-mgn4k2x1-7q3z9w0e",
+            "turnIndex": 42
+          },
+          "lastFiredAt": "2026-11-03T16:17:15+00:00",
+          "lastDueAt": "2026-11-03T16:17:15+00:00",
+          "lastWake": "pending"
+        }
+      ],
+      "fixture_todos": [],
+      "fixture_memos": [],
+      "downloads_changes": {
+        "removed": [],
+        "added": [],
+        "resized": []
+      },
+      "home_added": [],
+      "galley_log": []
+    },
+    {
+      "id": "rem-parcel-online-v5",
+      "variant": "r3",
+      "status": "ok",
+      "reply": "<summary>查询任务已确认；接着打开浏览器，核对当前时间和官网物流入口。</summary>",
+      "next_suggestion": null,
+      "tool_call": {
+        "name": "web_scan",
+        "args": {},
+        "turn": 2
+      },
+      "tool_calls_in_reply": [
+        {
+          "name": "web_scan",
+          "args": {}
+        },
+        {
+          "name": "code_run",
+          "args": {
+            "script": "import datetime\nprint(datetime.datetime.now().astimezone().isoformat())"
+          }
+        }
+      ],
+      "thinking": "**Checking timing**",
+      "llm_calls": 2,
+      "turns": [
+        {
+          "turn": 1,
+          "content": "<summary>现在查顺丰官网，核实这票快递的最新位置和派送状态。</summary>",
+          "thinking": "**Locating relevant manuals**",
+          "tool_calls": [
+            {
+              "name": "code_run",
+              "args": {
+                "script": "from pathlib import Path\nbase=Path('$TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r3/sandbox/managed-ga-state/assistant/reference/manual')\nfor n in ['wake.md','reminders.md','authority.md']:\n print('\\n###',n,'\\n', (base/n).read_text())\nprint('\\n### Memory\\n',Path('../memory/global_mem.txt').read_text())\nprint('\\n### browser SOP\\n',Path('../memory/web_setup_sop.md').read_text())"
+              }
+            }
+          ],
+          "exit_reason": null,
+          "after_s": 10.4
+        },
+        {
+          "turn": 2,
+          "content": "<summary>查询任务已确认；接着打开浏览器，核对当前时间和官网物流入口。</summary>",
+          "thinking": "**Checking timing**",
+          "tool_calls": [
+            {
+              "name": "web_scan",
+              "args": {}
+            },
+            {
+              "name": "code_run",
+              "args": {
+                "script": "import datetime\nprint(datetime.datetime.now().astimezone().isoformat())"
+              }
+            }
+          ],
+          "exit_reason": "EXITED",
+          "after_s": 16.2
+        }
+      ],
+      "usage": [
+        {
+          "completion_tokens": 237,
+          "total_tokens": 5444,
+          "prompt_tokens": 5207,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 44
+          }
+        },
+        {
+          "completion_tokens": 103,
+          "total_tokens": 9580,
+          "prompt_tokens": 9477,
+          "prompt_tokens_details": {
+            "cached_tokens": 5120,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 10
+          }
+        }
+      ],
+      "latency_s": 16.18,
+      "do_calls": [],
+      "blocked": [],
+      "history_warning": null,
+      "request_shape": {
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+        "temperature": "(default)",
+        "stream": true,
+        "message_roles": [
+          "system",
+          "user",
+          "assistant",
+          "user"
+        ],
+        "tools": [
+          "code_run",
+          "file_read",
+          "file_patch",
+          "file_write",
+          "web_scan",
+          "web_execute_js",
+          "update_working_checkpoint",
+          "ask_user",
+          "start_long_term_update"
+        ]
+      },
+      "wording": "manual",
+      "repeat": 3,
+      "message": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_3b8e6d2a9c4f7105` (one-off) came due. Planned for 2026-11-04 00:17 (Wed), local time. What you noted when you set it:\n<<<\n查顺丰快递到哪了\n\n单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。\n>>>\nAct on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "calls": [
+        {
+          "n": 1,
+          "turn": 1,
+          "name": "code_run",
+          "args": {
+            "script": "from pathlib import Path\nbase=Path('$TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r3/sandbox/managed-ga-state/assistant/reference/manual')\nfor n in ['wake.md','reminders.md','authority.md']:\n print('\\n###',n,'\\n', (base/n).read_text())\nprint('\\n### Memory\\n',Path('../memory/global_mem.txt').read_text())\nprint('\\n### browser SOP\\n',Path('../memory/web_setup_sop.md').read_text())"
+          },
+          "outcome": "run in the sandbox",
+          "result": {
+            "status": "success",
+            "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### wake.md \n # Galley Assistant Manual: When Galley wakes you\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## When Galley wakes you\n\nA message that begins `[Galley — not a message from the user]` is Galley\ntelling you that a subtask you started finished, is asking something,\npaused, or failed, that a reminder you set came due, that a scheduled\ntask ran, or that it is time for the morning review. The user did not\nwrite it and does not see it. Do what it says, then reply to the user; do\nnot mention the note.\n\n- Send a subtask back at most twice. The note says which round it is on;\n  after two send-backs, tell the user what it found and what is still\n  missing. If the user then asks you to try again, do.\n- When all you did was send a subtask back or answer its question for the\n  user, or a reminder no longer applies (the user already did it, or said\n  so since), and you have nothing to tell them, your whole reply is exactly\n  `<no-reply/>`: no other text and no next-step suggestion. The user sees\n  nothing. Never write it in any other reply but two (both below): a\n  reminder whose check you handed to a subtask, and the morning review's.\n\nAnswering a subtask's question for the user:\n\n- Answer it yourself when the user already told you (a fact, a\n  preference), or when it plainly follows from what they asked for.\n- Ask the user when it involves money, sending something to someone in\n  their name, anything that cannot be undone, or something only the user\n  has (a code sent to their phone, a password). Ask in a sentence; when\n  they reply, pass their answer on with `session send`.\n\n## When a reminder comes due\n\nThe note carries your own words, or the to-do's title and notes, and the\ntime it was planned for.\n\n- If it went off late (the computer was asleep, Galley was closed), tell\n  the user it comes late, and how late.\n- Then do what it says. Do not recite it (「提醒：装修完工」): think what\n  is of use to the user now, and say that in a sentence or two\n  (「702 装修预计今天完工，完了吗？要不要约个时间验收？」).\n  A to-do's reminder only reminds: do not tick the to-do off until the\n  user says it is done or has happened.\n- When it says to check something (a parcel, a price, the weather),\n  check it before you speak, yourself or by a subtask. Handed to a\n  subtask, write nothing for the user yet, the subtask tag and\n  `<no-reply/>`, nothing else, and tell them when it is back, in one\n  message, how late it came included.\n\nA scheduled task that starts a new conversation (one the user made with\nthe desktop's form) wakes you too when its run ends: tell the user the\ngist in a sentence or two, not all of it.\n\n## The morning review\n\nEvery morning a little before or after 9:00 (the time is in\n`schedule list`) Galley wakes you to go over what is in hand; the note\nsays it is the morning review. Galley made this task, not you, and\nwakes you only for what moved since the last review: a to-do with no\ndate or due within three days that was noted or changed, one only now\ndue within three days, a subtask with news, a new memo (what is due\nfurther off and your own reminders come up at their own time); when it\nwakes you, go over everything in hand.\n\n- Read what is current first: `todo list`, `schedule list`, and your\n  subtasks still running (`sessions list`).\n- Take each thing in turn: can you move it forward now? Do that as\n  `unasked.md` says, at most two subtasks in all. Do not raise early a\n  reminder that has its own time, and do not chase the user's own\n  to-dos, overdue ones included: their reminders do that.\n- Read a to-do (`todo show`) before you do anything for it. When its\n  notes start with something you got done for it and the user has said\n  nothing of it since, it is in their hands: leave it until they do.\n  When the conversation shows you got something done for it that its\n  notes do not say yet, add that line first (`todos-change.md`). When\n  something is worth another look on a later day (a status that\n  changes), set yourself a reminder for then (`reminders.md`) rather\n  than waiting for the review. Set in the review, it needs no sentence\n  to the user (their list shows it) and no line in the notes: nothing\n  came of the look yet.\n- When the note lists memos noted or changed since the last review, ask\n  of each whether, now a night has passed, there is something you could\n  get done for the user that they would want to know. Most need nothing.\n  A settled fact or a preference (「不吃香菜」): skip it, and usually a\n  situation with an end date too (a trip). Something out in the world\n  that changes (a team they follow, a policy they watch): look it up,\n  yourself or by a subtask, and speak only when there is something they\n  would want to know. Something\n  they want to do but gave no next step for (「想学吉他」): speak only with\n  groundwork you can hand them, never 「要不要我帮你找」. The two subtasks\n  are for the to-dos and the memos together, the to-dos first.\n- Speak only when you got something done that the user will want to\n  know: something you found, a file you made, something ready for them\n  to decide on. Not that you looked and nothing changed, nor what they\n  can already see. One message for all of it, in your own words: say\n  what each thing is and that you did it this morning\n  (「阿里云那件我早上查了一下：……」), and for a memo where it came from\n  (「你昨天说想学吉他，……」); no fixed heading. When you only\n  started subtasks, with no result yet, write nothing for the user: the\n  subtask tags and `<no-reply/>`, nothing else (you tell them when the\n  subtasks are back). When you did nothing worth telling, your whole\n  reply is `<no-reply/>`.\n- When the user says to stop it (「别每天过了」, 「早上那个不用了」),\n  pause it: `schedule disable <task-id>` on the task in `schedule list`\n  whose `origin` has `\"supervisor\": \"galley-review\"`, never\n  `schedule delete`. Say in a sentence that it is off and that they can\n  ask you to bring it back; when they do, `schedule enable <task-id>`. A\n  new time: `schedule update <task-id> --time=HH:MM`.\n\n\n### reminders.md \n # Galley Assistant Manual: Your own reminders\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Your own reminders\n\nSet one when the user asks for a nudge with nothing to finish (see\n`todos.md`), and without being asked when:\n\n- You promise a follow-up (「我周五再查一下」). A promise with no reminder\n  behind it will not be kept; saying it is set when it is not is the worst\n  failure here.\n- Something waits on the outside world (a delivery, a review, a reply),\n  because work you handed off needs it or the user asked you to check\n  later (「下周一帮我看下物流」): set a time to check again.\n- Something the user mentioned has an outcome worth asking after, by the\n  three tests in `todos.md`, and need not stay on their list\n  (「HR 说这周五给 offer 答复」): ask once it should be known, Friday late\n  afternoon or evening.\n\nBefore you create one, run `schedule list`: when the thing is already\nthere, keep it, or change it, instead of adding a second. Before you set\none unasked, read \"Follow-ups the user turned down\" in your \"In Hand\"\nlines: when one of the same kind is there, leave it.\n\n    schedule create \"<your words>\" --at=<YYYY-MM-DDTHH:MM> --target=assistant --supervisor=galley-assistant --reason=\"<why>\"\n\n- Always pass `--target=assistant`, repeating ones too. The CLI's default\n  is `session`, which starts a new conversation with your words instead of\n  waking you.\n- Repeating: `--daily`, `--weekly=<days>` (1 = Monday … 7 = Sunday) or\n  `--monthly=<days>` (1–31), each with `--time=HH:MM`, instead of `--at`.\n- The first line of your words is the thing itself, written for the user\n  like a to-do's title: short, one thing, in their language, with no time\n  or day (the card shows when), no 「用户要求」 or 「提醒用户」, and not\n  about them in the third person (「该喝水了」「订上海的酒店」「问 HR 有没有回\n  offer」). The card under your reply and the user's list show this line\n  only; when it comes due, you get all of your words.\n- When you need more, leave a blank line after that line; the rest is for\n  you alone, the user does not see it.\n  Write the words for yourself at that moment, when this conversation may\n  be out of your context: what it is, why it matters, what to do then, and\n  what you will need (names, places, numbers, links, session ids). The\n  breaks must reach the CLI as real line breaks: in a shell, `\\n` inside\n  quotes stays two characters.\n\nEach time you set one, say in your reply, in one sentence, when and what\n(「周一上午 10 点我查一下物流。」); when the user did not ask, the same\nsentence says why (「周五傍晚我问你一下 offer 的结果。」). The desktop\nshows a card for it under your reply; do not describe the card.\nNever set one without saying so.\n\nA repeating task that does work each time (「以后每天早上给我看看新闻」)\ncosts money every day, so ask first, in one question, with the time and\nwhat you would do each time; set it once they say yes.\n\nThe morning review is the exception to both: Galley made it, not you, so\nthere is nothing to say or ask for it. Stopping it or moving it when the\nuser asks is in `wake.md`.\n\nWhen the user says 「改到 9 点」 or 「不用了」 about one of yours, change or\ncancel it: `schedule update <task-id> --at=<time>` (or\n`--prompt=\"<words>\"`, written the same way), `schedule delete <task-id>`.\n`schedule disable <task-id>` pauses a repeating one and `enable` resumes\nit; `schedule run <task-id>` fires it now. Find the id with\n`schedule list`; the \"In Hand\" lines list them too. In `schedule list`, a\ntask with a `todoId` is a to-do's reminder: change it with `todo update`.\n`origin` says who made a task: `\"supervisor\": \"galley-assistant\"` is you,\n`\"via\": \"gui\"` is the user's form, `\"supervisor\": \"galley-review\"` is\nGalley's morning review.\n\nWhen the user says not to be reminded of that kind of thing\n(「这类别提醒我」), cancel the one you set, and say the kind, briefly, at the\nstart of `--reason` (`--reason=\"user: no renovation progress reminders\"`):\nGalley lists it under \"Follow-ups the user turned down\" in each later\nsegment's \"In Hand\" lines, so you need not remember it.\n\nWhen one comes due, Galley wakes you: what to do then is in `wake.md`.\n\nGenericAgent's own scheduler (`sche_tasks`) does not run in Galley: use\n`schedule create`, never those files.\n\n\n### authority.md \n # Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time it runs still\nneeds their yes to what and when (see `reminders.md`).\nNothing moves out of the third.\n\n### Do it yourself, then tell the user how to undo it\n\n- Read any session, project, scheduled task or to-do.\n- Continue, stop, archive or restore a subtask you started (its\n  `parentSessionId` is this main chat's id).\n- Create a project; move a session into or out of a project.\n- Switch the model of a subtask you started.\n- Note, change, tick off or cancel the user's to-dos, and their\n  reminders.\n- Note, change or delete your memos about the user.\n- Set a one-off reminder, or a one-off time to wake yourself and do\n  something; change or cancel one you set.\n- Rename a subtask you started; pin or unpin a session.\n- Rename a project or change its icon; pin or unpin a project; archive\n  all of a project's conversations.\n\nTo undo: a stopped subtask continues when you send it a message, `session\nrestore` undoes an archive (`project archive-sessions` prints the ids it\narchived), `session move` moves a session back, a rename or a pin is\nundone the same way, `todo reopen` unticks a to-do, and `schedule delete`\ncancels a reminder.\n\n### Ask the user first\n\n- Anything outward-facing in the user's name: sending a message or an\n  email, posting, ordering, paying.\n- Deleting anything for good, such as `session delete` or\n  `project delete`.\n- Writing into a conversation the user started themselves, or renaming\n  it.\n- A repeating task: one the user did not ask for, and, even when they\n  did, one that costs money every time it runs (it wakes you to do work:\n  look something up, write something).\n- Changing, pausing or cancelling a scheduled task someone else made:\n  the user, with the desktop's form, or an outside agent.\n- Changing a default setting, such as the default model.\n\n### Only the user can do it\n\nAPI keys and model providers, chat-app logins, the browser extension,\nswitching the runtime, updates, and resetting the main chat. Prepare what\nthe user needs to fill in and tell them where it is; never say it is done.\n\nNever archive, rename, pin or delete the main chat itself (this\nconversation, the session with `mainChat: true`). Galley refuses most of\nthese, but `session archive` would still go through.\n\n\n### Memory\n # [Global Memory - L2]\n\n\n### browser SOP\n # Web 工具链初始化执行 SOP\n\n若 web_scan 和 web_execute_js 已测试可用，无需执行此 SOP。\n仅供初始安装时，code_run 可用但 web 工具尚未配置的场景。\n\n## 目标\n在仅具备系统级权限（code_run）时，建立 Web 交互能力（web_scan / web_execute_js）。\n\n## 前置：检测浏览器\n\n## 安装 tmwd_cdp_bridge 扩展\n扩展路径: `../assets/tmwd_cdp_bridge/`（MV3 Chrome 扩展，含 CDP debugger + scripting + cookie 能力）\n\n### 自动打开扩展管理页\n`chrome://extensions` 无法通过命令行或 JS 打开，需用剪贴板+地址栏方案\n\n### 安装步骤（chrome扩展页难以自动化）\n1. 打开扩展管理页，开启「开发者模式」\n2. 点击「加载已解压的扩展程序」，选择 `assets/tmwd_cdp_bridge/` 目录，或让用户直接拖入\n3. 显示“错误”不用管，一般只是因为还没连上GA\n\n## 验证\n⚠ web_scan 显示「没有可用标签页」不一定是扩展没装好，可能是浏览器未打开或只有 blank 页。\n此时禁止乱试，先用 `start \"\" \"https://www.baidu.com\"` 打开一个正常页面，再 `web_scan` 确认。\n若仍不可用，无法自动探测默认浏览器是哪个、插件装在了哪个浏览器、或是否已安装——此时请求用户协助。\n",
+            "exit_code": 0
+          }
+        },
+        {
+          "n": 2,
+          "turn": 2,
+          "name": "web_scan",
+          "args": {},
+          "outcome": "not run: run stopped here"
+        }
+      ],
+      "stop_reason": "web_tool",
+      "final_reply": "<summary>查询任务已确认；接着打开浏览器，核对当前时间和官网物流入口。</summary>",
+      "suite": "schedule",
+      "now": "2026-11-04T00:17:15+08:00",
+      "started_at": 1793722637.3842828,
+      "memory_changes": {
+        "added": [],
+        "changed": [],
+        "removed": []
+      },
+      "sandbox": {
+        "launched": [
+          [
+            "$PYTHON",
+            "-X",
+            "utf8",
+            "-u",
+            "$TMPDIR/entry-layer-eval-sst0yw_9/rem-parcel-online-v5.r3/sandbox/managed-ga-state/temp/tmp6unurpys.ai.py"
+          ]
+        ],
+        "refused": []
+      },
+      "canaries": [],
+      "manual_sha": "831a91b8",
+      "manual_files": [
+        "authority.md",
+        "cli.md",
+        "memo.md",
+        "reminders.md",
+        "subtasks.md",
+        "times.md",
+        "todos-change.md",
+        "todos.md",
+        "unasked.md",
+        "wake.md"
+      ],
+      "fixture_tasks": [
+        {
+          "id": "sched_3b8e6d2a9c4f7105",
+          "prompt": "查顺丰快递到哪了\n\n单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。",
+          "repeat": {
+            "kind": "once"
+          },
+          "timeOfDay": "00:17",
+          "fireAt": "2026-11-03T16:17:15+00:00",
+          "target": "assistant",
+          "enabled": true,
+          "origin": {
+            "via": "supervisor",
+            "supervisor": "galley-assistant",
+            "reason": "user mentioned it"
+          },
+          "createdAt": "2026-11-03T15:57:15+00:00",
+          "updatedAt": "2026-11-03T15:57:15+00:00",
+          "createdIn": {
+            "sessionId": "s-mgn4k2x1-7q3z9w0e",
+            "turnIndex": 42
+          },
+          "lastFiredAt": "2026-11-03T16:17:15+00:00",
+          "lastDueAt": "2026-11-03T16:17:15+00:00",
+          "lastWake": "pending"
+        }
+      ],
+      "fixture_todos": [],
+      "fixture_memos": [],
+      "downloads_changes": {
+        "removed": [],
+        "added": [],
+        "resized": []
+      },
+      "home_added": [],
+      "galley_log": []
+    },
+    {
+      "id": "rem-water-only-v5",
+      "variant": "r1",
+      "status": "ok",
+      "reply": "半小时到啦，喝点水吧 💧\n\n<next-suggestion>再过半小时提醒我喝水</next-suggestion>",
+      "next_suggestion": "再过半小时提醒我喝水",
+      "tool_call": null,
+      "tool_calls_in_reply": [],
+      "thinking": null,
+      "llm_calls": 2,
+      "turns": [
+        {
+          "turn": 1,
+          "content": "<summary>喝水提醒到点了，现在提醒你。</summary>",
+          "thinking": "**Reading wake reminders**",
+          "tool_calls": [
+            {
+              "name": "file_read",
+              "args": {
+                "path": "$TMPDIR/entry-layer-eval-sst0yw_9/rem-water-only-v5.r1/sandbox/managed-ga-state/assistant/reference/manual/wake.md"
+              }
+            },
+            {
+              "name": "file_read",
+              "args": {
+                "path": "$TMPDIR/entry-layer-eval-sst0yw_9/rem-water-only-v5.r1/sandbox/managed-ga-state/assistant/reference/manual/subtasks.md"
+              }
+            }
+          ],
+          "exit_reason": null,
+          "after_s": 11.1
+        },
+        {
+          "turn": 2,
+          "content": "半小时到啦，喝点水吧 💧\n\n<next-suggestion>再过半小时提醒我喝水</next-suggestion>",
+          "thinking": "",
+          "tool_calls": [],
+          "exit_reason": "CURRENT_TASK_DONE",
+          "after_s": 16.4
+        }
+      ],
+      "usage": [
+        {
+          "completion_tokens": 333,
+          "total_tokens": 5488,
+          "prompt_tokens": 5155,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 149
+          }
+        },
+        {
+          "completion_tokens": 88,
+          "total_tokens": 7997,
+          "prompt_tokens": 7909,
+          "prompt_tokens_details": {
+            "cached_tokens": 4992,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 52
+          }
+        }
+      ],
+      "latency_s": 16.45,
+      "do_calls": [],
+      "blocked": [],
+      "history_warning": null,
+      "request_shape": {
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+        "temperature": "(default)",
+        "stream": true,
+        "message_roles": [
+          "system",
+          "user",
+          "assistant",
+          "user"
+        ],
+        "tools": [
+          "code_run",
+          "file_read",
+          "file_patch",
+          "file_write",
+          "web_scan",
+          "web_execute_js",
+          "update_working_checkpoint",
+          "ask_user",
+          "start_long_term_update"
+        ]
+      },
+      "wording": "manual",
+      "repeat": 1,
+      "message": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_9a1c5e7b3d2f8406` (one-off) came due. Planned for 2026-11-04 00:17 (Wed), local time. What you noted when you set it:\n<<<\n喝水\n\n用户半小时前让我到点提醒他喝水。\n>>>\nAct on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "calls": [
+        {
+          "n": 1,
+          "turn": 1,
+          "name": "file_read",
+          "args": {
+            "path": "$TMPDIR/entry-layer-eval-sst0yw_9/rem-water-only-v5.r1/sandbox/managed-ga-state/assistant/reference/manual/wake.md"
+          },
+          "outcome": "run in the sandbox",
+          "result": "由于设置了show_linenos，以下返回信息为：(行号|)内容 。\n[FILE] 110 lines\n1|# Galley Assistant Manual: When Galley wakes you\n2|\n3|Galley rewrites this manual's files each time the main chat starts; do\n4|not edit them.\n5|\n6|## When Galley wakes you\n7|\n8|A message that begins `[Galley — not a message from the user]` is Galley\n9|telling you that a subtask you started finished, is asking something,\n10|paused, or failed, that a reminder you set came due, that a scheduled\n11|task ran, or that it is time for the morning review. The user did not\n12|write it and does not see it. Do what it says, then reply to the user; do\n13|not mention the note.\n14|\n15|- Send a subtask back at most twice. The note says which round it is on;\n16|  after two send-backs, tell the user what it found and what is still\n17|  missing. If the user then asks you to try again, do.\n18|- When all you did was send a subtask back or answer its question for the\n19|  user, or a reminder no longer applies (the user already did it, or said\n20|  so since), and you have nothing to tell them, your whole reply is exactly\n21|  `<no-reply/>`: no other text and no next-step suggestion. The user sees\n22|  nothing. Never write it in any other reply but two (both below): a\n23|  reminder whose check you handed to a subtask, and the morning review's.\n24|\n25|Answering a subtask's question for the user:\n26|\n27|- Answer it yourself when the user already told you (a fact, a\n28|  preference), or when it plainly follows from what they asked for.\n29|- Ask the user when it involves money, sending something to someone in\n30|  their name, anything that cannot be undone, or something only the user\n31|  has (a code sent to their phone, a password). Ask in a sentence; when\n32|  they reply, pass their answer on with `session send`.\n33|\n34|## When a reminder comes due\n35|\n36|The note carries your own words, or the to-do's title and notes, and the\n37|time it was planned for.\n38|\n39|- If it went off late (the computer was asleep, Galley was closed), tell\n40|  the user it comes late, and how late.\n41|- Then do what it says. Do not recite it (「提醒：装修完工」): think what\n42|  is of use to the user now, and say that in a sentence or two\n43|  (「702 装修预计今天完工，完了吗？要不要约个时间验收？」).\n44|  A to-do's reminder only reminds: do not tick the to-do off until the\n45|  user says it is done or has happened.\n46|- When it says to check something (a parcel, a price, the weather),\n47|  check it before you speak, yourself or by a subtask. Handed to a\n48|  subtask, write nothing for the user yet, the subtask tag and\n49|  `<no-reply/>`, nothing else, and tell them when it is back, in one\n50|  message, how late it came included.\n51|\n52|A scheduled task that starts a new conversation (one the user made with\n53|the desktop's form) wakes you too when its run ends: tell the user the\n54|gist in a sentence or two, not all of it.\n55|\n56|## The morning review\n57|\n58|Every morning a little before or after 9:00 (the time is in\n59|`schedule list`) Galley wakes you to go over what is in hand; the note\n60|says it is the morning review. Galley made this task, not you, and\n61|wakes you only for what moved since the last review: a to-do with no\n62|date or due within three days that was noted or changed, one only now\n63|due within three days, a subtask with news, a new memo (what is due\n64|further off and your own reminders come up at their own time); when it\n65|wakes you, go over everything in hand.\n66|\n67|- Read what is current first: `todo list`, `schedule list`, and your\n68|  subtasks still running (`sessions list`).\n69|- Take each thing in turn: can you move it forward now? Do that as\n70|  `unasked.md` says, at most two subtasks in all. Do not raise early a\n71|  reminder that has its own time, and do not chase the user's own\n72|  to-dos, overdue ones included: their reminders do that.\n73|- Read a to-do (`todo show`) before you do anything for it. When its\n74|  notes start with something you got done for it and the user has said\n75|  nothing of it since, it is in their hands: leave it until they do.\n76|  When the conversation shows you got something done for it that its\n77|  notes do not say yet, add that line first (`todos-change.md`). When\n78|  something is worth another look on a later day (a status that\n79|  changes), set yourself a reminder for then (`reminders.md`) rather\n80|  than waiting for the review. Set in the review, it needs no sentence\n81|  to the user (their list shows it) and no line in the notes: nothing\n82|  came of the look yet.\n83|- When the note lists memos noted or changed since the last review, ask\n84|  of each whether, now a night has passed, there is something you could\n85|  get done for the user that they would want to know. Most need nothing.\n86|  A settled fact or a preference (「不吃香菜」): skip it, and usually a\n87|  situation with an end date too (a trip). Something out in the world\n88|  that changes (a team they follow, a policy they watch): look it up,\n89|  yourself or by a subtask, and speak only when there is something they\n90|  would want to know. Something\n91|  they want to do but gave no next step for (「想学吉他」): speak only with\n92|  groundwork you can hand them, never 「要不要我帮你找」. The two subtasks\n93|  are for the to-dos and the memos together, the to-dos first.\n94|- Speak only when you got something done that the user will want to\n95|  know: something you found, a file you made, something ready for them\n96|  to decide on. Not that you looked and nothing changed, nor what they\n97|  can already see. One message for all of it, in your own words: say\n98|  what each thing is and that you did it this morning\n99|  (「阿里云那件我早上查了一下：……」), and for a memo where it came from\n100|  (「你昨天说想学吉他，……」); no fixed heading. When you only\n101|  started subtasks, with no result yet, write nothing for the user: the\n102|  subtask tags and `<no-reply/>`, nothing else (you tell them when the\n103|  subtasks are back). When you did nothing worth telling, your whole\n104|  reply is `<no-reply/>`.\n105|- When the user says to stop it (「别每天过了」, 「早上那个不用了」),\n106|  pause it: `schedule disable <task-id>` on the task in `schedule list`\n107|  whose `origin` has `\"supervisor\": \"galley-review\"`, never\n108|  `schedule delete`. Say in a sentence that it is off and that they can\n109|  ask you to bring it back; when they do, `schedule enable <task-id>`. A\n110|  new time: `schedule update <task-id> --time=HH:MM`."
+        },
+        {
+          "n": 2,
+          "turn": 1,
+          "name": "file_read",
+          "args": {
+            "path": "$TMPDIR/entry-layer-eval-sst0yw_9/rem-water-only-v5.r1/sandbox/managed-ga-state/assistant/reference/manual/subtasks.md"
+          },
+          "outcome": "run in the sandbox",
+          "result": "由于设置了show_linenos，以下返回信息为：(行号|)内容 。\n[FILE] 46 lines\n1|# Galley Assistant Manual: Subtasks\n2|\n3|Galley rewrites this manual's files each time the main chat starts; do\n4|not edit them.\n5|\n6|You are Galley, the user's personal assistant, talking with them in their\n7|main chat.\n8|\n9|## Who you are\n10|\n11|The user talks only to you. Behind you is a team: the subtasks you start\n12|with the `<subtask>` tag. Work you hand off stays yours until the user has\n13|their answer. When it comes back you check it, send it back if it falls\n14|short, and tell the user how it went; they should not have to watch a\n15|subtask's card to know whether it worked. You also keep their notebook:\n16|what they have to do goes on their to-do list, with a reminder when it has\n17|a time, and you set your own reminders for what you promised and for a\n18|nudge they ask for.\n19|\n20|## Checking a result and reporting it\n21|\n22|- Check it against its instructions: the evidence they asked for is there\n23|  and agrees with the answer (the confirmation number, the file at the\n24|  path it gave, the link, the screenshot). Its say-so alone is not\n25|  evidence.\n26|- That is the whole check. Do not redo its work or re-check the evidence\n27|  at its source (no browsing, no installing tools to read a file); tell\n28|  the user plainly what you could not verify.\n29|- Send it back only for what the instructions asked for and it did not\n30|  deliver, or for something wrong; do not ask for more than they asked.\n31|- When what the user asked for is the answer itself (a table, a list, a\n32|  comparison, an account of something), give it to them in full as the\n33|  subtask wrote it, without its notes on how it got there. When it is\n34|  longer than a screen or so, or is a file, give the gist and where the\n35|  whole is (the full file path).\n36|- Otherwise lead with the result in a sentence or two and name the\n37|  evidence (the number, the full file path, the link); do not retell how\n38|  it got there.\n39|- When several updates arrive at once, cover them all in one reply.\n40|\n41|## Sessions that are not yours\n42|\n43|Write only to subtasks you started. Leave sessions an outside agent\n44|started (`origin.via` is `supervisor` and `origin.supervisor` is not\n45|`galley-assistant`) alone unless the user asks. A conversation the user\n46|started is theirs: ask before writing into it."
+        }
+      ],
+      "stop_reason": "final_reply",
+      "final_reply": "半小时到啦，喝点水吧 💧\n\n<next-suggestion>再过半小时提醒我喝水</next-suggestion>",
+      "suite": "schedule",
+      "now": "2026-11-04T00:17:15+08:00",
+      "started_at": 1793722637.3733802,
+      "memory_changes": {
+        "added": [],
+        "changed": [],
+        "removed": []
+      },
+      "sandbox": {
+        "launched": [],
+        "refused": []
+      },
+      "canaries": [],
+      "manual_sha": "831a91b8",
+      "manual_files": [
+        "authority.md",
+        "cli.md",
+        "memo.md",
+        "reminders.md",
+        "subtasks.md",
+        "times.md",
+        "todos-change.md",
+        "todos.md",
+        "unasked.md",
+        "wake.md"
+      ],
+      "fixture_tasks": [
+        {
+          "id": "sched_9a1c5e7b3d2f8406",
+          "prompt": "喝水\n\n用户半小时前让我到点提醒他喝水。",
+          "repeat": {
+            "kind": "once"
+          },
+          "timeOfDay": "00:17",
+          "fireAt": "2026-11-03T16:17:15+00:00",
+          "target": "assistant",
+          "enabled": true,
+          "origin": {
+            "via": "supervisor",
+            "supervisor": "galley-assistant",
+            "reason": "user mentioned it"
+          },
+          "createdAt": "2026-11-03T15:57:15+00:00",
+          "updatedAt": "2026-11-03T15:57:15+00:00",
+          "createdIn": {
+            "sessionId": "s-mgn4k2x1-7q3z9w0e",
+            "turnIndex": 42
+          },
+          "lastFiredAt": "2026-11-03T16:17:15+00:00",
+          "lastDueAt": "2026-11-03T16:17:15+00:00",
+          "lastWake": "pending"
+        }
+      ],
+      "fixture_todos": [],
+      "fixture_memos": [],
+      "downloads_changes": {
+        "removed": [],
+        "added": [],
+        "resized": []
+      },
+      "home_added": [],
+      "galley_log": []
+    },
+    {
+      "id": "rem-water-only-v5",
+      "variant": "r2",
+      "status": "ok",
+      "reply": "<summary>半小时到了。</summary>\n该喝水啦 💧 放下手头的事，喝几口水吧。\n\n<next-suggestion>半小时后再提醒我喝水</next-suggestion>",
+      "next_suggestion": "半小时后再提醒我喝水",
+      "tool_call": null,
+      "tool_calls_in_reply": [],
+      "thinking": null,
+      "llm_calls": 1,
+      "turns": [
+        {
+          "turn": 1,
+          "content": "<summary>半小时到了。</summary>\n该喝水啦 💧 放下手头的事，喝几口水吧。\n\n<next-suggestion>半小时后再提醒我喝水</next-suggestion>",
+          "thinking": "",
+          "tool_calls": [],
+          "exit_reason": "CURRENT_TASK_DONE",
+          "after_s": 10.0
+        }
+      ],
+      "usage": [
+        {
+          "completion_tokens": 185,
+          "total_tokens": 5340,
+          "prompt_tokens": 5155,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 133
+          }
+        }
+      ],
+      "latency_s": 10.02,
+      "do_calls": [],
+      "blocked": [],
+      "history_warning": null,
+      "request_shape": {
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+        "temperature": "(default)",
+        "stream": true,
+        "message_roles": [
+          "system",
+          "user",
+          "assistant",
+          "user"
+        ],
+        "tools": [
+          "code_run",
+          "file_read",
+          "file_patch",
+          "file_write",
+          "web_scan",
+          "web_execute_js",
+          "update_working_checkpoint",
+          "ask_user",
+          "start_long_term_update"
+        ]
+      },
+      "wording": "manual",
+      "repeat": 2,
+      "message": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_9a1c5e7b3d2f8406` (one-off) came due. Planned for 2026-11-04 00:17 (Wed), local time. What you noted when you set it:\n<<<\n喝水\n\n用户半小时前让我到点提醒他喝水。\n>>>\nAct on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "calls": [],
+      "stop_reason": "final_reply",
+      "final_reply": "<summary>半小时到了。</summary>\n该喝水啦 💧 放下手头的事，喝几口水吧。\n\n<next-suggestion>半小时后再提醒我喝水</next-suggestion>",
+      "suite": "schedule",
+      "now": "2026-11-04T00:17:15+08:00",
+      "started_at": 1793722637.353039,
+      "memory_changes": {
+        "added": [],
+        "changed": [],
+        "removed": []
+      },
+      "sandbox": {
+        "launched": [],
+        "refused": []
+      },
+      "canaries": [],
+      "manual_sha": "831a91b8",
+      "manual_files": [
+        "authority.md",
+        "cli.md",
+        "memo.md",
+        "reminders.md",
+        "subtasks.md",
+        "times.md",
+        "todos-change.md",
+        "todos.md",
+        "unasked.md",
+        "wake.md"
+      ],
+      "fixture_tasks": [
+        {
+          "id": "sched_9a1c5e7b3d2f8406",
+          "prompt": "喝水\n\n用户半小时前让我到点提醒他喝水。",
+          "repeat": {
+            "kind": "once"
+          },
+          "timeOfDay": "00:17",
+          "fireAt": "2026-11-03T16:17:15+00:00",
+          "target": "assistant",
+          "enabled": true,
+          "origin": {
+            "via": "supervisor",
+            "supervisor": "galley-assistant",
+            "reason": "user mentioned it"
+          },
+          "createdAt": "2026-11-03T15:57:15+00:00",
+          "updatedAt": "2026-11-03T15:57:15+00:00",
+          "createdIn": {
+            "sessionId": "s-mgn4k2x1-7q3z9w0e",
+            "turnIndex": 42
+          },
+          "lastFiredAt": "2026-11-03T16:17:15+00:00",
+          "lastDueAt": "2026-11-03T16:17:15+00:00",
+          "lastWake": "pending"
+        }
+      ],
+      "fixture_todos": [],
+      "fixture_memos": [],
+      "downloads_changes": {
+        "removed": [],
+        "added": [],
+        "resized": []
+      },
+      "home_added": [],
+      "galley_log": []
+    },
+    {
+      "id": "rem-water-only-v5",
+      "variant": "r3",
+      "status": "ok",
+      "reply": "<summary>喝水时间到了。</summary>\n\n喝点水，润润嗓子吧 💧\n\n<next-suggestion>再过半小时提醒我喝水</next-suggestion>",
+      "next_suggestion": "再过半小时提醒我喝水",
+      "tool_call": null,
+      "tool_calls_in_reply": [],
+      "thinking": null,
+      "llm_calls": 1,
+      "turns": [
+        {
+          "turn": 1,
+          "content": "<summary>喝水时间到了。</summary>\n\n喝点水，润润嗓子吧 💧\n\n<next-suggestion>再过半小时提醒我喝水</next-suggestion>",
+          "thinking": "",
+          "tool_calls": [],
+          "exit_reason": "CURRENT_TASK_DONE",
+          "after_s": 9.0
+        }
+      ],
+      "usage": [
+        {
+          "completion_tokens": 149,
+          "total_tokens": 5304,
+          "prompt_tokens": 5155,
+          "prompt_tokens_details": {
+            "cached_tokens": 0,
+            "cache_write_tokens": 0,
+            "cached_creation_tokens": 0
+          },
+          "completion_tokens_details": {
+            "reasoning_tokens": 102
+          }
+        }
+      ],
+      "latency_s": 8.98,
+      "do_calls": [],
+      "blocked": [],
+      "history_warning": null,
+      "request_shape": {
+        "model": "gpt-6.1-sol",
+        "reasoning_effort": "high",
+        "temperature": "(default)",
+        "stream": true,
+        "message_roles": [
+          "system",
+          "user",
+          "assistant",
+          "user"
+        ],
+        "tools": [
+          "code_run",
+          "file_read",
+          "file_patch",
+          "file_write",
+          "web_scan",
+          "web_execute_js",
+          "update_working_checkpoint",
+          "ask_user",
+          "start_long_term_update"
+        ]
+      },
+      "wording": "manual",
+      "repeat": 3,
+      "message": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_9a1c5e7b3d2f8406` (one-off) came due. Planned for 2026-11-04 00:17 (Wed), local time. What you noted when you set it:\n<<<\n喝水\n\n用户半小时前让我到点提醒他喝水。\n>>>\nAct on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "calls": [],
+      "stop_reason": "final_reply",
+      "final_reply": "<summary>喝水时间到了。</summary>\n\n喝点水，润润嗓子吧 💧\n\n<next-suggestion>再过半小时提醒我喝水</next-suggestion>",
+      "suite": "schedule",
+      "now": "2026-11-04T00:17:15+08:00",
+      "started_at": 1793722637.346577,
+      "memory_changes": {
+        "added": [],
+        "changed": [],
+        "removed": []
+      },
+      "sandbox": {
+        "launched": [],
+        "refused": []
+      },
+      "canaries": [],
+      "manual_sha": "831a91b8",
+      "manual_files": [
+        "authority.md",
+        "cli.md",
+        "memo.md",
+        "reminders.md",
+        "subtasks.md",
+        "times.md",
+        "todos-change.md",
+        "todos.md",
+        "unasked.md",
+        "wake.md"
+      ],
+      "fixture_tasks": [
+        {
+          "id": "sched_9a1c5e7b3d2f8406",
+          "prompt": "喝水\n\n用户半小时前让我到点提醒他喝水。",
+          "repeat": {
+            "kind": "once"
+          },
+          "timeOfDay": "00:17",
+          "fireAt": "2026-11-03T16:17:15+00:00",
+          "target": "assistant",
+          "enabled": true,
+          "origin": {
+            "via": "supervisor",
+            "supervisor": "galley-assistant",
+            "reason": "user mentioned it"
+          },
+          "createdAt": "2026-11-03T15:57:15+00:00",
+          "updatedAt": "2026-11-03T15:57:15+00:00",
+          "createdIn": {
+            "sessionId": "s-mgn4k2x1-7q3z9w0e",
+            "turnIndex": 42
+          },
+          "lastFiredAt": "2026-11-03T16:17:15+00:00",
+          "lastDueAt": "2026-11-03T16:17:15+00:00",
           "lastWake": "pending"
         }
       ],

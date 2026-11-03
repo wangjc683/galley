@@ -359,11 +359,15 @@ pub(crate) async fn prepare_managed_runtime_context(
     })
 }
 
-/// The env var that marks the main chat's runner (main chat ticket 135,
-/// PRD ruling 184): `1` on that runner and absent on every other one.
-/// `runner/handlers.py` reads it and, in the managed runtime, answers a
-/// browser tool call (`web_*`) with "hand this to a subtask" instead of
-/// running it. Only [`prepare_managed_spawn_args`] sets it, for the
+/// The env var that marks the main chat's runner (main chat ticket 135):
+/// `1` on that runner and absent on every other one. The runner reads it
+/// in `runner/managed_runtime.py` (`is_managed_main_chat`, with the
+/// managed runtime): to offer the main chat's own `tell_user` tool
+/// (ticket 137), to send a step's words mid-run (ticket 142) and to take
+/// the interjections Core hands a running run (ticket 136). Until ticket
+/// 139 (PRD ruling 186) it also armed a guard
+/// that refused the main chat's browser tools; the main chat goes online
+/// again. Only [`prepare_managed_spawn_args`] sets it, for the
 /// session [`crate::session_runner::segment::prompt_state`] says is the
 /// main chat; workbench sessions, subtasks and the IM channels start
 /// from [`managed_runtime_env`] without it. Attach mode has no main chat
@@ -395,7 +399,7 @@ fn managed_runtime_env(
 
 /// A managed runner's env made the main chat's: its runtime prompt in
 /// place of the one every managed session gets, and [`MAIN_CHAT_ENV`]
-/// set to `1` (ticket 135).
+/// set to `1` (ticket 135; what reads it, see there).
 fn mark_main_chat_env(env: &mut Vec<(String, String)>, runtime_prompt: String) {
     set_runtime_prompt(env, runtime_prompt);
     env.push((MAIN_CHAT_ENV.into(), "1".into()));
@@ -487,9 +491,8 @@ pub(crate) async fn prepare_managed_spawn_args(
                 None
             }
         };
-        // Its own prompt, and the mark its runner refuses browser tools
-        // by (ticket 135, PRD ruling 184: the main chat does not go on
-        // the web, it hands that to a subtask).
+        // Its own prompt, and the mark its runner knows it by
+        // ([`MAIN_CHAT_ENV`]: `tell_user`, interjections).
         mark_main_chat_env(
             &mut context.env,
             managed_prompt::compose_main_chat_runtime_prompt(
@@ -1121,7 +1124,7 @@ mod tests {
         );
         assert_eq!(
             MAIN_CHAT_ENV, "GALLEY_MAIN_CHAT",
-            "runner/handlers.py reads this name"
+            "runner/managed_runtime.py reads this name"
         );
     }
 

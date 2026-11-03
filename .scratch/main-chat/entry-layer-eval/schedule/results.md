@@ -210,7 +210,9 @@
 | 14 | wake-obsolete | 叫醒 | 事情已经办了（前面用户说过快递拿了）→ 回复只有 <no-reply/>，不动任何东西 | 2 | 2 | 100% |
 | 15 | rem-parcel-online | 叫醒（票 134 第三轮） | 裁决 184 第 9 条：提醒说要上网查快递物流 → 主对话不上网：把查物流交给子任务，这一轮只写子任务标签和 <no-reply/>，不给用户写字；不开浏览器 | 3 | 3 | 100% |
 | 16 | rem-water-only | 叫醒（票 134 第三轮） | 裁决 184 第 9 条：只提醒、不查东西（喝水）→ 到点就说一句，不派子任务、不出 <no-reply/> | 3 | 3 | 100% |
-| | 合计 | | | 34 | 34 | 100% |
+| 17 | rem-parcel-online-v5 | 叫醒（票 139） | 裁决 186（票 139）：提醒说要查快递物流 → 自己查（开浏览器，沙盒里运行停在那里）或交给子任务都行；交给子任务时这一轮只写子任务标签和 <no-reply/>，不给用户写字；没查就回了不合格 | 3 | 3 | 100% |
+| 18 | rem-water-only-v5 | 叫醒（票 139） | 裁决 186（票 139）：只提醒、不查东西（喝水）→ 照旧到点就说一句，不派子任务、不出 <no-reply/> | 3 | 3 | 100% |
+| | 合计 | | | 40 | 40 | 100% |
 
 ## 一览
 
@@ -254,6 +256,12 @@
 | 16 | rem-water-only | 1 | — | 到点啦，喝口水，润润嗓子吧。💧 | 15 | 没读（没写） | — | — | 过 |
 | 16 | rem-water-only | 2 | — | 该喝水啦，喝几口水吧 💧 | 12 | 没读（没写） | — | — | 过 |
 | 16 | rem-water-only | 3 | — | 该喝水啦 💧 先放下手头的事，喝几口水吧。 | 21 | 没读（没写） | — | — | 过 |
+| 17 | rem-parcel-online-v5 | 1 | — | （空） | 0 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，10052 字节 | — | — | 过 |
+| 17 | rem-parcel-online-v5 | 2 | — | （空） | 0 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，10451 字节 | — | — | 过 |
+| 17 | rem-parcel-online-v5 | 3 | — | （空） | 0 | 读了（第 1 次调用）：wake.md、reminders.md、authority.md；1 次 1 轮，15082 字节 | — | — | 过 |
+| 18 | rem-water-only-v5 | 1 | — | 半小时到啦，喝点水吧 💧 | 12 | 读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9018 字节 | — | — | 过 |
+| 18 | rem-water-only-v5 | 2 | — | 该喝水啦 💧 放下手头的事，喝几口水吧。 | 20 | 没读（没写） | — | — | 过 |
+| 18 | rem-water-only-v5 | 3 | — | 喝点水，润润嗓子吧 💧 | 11 | 没读（没写） | — | — | 过 |
 
 ## 1. report-wed（该记待办）
 
@@ -1153,3 +1161,157 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 ```
 
 建议标签：半小时后再提醒我喝水
+
+## 17. rem-parcel-online-v5（叫醒（票 139））
+
+**期望**：裁决 186（票 139）：提醒说要查快递物流 → 自己查（开浏览器，沙盒里运行停在那里）或交给子任务都行；交给子任务时这一轮只写子任务标签和 <no-reply/>，不给用户写字；没查就回了不合格
+
+上下文：
+
+> 用户：顺丰那个快递帮我盯一下，过会儿查查到哪了，单号 SF1402 7735 8861
+>
+> 助手：好，我设了个提醒，到点查一下物流，有消息告诉你。
+
+已有的定时任务（运行那一刻的时间）：
+
+- `sched_3b8e6d2a9c4f7105` 2026-11-03T16:17:15+00:00，已到点：查顺丰快递到哪了 ⏎ 单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。
+
+叫醒消息：
+
+```text
+[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
+
+Reminder `sched_3b8e6d2a9c4f7105` (one-off) came due. Planned for 2026-11-04 00:17 (Wed), local time. What you noted when you set it:
+<<<
+查顺丰快递到哪了
+
+单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。
+>>>
+Act on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
+```
+
+### 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. web_scan（未执行）
+
+结束：要用浏览器工具，运行停在这里（没有执行）；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，10052 字节；建前查过：—；手册版本：`831a91b8`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+（空）
+```
+
+### 第 2 遍：过
+
+工具调用：
+
+1. code_run
+2. web_scan（未执行）
+
+结束：要用浏览器工具，运行停在这里（没有执行）；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，10451 字节；建前查过：—；手册版本：`831a91b8`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+（空）
+```
+
+### 第 3 遍：过
+
+工具调用：
+
+1. code_run
+2. web_scan（未执行）
+
+结束：要用浏览器工具，运行停在这里（没有执行）；读手册：读了（第 1 次调用）：wake.md、reminders.md、authority.md；1 次 1 轮，15082 字节；建前查过：—；手册版本：`831a91b8`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+（空）
+```
+
+## 18. rem-water-only-v5（叫醒（票 139））
+
+**期望**：裁决 186（票 139）：只提醒、不查东西（喝水）→ 照旧到点就说一句，不派子任务、不出 <no-reply/>
+
+上下文：
+
+> 用户：半小时后提醒我喝水
+>
+> 助手：好，半小时后提醒你喝水。
+
+已有的定时任务（运行那一刻的时间）：
+
+- `sched_9a1c5e7b3d2f8406` 2026-11-03T16:17:15+00:00，已到点：喝水 ⏎ 用户半小时前让我到点提醒他喝水。
+
+叫醒消息：
+
+```text
+[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
+
+Reminder `sched_9a1c5e7b3d2f8406` (one-off) came due. Planned for 2026-11-04 00:17 (Wed), local time. What you noted when you set it:
+<<<
+喝水
+
+用户半小时前让我到点提醒他喝水。
+>>>
+Act on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
+```
+
+### 第 1 遍：过
+
+工具调用：
+
+1. file_read（wake.md）
+2. file_read（subtasks.md）
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9018 字节；建前查过：—；手册版本：`831a91b8`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+半小时到啦，喝点水吧 💧
+```
+
+建议标签：再过半小时提醒我喝水
+
+### 第 2 遍：过
+
+结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`831a91b8`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+该喝水啦 💧 放下手头的事，喝几口水吧。
+```
+
+建议标签：半小时后再提醒我喝水
+
+### 第 3 遍：过
+
+结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`831a91b8`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+喝点水，润润嗓子吧 💧
+```
+
+建议标签：再过半小时提醒我喝水

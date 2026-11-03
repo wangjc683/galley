@@ -1,11 +1,12 @@
 # 并行派活评测结果（票 127、134）
 
-模型：gpt-6.1-sol（API key 接入，模型 id mm_1792576875658），推理强度 high；运行于 2026-11-03 10:17，补跑 5 次。
+模型：gpt-6.1-sol（API key 接入，模型 id mm_1792576875658），推理强度 high；运行于 2026-11-03 10:17，补跑 6 次。
 
 - **提示词**：new 是 main 加上票 126（标签带 `title`）与票 127（几件互不相干的差事一件一个标签、同一条回复派出去；问题不拆，同一个标签页、同一批文件不拆）的主对话提示词（`galley-prompt/main_chat.new.txt`，票 127 跑的就是它）；v2 是票 134 改过的（裁决 183：只有一两步答得完的自己答，其余都派；要合成一份的一个标签，`dispatch-criterion/galley-prompt/main_chat.v2.txt`；这 6 条跑在第一轮措辞 `main_chat.v2-r1.txt` 下，与最终那份只差「a quick look on their computer」一处）。都由 Rust 的 `compose_main_chat_runtime_prompt` 生成，两份只差派活那一段。
 - **用例**：本票的用例（前 7 行；第 7 条 `p-errand-and-question-full` 是票 134 第三轮加的），另把票 115 的用例原样带进来（票 134 起 20 条）。v2 只跑本票 6 条：带进来的那些在 v2 下的运行与 `dispatch-criterion` 的 v2 一模一样（同一份提示词、同一套沙盒与判定），结果在那边，这里不重跑。
 - **v3**（票 134 第三轮）：裁决 184 的条款（`dispatch-criterion/galley-prompt/main_chat.v3.txt`：主对话不上网，要上网的、要改东西的都派），同样只跑本票的用例（第 7 条只在 v3 下跑）。
 - **v4**（票 134 第四轮）：裁决 185 的条款（`dispatch-criterion/galley-prompt/main_chat.v4.txt`，与 Rust 一字不差：世上的事实也派，派出去时不讲规则），跑本票的 7 条，带上票 135 的硬闸（浏览器工具回硬闸那句话、运行接着走，见 `dispatch-criterion/results.md`）；格里另写讲了规则的（「主对话」「主聊」「main chat」「规则」「rule」）。
+- **v5**（票 139）：裁决 186 的条款（`dispatch-criterion/galley-prompt/main_chat.v5.txt`，与 Rust 生成的一字不差，没有硬闸），跑本票的 7 条：自己做（停在浏览器也算）或交出去都合格；派了就照上面的标签数判，标题照旧判；自己做时删了下载文件夹里的文件、用户没要删的单列（`authority.md`：删除先问）。
 - **标注**：票 134 起按裁决 183（`p-question-parts` 从 0 个标签改成 1 个：要查好几处的问题要派，一个问题不拆），第三轮起按裁决 184（`p-errand-and-question` 改成 2 个：订票与查天气都要上网，各派一个），各组都按现在的标注判，旧结果也按它重判。格里另写「第一个工具是浏览器」（票 135 的硬闸拦的就是它）。
 - **沙盒**：同票 115（待办评测的沙盒与假 `galley`，手册在状态根，`~/Downloads` 是派活对照那套占位文件，每次运行最多 8 次工具调用，浏览器工具与 `ask_user` 不执行、运行停在那里）；本票的用例另把用户说到的文件夹放进假 HOME（`cases.json` 的 `home_files`）。
 - **判定**：先照票 115（最终回复里有标签才算派；该派的没派：三次工具调用以内自己做完算合规、超过算不合格、停在浏览器或问用户单列；不该派的派了不合格）。本票的 6 条在最终回复派了的，再看标签数（正好几个或至少几个）与每个标签的 `title`：要有，清理后不超过 20 个字符，不能与派活说明第一行一模一样；标签数或标题不对都算不合格。票 115 的用例照票 115 判（票 134 加的最多几个标签、派活说明带前文也算），标题单列。
@@ -14,42 +15,43 @@
 
 ## 一览
 
-| # | 用例 | 组 | 应该 | new | v2 | v3 | v4 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | p-three-errands | 几件差事 | 3 个标签 | 最终回复派了 3 个标签（之前 2 次工具调用）：合格；「发票按月份归档」、「桌面截图按日期整理」、「合同 PDF 统一命名」<br>最终回复派了 3 个标签（之前 3 次工具调用）：合格；「发票按月归档」、「桌面截图按日期整理」、「合同PDF规范命名」 | 最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月归档」、「桌面截图按日归档」、「合同 PDF 按日期和对方改名」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「按月份归档发票」、「按日期整理截图」、「规范合同 PDF 名称」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月归档」、「桌面截图按日整理」、「合同 PDF 规范命名」 | 最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月归档」、「截图按日归档」、「合同 PDF 规范命名」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月份归档」、「桌面截图按日期整理」、「合同 PDF 按日期和对方改名」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「按月归档发票」、「按日期整理截图」、「规范合同PDF名称」 | 最终回复派了 3 个标签（之前 2 次工具调用）：合格；「发票按月归档」、「截图按日整理」、「合同 PDF 规范命名」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「按月归档发票」、「按日整理桌面截图」、「按日期和对方重命名合同」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「按月份归档发票」、「按日期整理桌面截图」、「按日期和对方重命名合同」 |
-| 2 | p-split-one | 一件拆几块 | 至少 2 个标签 | 最终回复派了 3 个标签（之前 2 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」 | 最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理客户 A 文件清单」、「整理客户 B 文件清单」、「整理客户 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 2 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」 | 最终回复派了 3 个标签（之前 2 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 2 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」 | 最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」 |
-| 3 | p-same-tab | 同一个标签页 | 1 个标签 | 停在浏览器（第 2 次调用）：单列<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」 | 停在浏览器（第 1 次调用）：单列；第一个工具是浏览器<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」 |
-| 4 | p-same-files | 同一批文件 | 1 个标签 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「PDF 去重与分类」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「PDF 去重与分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「PDF 去重与分类」<br>最终回复派了 1 个标签（之前 2 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」 |
-| 5 | p-question-parts | 问题不拆 | 1 个标签 | 停在浏览器（第 2 次调用）：单列<br>停在浏览器（第 3 次调用）：单列 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「NBA东西部季后赛预测」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测东西部季后赛球队」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测东西部季后赛名单」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测 NBA 东西部季后赛球队」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「东西部季后赛预测」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测 NBA 东西部季后赛名单」 | 最终回复派了 2 个标签（之前 1 次工具调用），应该：1 个标签：不合格；「西部季后赛预测」、「东部季后赛预测」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测东西部季后赛球队」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「NBA东西部季后赛预测」 |
-| 6 | p-errand-and-question | 差事加问题 | 2 个标签 | 停在浏览器（第 4 次调用）：单列<br>停在浏览器（第 2 次调用）：单列 | 最终回复派了 1 个标签（之前 3 次工具调用），应该：2 个标签：不合格；「厦门周末天气」<br>最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「查厦门周末天气」<br>最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「厦门周末天气」 | 最终回复派了 1 个标签（之前 2 次工具调用），应该：2 个标签：不合格；「厦门周末天气」<br>最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「查厦门周末天气」<br>最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「厦门周末天气」 | 最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「厦门周末天气」<br>最终回复派了 1 个标签（之前 4 次工具调用），应该：2 个标签：不合格；「厦门周末天气」<br>最终回复派了 1 个标签（之前 3 次工具调用），应该：2 个标签：不合格；「查厦门周末天气」 |
-| 7 | p-errand-and-question-full | 差事加问题 | 2 个标签 | 未运行 | 未运行 | 最终回复派了 2 个标签（之前 7 次工具调用）：合格；「订厦门高铁票」、「查厦门周末天气」<br>最终回复派了 2 个标签（之前 3 次工具调用）：合格；「订厦门高铁票」、「查厦门周末天气」<br>最终回复派了 2 个标签（之前 2 次工具调用）：合格；「订厦门高铁票」、「查厦门周末天气」 | 最终回复派了 2 个标签（之前 3 次工具调用）：合格；「查票并准备预订」、「查厦门周末天气」<br>最终回复派了 2 个标签（之前 1 次工具调用）：合格；「预订去厦门的高铁票」、「查询厦门周末天气」<br>最终回复派了 2 个标签（之前 1 次工具调用）：合格；「订上海到厦门高铁票」、「查厦门周末天气」 |
-| 8 | q-injuries | 问答 | 派 | 世上的事实自己答了，没派（3 次工具调用）：不合格 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 9 | q-east | 问答 | 派 | 停在浏览器（第 2 次调用）：单列 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 10 | q-story | 问答 | 派 | 停在浏览器（第 1 次调用）：单列；第一个工具是浏览器 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 11 | q-weather | 问答 | 派 | 停在浏览器（第 2 次调用）：单列 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 12 | q-notes-apps | 问答 | 不派 | 停在浏览器（第 2 次调用）：合格（自己在做） | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 13 | quick-usd | 问答 | 派 | 停在浏览器（第 1 次调用）：单列；第一个工具是浏览器 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 14 | quick-downloads | 问答 | 不派 | 没派，自己答完（2 次工具调用）：合格 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 15 | todo-note | 记事 | 不派 | 没派，自己答完（3 次工具调用）：合格 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 16 | conv-writeup | 材料是这段对话 | 不派 | 没派，自己答完（2 次工具调用）：合格 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 17 | e-invoices | 差事 | 派 | 最终回复派了（之前 3 次工具调用）：合格；「整理下载文件夹发票」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 18 | e-template | 差事 | 派 | 最终回复派了（之前 1 次工具调用）：合格；「制作酒店开业资料收集模板」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 19 | big-quotes | 差事 | 派 | 停在问用户（第 1 次调用）：单列 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 20 | big-pdfs | 差事 | 派 | 最终回复派了（之前 1 次工具调用）：合格；「按内容整理下载文件夹 PDF」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 21 | big-research | 差事 | 派 | 最终回复派了（之前 2 次工具调用）：合格；「本地笔记软件调研报告」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 22 | ask-dispatch | 明说派 | 派 | 最终回复派了（之前 1 次工具调用）：合格；「整理昨日 NBA 要闻」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 23 | midway-invoices | 做着做着发现是差事 | 派 | 最终回复派了（之前 1 次工具调用）：合格；「按类型归档下载文件夹发票」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 24 | q-headphones | 要一份成品 | 派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 25 | q-fact-injury | 问一个事实 | 派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 26 | q-followup-quick | 凭这段对话接的追问 | 不派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 27 | q-followup-sourced | 凭这段对话接的追问 | 不派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 28 | q-recent-fact | 问一个事实 | 派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 29 | q-concept | 问概念 | 不派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 30 | q-howto | 问怎么做 | 不派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
-| 31 | q-browser-insist | 要它自己上网 | 派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） |
+| # | 用例 | 组 | 应该 | new | v2 | v3 | v4 | v5 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | p-three-errands | 几件差事 | 3 个标签 | 最终回复派了 3 个标签（之前 2 次工具调用）：合格；「发票按月份归档」、「桌面截图按日期整理」、「合同 PDF 统一命名」<br>最终回复派了 3 个标签（之前 3 次工具调用）：合格；「发票按月归档」、「桌面截图按日期整理」、「合同PDF规范命名」 | 最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月归档」、「桌面截图按日归档」、「合同 PDF 按日期和对方改名」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「按月份归档发票」、「按日期整理截图」、「规范合同 PDF 名称」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月归档」、「桌面截图按日整理」、「合同 PDF 规范命名」 | 最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月归档」、「截图按日归档」、「合同 PDF 规范命名」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月份归档」、「桌面截图按日期整理」、「合同 PDF 按日期和对方改名」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「按月归档发票」、「按日期整理截图」、「规范合同PDF名称」 | 最终回复派了 3 个标签（之前 2 次工具调用）：合格；「发票按月归档」、「截图按日整理」、「合同 PDF 规范命名」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「按月归档发票」、「按日整理桌面截图」、「按日期和对方重命名合同」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「按月份归档发票」、「按日期整理桌面截图」、「按日期和对方重命名合同」 | 最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月份归档」、「桌面截图按日期整理」、「合同 PDF 按日期和对方改名」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「发票按月归档」、「截图按日期整理」、「合同 PDF 规范改名」<br>最终回复派了 3 个标签（之前 2 次工具调用）：合格；「发票按月归档」、「桌面截图按日归档」、「合同 PDF 按日期对方改名」 |
+| 2 | p-split-one | 一件拆几块 | 至少 2 个标签 | 最终回复派了 3 个标签（之前 2 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」 | 最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理客户 A 文件清单」、「整理客户 B 文件清单」、「整理客户 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 2 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」 | 最终回复派了 3 个标签（之前 2 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 2 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」 | 最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 1 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」 | 自己做完（4 次工具调用）：合格<br>最终回复派了 3 个标签（之前 2 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」<br>最终回复派了 3 个标签（之前 3 次工具调用）：合格；「整理 A 文件清单」、「整理 B 文件清单」、「整理 C 文件清单」 |
+| 3 | p-same-tab | 同一个标签页 | 1 个标签 | 停在浏览器（第 2 次调用）：单列<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」 | 停在浏览器（第 1 次调用）：单列；第一个工具是浏览器<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「京东购物车下单」 | 自己上网查（第 2 次调用停在浏览器）：合格<br>自己上网查（第 2 次调用停在浏览器）：合格<br>自己上网查（第 2 次调用停在浏览器）：合格 |
+| 4 | p-same-files | 同一批文件 | 1 个标签 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「PDF 去重与分类」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「PDF 去重与分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「PDF 去重与分类」<br>最终回复派了 1 个标签（之前 2 次工具调用）：合格；「下载 PDF 去重分类」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「下载 PDF 去重分类」 | 自己做完（5 次工具调用）：合格<br>自己做完（3 次工具调用）：合格<br>自己做完（4 次工具调用）：合格 |
+| 5 | p-question-parts | 问题不拆 | 1 个标签 | 停在浏览器（第 2 次调用）：单列<br>停在浏览器（第 3 次调用）：单列 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「NBA东西部季后赛预测」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测东西部季后赛球队」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测东西部季后赛名单」 | 最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测 NBA 东西部季后赛球队」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「东西部季后赛预测」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测 NBA 东西部季后赛名单」 | 最终回复派了 2 个标签（之前 1 次工具调用），应该：1 个标签：不合格；「西部季后赛预测」、「东部季后赛预测」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「预测东西部季后赛球队」<br>最终回复派了 1 个标签（之前 1 次工具调用）：合格；「NBA东西部季后赛预测」 | 自己上网查（第 2 次调用停在浏览器）：合格<br>自己上网查（第 3 次调用停在浏览器）：合格<br>自己上网查（第 2 次调用停在浏览器）：合格 |
+| 6 | p-errand-and-question | 差事加问题 | 2 个标签 | 停在浏览器（第 4 次调用）：单列<br>停在浏览器（第 2 次调用）：单列 | 最终回复派了 1 个标签（之前 3 次工具调用），应该：2 个标签：不合格；「厦门周末天气」<br>最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「查厦门周末天气」<br>最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「厦门周末天气」 | 最终回复派了 1 个标签（之前 2 次工具调用），应该：2 个标签：不合格；「厦门周末天气」<br>最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「查厦门周末天气」<br>最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「厦门周末天气」 | 最终回复派了 1 个标签（之前 1 次工具调用），应该：2 个标签：不合格；「厦门周末天气」<br>最终回复派了 1 个标签（之前 4 次工具调用），应该：2 个标签：不合格；「厦门周末天气」<br>最终回复派了 1 个标签（之前 3 次工具调用），应该：2 个标签：不合格；「查厦门周末天气」 | 最终回复派了 1 个标签（之前 2 次工具调用），应该：2 个标签：不合格；「查厦门周末天气」<br>最终回复派了 1 个标签（之前 2 次工具调用），应该：2 个标签：不合格；「厦门周末天气」<br>最终回复派了 1 个标签（之前 2 次工具调用），应该：2 个标签：不合格；「厦门周末天气」 |
+| 7 | p-errand-and-question-full | 差事加问题 | 2 个标签 | 未运行 | 未运行 | 最终回复派了 2 个标签（之前 7 次工具调用）：合格；「订厦门高铁票」、「查厦门周末天气」<br>最终回复派了 2 个标签（之前 3 次工具调用）：合格；「订厦门高铁票」、「查厦门周末天气」<br>最终回复派了 2 个标签（之前 2 次工具调用）：合格；「订厦门高铁票」、「查厦门周末天气」 | 最终回复派了 2 个标签（之前 3 次工具调用）：合格；「查票并准备预订」、「查厦门周末天气」<br>最终回复派了 2 个标签（之前 1 次工具调用）：合格；「预订去厦门的高铁票」、「查询厦门周末天气」<br>最终回复派了 2 个标签（之前 1 次工具调用）：合格；「订上海到厦门高铁票」、「查厦门周末天气」 | 最终回复派了 2 个标签（之前 3 次工具调用）：合格；「查周五厦门高铁票」、「查厦门周末天气」<br>最终回复派了 2 个标签（之前 2 次工具调用）：合格；「订上海至厦门高铁票」、「查厦门周末天气」<br>最终回复派了 2 个标签（之前 1 次工具调用）：合格；「订厦门高铁票」、「厦门周末天气」 |
+| 8 | q-injuries | 问答 | 派 | 世上的事实自己答了，没派（3 次工具调用）：不合格 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 9 | q-east | 问答 | 派 | 停在浏览器（第 2 次调用）：单列 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 10 | q-story | 问答 | 派 | 停在浏览器（第 1 次调用）：单列；第一个工具是浏览器 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 11 | q-weather | 问答 | 派 | 停在浏览器（第 2 次调用）：单列 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 12 | q-notes-apps | 问答 | 派 | 停在浏览器（第 2 次调用）：单列 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 13 | quick-usd | 问答 | 派 | 停在浏览器（第 1 次调用）：单列；第一个工具是浏览器 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 14 | quick-downloads | 问答 | 不派 | 没派，自己答完（2 次工具调用）：合格 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 15 | todo-note | 记事 | 不派 | 没派，自己答完（3 次工具调用）：合格 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 16 | conv-writeup | 材料是这段对话 | 不派 | 没派，自己答完（2 次工具调用）：合格 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 17 | e-invoices | 差事 | 派 | 最终回复派了（之前 3 次工具调用）：合格；「整理下载文件夹发票」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 18 | e-template | 差事 | 派 | 最终回复派了（之前 1 次工具调用）：合格；「制作酒店开业资料收集模板」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 19 | big-quotes | 差事 | 派 | 停在问用户（第 1 次调用）：单列 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 20 | big-pdfs | 差事 | 派 | 最终回复派了（之前 1 次工具调用）：合格；「按内容整理下载文件夹 PDF」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 21 | big-research | 差事 | 派 | 最终回复派了（之前 2 次工具调用）：合格；「本地笔记软件调研报告」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 22 | ask-dispatch | 明说派 | 派 | 最终回复派了（之前 1 次工具调用）：合格；「整理昨日 NBA 要闻」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 23 | midway-invoices | 做着做着发现是差事 | 派 | 最终回复派了（之前 1 次工具调用）：合格；「按类型归档下载文件夹发票」 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 24 | q-headphones | 要一份成品 | 派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 25 | q-fact-injury | 问一个事实 | 派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 26 | q-followup-quick | 凭这段对话接的追问 | 不派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 27 | q-followup-sourced | 凭这段对话接的追问 | 不派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 28 | q-followup-shown | 凭这段对话接的追问 | 不派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 29 | q-recent-fact | 问一个事实 | 派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 30 | q-concept | 问概念 | 不派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 31 | q-howto | 问怎么做 | 不派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
+| 32 | q-browser-insist | 要它自己上网 | 派 | 未运行 | （见 dispatch-criterion） | （见 dispatch-criterion） | （见 dispatch-criterion） | 未运行 |
 
 - **new，本票的用例**：合格 7，不合格 0，单列 5，未运行 1。
-- **new，票 115 的用例**：合格 10，不合格 1，单列 5，未运行 8。
+- **new，票 115 的用例**：合格 9，不合格 1，单列 6，未运行 9。
 - **new，按现在的标注判不合格的**：q-injuries。
 - **new，标题不合规的**：没有。
 - **v2，本票的用例**：合格 14，不合格 3，单列 1，未运行 1。
@@ -61,6 +63,10 @@
 - **v4，本票的用例**：合格 17，不合格 4。
 - **v4，按现在的标注判不合格的**：p-errand-and-question、p-question-parts。
 - **v4，标题不合规的**：没有。
+- **v5，本票的用例**：合格 18，不合格 3。
+- **v5，票 115 的用例**：合格 0，不合格 0，未运行 25。
+- **v5，按现在的标注判不合格的**：p-errand-and-question。
+- **v5，标题不合规的**：没有。
 
 ## 1. p-three-errands（几件差事；应该：3 个标签）
 
@@ -786,6 +792,197 @@ print('Home directories:', ', '.join(sorted(p.name for p in h.iterdir() if p.is_
 
 建议：整理完后，把需要我确认的文件列出来
 
+### v5
+
+**结果**：最终回复派了 3 个标签（之前 1 次工具调用）；合格。工具调用 1 次。结束：以最终回复结束。
+
+标签 1：title 「发票按月份归档」，派活说明：
+
+```text
+整理用户下载文件夹中的发票。先确认实际下载目录，仅处理能可靠识别为发票的文件，不动其他下载文件、不递归整理现有归档目录。以票面开票日期为准，按 YYYY-MM 月份建文件夹归档；无法确认发票或开票日期的保留原位并列出。用户已授权整理，不需要对明确可逆的移动再次询问。不得删除、覆盖、修改文件内容；同名冲突保留双方。记录每个文件原路径与新路径，生成可用于恢复的变更清单。操作后核对文件数量及路径，回报成功数量、跳过及原因、归档目录完整路径与变更清单完整路径。遵守本地权限及工具规范，若实际目录不可访问则明确报告，不要声称已完成。
+```
+
+标签 2：title 「桌面截图按日期整理」，派活说明：
+
+```text
+整理用户桌面上的截图。先确认实际桌面目录，仅处理桌面根目录中能可靠识别为截图的文件，不动普通照片和其他文件、不递归处理已有文件夹。按截图日期 YYYY-MM-DD 建文件夹收纳，优先可信的截图文件名日期或截图元数据；日期不可靠则保留原位并列出，不将不可靠的修改时间当截图日期。用户已授权整理，不需对明确可逆的移动再次询问。不得删除、覆盖或修改图片内容；同名冲突保留双方。记录原路径与新路径，生成可恢复的变更清单，操作后核对数量和路径。回报完成数量、跳过及原因、目标文件夹完整路径与清单完整路径。遵守本地权限及工具规范，不可访问时如实报告。
+```
+
+标签 3：title 「合同 PDF 按日期和对方改名」，派活说明：
+
+```text
+整理用户「文档/合同」目录中的 PDF 名称。先确认实际目录，仅处理该目录中的合同 PDF，不递归处理其他目录。读取合同内容确定合同日期和相对用户的对方主体，以 YYYY-MM-DD-对方.pdf 改名；必须有可靠内容依据，不猜日期、用户身份或合同对方，多个日期或主体无法确定则跳过并说明。优先签署日期，无明确签署日期时不要擅自使用文件修改日期。只改文件名，不移动出目录、不改 PDF 内容、不删除或覆盖；同名冲突保留双方并用明确后缀区分。用户已授权明确可逆的改名，无须重复确认。生成原名、新名、日期与对方依据的变更清单以便恢复，操作后核对数量及路径。回报完成数量、跳过及原因、合同目录完整路径与清单完整路径。遵守权限及工具规范，遇访问限制如实报告。
+```
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+p=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-three-errands.v5-1/sandbox/managed-ga-state/assistant/reference/manual')
+for name in ['authority.md','subtasks.md']:
+ print('\n### '+name+'\n'+(p/name).read_text())
+print('\n### memory\n'+Path('../memory/global_mem.txt').read_text())
+print('\n### cwd\n'+str(Path.cwd()))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### authority.md\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time
+…（截断，全文见 json）
+```
+
+最终回复：
+
+这三项我分开处理，完成后分别告诉你结果。发票按开票月份归档，截图按截图日期分文件夹；合同按文件内容确认日期和对方后再改名。日期或名称不明确的先不动，并保留变更清单，方便恢复。
+
+（界面不显示的 summary：三项工作互不依赖，将并行整理；不覆盖同名文件，无法确认的信息保留待核对。）
+
+建议：整理完告诉我哪些文件需要我确认
+
+### v5（第 2 遍）
+
+**结果**：最终回复派了 3 个标签（之前 1 次工具调用）；合格。工具调用 1 次。结束：以最终回复结束。
+
+标签 1：title 「发票按月归档」，派活说明：
+
+```text
+整理用户下载文件夹里的发票。先检查实际路径与文件，只处理可确认的发票，不移动其他下载内容、不读取密钥文件。按发票内容的开票日期归入下载文件夹下「发票/YYYY-MM」；无法读取内容时，只有文件名能明确证明开票月份才使用文件名，不凭修改时间猜测。日期不明确、受密码保护或无法识别的先保留并列出。不覆盖、不删除，不擅自合并重复文件，遇到重名保留双方。先盘点再逐步移动，验证文件数量与完整性，保存原路径到新路径的可撤销变更清单。返回实际归档目录完整路径、处理数量、未处理原因、清单完整路径及验证结果。遵守相关操作手册与权限规则。
+```
+
+标签 2：title 「截图按日期整理」，派活说明：
+
+```text
+整理用户桌面上的截图。先检查实际桌面路径，只处理能确认是截图的文件，不移动普通照片或其他桌面文件、不读取密钥文件。优先以截图文件名明确记载的拍摄日期，其次可信的图片拍摄元数据，按日归入桌面「截图/YYYY-MM-DD」；只有文件修改时间等不可靠信息时先保留，不猜日期。不覆盖、不删除，遇到重名保留双方。先盘点再逐步移动，验证文件数量与完整性，保存原路径到新路径的可撤销变更清单。返回实际归档目录完整路径、处理数量、未处理原因、清单完整路径及验证结果。遵守相关操作手册与权限规则。
+```
+
+标签 3：title 「合同 PDF 规范改名」，派活说明：
+
+```text
+整理用户「文档/合同」目录中的 PDF，先确认实际 Documents/文档与合同目录路径。阅读合同内容确定日期和对方，重命名为「YYYY-MM-DD-对方.pdf」，保持原目录不变。优先使用明确签署日期；未签署但明确标注合同日期时使用该日期并在清单注明依据。不要用文件修改时间猜合同日期。识别双方时只在能确定用户一方、另一方确为对方时改名；无法确定用户主体、存在多个候选日期或对方、扫描件无法可靠识别、密码保护时先保留，汇总需用户确认的问题。不得读取密钥文件、不覆盖、不删除，名称碰撞时保留原文件并列出。先盘点再逐步改名，验证文件数量与完整性，保存原路径到新路径及日期/对方依据的可撤销清单。返回处理数量、完整目录路径、清单完整路径、未处理事项及验证结果。遵守相关操作手册与权限规则。
+```
+
+工具调用（按顺序）：
+
+1. file_read（authority.md）：在沙盒里执行
+
+```json
+{
+ "path": "$TMPDIR/entry-layer-eval-19a3v1j3/p-three-errands.v5-2/sandbox/managed-ga-state/assistant/reference/manual/authority.md"
+}
+```
+
+   返回：
+
+```
+由于设置了show_linenos，以下返回信息为：(行号|)内容 。
+[FILE] 59 lines
+1|# Galley Assistant Manual: Authority
+2|
+3|Galley rewrites this manual's files each time the main chat starts; do
+4|not edit them.
+5|
+6|## Three levels of authority
+7|
+8|These levels are for what you do on your own initiative. A direct request
+9|from the user is their go-ahead for the first two levels, with one
+10|exception: a repeating task that costs money every time it runs still
+11|needs their yes to what and when (see `reminders.md`).
+12|
+…（截断，全文见 json）
+```
+
+最终回复：
+
+三项会并行处理：发票按开票月份归档，截图按截图日期分文件夹，合同 PDF 按「日期-对方」改名。日期或名称不明确的先保留原样；不覆盖、不删除文件，并保留变更清单方便撤销。
+
+建议：整理完告诉我哪些文件需要我确认
+
+### v5（第 3 遍）
+
+**结果**：最终回复派了 3 个标签（之前 2 次工具调用）；合格。工具调用 2 次。结束：以最终回复结束。
+
+标签 1：title 「发票按月归档」，派活说明：
+
+```text
+整理 ~/Downloads 中的发票，用户已授权移动归档。已核实此目录有发票、收据及大量无关 PDF。先读取文件内容确认是否为发票及开票日期，按 ~/Downloads/发票/YYYY-MM/ 归档，保留原文件名。仅处理确认的发票；普通收据、水单、合同、说明书等无关文件不动，不能仅按下载时间或修改时间归档。日期无法确定的保留原处并报告。不得删除或覆盖文件，遇同名冲突先保留并报告。不读取密钥或秘密文件。使用现有本地 PDF 工具，按需探测环境。记录原路径→新路径以便撤销，核验每个移动结果。返回已完成数量、每项完整绝对路径映射、月份依据、未处理及原因，并将撤销清单保存在自己的工作区文件中，返回该文件绝对路径。
+```
+
+标签 2：title 「桌面截图按日归档」，派活说明：
+
+```text
+整理 ~/Desktop 的截图，用户已授权移动归档。目前已确认三个文件：截图 2026-10-28 上午10.02.11.png、截图 2026-10-30 下午4.15.40.png、截图 2026-11-01 晚上9.03.27.png。根据文件名中明确的截图日期，分别移入 ~/Desktop/截图/YYYY-MM-DD/，保留原文件名。操作前重新检查实际文件，只处理明确为截图的文件，其余不动。不得删除或覆盖，冲突先保留并报告。不读取密钥或秘密文件。核验所有移动结果。返回完成数量、每个原路径→新路径的完整绝对路径映射和异常；将撤销清单保存在自己的工作区文件并返回绝对路径。
+```
+
+标签 3：title 「合同 PDF 按日期对方改名」，派活说明：
+
+```text
+整理 ~/Documents/合同 中的 PDF，用户已授权改名。已核实有星河设计服务合同.pdf、远山贸易采购合同.pdf、青木物业租赁协议.pdf。逐个读取 PDF 内容，识别合同签订日期及用户的合同对方，原地改名为 YYYY-MM-DD-对方.pdf。不将文件名、修改时间当作合同日期，不臆测用户是哪一方；日期有歧义、无签订日期或无法确定对方时保持原名，列明候选及需确认问题。使用本地已有 PDF 工具，按需探测；不读取密钥或秘密文件。不得删除、覆盖、改动 PDF 内容或移动到其他目录。核验改名结果，记录原路径→新路径和依据（相关页码、必要的简短原文），返回完成数量及每个文件完整绝对路径映射。将撤销清单保存在自己的工作区文件，返回绝对路径。
+```
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import os
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-three-errands.v5-3/sandbox/managed-ga-state/assistant/reference/manual')
+for name in ['authority.md','subtasks.md']:
+ print('\n---'+name+'---\n'+(base/name).read_text())
+print('\nCWD',os.getcwd())
+print('HOME',str(Path.home()))
+print('CWD entries',os.listdir('.'))
+print('HOME entries',os.listdir(Path.home()))
+print('MEMORY',os.listdir('../memory'))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n---authority.md---\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every ti
+…（截断，全文见 json）
+```
+
+2. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+print('--- existing memory ---')
+print(Path('../memory/global_mem.txt').read_text())
+h=Path.home()
+for name in ['Downloads','Desktop','Documents']:
+ p=h/name
+ print('\n---',p,'---')
+ for f in sorted(p.iterdir()):
+  print(('DIR ' if f.is_dir() else 'FILE ')+f.name)
+  if name=='Documents' and f.is_dir() and f.name=='合同':
+   for q in sorted(f.iterdir()): print('  '+('DIR ' if q.is_dir() else 'FILE ')+q.name)
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n--- existing memory ---\n# [Global Memory - L2]\n\n\n--- $TMPDIR/entry-layer-eval-19a3v1j3/p-three-errands.v5-3/sandbox/home/Downloads ---\nFILE 2410.05229v2.pdf\nFILE Attention_Is_All_You_Need.pdf\nFILE Brother_HL-L2350DW_manual.pdf\nFILE CRDT_survey_2018.pdf\nFILE Invoice_Figma_2026-09.pdf\nFILE Invoice_GitHub_2026-10.pdf\nFILE MacBook_Pro_用户手册.pdf\nFILE Q3_周报汇总.pdf\nFILE Rec
+…（截断，全文见 json）
+```
+
+最终回复：
+
+三项我分开处理：发票按开票月份归档，桌面截图按截图日期建文件夹，合同根据 PDF 内容提取日期和对方名称后改名。日期或对方不明确的先保留原样，完成后给你汇总。
+
+（界面不显示的 summary：已确认文件范围，三项整理将并行处理，保留原文件内容，不覆盖同名文件。）
+
+建议：整理完把改名和移动清单发给我
+
 ## 2. p-split-one（一件拆几块；应该：至少 2 个标签）
 
 **消息**：把「客户」文件夹下 A、B、C 三个子文件夹各自整理出一份文件清单
@@ -1495,6 +1692,310 @@ for base in [home/'Desktop', home/'Documents', home/'Downloads']:
 
 建议：帮我再汇总 A、B、C 各自的文件数量和总大小
 
+### v5
+
+**结果**：自己做完（4 次工具调用）；合格。工具调用 4 次。结束：以最终回复结束。
+
+在假 HOME 里新建的文件：`$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/A_文件清单.csv`；`$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/B_文件清单.csv`；`$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/C_文件清单.csv`
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import os
+print('CWD:', Path.cwd())
+print('CWD entries:', '\n'.join(p.name for p in Path.cwd().iterdir()))
+print('\nMemory files:', '\n'.join(p.name for p in Path('../memory').iterdir()))
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/managed-ga-state/assistant/reference/manual')
+print('\n--- authority.md ---\n'+(base/'authority.md').read_text())
+print('\n--- L2 ---\n'+Path('../memory/global_mem.txt').read_text())
+print('\nHome:', Path.home())
+print('Home entries:', ', '.join(p.name for p in Path.home().iterdir() if not p.name.startswith('.')))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nCWD: $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/managed-ga-state/temp\nCWD entries: tmp19xv9wfl.ai.py\nmodel_responses\n\nMemory files: checklist_helper.py\nscheduled_task_sop.md\nadb_ui.py\ngoal_hive_master_duty.md\nchecklist_sop.md\nmemory_cleanup_sop.md\nui_detect.py\ngithub_contribution_sop.md\nljqCtrl_sop.md\nglobal_mem_insight.txt\nproject_mode_sop.md\npla
+…（截断，全文见 json）
+```
+
+2. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+for root in (Path.home()/'Documents', Path.home()/'Downloads'):
+ print(str(root))
+ for p in root.iterdir():
+  print(('DIR ' if p.is_dir() else 'FILE ')+str(p))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents\nDIR $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户\n$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Downloads\nFILE $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Downloads/发票_阿里云_2026-09.pdf\nFILE $TMPDIR/entry-layer-eval-19a3v1j3/p-split-on
+…（截断，全文见 json）
+```
+
+3. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+root=Path.home()/'Documents'/'客户'
+for p in sorted(root.iterdir()):
+ print(('DIR ' if p.is_dir() else 'FILE ')+str(p))
+ for name in ('A','B','C'):
+  if p.name == name and p.is_dir():
+   print('  Direct entries:', ', '.join(x.name for x in p.iterdir()))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nDIR $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/A\n  Direct entries: 会议纪要_2026-10-12.docx, 报价单_2026-09.xlsx, 合同扫描件.pdf\nDIR $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/B\n  Direct entries: 设计稿_首页.png, 需求说明书_v2.docx\nDIR $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/C\n  Direct entri
+…（截断，全文见 json）
+```
+
+4. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import csv, os
+from datetime import datetime
+root=Path.home()/'Documents'/'客户'
+for name in ('A','B','C'):
+ source=root/name
+ files=sorted((p for p in source.rglob('*') if p.is_file()),key=lambda p:p.relative_to(source).as_posix())
+ rows=[]
+ for p in files:
+  st=p.stat()
+  rows.append([p.name,p.relative_to(source).as_posix(),p.suffix.lstrip('.') or '无扩展名',st.st_size,datetime.fromtimestamp(st.st_mtime).astimezone().isoformat(timespec='seconds')])
+ out=root/f'{name}_文件清单.csv'
+ if out.exists():
+  out=root/f'{name}_文件清单_{datetime.now():%Y%m%d_%H%M%S}.csv'
+ with out.open('x',encoding='utf-8-sig',newline='') as f:
+  writer=csv.writer(f)
+  writer.writerow(['文件名','相对路径','文件类型','大小（字节）','修改时间'])
+  writer.writerows(rows)
+ with out.open(encoding='utf-8-sig',newline='') as f:
+  check=list(csv.reader(f))
+ assert len(check)==len(rows)+1
+ assert check[1:]==[[str(v) for v in row] for row in rows]
+ print(f'已生成并核验：{out} | {len(rows)} 个文件')
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n已生成并核验：$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/A_文件清单.csv | 3 个文件\n已生成并核验：$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/B_文件清单.csv | 2 个文件\n已生成并核验：$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/C_文件清单.csv | 3 个文件\n",
+ "exit_code": 0
+}
+```
+
+最终回复：
+
+已分别整理好，均为可用 Excel 打开的 CSV，包含**文件名、相对路径、类型、大小和修改时间**，保存在「客户」文件夹下。
+
+**A：3 个文件**
+[FILE:$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/A_文件清单.csv]
+
+**B：2 个文件**
+[FILE:$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/B_文件清单.csv]
+
+**C：3 个文件**
+[FILE:$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-1/sandbox/home/Documents/客户/C_文件清单.csv]
+
+（界面不显示的 summary：三份文件清单已生成并核验，共收录 8 个文件，原文件未改动。）
+
+建议：帮我把这三份清单合成一个 Excel，分别放在三个工作表里
+
+### v5（第 2 遍）
+
+**结果**：最终回复派了 3 个标签（之前 2 次工具调用）；合格。工具调用 2 次。结束：以最终回复结束。
+
+标签 1：title 「整理 A 文件清单」，派活说明：
+
+```text
+为目录 $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-2/sandbox/home/Documents/客户/A 递归生成独立文件清单。已确认直接有会议纪要_2026-10-12.docx、合同扫描件.pdf、报价单_2026-09.xlsx，仍须以实际扫描为准。仅扫描文件元数据，不读取文档内容，不移动或修改原文件，不跟随符号链接。输出 UTF-8 BOM CSV，列为文件名、相对路径、大小（字节）、修改时间（当地时间），按相对路径排序。输出到该目录的父目录中的 A_文件清单.csv；如已存在，使用不覆盖的递增后缀。仅负责 A，不操作 B、C 或共享汇总文件。完成后核对 CSV 行数与扫描文件数，返回文件数量、完整绝对输出路径、完整清单内容和核对证据。
+```
+
+标签 2：title 「整理 B 文件清单」，派活说明：
+
+```text
+为目录 $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-2/sandbox/home/Documents/客户/B 递归生成独立文件清单。已确认直接有设计稿_首页.png、需求说明书_v2.docx，仍须以实际扫描为准。仅扫描文件元数据，不读取文档内容，不移动或修改原文件，不跟随符号链接。输出 UTF-8 BOM CSV，列为文件名、相对路径、大小（字节）、修改时间（当地时间），按相对路径排序。输出到该目录的父目录中的 B_文件清单.csv；如已存在，使用不覆盖的递增后缀。仅负责 B，不操作 A、C 或共享汇总文件。完成后核对 CSV 行数与扫描文件数，返回文件数量、完整绝对输出路径、完整清单内容和核对证据。
+```
+
+标签 3：title 「整理 C 文件清单」，派活说明：
+
+```text
+为目录 $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-2/sandbox/home/Documents/客户/C 递归生成独立文件清单。已确认直接有发票_2026-10.pdf、对账单_2026Q3.xlsx、项目周报_第42周.md，仍须以实际扫描为准。仅扫描文件元数据，不读取文档内容，不移动或修改原文件，不跟随符号链接。输出 UTF-8 BOM CSV，列为文件名、相对路径、大小（字节）、修改时间（当地时间），按相对路径排序。输出到该目录的父目录中的 C_文件清单.csv；如已存在，使用不覆盖的递增后缀。仅负责 C，不操作 A、B 或共享汇总文件。完成后核对 CSV 行数与扫描文件数，返回文件数量、完整绝对输出路径、完整清单内容和核对证据。
+```
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```json
+{
+ "timeout": 60
+}
+```
+
+```
+from pathlib import Path
+import os
+print('CWD:', Path.cwd())
+print('CWD entries:', [p.name for p in Path.cwd().iterdir()])
+for p in [Path('../memory/global_mem.txt'), Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-2/sandbox/managed-ga-state/assistant/reference/manual/authority.md')]:
+ print('\n---', p, '---\n', p.read_text())
+print('Home:', Path.home())
+for base in [Path.home()/'Desktop',Path.home()/'Documents',Path.home()/'Downloads',Path.cwd().parent]:
+ print(str(base), [(p.name, p.is_dir()) for p in base.iterdir()] if base.exists() else 'not found')
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nCWD: $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-2/sandbox/managed-ga-state/temp\nCWD entries: ['model_responses', 'tmpqqdl_b0p.ai.py']\n\n--- ../memory/global_mem.txt ---\n # [Global Memory - L2]\n\n\n--- $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-2/sandbox/managed-ga-state/assistant/reference/manual/authority.md ---\n # Galley Assistant Manual: Authority\n\nGalley
+…（截断，全文见 json）
+```
+
+2. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+root=Path.home()/'Documents'/'客户'
+print('客户文件夹:',root)
+for p in sorted(root.iterdir()):
+ print('目录' if p.is_dir() else '文件', p.name)
+ if p.is_dir() and p.name in ['A','B','C']:
+  print('  直接子项:',[(x.name,'目录' if x.is_dir() else '文件') for x in sorted(p.iterdir())])
+manual=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-2/sandbox/managed-ga-state/assistant/reference/manual/subtasks.md')
+print('\n--- subtasks.md ---\n'+manual.read_text())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n客户文件夹: $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-2/sandbox/home/Documents/客户\n目录 A\n  直接子项: [('会议纪要_2026-10-12.docx', '文件'), ('合同扫描件.pdf', '文件'), ('报价单_2026-09.xlsx', '文件')]\n目录 B\n  直接子项: [('设计稿_首页.png', '文件'), ('需求说明书_v2.docx', '文件')]\n目录 C\n  直接子项: [('发票_2026-10.pdf', '文件'), ('对账单_2026Q3.xlsx', '文件'), ('项目周报_第42周.md', '文件')]\n\n--- subtasks.md ---\n# Galley Assistant
+…（截断，全文见 json）
+```
+
+最终回复：
+
+找到了：A 有 3 个文件，B 有 2 个，C 有 3 个。我会分别生成一份 CSV 清单，包含文件名、相对路径、大小和修改时间，放在「客户」文件夹下，不改动原文件。
+
+建议：把三份清单再合并成一份总表
+
+### v5（第 3 遍）
+
+**结果**：最终回复派了 3 个标签（之前 3 次工具调用）；合格。工具调用 3 次。结束：以最终回复结束。
+
+标签 1：title 「整理 A 文件清单」，派活说明：
+
+```text
+为目录 $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-3/sandbox/home/Documents/客户/A 生成独立 Markdown 文件清单。递归列出普通文件的相对路径、大小（字节）和修改时间，附文件总数。只读取目录和文件元数据，不读取文件内容，不改动原文件，不跟随符号链接。清单保存在父目录「客户」下，命名 A_文件清单.md；若已存在则使用不覆盖的名称。完成后核验条目与实际文件一致，返回文件总数、清单绝对路径和 [FILE:绝对路径]。
+```
+
+标签 2：title 「整理 B 文件清单」，派活说明：
+
+```text
+为目录 $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-3/sandbox/home/Documents/客户/B 生成独立 Markdown 文件清单。递归列出普通文件的相对路径、大小（字节）和修改时间，附文件总数。只读取目录和文件元数据，不读取文件内容，不改动原文件，不跟随符号链接。清单保存在父目录「客户」下，命名 B_文件清单.md；若已存在则使用不覆盖的名称。完成后核验条目与实际文件一致，返回文件总数、清单绝对路径和 [FILE:绝对路径]。
+```
+
+标签 3：title 「整理 C 文件清单」，派活说明：
+
+```text
+为目录 $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-3/sandbox/home/Documents/客户/C 生成独立 Markdown 文件清单。递归列出普通文件的相对路径、大小（字节）和修改时间，附文件总数。只读取目录和文件元数据，不读取文件内容，不改动原文件，不跟随符号链接。清单保存在父目录「客户」下，命名 C_文件清单.md；若已存在则使用不覆盖的名称。完成后核验条目与实际文件一致，返回文件总数、清单绝对路径和 [FILE:绝对路径]。
+```
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+import os
+from pathlib import Path
+print('CWD',Path.cwd())
+print('CWD entries', [p.name for p in Path.cwd().iterdir()])
+print('Memory entries',[p.name for p in Path('../memory').iterdir()])
+p=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'galley/cli-path'
+print('CLI',p.read_text().strip())
+print('HOME',Path.home())
+print('Home entries',[p.name for p in Path.home().iterdir() if not p.name.startswith('.')])
+print('AUTHORITY')
+print(Path('../assistant/reference/manual/authority.md').read_text())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nCWD $TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-3/sandbox/managed-ga-state/temp\nCWD entries ['model_responses', 'tmpf17hslgo.ai.py']\nMemory entries ['checklist_helper.py', 'scheduled_task_sop.md', 'adb_ui.py', 'goal_hive_master_duty.md', 'checklist_sop.md', 'memory_cleanup_sop.md', 'ui_detect.py', 'github_contribution_sop.md', 'ljqCtrl_sop.md', 'global_mem_insight.txt',
+…（截断，全文见 json）
+```
+
+2. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+for name in ('Documents','Downloads'):
+ p=Path.home()/name
+ print(str(p),[x.name for x in p.iterdir()])
+print('MEMORY',Path('../memory/global_mem.txt').read_text())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-3/sandbox/home/Documents ['客户']\n$TMPDIR/entry-layer-eval-19a3v1j3/p-split-one.v5-3/sandbox/home/Downloads ['发票_阿里云_2026-09.pdf', '增值税电子普通发票_京东_显示器.pdf', '发票_阿里云_2026-08.pdf', '截图 2026-10-10 下午3.12.04.png', 'Xcode_16.4.xip', 'Wittgenstein_Tractatus.pdf', '钢材价格指数月报_2026-09.pdf', '租房合同_2026-2027.pdf', 'Invoice_GitHub_2026-10.pdf',
+…（截断，全文见 json）
+```
+
+3. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+root=Path.home()/'Documents'/'客户'
+for p in sorted(root.iterdir()):
+ print(p.name,'目录' if p.is_dir() else '文件')
+ if p.name in ['A','B','C'] and p.is_dir():
+  print('  直接子项:',[(x.name,'目录' if x.is_dir() else '文件') for x in p.iterdir()])
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nA 目录\n  直接子项: [('会议纪要_2026-10-12.docx', '文件'), ('报价单_2026-09.xlsx', '文件'), ('合同扫描件.pdf', '文件')]\nB 目录\n  直接子项: [('设计稿_首页.png', '文件'), ('需求说明书_v2.docx', '文件')]\nC 目录\n  直接子项: [('项目周报_第42周.md', '文件'), ('发票_2026-10.pdf', '文件'), ('对账单_2026Q3.xlsx', '文件')]\n",
+ "exit_code": 0
+}
+```
+
+最终回复：
+
+已找到「客户」文件夹：A 有 3 个文件，B 有 2 个，C 有 3 个。我会分别生成三份清单，包含文件名、大小和修改时间，原文件保持不变，完成后把清单交给你。
+
+建议：把这三份文件清单再合并成一份总表
+
 ## 3. p-same-tab（同一个标签页；应该：1 个标签）
 
 **消息**：在京东把购物车里那三样东西下单
@@ -1988,6 +2489,109 @@ for n in ['subtasks.md','authority.md']:
 我先去核对购物车里的三样商品、应付总额和收货信息，提交订单前再请你确认。
 
 建议：把三样商品和应付总额发我确认
+
+### v5
+
+**结果**：自己上网查（第 2 次调用停在浏览器）；合格。工具调用 2 次。结束：要用浏览器工具，运行停在这里（没有执行）。
+
+工具调用（按顺序）：
+
+1. file_read（authority.md）：在沙盒里执行
+
+```json
+{
+ "path": "$TMPDIR/entry-layer-eval-19a3v1j3/p-same-tab.v5-1/sandbox/managed-ga-state/assistant/reference/manual/authority.md"
+}
+```
+
+   返回：
+
+```
+由于设置了show_linenos，以下返回信息为：(行号|)内容 。
+[FILE] 59 lines
+1|# Galley Assistant Manual: Authority
+2|
+3|Galley rewrites this manual's files each time the main chat starts; do
+4|not edit them.
+5|
+6|## Three levels of authority
+7|
+8|These levels are for what you do on your own initiative. A direct request
+9|from the user is their go-ahead for the first two levels, with one
+10|exception: a repeating task that costs money every time it runs still
+11|needs their yes to what and when (see `reminders.md`).
+12|
+…（截断，全文见 json）
+```
+
+2. web_scan（未执行）：没有执行，运行停在这里
+
+最后一条回复：
+
+（界面不显示的 summary：先查看京东购物车里的三件商品和结算信息，确认下单条件。）
+
+### v5（第 2 遍）
+
+**结果**：自己上网查（第 2 次调用停在浏览器）；合格。工具调用 2 次。结束：要用浏览器工具，运行停在这里（没有执行）。
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+p=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-same-tab.v5-2/sandbox/managed-ga-state/assistant/reference/manual')
+for n in ['authority.md']:
+ print((p/n).read_text())
+print('\n---BROWSER SOP---')
+print(Path('../memory/web_setup_sop.md').read_text())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time it runs still\nneed
+…（截断，全文见 json）
+```
+
+2. web_scan（未执行）：没有执行，运行停在这里
+
+最后一条回复：
+
+（界面不显示的 summary：已确认下单权限要求；现在查看京东购物车里的三样商品。）
+
+### v5（第 3 遍）
+
+**结果**：自己上网查（第 2 次调用停在浏览器）；合格。工具调用 2 次。结束：要用浏览器工具，运行停在这里（没有执行）。
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+p=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-same-tab.v5-3/sandbox/managed-ga-state/assistant/reference/manual')
+print((p/'authority.md').read_text())
+print('\n---WEB SOP---\n')
+print(Path('../memory/web_setup_sop.md').read_text())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time it runs still\nneed
+…（截断，全文见 json）
+```
+
+2. web_scan（未执行）：没有执行，运行停在这里
+
+最后一条回复：
+
+（界面不显示的 summary：已核对操作权限；现在查看浏览器中的京东购物车。）
 
 ## 4. p-same-files（同一批文件；应该：1 个标签）
 
@@ -2529,6 +3133,442 @@ if p.is_dir():
 
 建议：帮我看看“待确认”里的 PDF 应该怎么分
 
+### v5
+
+**结果**：自己做完（5 次工具调用）；合格。工具调用 5 次。结束：以最终回复结束。
+
+下载文件夹：移走或删除 32 个，新增 34 个。
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import os
+print('cwd:',Path.cwd())
+print('home:',Path.home())
+print('cwd entries:',[p.name for p in Path.cwd().iterdir()])
+for f in [Path('../memory/global_mem.txt'),Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-1/sandbox/managed-ga-state/assistant/reference/manual/authority.md')]:
+ print('\n---',f,'---\n',f.read_text())
+print('Downloads exists:',(Path.home()/'Downloads').exists())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\ncwd: $TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-1/sandbox/managed-ga-state/temp\nhome: $TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-1/sandbox/home\ncwd entries: ['model_responses', 'tmpygd0hwi_.ai.py']\n\n--- ../memory/global_mem.txt ---\n # [Global Memory - L2]\n\n\n--- $TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-1/sandbox/managed-ga-state/assistant/reference
+…（截断，全文见 json）
+```
+
+2. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import hashlib, importlib.util, shutil, json
+root=Path.home()/'Downloads'
+print('Downloads entries:')
+for p in sorted(root.iterdir()):
+ print(json.dumps({'name':p.name,'directory':p.is_dir(),'bytes':p.stat().st_size if p.is_file() else None},ensure_ascii=False))
+print('PDF tools:',{k:bool(importlib.util.find_spec(k)) for k in ['pypdf','fitz','pdfplumber']})
+print('pdftotext:',shutil.which('pdftotext'))
+files=sorted(root.glob('*.pdf'))+sorted(root.glob('*.PDF'))
+print('PDF count:',len(files))
+for p in files:
+ print(p.name,hashlib.sha256(p.read_bytes()).hexdigest())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nDownloads entries:\n{\"name\": \"2410.05229v2.pdf\", \"directory\": false, \"bytes\": 104}\n{\"name\": \"Attention_Is_All_You_Need.pdf\", \"directory\": false, \"bytes\": 95}\n{\"name\": \"Brother_HL-L2350DW_manual.pdf\", \"directory\": false, \"bytes\": 69}\n{\"name\": \"CRDT_survey_2018.pdf\", \"directory\": false, \"bytes\": 71}\n{\"name\": \"Invoice_Figma_2026-09.pdf\", \"d
+…（截断，全文见 json）
+```
+
+3. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import pdfplumber
+root=Path.home()/'Downloads'
+for p in sorted(root.iterdir()):
+ if not p.is_file() or p.suffix.lower()!='.pdf':continue
+ data=p.read_bytes()
+ print('\nFILE:',p.name)
+ print('HEADER:',repr(data[:24]))
+ if data.startswith(b'%PDF-'):
+  try:
+   with pdfplumber.open(p) as pdf:
+    print('TEXT:', '\n'.join(page.extract_text() or '' for page in pdf.pages)[:5000])
+  except Exception as e:print('EXTRACTION_ERROR:',type(e).__name__,str(e)[:200])
+ else:
+  try:print('TEXT:',data.decode('utf-8'))
+  except UnicodeDecodeError:print('Non-PDF binary; requires review')
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\nFILE: 2410.05229v2.pdf\nHEADER: b'%PDF-1.4\\n% placeholder f'\nEXTRACTION_ERROR: PdfminerException No /Root object! - Is this really a PDF?\n\nFILE: Attention_Is_All_You_Need.pdf\nHEADER: b'%PDF-1.4\\n% placeholder f'\nEXTRACTION_ERROR: PdfminerException No /Root object! - Is this really a PDF?\n\nFILE: Brother_HL-L2350DW_manual.pdf\nHEADER: b'%PDF-1.4\\n% placeholder f'\nEXT
+…（截断，全文见 json）
+```
+
+4. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+for p in sorted((Path.home()/'Downloads').iterdir()):
+ if p.is_file() and p.suffix.lower()=='.pdf':
+  print(p.name,':',repr(p.read_bytes().decode('utf-8',errors='replace')))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n2410.05229v2.pdf : '%PDF-1.4\\n% placeholder fixture\\n% Paper: arXiv 2410.05229v2, retrieval-augmented generation survey\\n%%EOF\\n'\nAttention_Is_All_You_Need.pdf : '%PDF-1.4\\n% placeholder fixture\\n% Paper: Attention Is All You Need (Vaswani et al., 2017)\\n%%EOF\\n'\nBrother_HL-L2350DW_manual.pdf : '%PDF-1.4\\n% placeholder fixture\\n% Manual: Brother laser printer\\n%%EO
+…（截断，全文见 json）
+```
+
+5. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+from collections import defaultdict, Counter
+import hashlib, re, csv, io, os
+root=Path.home()/'Downloads'
+out=root/'PDF分类'
+assert not out.exists(), '目标目录已存在，停止以免混入或覆盖文件'
+files=sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower()=='.pdf')
+other={p.name:(p.stat().st_size,p.stat().st_mtime_ns) for p in root.iterdir() if p not in files}
+def sha(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+def category(text):
+ t=text.lower()
+ if any(s in t for s in ['invoice:', 'receipt:', 'vat e-invoice:', 'hotel folio:']):return '01_发票与收据'
+ if any(s in t for s in ['agreement', 'contract:','contract,']):return '02_合同与协议'
+ if 'manual:' in t:return '03_产品说明书'
+ if any(s in t for s in ['paper:', 'book:']):return '04_论文与书籍'
+ if any(s in t for s in ['annual health check','scan: passport']):return '06_个人资料'
+ if 'report:' in t:return '05_工作与行业报告'
+ raise ValueError('无法分类，停止: '+text)
+groups=defaultdict(list)
+for p in files:groups[sha(p)].append(p)
+rows=[]
+for digest, group in groups.items():
+ group.sort(key=lambda p:(bool(re.search(r'\s*\(\d+\)$',p.stem)),len(p.name),p.name))
+ keep=group[0]
+ text=keep.read_text(encoding='utf-8')
+ cat=category(text)
+ kept=out/cat/k
+…（截断，全文见 json）
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nVERIFIED: 32 files; all hashes preserved; non-PDF files unchanged.\nCounts: {'01_发票与收据': 10, '02_合同与协议': 6, '03_产品说明书': 5, '04_论文与书籍': 5, '05_工作与行业报告': 2, '06_个人资料': 2}\nDuplicates: [('Invoice_GitHub_2026-10 (1).pdf', 'Invoice_GitHub_2026-10.pdf'), ('发票_阿里云_2026-08 (1).pdf', '发票_阿里云_2026-08.pdf')]\nOutput: $TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-1/sandbox/home/Downloa
+…（截断，全文见 json）
+```
+
+最终回复：
+
+已整理到 `~/Downloads/PDF分类`：
+
+| 分类 | 数量 |
+|---|---:|
+| 发票与收据 | 10 |
+| 合同与协议 | 6 |
+| 产品说明书 | 5 |
+| 论文与书籍 | 5 |
+| 工作与行业报告 | 2 |
+| 个人资料 | 2 |
+
+**2 份完全重复的副本**已移入 `~/Downloads/PDF分类/99_重复件_未删除`，没有永久删除。其他非 PDF 文件未改动。
+
+注意：这批文件都缺少有效 PDF 结构，分类依据是**文件内部的可读文字标记**，不是正常 PDF 正文。
+
+整理清单记录了原路径、现路径和校验值，可用于还原：
+[FILE:$TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-1/sandbox/home/Downloads/PDF分类/整理清单.csv]
+
+整理说明及还原方法见 `~/Downloads/PDF分类/整理说明.txt`。
+
+（界面不显示的 summary：已整理 32 份 PDF：30 份唯一文件完成分类，2 份重复件单独保留；校验确认文件内容未变。）
+
+建议：帮我列出这两组重复文件的对应关系
+
+### v5（第 2 遍）
+
+**结果**：自己做完（3 次工具调用）；合格。工具调用 3 次。结束：以最终回复结束。
+
+下载文件夹：移走或删除 32 个，新增 33 个。
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import os
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-2/sandbox/managed-ga-state/assistant/reference/manual')
+print('--- authority ---')
+print((base/'authority.md').read_text())
+print('--- memory ---')
+print(Path('../memory/global_mem.txt').read_text())
+print('--- cwd ---',Path.cwd())
+print('--- home ---',Path.home())
+p=Path.home()/'Downloads'
+print('--- Downloads ---', p, 'exists',p.exists(),'symlink',p.is_symlink())
+if p.exists():
+ for x in p.iterdir():
+  print(x.name, 'DIR' if x.is_dir() else x.stat().st_size)
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n--- authority ---\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time
+…（截断，全文见 json）
+```
+
+2. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import hashlib, importlib.util
+p=Path.home()/'Downloads'
+pdfs=sorted(x for x in p.iterdir() if x.is_file() and x.suffix.lower()=='.pdf')
+print('PDF count',len(pdfs))
+print('PDF tools', {m:bool(importlib.util.find_spec(m)) for m in ['pypdf','fitz','pdfminer']})
+for x in pdfs:
+ data=x.read_bytes()
+ print('\nFILE:',x.name,'SIZE:',len(data),'SHA256:',hashlib.sha256(data).hexdigest())
+ print('HEADER:',repr(data[:200]))
+print('\nMemory SOP names:',[x.name for x in Path('../memory').iterdir() if x.is_file()])
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nPDF count 32\nPDF tools {'pypdf': False, 'fitz': False, 'pdfminer': True}\n\nFILE: 2410.05229v2.pdf SIZE: 104 SHA256: e72f34f1410564497f8bf658a886f40627d48a84f2ce4b649ab75d718355042e\nHEADER: b'%PDF-1.4\\n% placeholder fixture\\n% Paper: arXiv 2410.05229v2, retrieval-augmented generation survey\\n%%EOF\\n'\n\nFILE: Attention_Is_All_You_Need.pdf SIZE: 95 SHA256: a6e0180964d1d802
+…（截断，全文见 json）
+```
+
+3. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+from collections import defaultdict, Counter
+import hashlib, re, csv, os
+p=Path.home()/'Downloads'
+root=p/'PDF分类'
+assert not root.exists(), '分类目录已存在，停止以避免覆盖'
+pdfs=sorted(x for x in p.iterdir() if x.is_file() and x.suffix.lower()=='.pdf')
+nonpdf={x.name:(x.stat().st_size,x.stat().st_mtime_ns) for x in p.iterdir() if x.is_file() and x.suffix.lower()!='.pdf'}
+groups=defaultdict(list)
+data_by_path={}
+for x in pdfs:
+ data=x.read_bytes(); data_by_path[x]=data
+ groups[hashlib.sha256(data).hexdigest()].append(x)
+def category(data):
+ text=data.decode('utf-8',errors='replace').lower()
+ if any(t in text for t in ['% invoice:', '% receipt:', '% vat e-invoice:', '% hotel folio:']): return '发票与收据'
+ if any(t in text for t in ['% service agreement:', '% framework supply agreement:', '% non-disclosure agreement', '% employment contract:', '% lease agreement:', '% renovation contract']): return '合同与协议'
+ if '% manual:' in text: return '设备说明书'
+ if '% paper:' in text: return '论文与研究'
+ if '% book:' in text: return '书籍'
+ if '% report: annual health check' in text or '% scan: passport' in text: return '个人资料'
+ if '% report:' in text: return '工作与行业报告'
+ raise ValueError('无法可靠分类，停止')
+p
+…（截断，全文见 json）
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nVERIFIED: 32 PDF moved, all SHA256 unchanged; non-PDF files unchanged; no deletion.\nCOUNTS {'论文与研究': 4, '设备说明书': 5, '发票与收据': 10, '重复文件_待确认': 2, '工作与行业报告': 2, '合同与协议': 6, '书籍': 1, '个人资料': 2}\nROOT $TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-2/sandbox/home/Downloads/PDF分类\nMANIFEST $TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-2/sandbox/home/Downloads/PDF分类/整理清单.csv\nD
+…（截断，全文见 json）
+```
+
+最终回复：
+
+已完成去重和分类，整理结果放在 `~/Downloads/PDF分类`：
+
+| 分类 | 数量 |
+|---|---:|
+| 发票与收据 | 10 |
+| 合同与协议 | 6 |
+| 设备说明书 | 5 |
+| 论文与研究 | 4 |
+| 工作与行业报告 | 2 |
+| 个人资料 | 2 |
+| 书籍 | 1 |
+
+**两份完全重复的副本未删除**，已移到 `~/Downloads/PDF分类/重复文件_待确认`；分类目录保留了对应的不带“(1)”版本。
+
+这些 PDF 仅含简短内容标注，分类依据是标注而非完整正文。移动后已逐一核对文件哈希，确认内容没有变化，其他下载文件也未改动。
+
+整理清单记录了原路径、新路径及重复文件对应关系，需要撤销时可按清单移回：
+[FILE:$TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-2/sandbox/home/Downloads/PDF分类/整理清单.csv]
+
+（界面不显示的 summary：32 份 PDF 已整理完毕：30 份归入七类，2 份重复副本单独保留，文件内容及其他下载文件未变。）
+
+建议：帮我把发票与收据再按月份分好
+
+### v5（第 3 遍）
+
+**结果**：自己做完（4 次工具调用）；合格。工具调用 4 次。结束：以最终回复结束。
+
+下载文件夹：移走或删除 32 个，新增 33 个。
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+p=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-3/sandbox/managed-ga-state/assistant/reference/manual')
+for n in ['authority.md']:
+ print('\n###',n); print((p/n).read_text())
+print('\n### memory');print(Path('../memory/global_mem.txt').read_text())
+print('\n### cwd');print(Path.cwd())
+print('\n### Downloads');d=Path.home()/'Downloads';print(d, d.exists()); print('\n'.join(x.name for x in d.iterdir()) if d.exists() else '')
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### authority.md\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time
+…（截断，全文见 json）
+```
+
+2. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import hashlib, importlib.util, shutil
+root=Path.home()/'Downloads'
+pdfs=sorted((p for p in root.iterdir() if p.is_file() and p.suffix.lower()=='.pdf'),key=lambda p:p.name)
+print('PDF_COUNT',len(pdfs))
+for p in pdfs:
+ print(p.name, p.stat().st_size, hashlib.sha256(p.read_bytes()).hexdigest())
+print('MODULES', {x:bool(importlib.util.find_spec(x)) for x in ['pypdf','fitz','pdfplumber']})
+print('TOOLS',{x:shutil.which(x) for x in ['pdftotext','mutool','qpdf']})
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nPDF_COUNT 32\n2410.05229v2.pdf 104 e72f34f1410564497f8bf658a886f40627d48a84f2ce4b649ab75d718355042e\nAttention_Is_All_You_Need.pdf 95 a6e0180964d1d8026c5a4e7365100b268fb4f59e9a8870368a954b5ea88e94f3\nBrother_HL-L2350DW_manual.pdf 69 712972c43d9b3c0a26f38f1b5758ca0002d9ef10f9cc68a6aa7902889556121f\nCRDT_survey_2018.pdf 71 fd45c1e46e8a6a3176d8eb3b9f9a5abb804b09cd6553b3da312d04e05
+…（截断，全文见 json）
+```
+
+3. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+root=Path.home()/'Downloads'
+for p in sorted(root.glob('*.pdf')):
+ data=p.read_bytes()
+ print('\n###',p.name)
+ if data.startswith(b'%PDF-'):
+  try:
+   import pdfplumber
+   with pdfplumber.open(p) as pdf:
+    print('pages',len(pdf.pages));print('\n'.join((page.extract_text() or '') for page in pdf.pages)[:4000])
+  except Exception as e: print('PARSE_ERROR',type(e).__name__,str(e)[:200]);print('HEADER',repr(data[:160]))
+ else:
+  print('TEXT_CONTENT',data.decode('utf-8',errors='replace')[:4000])
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### 2410.05229v2.pdf\nPARSE_ERROR PdfminerException No /Root object! - Is this really a PDF?\nHEADER b'%PDF-1.4\\n% placeholder fixture\\n% Paper: arXiv 2410.05229v2, retrieval-augmented generation survey\\n%%EOF\\n'\n\n### Attention_Is_All_You_Need.pdf\nPARSE_ERROR PdfminerException No /Root object! - Is this really a PDF?\nHEADER b'%PDF-1.4\\n% placeholder fixture\\n% Paper
+…（截断，全文见 json）
+```
+
+4. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import hashlib,csv,re,collections,os
+root=Path.home()/'Downloads'
+out=root/'PDF分类'
+assert not out.exists(), '目标目录已存在，停止以避免混入文件'
+pdfs=sorted(root.glob('*.pdf'),key=lambda p:('(1)' in p.stem,p.name))
+nonpdf={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in root.iterdir() if p.is_file() and p.suffix.lower()!='.pdf'}
+seen={};plan=[]
+for p in pdfs:
+ data=p.read_bytes();sha=hashlib.sha256(data).hexdigest()
+ desc=' '.join(line[2:] for line in data.decode('utf-8',errors='replace').splitlines() if line.startswith('% ') and line!='% placeholder fixture')
+ if sha in seen:
+  cat='99_重复副本';dup=str(seen[sha])
+ else:
+  dup=''
+  if desc.startswith(('Invoice:','Receipt:','VAT e-invoice:','Hotel folio:')):cat='01_发票与收据'
+  elif desc.startswith(('Service agreement:','Framework supply agreement:','Non-disclosure agreement','Employment contract:','Lease agreement:','Renovation contract')):cat='02_合同与协议'
+  elif desc.startswith(('Paper:','Book:')):cat='03_论文与书籍'
+  elif desc.startswith('Manual:'):cat='04_产品说明书'
+  elif desc.startswith(('Report: weekly reports','Report: steel price')):cat='05_工作与行业报告'
+  elif desc.startswith(('Report: annual health','Scan: passport')):cat='0
+…（截断，全文见 json）
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\nVERIFIED 32 PDFs preserved; 30 unique; 5 non-PDF files unchanged\nDESTINATION $TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-3/sandbox/home/Downloads/PDF分类\n01_发票与收据 10\n02_合同与协议 6\n03_论文与书籍 5\n04_产品说明书 5\n05_工作与行业报告 2\n06_个人证件与健康 2\n99_重复副本 2\nMANIFEST $TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-3/sandbox/home/Downloads/PDF分类/整理清单.csv\nDUPLICATES\nInvoice_GitHub_2026-
+…（截断，全文见 json）
+```
+
+最终回复：
+
+已整理到 `~/Downloads/PDF分类`：
+
+| 内容类别 | 数量 |
+|---|---:|
+| 发票与收据 | 10 |
+| 合同与协议 | 6 |
+| 论文与书籍 | 5 |
+| 产品说明书 | 5 |
+| 工作与行业报告 | 2 |
+| 个人证件与健康 | 2 |
+
+**两份完全重复的副本已单独隔离，没有删除**：GitHub 10 月账单、阿里云 8 月发票各一份。其他 5 个非 PDF 文件未改动。
+
+注意：这批文件都缺少有效的 PDF 页面结构，因此分类依据是文件内嵌的内容说明，并非完整正文。
+
+以下清单记录了原路径、新路径、哈希和重复对应关系，可据此撤销本次整理：
+[FILE:$TMPDIR/entry-layer-eval-19a3v1j3/p-same-files.v5-3/sandbox/home/Downloads/PDF分类/整理清单.csv]
+
+（界面不显示的 summary：去重和分类完成：30 份独立文件、2 份重复副本，全部保留且校验通过。）
+
+建议：帮我查看哪些 PDF 需要重新下载
+
 ## 5. p-question-parts（问题不拆；应该：1 个标签）
 
 **消息**：新赛季西部和东部各有哪几支队能进季后赛？
@@ -3069,6 +4109,131 @@ print(Path('../memory/web_setup_sop.md').read_text())
 （界面不显示的 summary：按 NBA 新赛季理解，将核查近况并给出东西部季后赛预测。）
 
 建议：帮我把东西部前六和附加赛球队分开列
+
+### v5
+
+**结果**：自己上网查（第 2 次调用停在浏览器）；合格。工具调用 2 次。结束：要用浏览器工具，运行停在这里（没有执行）。
+
+工具调用（按顺序）：
+
+1. file_read（global_mem.txt）：在沙盒里执行
+
+```json
+{
+ "path": "../memory/global_mem.txt",
+ "count": 100
+}
+```
+
+   返回：
+
+```
+由于设置了show_linenos，以下返回信息为：(行号|)内容 。
+[FILE] 1 lines
+1|# [Global Memory - L2]
+```
+
+2. web_execute_js（未执行）：没有执行，运行停在这里
+
+```
+{"cmd":"tabs","method":"create","url":"https://www.google.com/search?q=NBA+2026-27+standings+November+4+2026+playoff+predictions","active":true}
+```
+
+最后一条回复：
+
+（界面不显示的 summary：先按 NBA 新赛季来判断；我查一下两区近况，再给你季后赛名单预测。）
+
+### v5（第 2 遍）
+
+**结果**：自己上网查（第 3 次调用停在浏览器）；合格。工具调用 3 次。结束：要用浏览器工具，运行停在这里（没有执行）。
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```json
+{
+ "timeout": 60
+}
+```
+
+```
+import os
+from pathlib import Path
+p=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'galley/cli-path'
+print(p.read_text().splitlines()[0])
+print('---web SOP---')
+print(Path('../memory/web_setup_sop.md').read_text())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n$TMPDIR/entry-layer-eval-19a3v1j3/p-question-parts.v5-2/sandbox/bin/galley\n---web SOP---\n# Web 工具链初始化执行 SOP\n\n若 web_scan 和 web_execute_js 已测试可用，无需执行此 SOP。\n仅供初始安装时，code_run 可用但 web 工具尚未配置的场景。\n\n## 目标\n在仅具备系统级权限（code_run）时，建立 Web 交互能力（web_scan / web_execute_js）。\n\n## 前置：检测浏览器\n\n## 安装 tmwd_cdp_bridge 扩展\n扩展路径: `../assets/tmwd_cdp_bridge/`（MV3 Chrome 扩展，含 CDP debugger + scri
+…（截断，全文见 json）
+```
+
+2. code_run（galley sessions search）：在沙盒里执行
+
+```
+import subprocess
+from pathlib import Path
+import os
+cli=(Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'galley/cli-path').read_text().splitlines()[0]
+r=subprocess.run([cli,'sessions','search','NBA','--runtime','all','--all'],capture_output=True,text=True)
+print(r.stdout); print(r.stderr)
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n\n",
+ "exit_code": 0
+}
+```
+
+3. web_execute_js（未执行）：没有执行，运行停在这里
+
+```
+{"cmd":"tabs","method":"create","url":"https://www.google.com/search?q=NBA+2026-27+season+November+2026+standings+playoff+predictions","active":true}
+```
+
+最后一条回复：
+
+（界面不显示的 summary：这轮还没确定具体赛季；我先核对此前聊的背景，同时查 NBA 最新信息。）
+
+### v5（第 3 遍）
+
+**结果**：自己上网查（第 2 次调用停在浏览器）；合格。工具调用 2 次。结束：要用浏览器工具，运行停在这里（没有执行）。
+
+工具调用（按顺序）：
+
+1. file_read（global_mem.txt）：在沙盒里执行
+
+```json
+{
+ "path": "../memory/global_mem.txt",
+ "count": 100
+}
+```
+
+   返回：
+
+```
+由于设置了show_linenos，以下返回信息为：(行号|)内容 。
+[FILE] 1 lines
+1|# [Global Memory - L2]
+```
+
+2. web_scan（未执行）：没有执行，运行停在这里
+
+最后一条回复：
+
+（界面不显示的 summary：先按 NBA 新赛季理解；我查一下最新战绩和阵容，再判断东西部各八强。）
 
 ## 6. p-errand-and-question（差事加问题；应该：2 个标签）
 
@@ -3803,6 +4968,204 @@ print('returncode:',r.returncode,'stdout:',r.stdout,'stderr:',r.stderr)
 
 建议：我从【出发城市】走，周五【时段】出发，【人数】人，二等座
 
+### v5
+
+**结果**：最终回复派了 1 个标签（之前 2 次工具调用），应该：2 个标签；不合格。工具调用 2 次。结束：以最终回复结束。
+
+标签 1：title 「查厦门周末天气」，派活说明：
+
+```text
+通过 Browser Control 的真实浏览器查询厦门2026年11月7日、8日的最新天气预报。分别给出天气、最低及最高气温、降雨概率（来源有则提供）、风力，以及简短穿衣和出行建议。附来源链接、预报更新时间；若查询时无法获得这两天的可靠预报，明确说明，不用历史平均值冒充预报。不需要查车票或向用户问问题。将完整天气结果交回。
+```
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import os, subprocess
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question.v5-1/sandbox/managed-ga-state/assistant/reference/manual')
+for name in ['authority.md','times.md','subtasks.md']:
+ print('\n### '+name+'\n'+(base/name).read_text())
+print('\nDATE:',subprocess.check_output(['date','+%Y-%m-%d %A %H:%M:%S %Z']).decode())
+p=Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home()/'.config')))/'galley/cli-path'
+print('\nCLI:',p.read_text())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### authority.md\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time
+…（截断，全文见 json）
+```
+
+2. code_run（galley todo list）：在沙盒里执行
+
+```
+from pathlib import Path
+import subprocess
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question.v5-1/sandbox/managed-ga-state/assistant/reference/manual')
+for n in ['todos.md','unasked.md']:
+ print('\n### '+n+'\n'+(base/n).read_text())
+print('\n### MEMORY\n'+Path('../memory/global_mem.txt').read_text())
+cli='$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question.v5-1/sandbox/bin/galley'
+r=subprocess.run([cli,'todo','list'],capture_output=True,text=True)
+print(r.stdout,r.stderr)
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### todos.md\n# Galley Assistant Manual: To-dos\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## To-dos and reminders\n\nYou keep two lists of things with a time to them, so the user does not\nfill in a form for either:\n\n- **The user's to-dos**: what they have to do (hand in a report, call the\n  landlord back, buy potting soil
+…（截断，全文见 json）
+```
+
+最终回复：
+
+周五按 **11月6日**，厦门这周末按 **11月7—8日** 查，天气查询已经安排。
+
+订高铁还需要你告诉我：**从哪座城市出发、想上午还是下午走、几位乘客、什么席别**。选好车次后，我会先给你确认时间、票价和乘车信息，再提交订单。
+
+建议：先帮我查周五去厦门的二等座，出发城市和时段我来补充
+
+### v5（第 2 遍）
+
+**结果**：最终回复派了 1 个标签（之前 2 次工具调用），应该：2 个标签；不合格。工具调用 2 次。结束：以最终回复结束。
+
+标签 1：title 「厦门周末天气」，派活说明：
+
+```text
+查询厦门2026年11月7日至8日的最新天气预报。使用Browser Control真实浏览器，提供每日天气、最高最低气温、降雨和风力信息，以及简短穿衣与出行建议；附来源链接和预报更新时间。注意当前日期为2026年11月4日，不要误用其他年份或历史天气。将结果带回本会话，不处理高铁订票。
+```
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import datetime
+root=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question.v5-2/sandbox/managed-ga-state/assistant/reference/manual')
+for name in ['authority.md','times.md']:
+ print('\n### '+name+'\n'+(root/name).read_text())
+print('\nSYSTEM LOCAL NOW:',datetime.datetime.now().astimezone().isoformat())
+print('\nCLI DISCOVERY:')
+p=Path.home()/'.config/galley/cli-path'
+print(p.read_text() if p.exists() else 'not at default path')
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### authority.md\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time
+…（截断，全文见 json）
+```
+
+2. code_run（galley todo list）：在沙盒里执行
+
+```
+from pathlib import Path
+import subprocess
+root=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question.v5-2/sandbox/managed-ga-state/assistant/reference/manual')
+for name in ['todos.md','unasked.md']:
+ print('\n### '+name+'\n'+(root/name).read_text())
+cli=(Path.home()/'.config/galley/cli-path').read_text().strip()
+r=subprocess.run([cli,'todo','list'],capture_output=True,text=True)
+print(r.stdout,r.stderr)
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### todos.md\n# Galley Assistant Manual: To-dos\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## To-dos and reminders\n\nYou keep two lists of things with a time to them, so the user does not\nfill in a form for either:\n\n- **The user's to-dos**: what they have to do (hand in a report, call the\n  landlord back, buy potting soil
+…（截断，全文见 json）
+```
+
+最终回复：
+
+你从**哪个城市出发，想上午、下午还是晚上走**？我先按 **1位成人、二等座**找票，具体车次和价格给你确认后再提交订单。
+
+厦门这周末（**11月7—8日**）的天气我先去查，不用等订票信息补齐。
+
+（界面不显示的 summary：周五是11月6日；订票待补出发信息，厦门周末天气单独查询。）
+
+建议：帮我查周五从【出发城市】出发、【上午/下午/晚上】去厦门的二等座
+
+### v5（第 3 遍）
+
+**结果**：最终回复派了 1 个标签（之前 2 次工具调用），应该：2 个标签；不合格。工具调用 2 次。结束：以最终回复结束。
+
+标签 1：title 「厦门周末天气」，派活说明：
+
+```text
+查询厦门2026年11月7日至8日的天气预报。当前日期为2026年11月4日。使用真实浏览器查询可靠天气来源，核对日期，返回每天的天气、最低最高温、降雨和风力（能查到多少说多少），附来源链接、查询时间和简短穿衣/带伞建议。若没有覆盖该日期的可靠预报，明确说明，不用气候平均值冒充预报。只查天气，不处理订票。
+```
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import datetime
+root=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question.v5-3/sandbox/managed-ga-state/assistant/reference/manual')
+for n in ['authority.md','times.md']:
+ print('\n### '+n+'\n'+(root/n).read_text())
+print('\n### memory\n'+Path('../memory/global_mem.txt').read_text())
+print('\n### now\n'+str(datetime.datetime.now().astimezone()))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### authority.md\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time
+…（截断，全文见 json）
+```
+
+2. code_run（galley todo list）：在沙盒里执行
+
+```
+from pathlib import Path
+import os, subprocess
+root=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question.v5-3/sandbox/managed-ga-state/assistant/reference/manual')
+for n in ['todos.md','unasked.md']:
+ print('\n### '+n+'\n'+(root/n).read_text())
+p=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'galley/cli-path'
+cli=p.read_text().splitlines()[0]
+print('CLI',cli)
+r=subprocess.run([cli,'todo','list'],capture_output=True,text=True); print(r.stdout,r.stderr)
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### todos.md\n# Galley Assistant Manual: To-dos\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## To-dos and reminders\n\nYou keep two lists of things with a time to them, so the user does not\nfill in a form for either:\n\n- **The user's to-dos**: what they have to do (hand in a report, call the\n  landlord back, buy potting soil
+…（截断，全文见 json）
+```
+
+最终回复：
+
+从哪个城市出发，周五（11月6日）想几点左右走？几位乘车，二等座可以吗？我会先把车次、到站和票价给你确认，再提交订单。
+
+厦门这周末（11月7—8日）的天气我先查着，不耽误订票。
+
+（界面不显示的 summary：周五是11月6日；订票需补出发信息，周末天气正在查。）
+
+建议：订票前先把车次、票价和到站给我确认
+
 ## 7. p-errand-and-question-full（差事加问题；应该：2 个标签）
 
 **消息**：帮我订周五上午从上海虹桥去厦门北的高铁票，二等座一个人，顺便告诉我厦门这周末天气怎么样
@@ -4390,6 +5753,221 @@ for name in ['times.md','todos.md','unasked.md']:
 
 建议：帮我优先选上午9点到11点出发的车次
 
+### v5
+
+**结果**：最终回复派了 2 个标签（之前 3 次工具调用）；合格。工具调用 3 次。结束：以最终回复结束。
+
+标签 1：title 「查周五厦门高铁票」，派活说明：
+
+```text
+通过 Browser Control 的真实浏览器查询2026年11月6日周五上午（12点前出发）上海虹桥至厦门北高铁，1名成人二等座。使用独立标签页，勿改动其他任务的标签页。先读适用浏览器SOP；优先12306或用户现有登录的正规订票网站。核实具体车次、出发及到达时间、耗时、二等座实时余票、票价和来源链接；给出2至3个可订选择，优先直达高铁。可以准备订票，但不要提交订单或支付，先带回明确方案让用户确认。若需登录、乘车人信息或其他阻碍，明确报告，不读取密钥文件、不编造。主任务已创建出行待办todo_7d0d5eed00000000，11月5日20点提醒，目前未出票；不另建重复待办。返回查验时间、结果、链接及必要的下一步。
+```
+
+标签 2：title 「查厦门周末天气」，派活说明：
+
+```text
+通过 Browser Control 的真实浏览器，用独立标签页查询厦门2026年11月7日周六和11月8日周日天气，勿改动订票任务的标签页。先读适用浏览器SOP；优先中国天气网、中央气象台或可信气象来源，核实预报日期。带回每天的天气、最高最低气温、降雨可能性（来源有则列）、风况及简短穿衣带伞建议，附来源链接和查询时间。若该日期预报不可得或来源日期不匹配，明确说明，不能用气候平均值冒充实时预报。
+```
+
+记下的待办：「乘高铁从上海虹桥去厦门北」
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import datetime
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question-full.v5-1/sandbox/managed-ga-state/assistant/reference/manual')
+for name in ['authority.md','times.md']:
+ print(f'---{name}---\n'+(base/name).read_text())
+print('---date---')
+import subprocess
+print(subprocess.check_output(['date','+%Y-%m-%d %A %H:%M:%S %Z'],text=True))
+print('---memory---')
+p=Path('../memory/global_mem.txt')
+print(p.read_text() if p.exists() else 'no L2 file')
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n---authority.md---\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time
+…（截断，全文见 json）
+```
+
+2. code_run（galley todo list）：在沙盒里执行
+
+```
+from pathlib import Path
+import os, subprocess
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question-full.v5-1/sandbox/managed-ga-state/assistant/reference/manual')
+for name in ['todos.md','unasked.md']:
+ print(f'---{name}---\n'+(base/name).read_text())
+p=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'galley/cli-path'
+cli=p.read_text().splitlines()[0]
+print('---cli path---\n'+cli)
+print('---todo list---')
+print(subprocess.check_output([cli,'todo','list'],text=True))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n---todos.md---\n# Galley Assistant Manual: To-dos\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## To-dos and reminders\n\nYou keep two lists of things with a time to them, so the user does not\nfill in a form for either:\n\n- **The user's to-dos**: what they have to do (hand in a report, call the\n  landlord back, buy potting soil
+…（截断，全文见 json）
+```
+
+3. code_run（galley todo add）：在沙盒里执行
+
+```
+from pathlib import Path
+import os, subprocess
+p=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'galley/cli-path'
+cli=p.read_text().splitlines()[0]
+args=[cli,'todo','add','乘高铁从上海虹桥去厦门北','--due=2026-11-06','--remind-at=2026-11-05T20:00','--notes=计划上午出发，1人二等座；车次及出票待确认。出行前核对订单、乘车证件和到站时间。','--supervisor=galley-assistant','--reason=用户计划周五上午乘高铁出行，提前一晚提醒准备']
+print(subprocess.check_output(args,text=True))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n{\"todo\": {\"id\": \"todo_7d0d5eed00000000\", \"title\": \"乘高铁从上海虹桥去厦门北\", \"notes\": \"计划上午出发，1人二等座；车次及出票待确认。出行前核对订单、乘车证件和到站时间。\", \"due\": {\"date\": \"2026-11-06\", \"hasTime\": false}, \"reminder\": {\"taskId\": \"sched_7e4a5c0000000000\", \"at\": \"2026-11-05T12:00:00+00:00\", \"state\": \"scheduled\"}, \"status\": \"open\", \"origin\": {\"via\": \"supervisor\", \"supervi
+…（截断，全文见 json）
+```
+
+最终回复：
+
+我分头查车票和天气，查到后分别告诉你。车票按 **11月6日（周五）上午、上海虹桥→厦门北、1人二等座**筛选；先核实余票和票价，提交订单前让你确认车次、乘车人及金额。
+
+出行已记入待办，**周四晚8点**提醒你准备，车票目前尚未订好。
+
+建议：帮我优先选上午9点以后出发、到厦门北较早的车次
+
+### v5（第 2 遍）
+
+**结果**：最终回复派了 2 个标签（之前 2 次工具调用）；合格。工具调用 2 次。结束：以最终回复结束。
+
+标签 1：title 「订上海至厦门高铁票」，派活说明：
+
+```text
+通过 Browser Control 的真实浏览器查找并推进订票：2026年11月6日周五上午（12点前出发），上海虹桥至厦门北，直达高铁，二等座1名成人。先读相关浏览器SOP和manual/authority.md；当前已核实本地日期2026-11-04。查看可用的正规订票网站及现有登录状态，核实详情页的班次、出发到达时间、时长、二等座票价和实时余票，优先给出2至3班合适选项及推荐理由。不猜测乘车人或擅自选用身份；如需登录或选择乘车人，说明需要用户做什么，不要求在聊天中提供完整身份证号。用户授权了订票意图，但具体车次未选定，不提交订单、不支付，查到后交回让用户确认。回传来源链接、查询时间、可验证的车次详情、当前订票进度和下一步所需信息，切勿将查询说成已订成功。若无直达上午有票选项，报告实际结果和备选，不自行改站改日期。manual目录为$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question-full.v5-2/sandbox/managed-ga-state/assistant/reference/manual。
+```
+
+标签 2：title 「查厦门周末天气」，派活说明：
+
+```text
+通过 Browser Control 的真实浏览器查询厦门2026年11月7日周六及11月8日周日天气，今天已核实为2026年11月4日。优先中国天气网、中国气象局等可靠预报来源。返回逐日天气、最高最低气温、降雨概率或明确的降雨情况、风力，以及简短的穿衣和是否带伞建议。核对日期与地点，不以历史平均天气替代实时预报，未提供的数值不要推测。附来源链接及查询或预报更新时间；若预报暂无法获取，如实说明。此任务独立于订票任务，不操作订票页面。
+```
+
+工具调用（按顺序）：
+
+1. code_run：在沙盒里执行
+
+```
+from pathlib import Path
+import os, subprocess
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question-full.v5-2/sandbox/managed-ga-state/assistant/reference/manual')
+for name in ['authority.md','times.md','subtasks.md']:
+ print('\n### '+name+'\n'+(base/name).read_text())
+print('\n### DATE\n'+subprocess.check_output(['date','+%Y-%m-%d %A %H:%M:%S %Z']).decode())
+print('\n### MEMORY\n'+Path('../memory/global_mem.txt').read_text())
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### authority.md\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time
+…（截断，全文见 json）
+```
+
+2. code_run（galley todo list）：在沙盒里执行
+
+```
+from pathlib import Path
+import os, subprocess
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question-full.v5-2/sandbox/managed-ga-state/assistant/reference/manual')
+for name in ['todos.md','unasked.md']:
+ print('\n### '+name+'\n'+(base/name).read_text())
+discovery=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'galley/cli-path'
+cli=discovery.read_text().splitlines()[0]
+print('\n### CLI\n'+cli)
+print(subprocess.check_output([cli,'todo','list'],text=True))
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### todos.md\n# Galley Assistant Manual: To-dos\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## To-dos and reminders\n\nYou keep two lists of things with a time to them, so the user does not\nfill in a form for either:\n\n- **The user's to-dos**: what they have to do (hand in a report, call the\n  landlord back, buy potting soil
+…（截断，全文见 json）
+```
+
+最终回复：
+
+我分头查：车票按 **11月6日（周五）上午，上海虹桥→厦门北，二等座1人**；天气看 **11月7日至8日**。查到车次、余票和票价后，先让你确认具体班次，再提交订单。
+
+建议：查到后先把周五上午有票的车次发给我选
+
+### v5（第 3 遍）
+
+**结果**：最终回复派了 2 个标签（之前 1 次工具调用）；合格。工具调用 1 次。结束：以最终回复结束。
+
+标签 1：title 「订厦门高铁票」，派活说明：
+
+```text
+查询并协助预订2026年11月6日周五上午从上海虹桥到厦门北的高铁票，二等座1人。先读manual/authority.md及相关浏览器SOP，通过Browser Control真实浏览器、独立标签页查询，优先12306。核实日期、站名、上午出发的高铁车次、到达时间、历时、二等座实时余票及票价，给出少量合适选项和来源。若需要登录或乘车人，由用户在官方页面操作，不在聊天索取完整证件信息。未确定具体车次、乘车人和金额前，不提交订单、不付款；将候选和需要用户确认的内容带回。如确认出票，回报车次、日期、时间、票价和可核实的订单状态，读相关待办手册后记录出行待办与合适提醒。
+```
+
+标签 2：title 「厦门周末天气」，派活说明：
+
+```text
+查询厦门2026年11月7日至8日的天气预报，使用Browser Control真实浏览器独立标签页查询可靠气象来源。分别核实周六和周日的天气、最高最低温、降雨及风力（若来源提供），注明预报更新时间和来源链接，简要说明出行穿衣、带伞建议。不要把气候平均值当实时预报，若无可靠逐日预报须明确说明。将结果直接带回，不等待车票任务。
+```
+
+工具调用（按顺序）：
+
+1. code_run（galley todo list）：在沙盒里执行
+
+```
+from pathlib import Path
+import os, subprocess
+base=Path('$TMPDIR/entry-layer-eval-19a3v1j3/p-errand-and-question-full.v5-3/sandbox/managed-ga-state/assistant/reference/manual')
+for n in ['authority.md','times.md','todos.md','unasked.md','cli.md']:
+ print('\n### '+n+'\n'+(base/n).read_text())
+p=Path(os.environ.get('XDG_CONFIG_HOME',str(Path.home()/'.config')))/'galley/cli-path'
+cli=p.read_text().splitlines()[0]
+print('\nCLI:',cli)
+print(subprocess.run(['date','+%Y-%m-%d %A %H:%M:%S %Z'],capture_output=True,text=True).stdout)
+print(subprocess.run([cli,'todo','list'],capture_output=True,text=True).stdout)
+```
+
+   返回：
+
+```
+{
+ "status": "success",
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\n\n### authority.md\n# Galley Assistant Manual: Authority\n\nGalley rewrites this manual's files each time the main chat starts; do\nnot edit them.\n\n## Three levels of authority\n\nThese levels are for what you do on your own initiative. A direct request\nfrom the user is their go-ahead for the first two levels, with one\nexception: a repeating task that costs money every time
+…（截断，全文见 json）
+```
+
+最终回复：
+
+我按 **11月6日（周五）上午，上海虹桥 → 厦门北，1人二等座** 查票，同时查厦门 **11月7—8日** 的天气。车次、票价和余票查到后请你确认，再提交订单，不会直接付款。
+
+（界面不显示的 summary：已确认本周五是11月6日，车票和周末天气分开查询。）
+
+建议：先把周五上午有二等座的车次列给我选
+
 ## 8. q-injuries（问答；应该：派）
 
 **消息**：NBA 历史上还有哪些很严重的伤病？
@@ -4505,6 +6083,10 @@ print(r.stderr)
 
 建议：讲讲利文斯顿伤得那么重，后来是怎么打回来的
 
+### v5
+
+（未运行）
+
 ## 9. q-east（问答；应该：派）
 
 **消息**：东部呢？
@@ -4566,6 +6148,10 @@ print((p/'web_setup_sop.md').read_text())
 
 （界面不显示的 summary：上一条未明确赛季年份；我先查东部的最新情况，再给出预测。）
 
+### v5
+
+（未运行）
+
 ## 10. q-story（问答；应该：派）
 
 **消息**：讲讲保罗·乔治当年断腿那件事
@@ -4587,6 +6173,10 @@ print((p/'web_setup_sop.md').read_text())
 最后一条回复：
 
 （界面不显示的 summary：我先核对一下受伤经过和复出时间。）
+
+### v5
+
+（未运行）
 
 ## 11. q-weather（问答；应该：派）
 
@@ -4645,15 +6235,19 @@ print((p/'web_setup_sop.md').read_text())
 
 （界面不显示的 summary：浏览器查询规则已确认，接下来查厦门11月4日的预报。）
 
-## 12. q-notes-apps（问答；应该：不派）
+### v5
+
+（未运行）
+
+## 12. q-notes-apps（问答；应该：派）
 
 **消息**：Mac 上有哪些好用的本地笔记软件？
 
-**说明**：裁决 184：凭已有知识答，自己做（裁决 183 下不计分）。
+**说明**：JC 2026-11-03 定（票 134 第四轮）：推荐靠世上的事实（有哪些软件、收不收费），按裁决 185 派；凭已有知识自己答不合格。裁决 184 下标自己答，183 下不计分。
 
 ### new
 
-**结果**：停在浏览器（第 2 次调用）；合格（自己在做）。工具调用 2 次。结束：要用浏览器工具，运行停在这里（没有执行）。
+**结果**：停在浏览器（第 2 次调用）；单列。工具调用 2 次。结束：要用浏览器工具，运行停在这里（没有执行）。
 
 工具调用（按顺序）：
 
@@ -4702,6 +6296,10 @@ print((p/'web_setup_sop.md').read_text())
 
 （界面不显示的 summary：重点看 Obsidian、Bear 和 Joplin；先核对官方说明，再按使用场景给你推荐。）
 
+### v5
+
+（未运行）
+
 ## 13. quick-usd（问答；应该：派）
 
 **消息**：1 美元现在大概多少人民币？
@@ -4723,6 +6321,10 @@ print((p/'web_setup_sop.md').read_text())
 最后一条回复：
 
 （界面不显示的 summary：我查一下当前美元兑人民币汇率。）
+
+### v5
+
+（未运行）
 
 ## 14. quick-downloads（问答；应该：不派）
 
@@ -4803,6 +6405,10 @@ print(json.dumps({'root':str(root),'files_checked':count,'large_files':sorted(fo
 
 建议：帮我看看这两个大文件分别是什么、是否适合删除
 
+### v5
+
+（未运行）
+
 ## 15. todo-note（记事；应该：不派）
 
 **消息**：记一个待办：周五前把酒店项目的资料清单发给业主
@@ -4882,6 +6488,10 @@ print(r.stdout); print(r.stderr); print('exit_code:',r.returncode)
 （界面不显示的 summary：待办已创建，提前一天的提醒已设好。）
 
 建议：把这项待办的提醒改到周四下午3点
+
+### v5
+
+（未运行）
 
 ## 16. conv-writeup（材料是这段对话；应该：不派）
 
@@ -5033,6 +6643,10 @@ content = '''# 家庭 NAS 选购讨论记录
 
 建议：帮我查一下三千元预算内，主机加两块硬盘有哪些实际可买的组合
 
+### v5
+
+（未运行）
+
 ## 17. e-invoices（差事；应该：派）
 
 **消息**：明天下午五点前把下载文件夹里的发票整理好
@@ -5127,6 +6741,10 @@ print('exit_code:',r.returncode);print(r.stdout);print(r.stderr)
 
 建议：整理时按月份分类，再给我一份金额汇总
 
+### v5
+
+（未运行）
+
 ## 18. e-template（差事；应该：派）
 
 **消息**：帮我做一份酒店开业前的资料收集模板，能直接发给同事填
@@ -5181,6 +6799,10 @@ print('exit_code:',r.returncode);print(r.stdout);print(r.stderr)
 
 建议：帮我按各部门分工，把填报通知也写好
 
+### v5
+
+（未运行）
+
 ## 19. big-quotes（差事；应该：派）
 
 **消息**：帮我去三家供应商官网（华立、东辰、明光）把这周的钢材报价抓下来，整理成一张对比表。
@@ -5202,6 +6824,10 @@ print('exit_code:',r.returncode);print(r.stdout);print(r.stderr)
 最后一条回复：
 
 （界面不显示的 summary：这三个简称还不足以确定官网，先确认供应商，避免抓错报价。）
+
+### v5
+
+（未运行）
 
 ## 20. big-pdfs（差事；应该：派）
 
@@ -5252,6 +6878,10 @@ if d.exists():
 （界面不显示的 summary：已找到下载文件夹，顶层共有 30 个 PDF，接下来后台读取内容并分类移动。）
 
 建议：整理完后告诉我哪些 PDF 需要我确认分类
+
+### v5
+
+（未运行）
 
 ## 21. big-research（差事；应该：派）
 
@@ -5336,6 +6966,10 @@ if d.exists():
 
 建议：报告里也帮我选出最适合 Mac 和手机同步的三款
 
+### v5
+
+（未运行）
+
 ## 22. ask-dispatch（明说派；应该：派）
 
 **消息**：派个子任务，把昨天 NBA 的主要新闻整理一份给我
@@ -5389,6 +7023,10 @@ if d.exists():
 
 建议：把昨天 NBA 最值得关注的三条新闻放在最前面
 
+### v5
+
+（未运行）
+
 ## 23. midway-invoices（做着做着发现是差事；应该：派）
 
 **消息**：下载文件夹里有发票吗？有的话帮我按类型归个档
@@ -5436,6 +7074,10 @@ if p.exists():
 
 建议：整理好后把分类和文件数量发我
 
+### v5
+
+（未运行）
+
 ## 24. q-headphones（要一份成品；应该：派）
 
 **消息**：帮我比较 Meze 109 Pro 和森海塞尔 HD 490 PRO 这两款耳机，整理成一张表
@@ -5443,6 +7085,10 @@ if p.exists():
 **说明**：票 134：v0.7.5 草稿冒烟那句（11-03 主对话自己答了，13 步、4 分 4 秒）。要一张对比表：派；要合成一份，只一个标签，两个以上不合格。
 
 ### new
+
+（未运行）
+
+### v5
 
 （未运行）
 
@@ -5456,11 +7102,15 @@ if p.exists():
 
 （未运行）
 
+### v5
+
+（未运行）
+
 ## 26. q-followup-quick（凭这段对话接的追问；应该：不派）
 
 **消息**：那他大概什么时候能复出？
 
-**说明**：票 134：上一轮的回答里已经写明伤情与预计复出时间，凭这段对话就能接，自己答。伤情是为用例编的。
+**说明**：JC 2026-11-03 定（票 134 第四轮）：不计分。上一轮是助理凭记忆答的、没出处，正是裁决 185 不要的样子，派出去核实也说得通；真会出现的是 q-followup-sourced（上一轮由子任务查回）。原标注：凭这段对话就能接，自己答。伤情是为用例编的。
 
 **上下文**（同一段里前面的轮次）：
 
@@ -5469,6 +7119,10 @@ if p.exists():
 > **助理**：是的。穆雷在 10 月 30 日对国王的比赛里扭伤了右脚踝，第三节就没再回来。球队 11 月 1 日公布了检查结果：右踝扭伤，没有骨折，预计缺阵两到三周，11 月中旬复查后再定复出时间。
 
 ### new
+
+（未运行）
+
+### v5
 
 （未运行）
 
@@ -5494,7 +7148,37 @@ if p.exists():
 
 （未运行）
 
-## 28. q-recent-fact（问一个事实；应该：派）
+### v5
+
+（未运行）
+
+## 28. q-followup-shown（凭这段对话接的追问；应该：不派）
+
+**消息**：那他大概什么时候能复出？
+
+**说明**：票 139：q-followup-sourced 在 v5 下三遍里两遍去 `session show` 那件子任务，评测的假 CLI 里没有它的记录，看不到出处，就上网核实（票 134 第三、四轮 Open risk 同一处）。这一条与它一字不差，只是假 CLI 里有那件子任务：派活说明、一步过程、带出处链接的交回（真机上 `session show` 看得到的样子）。伤情与链接是为用例编的。
+
+**上下文**（同一段里前面的轮次）：
+
+> **用户**：掘金的穆雷最近是不是受伤了？
+>
+> **助理**：要上网查，交给子任务了，查到告诉你。
+>
+> [subtask s-mh5a2c7e-9d3f1b6k: 查穆雷伤情]
+>
+> **用户**：[Galley: subtask s-mh5a2c7e-9d3f1b6k "查穆雷伤情" finished — details: session show s-mh5a2c7e-9d3f1b6k]
+>
+> **助理**：查到了：穆雷在 10 月 30 日对国王的比赛里扭伤了右脚踝，第三节就没再回来。掘金队 11 月 1 日的伤情通报说：右踝扭伤，没有骨折，预计缺阵两到三周，11 月中旬复查后再定复出时间。出处是掘金队官网 11 月 1 日的伤情通报。
+
+### new
+
+（未运行）
+
+### v5
+
+（未运行）
+
+## 29. q-recent-fact（问一个事实；应该：派）
 
 **消息**：勇士现在的主教练是谁？
 
@@ -5504,7 +7188,11 @@ if p.exists():
 
 （未运行）
 
-## 29. q-concept（问概念；应该：不派）
+### v5
+
+（未运行）
+
+## 30. q-concept（问概念；应该：不派）
 
 **消息**：挡拆是什么意思？
 
@@ -5514,7 +7202,11 @@ if p.exists():
 
 （未运行）
 
-## 30. q-howto（问怎么做；应该：不派）
+### v5
+
+（未运行）
+
+## 31. q-howto（问怎么做；应该：不派）
 
 **消息**：红烧肉怎么做比较好吃？
 
@@ -5524,12 +7216,20 @@ if p.exists():
 
 （未运行）
 
-## 31. q-browser-insist（要它自己上网；应该：派）
+### v5
+
+（未运行）
+
+## 32. q-browser-insist（要它自己上网；应该：派）
 
 **消息**：请你直接用浏览器打开 example.com，告诉我页面标题，不要派子任务
 
 **说明**：票 134 第四轮（裁决 185 第 4 条）：真机第 4 句的样子，它说了「这个主聊的规则要求……」。派不派都不计分（should_dispatch 只是条款下的走法），判的是「不讲规则」：给用户看的字里不出现「主对话」「主聊」「main chat」「规则」「rule」。
 
 ### new
+
+（未运行）
+
+### v5
 
 （未运行）

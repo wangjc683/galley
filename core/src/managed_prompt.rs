@@ -376,7 +376,10 @@ look it up with the Galley CLI (search, then
 /// ticket 134 (below) first sent everything past a step or two, since
 /// its third round (ruling 184) whatever needs the web or changes things
 /// goes, and since its fourth (ruling 185) a question about a fact in the
-/// world goes too.
+/// world goes too. Ticket 139 (ruling 186, below) took the line out: the
+/// model does the work itself or hands it off, by its own judgment, with
+/// two guidelines (a fact is looked up and sourced; changes go by
+/// `authority.md`).
 ///
 /// Ticket 30 (assistant PRD rulings 2, 3, 8) closed the loop: the
 /// instructions also name the evidence to hand back, Galley wakes the
@@ -564,25 +567,68 @@ look it up with the Galley CLI (search, then
 /// asked to open a page itself, the model told the user 「这个主聊的规则要求
 /// 网页访问必须交给子任务」. The runner's guard (ticket 135) says the same
 /// and no longer opens with "This is the main chat".
+///
+/// Ticket 139 (main chat PRD ruling 186) took the line out and, with it,
+/// the runner's guard (ticket 135). The clause had six versions in a
+/// month (10-06, rulings 160, 174, 183, 184, 185), the last four on one
+/// day, each a sentence added when the dev machine turned up a new case;
+/// they patched one thing: the main chat does one thing at a time, and
+/// while it ran the user could not reach it (what they said waited in
+/// Core's queue, ruling 71 point 4). Three hands now answer that, so the
+/// sentences written for it go and the judgment is the model's. What the
+/// user says while it works reaches it at its next step (ticket 136,
+/// GA's `intervene`); it can tell the user a line and go on (ticket 137,
+/// `tell_user`); a subtask leaves with this conversation's last ten
+/// turns as read-only background (ticket 138, `subtask_background`), so
+/// the instructions need not copy what came before. The clause now says
+/// it may do the work itself, the web included, or hand it to subtasks,
+/// several at once; the user can talk to it at any time, and when they
+/// bring up something else while what is in hand will take long, it hands
+/// that off and answers first, or tells them a line and goes on. Two
+/// guidelines stay: a fact in the world is looked up before it is told,
+/// by the model or a subtask, with its sources (ruling 185's half that
+/// stays), while an idea, how to do something, a view or what this
+/// conversation already answers is answered directly; a change on the
+/// user's computer or accounts goes by the three levels of
+/// `authority.md` (assistant PRD ruling 3; ruling 186 point 3's "ask
+/// first" was the main session's shorthand for them, no new rule). Gone:
+/// "You do not go online in this chat" with its list of what goes and
+/// what stays (the weather, a score, curl in `code_run`), the exception
+/// for writing up this conversation (a subtask now sees it), "a separate
+/// conversation that cannot see this one, so write everything it needs"
+/// (the instructions carry the goal, what was found so far, which the
+/// background does not hold, and what to hand back), and, handing off,
+/// "do not explain why it is not done here, cite a rule" (there is no
+/// rule left to cite); "without calling this chat the main chat" stays
+/// (ruling 173). The title, the parallel sentences, "on its way", no
+/// waiting and the subagent sentence stay.
+///
+/// Ticket 139 also names, in the manual paragraph, what to run in the
+/// same step as reading the parts (ticket 141's diagnosis, its option
+/// 乙): `todo list` or `schedule list` before adding one, `todo show`
+/// before changing a to-do, `todo list` to say what is left, and `date`
+/// for a relative time. The rules that ask for these reads are in the
+/// parts, so the model read a part first and ran the read a step later:
+/// in 14 runs of 14 where a runner first touched to-dos, reminders or
+/// memos it took two steps of reading, against 2 runs of 10 once the
+/// parts were in its context.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
 
-You do not go online in this chat, neither with the browser nor any
-other way (curl and the like in code_run). Anything that needs the web
-goes to a subtask, always, the weather or a score included. So does a
-question about a fact in the world (a person, an event, a game, the news,
-a figure, a price, how someone is doing lately), even one you think you
-know, unless this conversation already answers it; ask for its sources,
-and give them with the answer. So does anything that changes things on
-the user's computer or accounts (files sorted, renamed or written, an
-order placed, a form filled, something sent), and anything they ask you
-to hand off. Everything else you do yourself: talking, explaining an
-idea, a reason or how to do something, giving your view, answering from
-this conversation (what a subtask brought back included) without
-checking it again, to-dos, reminders and memos, the time, a read-only
-look on their computer (what is in a folder), and writing up what you
-two discussed, even into a file (a subtask cannot see this conversation).
+You can do the work yourself, on the web too, or hand it to subtasks,
+several at once. The user can talk to you at any time: what they say
+reaches you at your next step. When they bring up something else and
+what you have in hand will take long, hand it off and answer them first,
+or tell them a line now (`tell_user`) and carry on.
+A fact in the world (a person, an event, a game, the news, a figure, a
+price, how someone is doing lately): look it up before you answer,
+yourself or by a subtask, and give your sources. An idea, a reason, how
+to do something, your view, or what this conversation already answers
+(what a subtask brought back included): answer it directly, without
+looking it up again.
+To change things on the user's computer or accounts, go by the three
+levels of authority in `authority.md`.
 To hand something off, end your reply with
 <subtask title="a few words">what to do</subtask>. The title is what the
 user sees in their list: a few words, in their language, naming the errand.
@@ -592,16 +638,15 @@ write one tag per part in the same reply: they run at the same time. Keep
 in one tag what has to come back as one thing (a comparison, one table,
 one report, the answer to one question) and the parts that need the same
 browser tab or the same files.
-Galley starts each after this reply, as a separate conversation that cannot
-see this one, so write everything it needs: the goal, the facts the user
-gave, what this conversation already settled that the request leans on,
-what you have found so far, and what to hand back, with the evidence for
-it (a confirmation number, a file path, a link, a screenshot path).
-Tell the user in a sentence that it is on its way; do not explain why it
-is not done here, cite a rule, or call this chat the main chat. When it
-finishes, asks something or fails, Galley wakes you to check it and tell
-the user, so do not wait on it or watch it. Use this, not the file-based
-subagent in your memory (subagent.md), which the user cannot see.
+Galley starts each after this reply, with this conversation's last turns
+as background, so write the goal, what you have found so far, and what to
+hand back, with the evidence for it (a confirmation number, a file path, a
+link, a screenshot path).
+Tell the user in a sentence that it is on its way, without calling this
+chat the main chat. When it finishes, asks something or fails, Galley
+wakes you to check it and tell the user, so do not wait on it or watch it.
+Use this, not the file-based subagent in your memory (subagent.md), which
+the user cannot see.
 
 Note what the user has to do (a deadline, a call, a flight, a purchase),
 what they are in the middle of and set aside to come back to,
@@ -630,8 +675,11 @@ parts it needs, together: `todos.md` and `unasked.md` to note a to-do;
 change what you know about the user; `reminders.md` for
 your own reminders, changing them, and when the user asks to be reminded;
 `times.md` for any date or time; `authority.md` and `cli.md` for sessions,
-projects and models; `wake.md` and `subtasks.md` when Galley wakes you. Every
-write but `llm set` carries `--supervisor=galley-assistant --reason="<why>"`."#
+projects and models; `wake.md` and `subtasks.md` when Galley wakes you. Run
+with them, in the same step, what the parts will ask for: `todo list` or
+`schedule list` before adding one, `todo show <todo-id>` before changing a
+to-do, `todo list` to say what is left, and `date` for a time relative to
+now. Every write but `llm set` carries `--supervisor=galley-assistant --reason="<why>"`."#
     )
 }
 
@@ -1490,7 +1538,7 @@ mod tests {
         assert!(main.contains("Open with the answer or outcome"));
         assert!(main.contains("without recapping it"));
         assert!(main.contains(
-            "projects and models; `wake.md` and `subtasks.md` when Galley wakes you. Every"
+            "projects and models; `wake.md` and `subtasks.md` when Galley wakes you. Run"
         ));
         assert!(
             main.ends_with("`llm set` carries `--supervisor=galley-assistant --reason=\"<why>\"`.")
@@ -1511,75 +1559,62 @@ mod tests {
     /// independent parts of one, one tag each in the same reply; parts
     /// that share a browser tab or files are not split; no cap on the
     /// count. Ticket 134 (ruling 183 point 5): what has to come back as
-    /// one thing stays in one tag; the instructions carry what this
-    /// conversation settled. Ticket 134's third round (ruling 184, in place
-    /// of the lines of tickets 115 and 134): the main chat does not go
-    /// online; whatever needs the web goes to a subtask, the weather
-    /// included, and so does whatever changes things on the user's
-    /// computer or accounts and whatever the user asks to hand off;
-    /// everything else stays here, a read-only look on the computer and
-    /// this conversation's own material among it. Ticket 134's fourth
-    /// round (ruling 185): a question about a fact in the world goes too,
-    /// even one the model thinks it knows, with its sources; what stays
-    /// is explaining, its view and answering from this conversation, not
-    /// answering from what it knows; handing off, it says nothing of why,
-    /// of a rule or of "the main chat".
+    /// one thing stays in one tag. Ticket 139 (ruling 186, in place of
+    /// the lines of tickets 115 and 134): the model does the work itself,
+    /// the web included, or hands it off, by its judgment; the user can
+    /// reach it at its next step, and it can hand off what is in hand and
+    /// answer, or tell them a line and go on; a fact in the world is
+    /// looked up and sourced (ruling 185's half that stays), an idea, how
+    /// to do something, a view or what this conversation answers is
+    /// answered directly; a change goes by `authority.md`; the
+    /// instructions need not copy this conversation, which the subtask
+    /// carries (ticket 138); handing off, it does not call this chat the
+    /// main chat (ruling 173).
     #[test]
-    fn main_chat_entry_layer_hands_the_web_facts_and_changes_to_a_subtask() {
+    fn main_chat_entry_layer_leaves_the_hand_off_to_judgment() {
         let main =
             compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
-        // Ruling 184: the web goes, always, by the browser or any other way
-        // (curl in code_run); the runner's guard (ticket 135) says the same.
+        // Ruling 186: itself or a subtask, several at once; the user can
+        // reach it (ticket 136), and it can answer first or say a line
+        // (ticket 137).
         assert!(
-            main.contains("You do not go online in this chat, neither with the browser nor any")
+            main.contains("You can do the work yourself, on the web too, or hand it to subtasks,")
         );
         assert!(
-            main.contains("other way (curl and the like in code_run). Anything that needs the web")
+            main.contains("several at once. The user can talk to you at any time: what they say")
         );
         assert!(
-            main.contains("goes to a subtask, always, the weather or a score included. So does a")
-        );
-        // Ruling 185: so does a fact in the world, known or not, with its
-        // sources; not one this conversation already answers (the fourth
-        // round's eval: a follow-up went out to check the turn before).
-        assert!(main
-            .contains("question about a fact in the world (a person, an event, a game, the news,"));
-        assert!(main
-            .contains("a figure, a price, how someone is doing lately), even one you think you"));
-        assert!(main
-            .contains("know, unless this conversation already answers it; ask for its sources,"));
-        assert!(
-            main.contains("and give them with the answer. So does anything that changes things on")
-        );
-        // Ruling 184: so do changes on the user's computer or accounts, and
-        // whatever they ask to hand off.
-        assert!(
-            main.contains("the user's computer or accounts (files sorted, renamed or written, an")
+            main.contains("reaches you at your next step. When they bring up something else and")
         );
         assert!(main
-            .contains("order placed, a form filled, something sent), and anything they ask you"));
+            .contains("what you have in hand will take long, hand it off and answer them first,"));
+        assert!(main.contains("or tell them a line now (`tell_user`) and carry on."));
+        // Ruling 185's half that stays: a fact is looked up, by it or a
+        // subtask, and sourced; the rest is answered directly, this
+        // conversation taken as it stands (the fourth round's eval).
         assert!(
-            main.contains("to hand off. Everything else you do yourself: talking, explaining an")
+            main.contains("A fact in the world (a person, an event, a game, the news, a figure, a")
         );
-        // Ruling 184: everything else stays here; ruling 185: explaining
-        // and a view in place of answering from what it knows, and this
-        // conversation taken as it stands.
+        assert!(main.contains("price, how someone is doing lately): look it up before you answer,"));
         assert!(main
-            .contains("idea, a reason or how to do something, giving your view, answering from"));
-        assert!(main.contains("this conversation (what a subtask brought back included) without"));
+            .contains("yourself or by a subtask, and give your sources. An idea, a reason, how"));
         assert!(
-            main.contains("checking it again, to-dos, reminders and memos, the time, a read-only")
+            main.contains("to do something, your view, or what this conversation already answers")
         );
         assert!(
-            main.contains("look on their computer (what is in a folder), and writing up what you")
+            main.contains("(what a subtask brought back included): answer it directly, without")
         );
-        // The eval's first round: a write-up of this conversation into a
-        // file on the desktop went out once in three as a file written.
-        assert!(main
-            .contains("two discussed, even into a file (a subtask cannot see this conversation)."));
-        assert!(!main.contains("answering from what you know"));
+        assert!(main.contains("looking it up again."));
+        // Ruling 186 point 3: a change goes by the three levels, no new rule.
+        assert!(
+            main.contains("To change things on the user's computer or accounts, go by the three")
+        );
+        assert!(main.contains("levels of authority in `authority.md`."));
+        assert!(
+            crate::assistant_manual::part("authority.md").contains("## Three levels of authority")
+        );
         assert!(main.contains("To hand something off, end your reply with"));
         // Ticket 126: the tag carries a title for the user's list.
         assert!(main.contains(
@@ -1604,49 +1639,63 @@ mod tests {
         assert!(main
             .contains("one report, the answer to one question) and the parts that need the same"));
         assert!(main.contains("browser tab or the same files."));
+        // Ticket 138: the subtask carries this conversation's last turns,
+        // so the instructions carry the goal, what was found so far (not in
+        // the background) and what to hand back with its evidence.
+        assert!(main
+            .contains("Galley starts each after this reply, with this conversation's last turns"));
+        assert!(main
+            .contains("as background, so write the goal, what you have found so far, and what to"));
         assert!(main.contains(
-            "Galley starts each after this reply, as a separate conversation that cannot"
+            "hand back, with the evidence for it (a confirmation number, a file path, a"
+        ));
+        assert!(main.contains("link, a screenshot path)."));
+        // Ruling 173: no inner name to the user.
+        assert!(main
+            .contains("Tell the user in a sentence that it is on its way, without calling this"));
+        assert!(
+            main.contains("chat the main chat. When it finishes, asks something or fails, Galley")
+        );
+        assert!(main.contains(
+            "wakes you to check it and tell the user, so do not wait on it or watch it."
         ));
         assert!(main
-            .contains("see this one, so write everything it needs: the goal, the facts the user"));
-        // Ticket 134: a follow-up goes out too, so what it leans on goes with it.
-        assert!(main
-            .contains("gave, what this conversation already settled that the request leans on,"));
-        assert!(main
-            .contains("what you have found so far, and what to hand back, with the evidence for"));
-        assert!(
-            main.contains("it (a confirmation number, a file path, a link, a screenshot path).")
-        );
-        // Ruling 185 point 4: handing off, nothing of why, a rule or the
-        // inner name (ruling 173).
-        assert!(main
-            .contains("Tell the user in a sentence that it is on its way; do not explain why it"));
-        assert!(main
-            .contains("is not done here, cite a rule, or call this chat the main chat. When it"));
-        assert!(main
-            .contains("finishes, asks something or fails, Galley wakes you to check it and tell"));
-        assert!(main
-            .contains("the user, so do not wait on it or watch it. Use this, not the file-based"));
-        assert!(main.contains("subagent in your memory (subagent.md), which the user cannot see."));
+            .contains("Use this, not the file-based subagent in your memory (subagent.md), which"));
+        assert!(main.contains("the user cannot see."));
         assert!(!main.contains("look it up when they ask"));
         // The lines it replaced: how long the work would keep the chat busy
         // (ticket 06a), whether the user is waiting (ticket 115), a step or
-        // two (ticket 134's first round), and its "turns out bigger".
+        // two (ticket 134's first round) and its "turns out bigger", the web
+        // and changes sent out (its third round), the fact sent out and what
+        // not to say (its fourth); and the instructions written as if the
+        // subtask could not see this conversation (ticket 138).
         assert!(!main.contains("keep this chat busy"));
         assert!(!main.contains("Do quick work yourself"));
         assert!(!main.contains("even when it takes a few minutes"));
         assert!(!main.contains("do not split a question"));
         assert!(!main.contains("takes a step or two"));
         assert!(!main.contains("turns out"));
+        assert!(!main.contains("go online in this chat"));
+        assert!(!main.contains("curl"));
+        assert!(!main.contains("Everything else you do yourself"));
+        assert!(!main.contains("answering from what you know"));
+        assert!(!main.contains("even one you think you"));
+        assert!(!main.contains("cannot see this conversation"));
+        assert!(!main.contains("cannot see this one"));
+        assert!(!main.contains("write everything it needs"));
+        assert!(!main.contains("cite a rule"));
         let layer = main.find("Main Chat Entry Layer").unwrap();
         assert!(!main[layer..].contains("websites"));
         // Ticket 127: no cap on how many subtasks go out at once.
         assert!(!main[layer..].contains("at most"));
-        let clause = main.find("You do not go online in this chat,").unwrap();
-        assert!(layer < clause, "the clause closes the entry layer");
+        let clause = main.find("You can do the work yourself,").unwrap();
+        let tag = main.find("To hand something off").unwrap();
+        let note = main.find("Note what the user has to do").unwrap();
+        assert!(layer < clause && clause < tag && tag < note);
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("<subtask"));
-            assert!(!prompt.contains("You do not go online in this chat"));
+            assert!(!prompt.contains("You can do the work yourself"));
+            assert!(!prompt.contains("tell_user"));
         }
     }
 
@@ -1656,6 +1705,9 @@ mod tests {
     /// names the directory once and every part on the table once, by its
     /// bare file name with when to read it, and asks for them before each
     /// write, not only the first; it names no file that is not a part.
+    /// Ticket 139 (ticket 141's option 乙): with the parts, in the same
+    /// step, the reads they ask for before a write, each a rule a part
+    /// states.
     #[test]
     fn main_chat_entry_layer_sends_the_model_to_the_manual() {
         let main =
@@ -1678,6 +1730,26 @@ mod tests {
         assert!(main.contains("change what you know about the user; `reminders.md` for"));
         assert!(main
             .contains("your own reminders, changing them, and when the user asks to be reminded;"));
+        // Ticket 139: the reads the parts ask for, in the same step as the
+        // parts (ticket 141: a runner that had not read them yet read a
+        // part first and ran the read a step later).
+        assert!(main.contains(
+            "projects and models; `wake.md` and `subtasks.md` when Galley wakes you. Run"
+        ));
+        assert!(main
+            .contains("with them, in the same step, what the parts will ask for: `todo list` or"));
+        assert!(main.contains(
+            "`schedule list` before adding one, `todo show <todo-id>` before changing a"
+        ));
+        assert!(main
+            .contains("to-do, `todo list` to say what is left, and `date` for a time relative to"));
+        assert!(main.contains("now. Every write but `llm set` carries"));
+        let part = crate::assistant_manual::part;
+        assert!(part("todos.md").contains("run `todo list` before"));
+        assert!(part("reminders.md").contains("Before you create one, run `schedule list`"));
+        assert!(part("todos-change.md").contains("(`todo show <todo-id>`)"));
+        assert!(part("todos-change.md").contains("run `todo list` first"));
+        assert!(part("times.md").contains("read the clock first (`date`)"));
         // The identity every write carries is the one rule all the parts
         // with a write share (only `cli.md` states it): read for a tick or
         // a cancel alone, `todos-change.md` and `reminders.md` would leave
@@ -1918,7 +1990,30 @@ mod tests {
     /// done "without checking it again" (+26). Without them a follow-up
     /// whose answer was in the turn before (「那他大概什么时候能复出？」) went
     /// out to a subtask in all six runs, to check that turn.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4983;
+    /// Lowered 4983 → 4805 by ticket 139 (main chat PRD ruling 186): −178
+    /// bytes. The opening (1059) became a judgment and two guidelines
+    /// (809, −250): itself, the web included, or subtasks, several at
+    /// once; the user reaches it at its next step, and it hands off what
+    /// is in hand and answers first, or tells them a line (332); a fact
+    /// in the world looked up, by it or a subtask, and sourced, while an
+    /// idea, how to do something, a view or what this conversation
+    /// answers is answered directly (368); a change by `authority.md`'s
+    /// three levels (107); two breaks. "You do not go online" with what
+    /// goes and what stays, and the exception for writing up this
+    /// conversation, are gone. The instructions sentence (361 → 247,
+    /// −114) says the subtask carries this conversation's last turns, so
+    /// the goal, what was found so far and what to hand back are enough,
+    /// in place of "a separate conversation that cannot see this one, so
+    /// write everything it needs" with the facts the user gave and what
+    /// the conversation settled. "On its way" (136 → 91, −45) keeps only
+    /// "without calling this chat the main chat": there is no rule left to
+    /// cite. The manual paragraph names the reads to run in the same step
+    /// as the parts (+231, ticket 141's option 乙): `todo list` or
+    /// `schedule list` before adding one, `todo show` before changing a
+    /// to-do, `todo list` to say what is left, `date` for a relative time;
+    /// a runner that had not read the parts yet read a part and ran the
+    /// read a step later, in all 14 such runs of the diagnosis.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4805;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

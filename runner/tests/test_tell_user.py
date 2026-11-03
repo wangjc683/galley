@@ -21,7 +21,7 @@ import pytest
 import runner.managed_runtime as managed_runtime
 from runner import tell_user
 from runner.ga_session import GaSession
-from runner.handlers import MAIN_CHAT_ENV, WorkbenchHandler
+from runner.handlers import WorkbenchHandler
 from runner.ipc import (
     AbortCommand,
     AskUserResponseCommand,
@@ -31,6 +31,8 @@ from runner.ipc import (
     encode,
 )
 from runner.workbench_bridge import Bridge
+
+MAIN_CHAT_ENV = managed_runtime.GALLEY_MAIN_CHAT_ENV
 
 
 def _drain(gen: Any) -> tuple[list[Any], Any]:
@@ -60,11 +62,15 @@ def test_the_entry_says_what_it_is_and_when_it_helps() -> None:
     assert entry["type"] == "function"
     assert fn["name"] == "tell_user"
     assert fn["description"] == (
-        "Send the user a message right away, without ending your turn; until your "
-        "final reply, nothing else you write reaches them. Useful when the user says "
-        "something while you are working, or when what you are doing will take a "
-        "while and they would want to know how it is going."
+        "Send the user a message right away, without ending your turn. Useful when "
+        "the user says something while you are working, or when what you are doing "
+        "will take a while and they would want to know how it is going."
     )
+    # Ticket 139: ticket 137's "until your final reply, nothing else you
+    # write reaches them" stopped being true with ticket 142 (a step's
+    # words reach the user in a run they started).
+    assert "nothing else you write" not in fn["description"]
+    assert "你写的别的话" not in tell_user.DESCRIPTION_CN
     assert fn["parameters"]["required"] == ["message"]
     assert list(fn["parameters"]["properties"]) == ["message"]
     assert fn["parameters"]["properties"]["message"]["description"] == (
@@ -110,8 +116,10 @@ def test_the_results_say_sent_and_go_on() -> None:
     assert tell_user.EMPTY["status"] == tell_user.CLOSED["status"] == "error"
 
 
-def test_the_main_chat_variable_is_the_browser_guards() -> None:
-    assert tell_user.MAIN_CHAT_ENV == MAIN_CHAT_ENV
+def test_the_main_chat_variable_is_cores() -> None:
+    """The name Core sets on the main chat's runner
+    (core/src/runner_commands.rs `MAIN_CHAT_ENV`), read in one place."""
+    assert tell_user.MAIN_CHAT_ENV == MAIN_CHAT_ENV == "GALLEY_MAIN_CHAT"
 
 
 @pytest.mark.parametrize(
