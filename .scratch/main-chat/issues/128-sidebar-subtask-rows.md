@@ -87,3 +87,14 @@ git diff --check main...HEAD
 
 - 在 worktree 分支上提交，只点名本票文件，禁用 `git add -A` / `git commit -a`。提交说明用英文，末尾带 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`，命令后接 `git log --oneline -1`，提交号只抄输出。dev 切换器单独一个提交，方便之后撤掉。
 - 报告：①改了哪些文件 ②提交号（哪个是切换器）③每条验证命令与结果 ④偏离票面的地方与理由 ⑤看到没改的 ⑥Open risks ⑦拆切换器时要删的东西。
+
+## 收尾（2026-11-03，裁决 177）
+
+JC 真机比过 A / B / B2 / B3 / C，定 B3；又问出错、停住的子任务挂多久，定甲。由原代理在新 worktree 里做（从 main 起，main 已含本票与切换器）。
+
+1. **只列在跑与在问你**：`gui/src/lib/sidebar-subtasks.ts` 只收 `running` 与 `asking`；`failed`、`stepLimit`（或这里的叫法）、`stopped` 一律不列。在问你的排前面、全列；在跑的按开始时间从早到晚、最多 5 行，超出照旧「还有 N 件在办」（`more` 只数在跑的）。`subtaskNeedsYou` 只剩 `asking`。测试改成：出错、步数用完、停住都不出现；几件旧的停住不会把在跑的挤进「还有」。
+2. **子任务出错不再算要你处理的事**：卡片头像与名字加粗、主区顶栏身份行（「子任务出错」那一句）、侧栏收起时的徽标计数，都不再因子任务出错而变；子任务在问你照旧算。读 `gui/src/hooks/useAssistantState.ts`（`subtaskAttention`）、`gui/src/lib/assistant.ts`、侧栏收起徽标的来源，找到子任务出错进来的那几处，只拿掉子任务的出错，主对话自己的出错照旧。系统通知（`gui/src/lib/subtask-notify.ts` 子任务自己的出错通知，只在报告送不到 Galley 时补发）不动。`copy.subtask.sidebarErrored` 若没人用了就删，连同测试。
+3. **行定 B3，写进正式组件**：`SidebarSubtaskRows.tsx` 行 `min-h-7 py-1`，标题 `text-[12px]`；在跑的标题 `font-medium`、在问你的 `font-semibold`；在跑的转圈颜色 `text-ink-muted`（照转、照粗线；`StatusIcon` 不收 className 的话，在 `SubtaskGlyph` 里自己画同一颗 `CircleNotch`，别改 `status-icon.tsx`，它管工作台的行）；选中时标题 `text-ink`，其余 `text-ink-soft`。
+4. **拆切换器**：照报告第 7 条，删 `gui/src/dev/subtask-rows-trial.tsx`（主会话后来加过 B2、B3 两档，一并删）；`Sidebar.tsx` 去掉 `main chat 128` 那几行，换回 `<SidebarSubtaskRows`。删完 `grep -rn "main chat 128\|subtask-rows-trial" gui/src` 应为空。组件文档注释里「still on trial」改成定稿。
+5. **文档**：`docs/design/layout-and-chrome.md` 子任务那一条：列哪些改成「在跑与在问你」（裁决 177，修正 176 第 2 条），「待真机定」换成 B3 的尺寸与理由；卡片第二行、头像汇总、顶栏身份行那几处写明子任务出错不再算；`docs/copy-language-guidelines.md` 若写了「子任务出错」在卡片或顶栏出现，跟着改。
+6. 验证、别动、提交与回报同上面；只改 GUI 与文档，Core 不动。
