@@ -1319,9 +1319,11 @@ function AgentTurnView({
   // Dropping the echo outright leaves a bare "第 N 步", which reads as
   // a failed load next to a turn where the model did write its
   // `<summary>` — the same product showing two different shapes for a
-  // compliance difference the user cannot see. GA never emits an empty
-  // summary (686/686 rows carry one), so that bare shape would be ours
-  // alone; both branches need words. Wording follows the two-way
+  // compliance difference the user cannot see. Before baseline
+  // `f06d550` GA never emitted an empty summary (686/686 rows carried
+  // one); since then a reply that cleans to nothing writes none
+  // (`if raw:`, ga.py:579), so bare steps come from GA too. Either way
+  // both branches need words. Wording follows the two-way
   // fallback GA's `turn_end_callback` had until baseline `f06d550`
   // (today it falls back to the whole answer only, ga.py:578) — the
   // direct-answer line for a turn with no real tools, the tool name

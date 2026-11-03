@@ -139,3 +139,9 @@ prettier：只核了自己改的几段（`step-heading.ts`、两个测试、`Pro
 4. `ga-output-cleaning.ts:116` 的 `LLM_RUNNING_MARKER` 只认 `LLM Running (Turn N) ...`；今天 `agent_loop.py:53` 在 `handler.parent.task_dir` 有值时写 `Turn N ...`，这个形状不会被剥。Galley 的会话是否会设 `task_dir` 没核；票面范围外，没改。
 5. 没在真机看，只有单测和静态渲染。这是 GUI 改动，合入后 HMR 即可，不用重启 Core。
 6. worktree 里留着被 gitignore 的 `gui/node_modules`（主树 APFS 克隆）；scratchpad 里有 `gab03-cjk-punct.py`、`gab03-vitest-local.log`、`gab03-vitest-utc.log`、`gab03-prettier/`。
+
+## Comments
+
+- 2026-11-03 主会话收尾两条 Open risks：
+  - 第 3 条（「GA 从不产出空 summary」已不成立）：`zh.ts` 与 `Conversation.tsx` 两处注释改成基线 `f06d550` 前后两种情况（`ga.py:579` 的 `if raw:`），只改注释；typecheck、两个文件的 lint、`git diff --check` 过。
+  - 第 4 条（`LLM_RUNNING_MARKER` 认不出「Turn N ...」）：这个写法只在 `handler.parent.task_dir` 有值时出现（`managed-ga/code/agent_loop.py:53`），`task_dir` 只有 `agentmain.py --task` 的文件式子代理会设（`agentmain.py:303`），runner 从不设。Galley 的会话碰不到，不改。
