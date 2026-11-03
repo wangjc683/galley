@@ -1643,7 +1643,7 @@ if d.exists():
 ```
 {
  "status": "success",
- "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\ncwd: $TMPDIR/entry-layer-eval-b4pq7hzb/big-pdfs.new-1/sandbox/managed-ga-state/temp\nhome: $TMPDIR/entry-layer-eval-b4pq7hzb/big-pdfs.new-1/sandbox/home\nmemory: # [Global Memory - L2]\n\nDownloads exists: True\nTop-level PDF count: 30\nPDF names: 发票_阿里云_2026-09.pdf\n增值税电子普通发票_京东_显示器.pdf\n发票_阿里云_2026-08.pdf\nWittgenstein_Tractatus.pdf\n劳动合同_砚石科技.pdf\n钢材价格指数月报_2026-09.pdf\n租房合同_
+ "stdout": "# SecretStr.use() to get raw, do not print raw value! | keys.ls() to list all keys\ncwd: $TMPDIR/entry-layer-eval-b4pq7hzb/big-pdfs.new-1/sandbox/managed-ga-state/temp\nhome: $TMPDIR/entry-layer-eval-b4pq7hzb/big-pdfs.new-1/sandbox/home\nmemory: # [Global Memory - L2]\n\nDownloads exists: True\nTop-level PDF count: 30\nPDF names: 发票_阿里云_2026-09.pdf\n增值税电子普通发票_京东_显示器.pdf\n发票_阿里云_2026-08.pdf\nWittgenstein_Tractatus.pdf\n劳动合同_青禾科技.pdf\n钢材价格指数月报_2026-09.pdf\n租房合同_
 …（截断，全文见 json）
 ```
 

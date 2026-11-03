@@ -340,7 +340,7 @@ FIXTURE_PDFS = {
     "餐饮发票_2026-09-12.pdf": "Receipt: restaurant, team dinner, CNY 860.00",
     "收据_物业费_2026Q3.pdf": "Receipt: property management fee, 2026 Q3",
     "租房合同_2026-2027.pdf": "Lease agreement: apartment, 2026-03 to 2027-02",
-    "劳动合同_砚石科技.pdf": "Employment contract: Inkstone Technology",
+    "劳动合同_青禾科技.pdf": "Employment contract: Inkstone Technology",
     "供应商框架合同_华立钢材.pdf": "Framework supply agreement: Huali Steel",
     "保密协议_NDA_东辰.pdf": "Non-disclosure agreement with Dongchen",
     "Service_Agreement_Mingguang_2026.pdf": "Service agreement: Mingguang Materials, 2026",
