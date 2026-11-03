@@ -204,6 +204,54 @@ describe("the style", () => {
     expect(css).toContain('html[data-reply-cards-style="rows"]');
   });
 
+  // A line that opens something opens from anywhere on it: the title's
+  // button stretched over the line; what acts on its own sits above.
+  describe("the whole line opens", () => {
+    const both =
+      'html:is([data-reply-cards-style="list"],[data-reply-cards-style="rows"]) [data-role="reply-cards"]';
+    const line =
+      ':is([data-role="subtask-card"],[data-role="todo-card"],[data-role="reminder-card"],[data-role="memo-card"])>div:first-child';
+    const lines = css.split("\n");
+
+    it("stretches the title's button over its line, in 一框列表 and 无框行 only", () => {
+      expect(css).toContain(
+        `${both} ${line}:has(>span>button){position:relative}`,
+      );
+      expect(css).toContain(
+        `${both} ${line}>span>button::after{content:"";position:absolute;inset:0}`,
+      );
+      for (const l of lines.filter((l) => l.includes("::after"))) {
+        expect(l.startsWith(both)).toBe(true);
+      }
+    });
+
+    it("keeps the box, 取消 and a word with a reason above it", () => {
+      const lifted = lines.find((l) => l.includes("z-index:1"));
+      expect(lifted).toBeDefined();
+      expect(lifted).toContain(
+        '[data-role="todo-card"]>div:first-child>[data-card-icon] label',
+      );
+      expect(lifted).toContain(
+        '[data-role="reminder-card"]>div:first-child>button',
+      );
+      // Only a word with a reason (its hover title): 「出错」「没有开始」.
+      expect(lifted).toContain('[data-role="subtask-card-word"][title]');
+      expect(lifted).toMatch(/\{position:relative;z-index:1\}$/);
+    });
+
+    // A line that opens nothing has its title as a span: no button, so no
+    // ::after and no hover ground (both rules need a button in a span).
+    it("gives a line that opens nothing neither", () => {
+      const after = lines.find((l) => l.includes("::after"))!;
+      expect(after).toContain(">span>button::after");
+      const lit = lines.find((l) =>
+        l.includes("{background-color:var(--color-hover)}"),
+      )!;
+      expect(lit).toContain(":has(>span>button):hover");
+      expect(lit).toContain(":has(>span>button:focus-visible)");
+    });
+  });
+
   it("sends a list that is answered in place to the cap, and its card in 无框行", () => {
     expect(css).toContain(
       `html[data-reply-cards-style="list"] [data-role="reply-cards"]:has([data-role="subtask-card"] [data-role="ask-user-bubble"]){width:auto}`,

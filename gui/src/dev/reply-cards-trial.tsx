@@ -55,25 +55,32 @@ import type { PendingAskUser } from "@/types/conversation";
  *                     In both: a line that opens something lights whole
  *                     (`bg-hover`) on hover and keyboard focus, its name
  *                     to ink, with no underline and no focus ring; a line
- *                     that opens nothing does not light. What a click
- *                     opens and where it lands are as before: a file line
- *                     anywhere on it; a subtask, a to-do, a memo, a
- *                     reminder only on its title or words (not the icon,
- *                     the light things or the empty end of the line); the
- *                     to-do's box and 「取消」 as before. 「在文件夹中显示」
- *                     floats just outside the right edge (of the frame in
- *                     一框列表: 9px past the line, the frame's 4px and
- *                     border then 4px; of the line in 无框行), on the
- *                     file's line, the hover unbroken on the way. A
- *                     subtask answered in place opens under its line on
- *                     its faint amber, the question and the reply field
- *                     from the name's edge (30px), and the frame (一框列表)
- *                     or that card (无框行) goes to the cap; a failed
- *                     to-do's or reminder's reason stays under its line,
- *                     from the same edge. Strikes, fades, 「已删除」,
- *                     「已移走或删除」 as the cards draw them. A row of
- *                     image thumbnails is a band of its own, 4px above and
- *                     below, its left on the icon column (8px in).
+ *                     that opens nothing does not light. A click anywhere
+ *                     on a line that opens something opens it: a file
+ *                     line is one button as before; a subtask, a to-do, a
+ *                     memo, a reminder whose title or words are a button
+ *                     have that button stretched over the line (a
+ *                     `::after`, `inset: 0`), so its icon, the light
+ *                     things, a word without a reason (「等你回复」
+ *                     「没有跑完」) and the empty end open it too; the
+ *                     to-do's box, 「取消」 and a word with a reason on
+ *                     hover (「出错」「没有开始」) sit above it
+ *                     (`relative z-index 1`) and keep their own click and
+ *                     hover. Tab still lands on the title's button.
+ *                     「在文件夹中显示」 floats just outside the right edge
+ *                     (of the frame in 一框列表: 9px past the line, the
+ *                     frame's 4px and border then 4px; of the line in
+ *                     无框行), on the file's line, the hover unbroken on
+ *                     the way. A subtask answered in place opens under
+ *                     its line on its faint amber, the question and the
+ *                     reply field from the name's edge (30px), and the
+ *                     frame (一框列表) or that card (无框行) goes to the
+ *                     cap; a failed to-do's or reminder's reason stays
+ *                     under its line, from the same edge. Strikes, fades,
+ *                     「已删除」, 「已移走或删除」 as the cards draw them.
+ *                     A row of image thumbnails is a band of its own, 4px
+ *                     above and below, its left on the icon column (8px
+ *                     in).
  *   宽度  现状        as written: every card as wide as the bubble's cap
  *                     (`max-w-[88%]`, 669px in the 760 column, 1056 in
  *                     the 1200 one), the file card's right end giving way
@@ -177,7 +184,10 @@ import type { PendingAskUser } from "@/types/conversation";
  *       subtask word `ml-2`; a line that opens something `group
  *       hover:bg-hover has-[button:focus-visible]:bg-hover`, its name
  *       `group-hover:text-ink`, its title button without `hover:underline`
- *       and the focus ring; ReminderCard's spans reordered (words, time,
+ *       and the focus ring, stretched over the line (the line `relative`,
+ *       the button `after:absolute after:inset-0 after:content-['']`),
+ *       TodoCheck's label, 「取消」 and CardWord when it has a reason
+ *       `relative z-10`; ReminderCard's spans reordered (words, time,
  *       state) and 「取消」 `ml-auto h-5 px-1.5 py-0`; FileCard's button the
  *       line's classes without its frame, its 在文件夹中显示 holder
  *       `left-full right-auto pl-[9px]` with the pointer-events gating
@@ -518,6 +528,15 @@ function styleCss(): string[] {
     `${both} ${line}>span>button:hover:not(.line-through){text-decoration-line:none}`,
     `${both} ${line}>span>button.line-through:hover{text-decoration-line:line-through}`,
     `${both} ${line}>span>button:focus-visible,${both} ${fileLine}:focus-visible{box-shadow:none}`,
+    // …and it opens from anywhere on it: the title's button stretched
+    // over the line (a ::after; the line, positioned, is its containing
+    // block, so the button's own overflow does not clip it). What acts
+    // on its own sits above it: the to-do's box, 「取消」, a word with a
+    // reason on hover (「出错」「没有开始」). A line that opens nothing has
+    // no such button, so no ::after.
+    `${both} ${opens}{position:relative}`,
+    `${both} ${line}>span>button::after{content:"";position:absolute;inset:0}`,
+    `${both} [data-role="todo-card"]>div:first-child>[data-card-icon] label,${both} ${reminder}>button,${both} [data-role="subtask-card-word"][title]{position:relative;z-index:1}`,
     `${both} ${file}[data-file-state="present"]:hover>button,${both} ${file}[data-file-state="present"]>button:focus-visible{background-color:var(--color-hover)}`,
     `${both} ${file}[data-file-state="present"]:is(:hover,:has(>button:focus-visible)) [data-role="file-name"]{color:${ink}}`,
     // 在文件夹中显示 outside the right edge, the hover unbroken on the way.
