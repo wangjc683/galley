@@ -60,7 +60,10 @@ pub struct SubtaskDispatch {
     pub message_id: String,
     /// The subtask; `None` when no session was created.
     pub session_id: Option<String>,
-    /// The instructions' first line (empty for an empty tag).
+    /// The title at dispatch: the tag's (`<subtask title="…">`, main chat
+    /// ticket 126), else the instructions' first line; empty for an empty
+    /// tag. Where the subtask's session exists its current title names it
+    /// (the auto-title watcher may replace a first line).
     pub title: String,
     pub failure: Option<SubtaskFailure>,
     /// What went wrong, for [`SubtaskFailure::StartFailed`].

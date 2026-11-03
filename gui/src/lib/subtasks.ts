@@ -46,7 +46,9 @@ export interface SubtaskDispatch {
   messageId: string;
   /** The subtask session; null when it was never started. */
   sessionId: string | null;
-  /** First line of the instructions. */
+  /** The title at dispatch: the tag's (`<subtask title="…">`, ticket
+   * 126), else the instructions' first line. A card prefers the session's
+   * current title. */
   title: string;
   failure: "empty" | "unclosed" | "start_failed" | null;
   /** For `start_failed`: Core's error text (English). */
