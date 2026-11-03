@@ -24,7 +24,8 @@ import type { Session } from "@/types/session";
 /**
  * The assistant's state for its sidebar card's avatar and name and its
  * header identity (lib/assistant.ts): the main chat's live status, its
- * unpromoted subtasks' questions and errors, its unread mark. The
+ * unpromoted subtasks' questions (not their errors: Galley's business,
+ * ruling 177 point 3), its unread mark. The
  * card's second line speaks from the main chat's own
  * (`useOwnAssistantState`, ruling 176 point 5). `subtasks` are the
  * main chat's unpromoted subtasks. `open` is the main chat itself on
@@ -51,10 +52,9 @@ export function useAssistantState({
     {
       status: view.status,
       hasPendingAskUser: view.hasPendingAskUser,
-      subtaskState:
-        subtaskAttention.kind === "error" || subtaskAttention.kind === "ask"
-          ? subtaskAttention.kind
-          : undefined,
+      // Counted apart from the group's kind: one subtask failing must not
+      // hide another one's question.
+      subtaskAsking: subtaskAttention.askCount > 0,
       hasUnread: mainChat.hasUnread,
       open,
       errorCount: mainChat.errorCount,
@@ -67,7 +67,7 @@ export function useAssistantState({
  * The main chat on its own, its subtasks left out (lib/assistant.ts
  * `ownAssistantState`; main chat PRD ruling 176 point 5, ticket 128):
  * what the sidebar card's second line, and the running words' reads,
- * speak from. A subtask that asks or fails says so on its own row under
+ * speak from. A subtask that asks says so on its own row under
  * the card.
  */
 export function useOwnAssistantState({

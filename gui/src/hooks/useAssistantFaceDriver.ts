@@ -66,9 +66,11 @@ interface Live {
  *
  * Where each thing comes from — all of it already on the page:
  *
- *   running, a question, an error   the main chat's status view and its
- *                                   subtasks' (useSessionStatusView,
- *                                   useSessionsAttention)
+ *   running, a question, an error   the main chat's status view; a
+ *                                   question its subtasks' too (not an
+ *                                   error, ruling 177 point 3)
+ *                                   (useSessionStatusView, the messages
+ *                                   store)
  *   writing words, the tool now     the round's raw stream
  *                                   (`assistantWriting`, `liveToolKind`)
  *   a subtask out                   its subtasks' running count
@@ -120,7 +122,9 @@ export function useAssistantFaceDriver({
       s.byId[mainId]?.pendingAskUser != null ||
       subtasks.some((t) => s.byId[t.id]?.pendingAskUser != null),
   );
-  const erroring = view.status === "error" || attention.kind === "error";
+  // Its own error only: a subtask's is Galley's business, reported to
+  // it, with no row under the card (ruling 177 point 3).
+  const erroring = view.status === "error";
   const writing = useMessagesStore(
     (s) => running && assistantWriting(s.byId[mainId]?.inFlightContent ?? ""),
   );

@@ -156,11 +156,12 @@ function lineText(line: AssistantCardLine): string {
  *   (「你：」 for the user's own)
  *
  * (lib/assistant.ts) — the main chat's own (ruling 176 point 5, ticket
- * 128): a subtask asking or failing has its own row under the card and
- * says so there, so the line no longer writes 「子任务在问你」 /
- * 「子任务出错」 and goes on with what it says without it; the avatar's
- * mark, the name's weight and the header's line still sum the subtasks
- * up. Running, it says only what the screen does not
+ * 128): a subtask asking has its own row under the card and says so
+ * there, so the line no longer writes 「子任务在问你」 and goes on with
+ * what it says without it; the avatar's mark, the name's weight and the
+ * header's line still sum the subtasks' questions up. A subtask's error
+ * counts nowhere (ruling 177 point 3): it was reported to Galley, whose
+ * business it is. Running, it says only what the screen does not
  * (main chat PRD rulings 134, 135): in a round you started 「正在工作…」
  * with the main chat on screen (the dots and the line under them are
  * right there); away from it 「正在输入…」 while it writes, else

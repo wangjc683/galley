@@ -10,10 +10,11 @@ import {
 } from "./sidebar-subtasks";
 
 /**
- * The subtasks under Galley's card (main chat ticket 128, PRD ruling
- * 176): the panel's 「Galley 在办」 subtasks, what needs you first and
- * all of it, then at most five more by start time, the rest behind
- * 「还有 N 件在办」.
+ * The subtasks under Galley's card (main chat ticket 128, PRD rulings
+ * 176, 177): of the panel's 「Galley 在办」 subtasks, those asking you,
+ * first and all of them, then at most five running by start time, the
+ * rest behind 「还有 N 件在办」. Failed, out of steps or stopped: not
+ * listed.
  */
 
 const item = (
@@ -49,16 +50,46 @@ describe("which subtasks", () => {
     );
   });
 
+  // Ruling 177, correcting 176 point 2: a failure and a step limit were
+  // reported to Galley, a stop was yours or a restart's; none is in hand.
+  it("lists only what runs or asks you: failed, out of steps and stopped leave at once", () => {
+    const list = sidebarSubtasks(
+      [
+        item("run", "running"),
+        item("ask", "asking"),
+        item("fail", "failed"),
+        item("cap", "step_limit"),
+        item("stop", "stopped"),
+      ],
+      [
+        session("run", 1),
+        session("ask", 2),
+        session("fail", 3),
+        session("cap", 4),
+        session("stop", 5),
+      ],
+    );
+    expect(ids(list)).toEqual(["ask", "run"]);
+    expect(list.more).toEqual([]);
+    // Nothing but those: nothing at all.
+    expect(
+      sidebarSubtasks(
+        [item("fail", "failed"), item("stop", "stopped")],
+        [session("fail", 1), session("stop", 2)],
+      ),
+    ).toBe(NO_SIDEBAR_SUBTASKS);
+  });
+
   it("takes the subtasks of Galley's group and leaves its one-off tasks", () => {
     const list = sidebarSubtasks(
       [
         item("a", "running"),
-        { ...item("sched_1", "scheduled"), kind: "task" },
-        item("b", "stopped"),
+        { ...item("sched_1", "running"), kind: "task" },
+        item("b", "asking"),
       ],
       [session("a", 1), session("b", 2), session("sched_1", 0)],
     );
-    expect(ids(list)).toEqual(["a", "b"]);
+    expect(ids(list)).toEqual(["b", "a"]);
     expect(list.more).toEqual([]);
   });
 
@@ -91,7 +122,7 @@ describe("which subtasks", () => {
 });
 
 describe("in what order, and how many", () => {
-  it("puts what needs you first, then the rest, each by start time", () => {
+  it("puts what asks you first, then what runs, each by start time", () => {
     // The panel's order is the latest activity first; the sidebar's is
     // when each started, the first on top.
     const list = sidebarSubtasks(
@@ -99,21 +130,18 @@ describe("in what order, and how many", () => {
         item("late-run", "running"),
         item("late-ask", "asking"),
         item("early-run", "running"),
-        item("early-fail", "failed"),
-        item("cap", "step_limit"),
+        item("early-ask", "asking"),
       ],
       [
         session("late-run", 40),
         session("late-ask", 30),
         session("early-run", 10),
-        session("early-fail", 20),
-        session("cap", 5),
+        session("early-ask", 20),
       ],
     );
     expect(ids(list)).toEqual([
-      "early-fail",
+      "early-ask",
       "late-ask",
-      "cap",
       "early-run",
       "late-run",
     ]);
@@ -127,9 +155,9 @@ describe("in what order, and how many", () => {
     expect(ids(list)).toEqual(["b", "a"]);
   });
 
-  it("shows at most five that do not need you; the rest behind one row, in order", () => {
+  it("shows at most five running; the rest behind one row, in order", () => {
     const running = Array.from({ length: 8 }, (_, i) =>
-      item(`r${i}`, i % 2 ? "running" : "stopped"),
+      item(`r${i}`, "running"),
     );
     const list = sidebarSubtasks(
       [...running, item("ask", "asking")],
@@ -140,10 +168,27 @@ describe("in what order, and how many", () => {
     expect(list.more).toEqual(["r5", "r6", "r7"]);
   });
 
-  it("never folds what needs you, however many", () => {
-    const asking = Array.from({ length: 7 }, (_, i) =>
-      item(`q${i}`, i % 3 ? "asking" : "failed"),
+  // Ruling 177 point 1: subtasks stopped days ago used to take the five
+  // places by their early start and fold the one just sent off behind
+  // 「还有 N 件在办」.
+  it("never lets old stopped ones push what runs behind the extra row", () => {
+    const stopped = Array.from({ length: 6 }, (_, i) =>
+      item(`old${i}`, i % 2 ? "stopped" : "step_limit"),
     );
+    const list = sidebarSubtasks(
+      [item("fresh", "running"), ...stopped, item("broke", "failed")],
+      [
+        ...stopped.map((s, i) => session(s.id, i)),
+        session("broke", 7),
+        session("fresh", 50),
+      ],
+    );
+    expect(ids(list)).toEqual(["fresh"]);
+    expect(list.more).toEqual([]);
+  });
+
+  it("never folds what asks you, however many", () => {
+    const asking = Array.from({ length: 7 }, (_, i) => item(`q${i}`, "asking"));
     const list = sidebarSubtasks(
       [...asking, item("run", "running")],
       [...asking.map((q, i) => session(q.id, i)), session("run", 1)],
@@ -161,7 +206,7 @@ describe("in what order, and how many", () => {
     expect(list.more).toEqual([]);
   });
 
-  it("lists exactly five without the extra row", () => {
+  it("lists exactly five running without the extra row", () => {
     const five = Array.from({ length: 5 }, (_, i) => item(`r${i}`, "running"));
     const list = sidebarSubtasks(
       five,
@@ -173,10 +218,14 @@ describe("in what order, and how many", () => {
 });
 
 describe("what needs you", () => {
-  it("is a question or a failure; running and the two stops are not", () => {
+  it("is a question alone: a failure is Galley's business (ruling 177)", () => {
     expect(subtaskNeedsYou("asking")).toBe(true);
-    expect(subtaskNeedsYou("failed")).toBe(true);
-    for (const state of ["running", "step_limit", "stopped"] as const) {
+    for (const state of [
+      "failed",
+      "running",
+      "step_limit",
+      "stopped",
+    ] as const) {
       expect(subtaskNeedsYou(state)).toBe(false);
     }
   });

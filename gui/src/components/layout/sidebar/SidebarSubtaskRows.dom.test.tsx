@@ -117,7 +117,7 @@ describe("a row", () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
-  it("does nothing without a way to open (the dev switcher's demo rows)", () => {
+  it("does nothing without a way to open", () => {
     mount({});
     expect(() => press(row("s-run"))).not.toThrow();
   });
@@ -130,8 +130,8 @@ describe("a row", () => {
       onOpen: vi.fn(),
       subtasks: {
         rows: [
+          { id: "s-run", title: "整理下载文件夹里的发票", state: "asking" },
           { id: "s-ask", title: "比较三款扫地机器人的价格", state: "asking" },
-          { id: "s-run", title: "整理下载文件夹里的发票", state: "failed" },
         ],
         more: [],
       },

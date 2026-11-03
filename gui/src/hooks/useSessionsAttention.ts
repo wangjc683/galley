@@ -22,6 +22,11 @@ export interface SessionsAttentionView {
   /** Sessions in a blocking state — erroring or waiting for a reply.
    * A collapsed group shows these under its row (D6). */
   needsYouIds: Set<string>;
+  /** Sessions waiting for a reply (not erroring), whatever `kind` is:
+   * an error elsewhere outranks a question in `kind`, not here. The
+   * assistant sums up its subtasks' questions alone (main chat PRD
+   * ruling 177 point 3). */
+  askCount: number;
   /** Sessions still running. */
   runningCount: number;
 }
@@ -91,5 +96,5 @@ export function useSessionsAttention(
           : unreadCount > 0
             ? ["unread", unreadCount]
             : ["idle", 0];
-  return { kind, count, needsYouIds, runningCount };
+  return { kind, count, needsYouIds, askCount, runningCount };
 }

@@ -22,9 +22,9 @@ import type { SessionStatus } from "@/types/session";
  *     says: the last message, or a state when there is one — an error
  *     over a question over running over an unsent draft over the last
  *     message. Only the main chat's own (`ownAssistantState`, main chat
- *     PRD ruling 176 point 5): a subtask asking or failing says so on
- *     its own row under the card (ticket 128), and the card's avatar
- *     and name still carry it. Running, it says only what the screen does not (main chat
+ *     PRD ruling 176 point 5): a subtask asking says so on its own row
+ *     under the card (ticket 128), and the card's avatar and name still
+ *     carry it. Running, it says only what the screen does not (main chat
  *     PRD rulings 134, 135): in a round you started 「正在工作…」 with the
  *     main chat on screen; away from it 「正在输入…」 while it writes
  *     (an IM chat list's way), else 「正在工作…」, from a minute on
@@ -42,8 +42,9 @@ import type { SessionStatus } from "@/types/session";
  *   - The header's second line (`AssistantState.line`) is what a chat's
  *     own title bar says: only a state that needs you — waiting for a
  *     reply (not the question: it is right below, in the conversation),
- *     an error, a subtask's (「子任务在问你」, 「子任务出错」: the header
- *     has no subtask rows beside it). Nothing at rest, and nothing while it runs
+ *     an error, a subtask's question (「子任务在问你」: the header has no
+ *     subtask rows beside it; a subtask's error is Galley's business,
+ *     not yours, ruling 177 point 3). Nothing at rest, and nothing while it runs
  *     (rulings 134, 135: the header was where nobody looked). The last
  *     message and the draft are both on screen there already.
  *
@@ -75,8 +76,8 @@ export interface AssistantState {
   /** The state's words — the header identity's second line; null while
    * it runs, for a new reply and at rest. */
   line: AssistantLine | null;
-  /** The error or the question is an unpromoted subtask's, not the main
-   * chat's own (the header's words say so; the card's line speaks from
+  /** The question is an unpromoted subtask's, not the main chat's own
+   * (the header's words say so; the card's line speaks from
    * `ownAssistantState` since ruling 176 and so never meets one). */
   fromSubtask: boolean;
 }
@@ -85,8 +86,11 @@ export interface AssistantStateInput {
   /** The main chat's live status (useSessionStatusView). */
   status: SessionStatus;
   hasPendingAskUser: boolean;
-  /** One of its unpromoted subtasks is erroring or asking (ticket 06a). */
-  subtaskState?: "error" | "ask";
+  /** One of its unpromoted subtasks is asking (ticket 06a). A subtask's
+   * error is not here (main chat PRD ruling 177 point 3): it was
+   * reported to Galley, whose business it is, and the sidebar has no
+   * row for it. */
+  subtaskAsking?: boolean;
   hasUnread?: boolean;
   /** The main chat itself is on screen (not one of its subtasks: its
    * conversation is not in front of you there): nothing is unread. */
@@ -102,9 +106,11 @@ export const ASSISTANT_IDLE: AssistantState = {
 
 /**
  * The assistant's state, in the session row's priority (layout-and-
- * chrome.md, Session Row): an error — its own or an unpromoted
- * subtask's — over a question — its own or a subtask's — over running,
- * over a new reply, over nothing. Running has no words (rulings 134,
+ * chrome.md, Session Row): its own error over a question — its own or
+ * an unpromoted subtask's — over running, over a new reply, over
+ * nothing. A subtask's error is no state of the assistant's (ruling 177
+ * point 3): it was reported to Galley, and the sidebar lists no row for
+ * it. Running has no words (rulings 134,
  * 135): the header says nothing, the card its own (`assistantCardLine`).
  * A stop or a step-cap pause is nothing here: the card goes back to the
  * last message.
@@ -113,25 +119,21 @@ export function assistantState(
   input: AssistantStateInput,
   copy: AppCopy,
 ): AssistantState {
-  // A subtask's error or question counts as the main chat's own, the
-  // words aside (ticket 06a): the assistant is one person.
-  const subtaskErrored =
-    input.subtaskState === "error" && input.status !== "error";
+  // A subtask's question counts as the main chat's own, the words aside
+  // (ticket 06a): the assistant is one person. A subtask's error does
+  // not count at all (ruling 177 point 3).
   const subtaskAsking =
-    input.subtaskState === "ask" &&
+    !!input.subtaskAsking &&
     !input.hasPendingAskUser &&
     input.status !== "error";
-  if (input.status === "error" || subtaskErrored) {
+  if (input.status === "error") {
     const count = input.errorCount || 0;
-    const text = subtaskErrored
-      ? copy.subtask.sidebarErrored
-      : count > 1
-        ? `${copy.sidebar.errored} · ${count}`
-        : copy.sidebar.errored;
+    const text =
+      count > 1 ? `${copy.sidebar.errored} · ${count}` : copy.sidebar.errored;
     return {
       kind: "error",
       line: { text, tone: "error" },
-      fromSubtask: subtaskErrored,
+      fromSubtask: false,
     };
   }
   if (input.hasPendingAskUser || subtaskAsking) {
@@ -154,10 +156,10 @@ export function assistantState(
 }
 
 /**
- * The main chat on its own, its subtasks' questions and errors left out:
- * what the card's second line speaks from (main chat PRD ruling 176
- * point 5, ticket 128). A subtask that asks or fails has its own row
- * under the card, which says so; the line goes back to what it says
+ * The main chat on its own, its subtasks' questions left out: what the
+ * card's second line speaks from (main chat PRD ruling 176 point 5,
+ * ticket 128). A subtask that asks has its own row under the card,
+ * which says so; the line goes back to what it says
  * without it — Galley's own state, the draft, the last message. The
  * avatar's mark and the name's weight still sum the subtasks up
  * (`assistantState`), and so does the header's line.
@@ -166,7 +168,7 @@ export function ownAssistantState(
   input: AssistantStateInput,
   copy: AppCopy,
 ): AssistantState {
-  return assistantState({ ...input, subtaskState: undefined }, copy);
+  return assistantState({ ...input, subtaskAsking: false }, copy);
 }
 
 // ---- The card's second line ------------------------------------------
@@ -235,7 +237,7 @@ export function assistantCardLine(
     lastMessage?: AssistantLastMessage | null;
     /** The main chat itself is on screen (ruling 104): the card is the
      * list's selected row and, unless it runs, says the last message
-     * alone — asking, erroring, a subtask's question or error, a draft
+     * alone — asking, erroring, a subtask's question, a draft
      * in the composer right there all leave it be; the avatar's mark
      * and the name's weight say the state. */
     open: boolean;

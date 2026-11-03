@@ -23,6 +23,8 @@ vi.mock("react-resizable-panels", async (importOriginal) => ({
 // real hook.
 const needsYou = vi.hoisted(() => new Set<string>());
 const erroring = vi.hoisted(() => ({ on: false }));
+// Ids erroring, one by one (a subtask's error, ruling 177 point 3).
+const failing = vi.hoisted(() => new Set<string>());
 vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/hooks/useSessionsAttention")>();
@@ -34,10 +36,17 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
       const [sessions] = args;
       const view = actual.useSessionsAttention(...args);
       const ids = sessions.filter((s) => needsYou.has(s.id)).map((s) => s.id);
+      const failed = sessions.filter((s) => failing.has(s.id)).map((s) => s.id);
       return {
         ...view,
-        kind: erroring.on ? "error" : ids.length > 0 ? "ask" : view.kind,
-        needsYouIds: new Set([...view.needsYouIds, ...ids]),
+        kind:
+          erroring.on || failed.length > 0
+            ? "error"
+            : ids.length > 0
+              ? "ask"
+              : view.kind,
+        needsYouIds: new Set([...view.needsYouIds, ...ids, ...failed]),
+        askCount: view.askCount + ids.length,
       };
     },
   };
@@ -73,6 +82,7 @@ function renderToggle(collapsed: boolean, activeId?: string) {
 afterEach(() => {
   needsYou.clear();
   erroring.on = false;
+  failing.clear();
 });
 
 describe("SidebarCollapseToggle", () => {
@@ -102,6 +112,46 @@ describe("SidebarCollapseToggle", () => {
     const html = renderToggle(true, "a");
     expect(html).toMatch(/data-role="sidebar-needs-you-badge"[^>]*>1</);
     expect(html).toContain("text-error");
+  });
+
+  // An unpromoted subtask counts as the main chat (ticket 06a) when it
+  // asks; its error is Galley's business, not yours (ruling 177 point 3).
+  describe("Galley's subtasks", () => {
+    const subtask = managed("s-sub", {
+      parentSessionId: "s-main",
+      origin: { via: "subtask" },
+    });
+    const withSubtask = (activeId?: string) =>
+      renderToStaticMarkup(
+        <Tooltip.Provider>
+          <SidebarCollapseToggle
+            collapsed
+            onToggle={() => {}}
+            sessions={[...sessions, subtask]}
+            activeId={activeId}
+          />
+        </Tooltip.Provider>,
+      );
+
+    it("counts one asking as the main chat, in amber", () => {
+      needsYou.add("s-sub");
+      const html = withSubtask("a");
+      expect(html).toContain('aria-label="展开侧栏 · 1 个对话在等你"');
+      expect(html).toContain("text-warning");
+      // Not while the main chat, or the subtask itself, is open.
+      expect(withSubtask("s-main")).not.toContain("sidebar-needs-you-badge");
+      expect(withSubtask("s-sub")).not.toContain("sidebar-needs-you-badge");
+    });
+
+    it("does not count one that failed, nor turn the badge red", () => {
+      failing.add("s-sub");
+      expect(withSubtask("a")).not.toContain("sidebar-needs-you-badge");
+      needsYou.add("b");
+      const html = withSubtask("a");
+      expect(html).toContain('aria-label="展开侧栏 · 1 个对话在等你"');
+      expect(html).toContain("text-warning");
+      expect(html).not.toContain("text-error");
+    });
   });
 
   it("shows no badge with nothing waiting, or while the sidebar is open", () => {

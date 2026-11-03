@@ -63,11 +63,8 @@ describe("the assistant's state, in a session row's priority", () => {
     expect(state({ status: "running", hasPendingAskUser: true }).kind).toBe(
       "ask",
     );
-    expect(state({ status: "running", subtaskState: "ask" }).kind).toBe("ask");
-    expect(state({ hasPendingAskUser: true, subtaskState: "error" }).kind).toBe(
-      "error",
-    );
-    expect(state({ status: "error", subtaskState: "ask" }).kind).toBe("error");
+    expect(state({ status: "running", subtaskAsking: true }).kind).toBe("ask");
+    expect(state({ status: "error", subtaskAsking: true }).kind).toBe("error");
     // A stop or a step-cap pause is nothing: back to the last message.
     expect(state({ status: "cancelled" }).kind).toBe("idle");
   });
@@ -85,35 +82,36 @@ describe("the assistant's state, in a session row's priority", () => {
     expect(state({ status: "error", errorCount: 3 }).line?.text).toBe(
       "出错 · 3",
     );
-    expect(state({ subtaskState: "error" }).line?.text).toBe("子任务出错");
-    expect(state({ subtaskState: "error" }).fromSubtask).toBe(true);
     expect(state({ hasPendingAskUser: true }).line?.text).toBe("等你回复");
     expect(
-      state({ hasPendingAskUser: true, subtaskState: "ask" }).fromSubtask,
+      state({ hasPendingAskUser: true, subtaskAsking: true }).fromSubtask,
     ).toBe(false);
-    expect(state({ subtaskState: "ask" }).line?.text).toBe("子任务在问你");
+    expect(state({ subtaskAsking: true }).line?.text).toBe("子任务在问你");
+    expect(state({ subtaskAsking: true }).fromSubtask).toBe(true);
+    expect(state({ subtaskAsking: true }, en).line?.text).toBe(
+      "A subtask is asking you",
+    );
     expect(state({ hasUnread: true }).line).toBeNull();
     expect(state().line).toBeNull();
   });
 });
 
 describe("the main chat on its own (ruling 176 point 5)", () => {
-  it("leaves a subtask's question or error out, and nothing else", () => {
+  it("leaves a subtask's question out, and nothing else", () => {
     const own = (input: Partial<AssistantStateInput>) =>
       ownAssistantState({ ...base, ...input }, zh);
-    expect(own({ subtaskState: "ask" })).toEqual(state());
-    expect(own({ subtaskState: "error" })).toEqual(state());
-    expect(own({ status: "running", subtaskState: "error" })).toEqual(
+    expect(own({ subtaskAsking: true })).toEqual(state());
+    expect(own({ status: "running", subtaskAsking: true })).toEqual(
       state({ status: "running" }),
     );
-    expect(own({ hasUnread: true, subtaskState: "ask" })).toEqual(
+    expect(own({ hasUnread: true, subtaskAsking: true })).toEqual(
       state({ hasUnread: true }),
     );
     // Its own question and error stay its own.
-    expect(own({ hasPendingAskUser: true, subtaskState: "error" })).toEqual(
+    expect(own({ hasPendingAskUser: true, subtaskAsking: true })).toEqual(
       state({ hasPendingAskUser: true }),
     );
-    expect(own({ status: "error", subtaskState: "ask" })).toEqual(
+    expect(own({ status: "error", subtaskAsking: true })).toEqual(
       state({ status: "error" }),
     );
   });
@@ -181,9 +179,8 @@ describe("the card's second line: error > question > running > draft > last mess
     };
     const states: Partial<AssistantStateInput>[] = [
       { status: "error", errorCount: 3 },
-      { subtaskState: "ask" },
-      { subtaskState: "error" },
-      { status: "running", subtaskState: "ask" },
+      { subtaskAsking: true },
+      { status: "running", subtaskAsking: true },
       { hasUnread: true },
       {},
     ];
@@ -227,7 +224,7 @@ describe("the card's second line: error > question > running > draft > last mess
     }
     // A subtask's question is the subtask's: the last message.
     expect(
-      line({ subtaskState: "ask" }, { open: true, question: "这个不是它的" }),
+      line({ subtaskAsking: true }, { open: true, question: "这个不是它的" }),
     ).toEqual({
       kind: "message",
       prefix: null,
@@ -253,9 +250,9 @@ describe("the card's second line: error > question > running > draft > last mess
   });
 
   // Ruling 176 point 5 (ticket 128), overturning ticket 06a's
-  // 「子任务在问你」 / 「子任务出错」 here: the subtask's row under the card
-  // says it; the line says what it says without it.
-  it("leaves a subtask's question or error to its row: the line goes on as without it", () => {
+  // 「子任务在问你」 here: the subtask's row under the card says it; the
+  // line says what it says without it.
+  it("leaves a subtask's question to its row: the line goes on as without it", () => {
     const quiet: Partial<AssistantStateInput>[] = [
       {},
       { hasUnread: true },
@@ -264,29 +261,25 @@ describe("the card's second line: error > question > running > draft > last mess
       { status: "error" },
     ];
     for (const input of quiet) {
-      for (const subtaskState of ["ask", "error"] as const) {
-        for (const open of [true, false]) {
-          expect(line({ ...input, subtaskState }, { open })).toEqual(
-            line(input, { open }),
-          );
-        }
+      for (const open of [true, false]) {
+        expect(line({ ...input, subtaskAsking: true }, { open })).toEqual(
+          line(input, { open }),
+        );
       }
     }
-    for (const subtaskState of ["ask", "error"] as const) {
-      expect(line({ subtaskState })).toEqual({
-        kind: "draft",
-        prefix: "草稿：",
-        text: "下周三的会",
-      });
-      expect(line({ subtaskState }, { draft: null })).toEqual({
-        kind: "message",
-        prefix: null,
-        text: "好的，明早九点提醒你。",
-      });
-      expect(
-        line({ subtaskState, status: "running" }, { typing: true }),
-      ).toEqual({ kind: "running", text: "正在输入…" });
-    }
+    expect(line({ subtaskAsking: true })).toEqual({
+      kind: "draft",
+      prefix: "草稿：",
+      text: "下周三的会",
+    });
+    expect(line({ subtaskAsking: true }, { draft: null })).toEqual({
+      kind: "message",
+      prefix: null,
+      text: "好的，明早九点提醒你。",
+    });
+    expect(
+      line({ subtaskAsking: true, status: "running" }, { typing: true }),
+    ).toEqual({ kind: "running", text: "正在输入…" });
   });
 
   // Rulings 107, 110 (tickets 55, 58): a round Core woke it for says it
@@ -341,8 +334,7 @@ describe("the card's second line: error > question > running > draft > last mess
       { hasPendingAskUser: true },
       { hasPendingAskUser: true, status: "running" },
       { status: "error" },
-      { subtaskState: "ask" },
-      { subtaskState: "error" },
+      { subtaskAsking: true },
     ];
     for (const input of states) {
       for (const open of [true, false]) {

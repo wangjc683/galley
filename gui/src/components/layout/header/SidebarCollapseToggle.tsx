@@ -37,7 +37,7 @@ const TOGGLE_SHORTCUT = "Mod+\\";
  * dot (layout-and-chrome.md bans those). The session open in the main
  * area is not counted: it is in front of you. The main chat counts
  * like any other when it is not the one open (its subtasks' asks reach
- * its row).
+ * its row; their errors do not: main chat PRD ruling 177 point 3).
  */
 export function SidebarCollapseToggle({
   collapsed,
@@ -63,10 +63,11 @@ export function SidebarCollapseToggle({
     return () => window.removeEventListener("keydown", onKey);
   }, [onToggle]);
 
-  // Counted the way the sidebar shows them: an unpromoted subtask has no
-  // row of its own, its ask / error lights the main chat's (ticket 06a),
-  // so it counts as the main chat — unless the main chat, or the
-  // subtask itself, is the one open.
+  // Counted the way the sidebar shows them: an unpromoted subtask's ask
+  // lights the main chat's card (ticket 06a), so it counts as the main
+  // chat — unless the main chat, or the subtask itself, is the one open.
+  // A subtask's error does not count (ruling 177 point 3): it was
+  // reported to Galley, whose business it is.
   const mainChat = findMainChat(sessions);
   const subtasks = unpromotedSubtasksOf(sessions, mainChat?.id).filter(
     (s) => s.status !== "archived",
@@ -85,7 +86,7 @@ export function SidebarCollapseToggle({
   );
   const subtasksNeedYou =
     !!mainChat &&
-    subtaskAttention.needsYouIds.size > 0 &&
+    subtaskAttention.askCount > 0 &&
     !attention.needsYouIds.has(mainChat.id);
   const needsYou = attention.needsYouIds.size + (subtasksNeedYou ? 1 : 0);
   const count = collapsed ? needsYou : 0;
@@ -117,12 +118,7 @@ export function SidebarCollapseToggle({
           <NeedsYouBadge
             count={needsYou}
             visible={collapsed}
-            tone={
-              attention.kind === "error" ||
-              (subtasksNeedYou && subtaskAttention.kind === "error")
-                ? "error"
-                : "warning"
-            }
+            tone={attention.kind === "error" ? "error" : "warning"}
           />
         </TopBarIconButton>
       </IconTooltip>

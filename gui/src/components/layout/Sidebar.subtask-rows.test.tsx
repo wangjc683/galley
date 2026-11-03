@@ -11,8 +11,8 @@ import { Sidebar } from "./Sidebar";
 
 /**
  * The subtasks Galley has in hand, under its card (main chat ticket 128,
- * PRD ruling 176). lib/sidebar-subtasks.test.ts covers which and in what
- * order; this is where they stand and how they draw.
+ * PRD rulings 176, 177). lib/sidebar-subtasks.test.ts covers which and
+ * in what order; this is where they stand and how they draw.
  */
 
 // Static rendering reads the to-do store's first state; Galley's group
@@ -159,7 +159,7 @@ describe("in hand", () => {
     );
   });
 
-  it("puts what needs you first with its word; running says none", () => {
+  it("puts what asks you first with its word; running says none, and nothing stopped is listed", () => {
     todo.items = [
       item("s-inv", "running"),
       item("s-notes", "failed"),
@@ -168,40 +168,69 @@ describe("in hand", () => {
     const html = render([mainChat, sideChat, invoices, notes, vacuums]);
     const tags = rowTags(html);
     expect(tags.map((t) => /data-subtask-id="([^"]+)"/.exec(t)?.[1])).toEqual([
-      "s-notes",
       "s-vac",
       "s-inv",
     ]);
     expect(tags.map((t) => /aria-label="([^"]+)"/.exec(t)?.[1])).toEqual([
-      "子任务：把会议纪要整理成一页，出错",
       "子任务：比较三款扫地机器人的价格，等你回复",
       "子任务：整理下载文件夹里的发票",
     ]);
     const words = html.split('data-role="sidebar-subtask-state"').slice(1);
-    expect(words).toHaveLength(2);
-    expect(words[0]).toMatch(/^ class="[^"]*font-medium text-error">出错</);
-    expect(words[1]).toMatch(
+    expect(words).toHaveLength(1);
+    expect(words[0]).toMatch(
       /^ class="[^"]*font-medium text-warning">等你回复</,
     );
+    // Failed (ruling 177): no row, no word, no red anywhere in the zone.
+    expect(html).not.toContain("把会议纪要整理成一页");
+    expect(blockOf(html)).not.toContain("text-error");
   });
 
-  it("draws a single-line session row: the glyph column, 13px, a cut title that fades", () => {
-    todo.items = [item("s-inv", "running"), item("s-vac", "stopped")];
+  it("lists nothing for subtasks that only failed, ran out of steps or stopped", () => {
+    todo.items = [
+      item("s-inv", "failed"),
+      item("s-notes", "step_limit"),
+      item("s-vac", "stopped"),
+    ];
+    expect(
+      blockOf(render([mainChat, sideChat, invoices, notes, vacuums])),
+    ).toBe(blockOf(render([mainChat, sideChat])));
+  });
+
+  // B3 (ruling 177 point 5): a size down from a session row; colour and
+  // weight only for what asks you.
+  it("draws B3: 28px rows, 12px titles, a muted spinner, weight for the question alone", () => {
+    todo.items = [item("s-inv", "running"), item("s-vac", "asking")];
     const html = render([mainChat, sideChat, invoices, vacuums]);
-    const [running, stopped] = rowTags(html);
-    for (const tag of [running, stopped]) {
+    const [asking, running] = rowTags(html);
+    for (const tag of [asking, running]) {
       expect(tag).toContain('type="button"');
       expect(tag).toContain("mx-1.5");
-      expect(tag).toContain("min-h-8");
-      expect(tag).toContain("grid-cols-[16px_minmax(0,1fr)]");
+      expect(tag).toContain("min-h-7");
+      expect(tag).toContain("py-1 ");
       expect(tag).toContain("hover:bg-hover");
       expect(tag).not.toContain("aria-current");
     }
+    expect(running).toContain("grid-cols-[16px_minmax(0,1fr)]");
+    expect(asking).toContain("grid-cols-[16px_minmax(0,1fr)_auto]");
     const title = html.split('data-role="sidebar-subtask-title"').slice(1);
     expect(title[0]).toMatch(
-      /truncate-fade min-w-0 text-\[13px\] text-ink-soft font-semibold/,
+      /truncate-fade min-w-0 text-\[12px\] text-ink-soft font-semibold/,
     );
-    expect(title[1]).toMatch(/text-ink-soft font-medium/);
+    expect(title[1]).toMatch(
+      /truncate-fade min-w-0 text-\[12px\] text-ink-soft font-medium/,
+    );
+    // The running glyph: the session rows' bold spinner, turning, in
+    // muted ink — not brand.
+    const runningRow = html.slice(html.indexOf('data-state="running"'));
+    expect(runningRow).toMatch(
+      /^[^]*?<span class="inline-flex shrink-0 spin"><svg[^>]*class="text-ink-muted"/,
+    );
+    expect(
+      blockOf(html).split('data-role="sidebar-subtasks"')[1],
+    ).not.toContain("text-brand");
+    // The question's pause stays amber.
+    const askingRow = html.slice(html.indexOf('data-state="asking"'));
+    expect(askingRow).toMatch(/^[^]*?<svg[^>]*class="text-warning"/);
     // No menu, no ⋯.
     expect(blockOf(html)).not.toContain('aria-label="更多"');
   });
@@ -215,6 +244,10 @@ describe("in hand", () => {
     expect(inv).toContain('aria-current="page"');
     expect(inv).toContain("bg-selected shadow-[var(--shadow-selected)]");
     expect(inv).not.toContain("hover:bg-hover");
+    // The open one's title in full ink, the others step back.
+    const title = html.split('data-role="sidebar-subtask-title"').slice(1);
+    expect(title[0]).toMatch(/text-ink-soft font-semibold/);
+    expect(title[1]).toMatch(/text-\[12px\] text-ink font-medium/);
     expect(count(html, 'aria-current="page"')).toBe(1);
     expect(tagWith(html, CARD)).not.toContain("aria-current");
   });
@@ -230,15 +263,21 @@ describe("in hand", () => {
       expect(tagWith(html, CARD)).toContain('aria-current="page"');
       expect(count(html, 'aria-current="page"')).toBe(1);
     }
-    // A done subtask, open from its card: no row, the card.
+    // A done subtask, open from its card: no row, the card. A failed one
+    // too (ruling 177).
     const done = subtask("s-done", "已办完的差事", 0);
-    const html = render([mainChat, sideChat, ...six, done], {
-      activeId: "s-done",
-    });
-    expect(tagWith(html, CARD)).toContain('aria-current="page"');
+    const failed = subtask("s-failed", "没办成的差事", 1);
+    todo.items = [...todo.items, item("s-failed", "failed")];
+    for (const activeId of ["s-done", "s-failed"]) {
+      const html = render([mainChat, sideChat, ...six, done, failed], {
+        activeId,
+      });
+      expect(tagWith(html, CARD)).toContain('aria-current="page"');
+      expect(count(html, 'aria-current="page"')).toBe(1);
+    }
   });
 
-  it("folds what does not need you past five into 「还有 N 件在办」", () => {
+  it("folds what runs past five into 「还有 N 件在办」", () => {
     const seven = Array.from({ length: 7 }, (_, i) =>
       subtask(`s-r${i}`, `差事 ${i}`, 10 + i),
     );

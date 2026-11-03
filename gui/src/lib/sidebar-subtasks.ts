@@ -8,20 +8,23 @@ import type { Session } from "@/types/session";
  * main chat sends several off at once, and their cards scroll away with
  * the conversation.
  *
- * - **Which**: the to-do panel's 「Galley 在办」 subtasks, one read
- *   (`AssistantTodo.assistant`, `kind === "subtask"`): Core has already
- *   left out the finished, the promoted and the archived, and the ones
- *   neither running nor moved for seven days (core/src/assistant_todo.rs).
- *   No rule of its own. Each is matched to its session among the main
- *   chat's unpromoted subtasks the sidebar has, for its start time and
- *   its title as it stands now; one the sidebar no longer has as such —
- *   promoted or archived a moment before the list is read again — is
- *   left out, so a conversation is never listed twice.
- * - **Needs you** (asking, failed): all of them, first, never folded.
- * - **The rest** (running, paused at the step limit, stopped short):
- *   after them, at most `SIDEBAR_SUBTASK_ROWS` (a project group's
- *   「最近 5 条」), the rest behind one row, 「还有 N 件在办」, which opens
- *   the panel.
+ * - **Which**: the subtasks running or asking you, out of the to-do
+ *   panel's 「Galley 在办」 read (`AssistantTodo.assistant`,
+ *   `kind === "subtask"`; Core has already left out the finished, the
+ *   promoted and the archived). A subtask that failed, ran out of steps
+ *   or stopped short leaves the moment it stops (ruling 177, correcting
+ *   176 point 2): a failure or a step limit was reported to Galley, who
+ *   sends it back or tells you — its business, not yours; a stop was
+ *   yours, or a restart's. They stay in the panel for seven days. Each
+ *   is matched to its session among the main chat's unpromoted subtasks
+ *   the sidebar has, for its start time and its title as it stands now;
+ *   one the sidebar no longer has as such — promoted or archived a
+ *   moment before the list is read again — is left out, so a
+ *   conversation is never listed twice.
+ * - **Asking you**: all of them, first, never folded.
+ * - **Running**: after them, at most `SIDEBAR_SUBTASK_ROWS` (a project
+ *   group's 「最近 5 条」), the rest behind one row, 「还有 N 件在办」,
+ *   which opens the panel.
  * - **Order**: by start time (the session's `createdAt`), the first
  *   started on top; the panel's own order (latest activity first) only
  *   breaks a tie. Rows do not jump about as steps land.
@@ -32,9 +35,12 @@ import type { Session } from "@/types/session";
  * Nothing at all: no rows, no space (`NO_SIDEBAR_SUBTASKS`).
  */
 
-/** How many of the subtasks that do not need you show before
- * 「还有 N 件在办」 (ruling 176 point 2). */
+/** How many running subtasks show before 「还有 N 件在办」 (ruling 176
+ * point 2). */
 export const SIDEBAR_SUBTASK_ROWS = 5;
+
+/** The states a listed subtask can be in (ruling 177). */
+export type SidebarSubtaskState = Extract<TodoState, "running" | "asking">;
 
 export interface SidebarSubtask {
   /** The subtask's session id. */
@@ -42,23 +48,29 @@ export interface SidebarSubtask {
   /** Its session's title as the sidebar has it now, else the list's
    * words; empty when neither has any (the row then says 「子任务」). */
   title: string;
-  state: TodoState;
+  state: SidebarSubtaskState;
 }
 
 export interface SidebarSubtasks {
-  /** The rows, in order: what needs you, then the rest. */
+  /** The rows, in order: asking you, then running. */
   rows: SidebarSubtask[];
-  /** The rest past `SIDEBAR_SUBTASK_ROWS`, by id, in the same order:
-   * 「还有 N 件在办」 (N is its length) opens the panel and lights them. */
+  /** The running ones past `SIDEBAR_SUBTASK_ROWS`, by id, in the same
+   * order: 「还有 N 件在办」 (N is its length) opens the panel and lights
+   * them. */
   more: string[];
 }
 
 export const NO_SIDEBAR_SUBTASKS: SidebarSubtasks = { rows: [], more: [] };
 
-/** A subtask that needs you: it asks, or it failed. Listed whatever
- * their number, ahead of the rest, with the state's word on the row. */
+/** A subtask that needs you: it asks (ruling 177: a failure is Galley's
+ * business). Listed whatever their number, ahead of the rest, with the
+ * state's word on the row. */
 export function subtaskNeedsYou(state: TodoState): boolean {
-  return state === "asking" || state === "failed";
+  return state === "asking";
+}
+
+function listed(state: TodoState): state is SidebarSubtaskState {
+  return state === "running" || state === "asking";
 }
 
 /**
@@ -71,12 +83,12 @@ export function sidebarSubtasks(
   subtasks: readonly Pick<Session, "id" | "title" | "createdAt">[],
 ): SidebarSubtasks {
   const sessions = new Map(subtasks.map((s) => [s.id, s]));
-  const listed: { row: SidebarSubtask; started: number }[] = [];
+  const shown: { row: SidebarSubtask; started: number }[] = [];
   for (const item of items) {
-    if (item.kind !== "subtask") continue;
+    if (item.kind !== "subtask" || !listed(item.state)) continue;
     const session = sessions.get(item.id);
     if (!session) continue;
-    listed.push({
+    shown.push({
       row: {
         id: item.id,
         title: session.title.trim() || item.text.trim(),
@@ -85,16 +97,16 @@ export function sidebarSubtasks(
       started: Date.parse(session.createdAt),
     });
   }
-  if (listed.length === 0) return NO_SIDEBAR_SUBTASKS;
+  if (shown.length === 0) return NO_SIDEBAR_SUBTASKS;
   // A stable sort: the panel's order breaks a tie, and a start time that
   // cannot be read keeps its place.
-  listed.sort((a, b) => a.started - b.started || 0);
-  const needsYou = listed.filter((s) => subtaskNeedsYou(s.row.state));
-  const rest = listed.filter((s) => !subtaskNeedsYou(s.row.state));
+  shown.sort((a, b) => a.started - b.started || 0);
+  const asking = shown.filter((s) => subtaskNeedsYou(s.row.state));
+  const running = shown.filter((s) => !subtaskNeedsYou(s.row.state));
   return {
-    rows: [...needsYou, ...rest.slice(0, SIDEBAR_SUBTASK_ROWS)].map(
+    rows: [...asking, ...running.slice(0, SIDEBAR_SUBTASK_ROWS)].map(
       (s) => s.row,
     ),
-    more: rest.slice(SIDEBAR_SUBTASK_ROWS).map((s) => s.row.id),
+    more: running.slice(SIDEBAR_SUBTASK_ROWS).map((s) => s.row.id),
   };
 }

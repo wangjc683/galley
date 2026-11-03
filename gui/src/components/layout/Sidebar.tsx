@@ -27,14 +27,6 @@ import { SidebarQuickActions } from "./sidebar/SidebarQuickActions";
 import { SidebarOtherSources } from "./sidebar/SidebarSideChats";
 import { SidebarSubtaskRows } from "./sidebar/SidebarSubtaskRows";
 import { SidebarSectionsList } from "./sidebar/SidebarTimeline";
-// TEMP variant switcher (main chat 128): the trial.
-import { SubtaskRowsTrial } from "@/dev/subtask-rows-trial";
-
-// TEMP variant switcher (main chat 128): in a dev build the rows under
-// Galley's card go through the trial (its pill, looks B / C, demo data;
-// src/dev/subtask-rows-trial.tsx); a production build draws them as
-// written.
-const SubtaskRows = import.meta.env.DEV ? SubtaskRowsTrial : SidebarSubtaskRows;
 
 export interface SidebarProps {
   sessions: Session[];
@@ -212,14 +204,14 @@ export function Sidebar({
     () => unpromotedSubtasksOf(sessions, mainChat?.id),
     [sessions, mainChat],
   );
-  // The subtasks Galley has in hand, under its card (ticket 128, ruling
-  // 176): what needs you, then at most five more.
+  // The subtasks Galley has in hand, under its card (ticket 128, rulings
+  // 176, 177): those asking you, then at most five running.
   const subtaskRows = useSidebarSubtasks(mainChatSubtasks);
   // An open subtask with a row of its own there is that row's to select
-  // (a conversation row, ruling 176 point 6); one without — done, or
-  // behind 「还有 N 件在办」 — keeps the assistant's card selected: the
-  // selected place must be in the sidebar (layout-and-chrome.md), and
-  // only once.
+  // (a conversation row, ruling 176 point 6); one without — done,
+  // stopped, failed, or behind 「还有 N 件在办」 — keeps the assistant's
+  // card selected: the selected place must be in the sidebar
+  // (layout-and-chrome.md), and only once.
   const mainChatSelected =
     !!mainChat &&
     (activeId === mainChat.id ||
@@ -496,7 +488,7 @@ export function Sidebar({
             open={activeId === mainChat.id}
             onOpen={() => handleSelectSession(mainChat.id)}
           />
-          <SubtaskRows
+          <SidebarSubtaskRows
             subtasks={subtaskRows}
             activeId={activeId}
             onOpen={handleSelectSession}

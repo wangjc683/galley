@@ -65,6 +65,8 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
         ...view,
         kind,
         needsYouIds: new Set([...view.needsYouIds, ...needsYou]),
+        // Asking counted apart from the kind, as the hook does.
+        askCount: view.askCount + kinds.filter((k) => k === "ask").length,
       };
     },
   };
@@ -598,7 +600,6 @@ describe("the assistant's card", () => {
       ],
       [() => live.set("s-main", { status: "error" }), "error"],
       [() => attentionKind.set("s-sub", "ask"), "ask"],
-      [() => attentionKind.set("s-sub", "error"), "error"],
     ] as const) {
       live.clear();
       attentionKind.clear();
@@ -695,30 +696,54 @@ describe("the assistant's card", () => {
     expect(plain).toContain("font-medium text-warning");
   });
 
-  // Ruling 176 point 5 (ticket 128): a subtask asking or failing says so
-  // on its own row under the card; the second line goes on with what it
-  // says without it, while the avatar and the name still carry it.
-  it("leaves a subtask's question or error to its row, the avatar and the name still carrying it", () => {
+  // Ruling 176 point 5 (ticket 128): a subtask asking says so on its own
+  // row under the card; the second line goes on with what it says
+  // without it, while the avatar and the name still carry it.
+  it("leaves a subtask's question to its row, the avatar and the name still carrying it", () => {
     card.question = "这个不是它的";
     card.lastMessage = { fromUser: false, text: "我派了一个子任务去查" };
-    for (const kind of ["ask", "error"] as const) {
-      attentionKind.set("s-sub", kind);
-      const html = render([used, sideChat, subtask]);
-      expect(textOf(lineOf(html))).toBe("我派了一个子任务去查");
-      expect(html).not.toContain("子任务在问你");
-      expect(html).not.toContain("子任务出错");
-      expect(tagWith(html, CARD)).toContain(`data-state="${kind}"`);
-      expect(between(html, CARD, "</button>")).toContain(`data-kind="${kind}"`);
-      expect(between(html, CARD, "</button>")).toMatch(
-        /font-semibold[^>]*>Galley</,
-      );
-    }
-    // Running, the line says Galley's own work.
+    attentionKind.set("s-sub", "ask");
+    const html = render([used, sideChat, subtask]);
+    expect(textOf(lineOf(html))).toBe("我派了一个子任务去查");
+    expect(html).not.toContain("子任务在问你");
+    expect(tagWith(html, CARD)).toContain('data-state="ask"');
+    expect(between(html, CARD, "</button>")).toContain('data-kind="ask"');
+    expect(between(html, CARD, "</button>")).toMatch(
+      /font-semibold[^>]*>Galley</,
+    );
+    // Running, the line says Galley's own work; the avatar the question.
     live.set("s-main", { status: "running" });
-    attentionKind.set("s-sub", "error");
     const running = render([used, sideChat, subtask]);
     expect(textOf(lineOf(running))).toBe("正在工作…");
-    expect(tagWith(running, CARD)).toContain('data-state="error"');
+    expect(tagWith(running, CARD)).toContain('data-state="ask"');
+  });
+
+  // Ruling 177 point 3: a subtask's error was reported to Galley, whose
+  // business it is; nothing on the card says it, and it hides no
+  // other subtask's question.
+  it("takes no notice of a subtask's error: no mark, no bold, no words", () => {
+    card.lastMessage = { fromUser: false, text: "我派了一个子任务去查" };
+    attentionKind.set("s-sub", "error");
+    const html = render([used, sideChat, subtask]);
+    expect(textOf(lineOf(html))).toBe("我派了一个子任务去查");
+    expect(html).not.toContain("子任务出错");
+    expect(tagWith(html, CARD)).toContain('data-state="idle"');
+    expect(between(html, CARD, "</button>")).not.toContain(BADGE);
+    expect(between(html, CARD, "</button>")).toMatch(
+      /font-medium[^>]*>Galley</,
+    );
+    // Running, it is Galley's own running.
+    live.set("s-main", { status: "running" });
+    expect(tagWith(render([used, sideChat, subtask]), CARD)).toContain(
+      'data-state="running"',
+    );
+    live.clear();
+    // One failing beside one asking: the question still shows.
+    const other = { ...subtask, id: "s-sub2" };
+    attentionKind.set("s-sub2", "ask");
+    expect(tagWith(render([used, sideChat, subtask, other]), CARD)).toContain(
+      'data-state="ask"',
+    );
   });
 
   it("shows no draft while the main chat is open: it is in the composer", () => {

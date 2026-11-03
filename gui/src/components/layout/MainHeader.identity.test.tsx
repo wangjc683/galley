@@ -48,6 +48,8 @@ vi.mock("@/hooks/useSessionStatusView", async (importOriginal) => {
 });
 
 const subtaskAsking = vi.hoisted(() => ({ on: false }));
+// A subtask's error, the kind the hook reports for its list.
+const subtaskErroring = vi.hoisted(() => ({ on: false }));
 vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("@/hooks/useSessionsAttention")>();
@@ -57,8 +59,10 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
       ...args: Parameters<typeof actual.useSessionsAttention>
     ) => {
       const view = actual.useSessionsAttention(...args);
-      return subtaskAsking.on && args[0].length > 0
-        ? { ...view, kind: "ask" as const }
+      if (args[0].length === 0) return view;
+      if (subtaskErroring.on) return { ...view, kind: "error" as const };
+      return subtaskAsking.on
+        ? { ...view, kind: "ask" as const, askCount: 1 }
         : view;
     },
   };
@@ -67,6 +71,7 @@ vi.mock("@/hooks/useSessionsAttention", async (importOriginal) => {
 afterEach(() => {
   live.clear();
   subtaskAsking.on = false;
+  subtaskErroring.on = false;
 });
 
 const mainChat = makeSession({
@@ -185,8 +190,13 @@ describe("the open main chat's header", () => {
     live.clear();
     subtaskAsking.on = true;
     expect(statusLine(header({}, [subtask]))).toBe("子任务在问你");
-    // At rest it says nothing, a sentence or not.
+    // A subtask's error is not yours (ruling 177 point 3): nothing.
     subtaskAsking.on = false;
+    subtaskErroring.on = true;
+    expect(statusLine(header({}, [subtask]))).toBeNull();
+    expect(header({}, [subtask])).not.toContain("子任务出错");
+    subtaskErroring.on = false;
+    // At rest it says nothing, a sentence or not.
     expect(statusLine(header())).toBeNull();
   });
 });
