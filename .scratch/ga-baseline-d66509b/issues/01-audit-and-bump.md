@@ -228,3 +228,11 @@ pytest 的第一条按票面不设 `GA_PATH` 时，conftest 会先找 `~/Documen
 9. **门禁缺口（可选）**：`scripts/check-managed-ga-payload.mjs` 与 `check-managed-ga-app-bundle.mjs` 没要求 `legacy_llmcore.py` 存在；缺了它 `import llmcore` 就失败，打包冒烟会抓到，但 payload 检查不会。
 10. **合并**：`docs/project-status.md` 的 Unreleased 段票 134 的分支也可能改，合入时可能冲突。
 11. worktree 里留着被 gitignore 的 `gui/node_modules`（主树 APFS 克隆）与重建的 `core/python-bundle`；借主树 venv 的 `.venv` 符号链接用完已删，要复跑 pytest 得重新链上；scratchpad 里有旧 payload 副本 `gab01-old-managed-ga/`、上游克隆 `gab01-upstream/` 与探针 `gab01-probes/`。rebase 脚本在 `/tmp` 的两个工作库已删。
+
+## Comments
+
+- 2026-11-03 17:47–17:52（UTC+8），主会话在 JC 起的 tauri dev 里走真机：
+  - runner 的 `--ga-path` 是仓库里的 `managed-ga/code`（新 payload）。
+  - 内置工作台会话里一个浏览器任务（打开 example.com，读标题和第一段）：2 次 `web_execute_js`，答对；`d66509b` 引擎的浏览器路径通。
+  - L0：让它调 `start_long_term_update` 并要求不写记忆。上游自己的门槛拦下了：第 10 轮之前调用一律回「start_long_term_update is only used after completing a long turn task!」（`managed-ga/code/ga.py:546`），读 L0 那一行照常执行，但结果被这句覆盖，看不到。模型随后自己用 `file_read` 从状态根读了 L0。所以「内置下提纯读到 L0」在真机上还没看到，要等一个跑满 10 轮的任务收尾时调用它（工具结果里有 `This is L0:`）；代码路径由报告里的打包 Python 探针与回归测试覆盖。
+  - 记忆目录事前事后比哈希：只有 `file_access_stats.json` 变了（GA 读记忆文件时自己记的读取计数），其余 45 个文件不变。测试会话已永久删除。
