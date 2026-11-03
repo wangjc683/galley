@@ -206,7 +206,9 @@
 | 12 | wake-on-time | 叫醒 | 按时叫醒 → 照记下的话一两句提醒（带身份证、几点出门），不说晚了，不出 <no-reply/> | 2 | 2 | 100% |
 | 13 | wake-late | 叫醒 | 晚了 9 小时（电脑睡着）→ 照实说晚了多久，再说事情（给王经理回电话） | 2 | 2 | 100% |
 | 14 | wake-obsolete | 叫醒 | 事情已经办了（前面用户说过快递拿了）→ 回复只有 <no-reply/>，不动任何东西 | 2 | 2 | 100% |
-| | 合计 | | | 28 | 28 | 100% |
+| 15 | rem-parcel-online | 叫醒（票 134 第三轮） | 裁决 184 第 9 条：提醒说要上网查快递物流 → 主对话不上网：把查物流交给子任务，这一轮只写子任务标签和 <no-reply/>，不给用户写字；不开浏览器 | 3 | 3 | 100% |
+| 16 | rem-water-only | 叫醒（票 134 第三轮） | 裁决 184 第 9 条：只提醒、不查东西（喝水）→ 到点就说一句，不派子任务、不出 <no-reply/> | 3 | 3 | 100% |
+| | 合计 | | | 34 | 34 | 100% |
 
 ## 一览
 
@@ -244,6 +246,12 @@
 | 13 | wake-late | 2 | todo list；sessions search 王经理 --runtime all --all | 这条提醒晚了 **9 小时**才送到。现在若方便，给王经理回个电话，把下周合同签约的具体日期、时间，以及需要提前准备的材料一起确认好。 | 67 | 读了（第 1 次调用）：wake.md、reminders.md、todos-change.md；1 次 1 轮，11798 字节 | — | — | 过 |
 | 14 | wake-obsolete | 1 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、reminders.md；1 次 1 轮，13705 字节 | — | — | 过 |
 | 14 | wake-obsolete | 2 | todo list；schedule list | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、reminders.md；1 次 1 轮，13705 字节 | — | — | 过 |
+| 15 | rem-parcel-online | 1 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9074 字节 | — | — | 过 |
+| 15 | rem-parcel-online | 2 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8775 字节 | — | — | 过 |
+| 15 | rem-parcel-online | 3 | — | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9074 字节 | — | — | 过 |
+| 16 | rem-water-only | 1 | — | 半小时到了，喝点水吧 💧 | 12 | 没读（没写） | — | — | 过 |
+| 16 | rem-water-only | 2 | — | 到时间啦，喝点水吧 💧 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8771 字节 | — | — | 过 |
+| 16 | rem-water-only | 3 | — | 半小时到啦，喝点水吧 💧 | 12 | 读了（第 1 次调用）：wake.md；1 次 1 轮，6673 字节 | — | — | 过 |
 
 ## 1. report-wed（该记待办）
 
@@ -997,3 +1005,160 @@ Act on it now: tell the user what is of use to them now, in a sentence or two (n
 ```text
 <no-reply/>
 ```
+
+## 15. rem-parcel-online（叫醒（票 134 第三轮））
+
+**期望**：裁决 184 第 9 条：提醒说要上网查快递物流 → 主对话不上网：把查物流交给子任务，这一轮只写子任务标签和 <no-reply/>，不给用户写字；不开浏览器
+
+上下文：
+
+> 用户：顺丰那个快递帮我盯一下，过会儿查查到哪了，单号 SF1402 7735 8861
+>
+> 助手：好，我设了个提醒，到点查一下物流，有消息告诉你。
+
+已有的定时任务（运行那一刻的时间）：
+
+- `sched_3b8e6d2a9c4f7105` 2026-11-03T10:16:56+00:00，已到点：查顺丰快递到哪了 ⏎ 单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。
+
+叫醒消息：
+
+```text
+[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
+
+Reminder `sched_3b8e6d2a9c4f7105` (one-off) came due. Planned for 2026-11-03 18:16 (Tue), local time. What you noted when you set it:
+<<<
+查顺丰快递到哪了
+
+单号 SF1402 7735 8861，上顺丰官网查物流，到了就告诉用户去取。
+>>>
+Act on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
+```
+
+### 第 1 遍：过
+
+工具调用：
+
+1. file_read（wake.md）
+2. file_read（subtasks.md）
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9074 字节；建前查过：—；手册版本：`a376d29d`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+<no-reply/>
+```
+
+### 第 2 遍：过
+
+工具调用：
+
+1. code_run
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8775 字节；建前查过：—；手册版本：`a376d29d`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+<no-reply/>
+```
+
+### 第 3 遍：过
+
+工具调用：
+
+1. file_read（wake.md）
+2. file_read（subtasks.md）
+3. file_read（global_mem.txt）
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；2 次 1 轮，9074 字节；建前查过：—；手册版本：`a376d29d`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+<no-reply/>
+```
+
+## 16. rem-water-only（叫醒（票 134 第三轮））
+
+**期望**：裁决 184 第 9 条：只提醒、不查东西（喝水）→ 到点就说一句，不派子任务、不出 <no-reply/>
+
+上下文：
+
+> 用户：半小时后提醒我喝水
+>
+> 助手：好，半小时后提醒你喝水。
+
+已有的定时任务（运行那一刻的时间）：
+
+- `sched_9a1c5e7b3d2f8406` 2026-11-03T10:16:56+00:00，已到点：喝水 ⏎ 用户半小时前让我到点提醒他喝水。
+
+叫醒消息：
+
+```text
+[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
+
+Reminder `sched_9a1c5e7b3d2f8406` (one-off) came due. Planned for 2026-11-03 18:16 (Tue), local time. What you noted when you set it:
+<<<
+喝水
+
+用户半小时前让我到点提醒他喝水。
+>>>
+Act on it now: tell the user what is of use to them now, in a sentence or two (not your words read back), look something up first, or start a subtask. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.
+```
+
+### 第 1 遍：过
+
+结束：以最终回复结束；读手册：没读（没写）；建前查过：—；手册版本：`a376d29d`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+半小时到了，喝点水吧 💧
+```
+
+建议标签：半小时后再提醒我喝水
+
+### 第 2 遍：过
+
+工具调用：
+
+1. code_run
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，8771 字节；建前查过：—；手册版本：`a376d29d`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+到时间啦，喝点水吧 💧
+```
+
+建议标签：半小时后再提醒我喝水
+
+### 第 3 遍：过
+
+工具调用：
+
+1. file_read（wake.md）
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md；1 次 1 轮，6673 字节；建前查过：—；手册版本：`a376d29d`。
+
+新建：无；删除：无；改动：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+半小时到啦，喝点水吧 💧
+```
+
+建议标签：再过半小时提醒我喝水

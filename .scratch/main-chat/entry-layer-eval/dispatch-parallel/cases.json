@@ -1,5 +1,5 @@
 {
-  "_note": "票 127（主对话 PRD 裁决 174）：几件互不相干的差事，或一件能拆成互不依赖的几块，一块一个标签、同一条回复派出去；问题不拆，要用同一个标签页或同一批文件的不拆。只在 new（main 加上票 126、127 的主对话提示词，galley-prompt/main_chat.new.txt）下跑。cases 是本票的 6 条：tags 是最终回复里该有的标签数（exact 正好几个，min 至少几个），should_dispatch 由它定（大于 0 为 true）；home_files 是放进假 HOME 的文件（相对 HOME，内容是占位文字），让用户说的文件夹在沙盒里真的有。reuse 指向票 115 的 16 条，原样带进来，按票 115 的判定看有没有退步。每个标签都要有 title，清理后（同 Core 的 subtask::tag_title）不超过 20 个字符，不能与派活说明第一行一模一样。票 134（裁决 183）：p-question-parts 从 exact 0 改成 exact 1（要查好几处的问题要派，一个问题不拆）；其余照旧。v2（票 134 改过的提示词，dispatch-criterion/galley-prompt/main_chat.v2.txt）只跑这 6 条，带进来的用例在 v2 下的结果见 dispatch-criterion。",
+  "_note": "票 127（主对话 PRD 裁决 174）：几件互不相干的差事，或一件能拆成互不依赖的几块，一块一个标签、同一条回复派出去；问题不拆，要用同一个标签页或同一批文件的不拆。只在 new（main 加上票 126、127 的主对话提示词，galley-prompt/main_chat.new.txt）下跑。cases 是本票的 6 条：tags 是最终回复里该有的标签数（exact 正好几个，min 至少几个），should_dispatch 由它定（大于 0 为 true）；home_files 是放进假 HOME 的文件（相对 HOME，内容是占位文字），让用户说的文件夹在沙盒里真的有。reuse 指向票 115 的 16 条，原样带进来，按票 115 的判定看有没有退步。每个标签都要有 title，清理后（同 Core 的 subtask::tag_title）不超过 20 个字符，不能与派活说明第一行一模一样。票 134（裁决 183）：p-question-parts 从 exact 0 改成 exact 1（要查好几处的问题要派，一个问题不拆）；其余照旧。v2（票 134 改过的提示词，dispatch-criterion/galley-prompt/main_chat.v2.txt）只跑这 6 条，带进来的用例在 v2 下的结果见 dispatch-criterion。票 134 第三轮（裁决 184）：p-errand-and-question 改成 exact 2：订票与查天气都要上网，都派，两件互不相干，一件一个标签；v3 跑这 6 条。",
   "reuse": "dispatch-criterion/cases.json",
   "cases": [
     {"id": "p-three-errands", "group": "几件差事", "message": "帮我把下载文件夹里的发票按月份归档，把桌面上的截图按日期放进文件夹，再把「文档/合同」里的 PDF 改名成「日期-对方」",
@@ -35,6 +35,8 @@
     {"id": "p-question-parts", "group": "问题不拆", "message": "新赛季西部和东部各有哪几支队能进季后赛？",
      "tags": {"exact": 1}, "note": "票 134（裁决 183）：要查好几处才答得上来，派；一个问题不拆，一个标签。票 127 时按裁决 160 标 0 个（在问、在等答案，自己答）。"},
     {"id": "p-errand-and-question", "group": "差事加问题", "message": "帮我订周五去厦门的高铁票，顺便告诉我厦门这周末天气怎么样",
-     "tags": {"exact": 1}, "note": "订票是差事，一个标签派出去；天气是在问，自己答。"}
+     "tags": {"exact": 2}, "note": "票 134 第三轮（裁决 184）：订票与查天气都要上网，都派；两件互不相干，一件一个标签，共 2 个。票 127 时按裁决 160 标 1 个（天气自己答）。"},
+    {"id": "p-errand-and-question-full", "group": "差事加问题", "message": "帮我订周五上午从上海虹桥去厦门北的高铁票，二等座一个人，顺便告诉我厦门这周末天气怎么样",
+     "tags": {"exact": 2}, "note": "票 134 第三轮：p-errand-and-question 没写出发地，v3 下三遍都先问出发地、只派了天气；这一条把出发地、时段、席别写全，看订票与天气是不是各派一个。"}
   ]
 }

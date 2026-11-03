@@ -364,7 +364,9 @@ look it up with the Galley CLI (search, then
 /// away from GA's file-based subagent SOP, which the model read on its
 /// own in that comparison. Ticket 115 (below) decided what goes by
 /// whether the user is waiting, not by how long the work would take;
-/// since ticket 134 (below) everything past a step or two goes.
+/// ticket 134 (below) first sent everything past a step or two, and since
+/// its third round (ruling 184) whatever needs the web or changes things
+/// goes.
 ///
 /// Ticket 30 (assistant PRD rulings 2, 3, 8) closed the loop: the
 /// instructions also name the evidence to hand back, Galley wakes the
@@ -503,20 +505,46 @@ look it up with the Galley CLI (search, then
 /// anything taken for quick that turns out bigger. When what comes back
 /// is the answer itself, the model pastes it back in full (`subtasks.md`,
 /// same ruling): the wake already carries the subtask's final answer.
+///
+/// Ticket 134's third round (main chat PRD ruling 184, in place of ruling
+/// 183 point 2) replaced that line by what the work touches. The eval of
+/// the line above kept finding cases it had to name one by one (a look in
+/// a folder went out as "a list"); JC asked for a rule that does not
+/// grow. Anything that needs the web, the browser or going online any
+/// other way, goes to a subtask, always, the weather and a score
+/// included: in GA going online is driving the user's real browser, and
+/// the weather took 4 to 9 browser calls and over a minute; the web
+/// turns are what held the main chat longest. Anything that changes
+/// things on the user's computer or accounts goes too, and anything the
+/// user asks to hand off. Everything else stays: talking, answering from
+/// what the model knows or from this conversation, to-dos, reminders and
+/// memos, the time, a read-only look on the computer, and writing up this
+/// conversation's own material. The clause opens with "You do not go
+/// online in this chat", the words of the runner's guard (ticket 135,
+/// ruling 184 point 4), which answers a browser tool in the main chat
+/// with the same hand-off instead of running it. The model's question
+/// before it starts is now "does this need the web, or change anything",
+/// which it can answer up front, so "if something you took for quick
+/// turns out bigger" is gone: a read-only look that turns up a change
+/// hands the change over with what it found ("what you have found so
+/// far" in the instructions). The title, the parallel sentence (what
+/// comes back as one thing stays in one tag, ruling 183 point 5), the
+/// instructions, "on its way", no waiting and the subagent sentence stay.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
 
-Answer yourself only what takes a step or two: a single fact (the
-weather, a score, whether someone is injured), a quick look on their
-computer (what is in a folder), a quick conversion, a follow-up you can
-answer from what is already in this conversation.
-Everything bigger goes to a subtask, so this chat stays free for the
-user: a thing to hand back (a table, a list, a comparison, a report, a
-file), a change on their computer or accounts (files sorted or renamed, a
-booking, a form filled), and a question or story that needs several
-places looked up (what happened in some event, a ranking, a prediction).
-So does anything they ask you to hand off. End your reply with
+You do not go online in this chat, neither with the browser nor any
+other way (curl and the like in code_run). Anything that needs the web
+goes to a subtask, always, the weather or a score included. So does
+anything that changes things on the user's computer or accounts (files
+sorted, renamed or written, an order placed, a form filled, something
+sent), and anything they ask you to hand off. Everything else you do
+yourself: talking, answering from what you know or from this
+conversation, to-dos, reminders and memos, the time, a read-only look on
+their computer (what is in a folder), and writing up what you two
+discussed, even into a file (a subtask cannot see this conversation).
+To hand something off, end your reply with
 <subtask title="a few words">what to do</subtask>. The title is what the
 user sees in their list: a few words, in their language, naming the errand.
 When the user hands you several errands that do not depend on each other,
@@ -532,12 +560,8 @@ what you have found so far, and what to hand back, with the evidence for
 it (a confirmation number, a file path, a link, a screenshot path).
 Tell the user in a sentence that it is on its way. When it finishes, asks
 something or fails, Galley wakes you to check it and tell the user, so do
-not wait on it or watch it. If something you took for quick turns out
-bigger partway through, stop there and hand the rest over the same way.
-Do it yourself when the errand's material is this conversation (writing up
-what you two discussed), and when it is a to-do, a reminder or a memo. Use
-this, not the file-based subagent in your memory (subagent.md), which the
-user cannot see.
+not wait on it or watch it. Use this, not the file-based subagent in your
+memory (subagent.md), which the user cannot see.
 
 Note what the user has to do (a deadline, a call, a flight, a purchase),
 what they are in the middle of and set aside to come back to,
@@ -1446,48 +1470,54 @@ mod tests {
     /// language. Ticket 127 (ruling 174): independent errands, or
     /// independent parts of one, one tag each in the same reply; parts
     /// that share a browser tab or files are not split; no cap on the
-    /// count. Ticket 134 (main chat PRD ruling 183, in place of ticket
-    /// 115's "whether the user is waiting"): only what takes a step or two
-    /// is answered here (a single fact, a quick conversion, a follow-up
-    /// this conversation answers); a thing to hand back, a change on the
-    /// user's computer or accounts, and a question or story that needs
-    /// several places looked up go to a subtask, and so does anything the
-    /// user asks to hand off; what has to come back as one thing stays in
-    /// one tag; the instructions carry what this conversation settled;
-    /// anything that turns out bigger partway hands off the rest; this
-    /// conversation's own material, a to-do, a reminder or a memo stay
-    /// here.
+    /// count. Ticket 134 (ruling 183 point 5): what has to come back as
+    /// one thing stays in one tag; the instructions carry what this
+    /// conversation settled. Ticket 134's third round (ruling 184, in place
+    /// of the lines of tickets 115 and 134): the main chat does not go
+    /// online; whatever needs the web goes to a subtask, the weather
+    /// included, and so does whatever changes things on the user's
+    /// computer or accounts and whatever the user asks to hand off;
+    /// everything else stays here, a read-only look on the computer and
+    /// this conversation's own material among it.
     #[test]
-    fn main_chat_entry_layer_answers_only_quick_things_and_hands_the_rest_to_a_subtask() {
+    fn main_chat_entry_layer_hands_the_web_and_changes_to_a_subtask() {
         let main =
             compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
-        // Ticket 134: what is answered here.
-        assert!(main.contains("Answer yourself only what takes a step or two: a single fact (the"));
+        // Ruling 184: the web goes, always, by the browser or any other way
+        // (curl in code_run); the runner's guard (ticket 135) says the same.
         assert!(
-            main.contains("weather, a score, whether someone is injured), a quick look on their")
+            main.contains("You do not go online in this chat, neither with the browser nor any")
         );
-        // The eval's first round: a look at the Downloads folder went out
-        // as "a list" to hand back (dispatch-criterion, quick-downloads).
+        assert!(
+            main.contains("other way (curl and the like in code_run). Anything that needs the web")
+        );
+        assert!(
+            main.contains("goes to a subtask, always, the weather or a score included. So does")
+        );
+        // Ruling 184: so do changes on the user's computer or accounts, and
+        // whatever they ask to hand off.
+        assert!(
+            main.contains("anything that changes things on the user's computer or accounts (files")
+        );
+        assert!(
+            main.contains("sorted, renamed or written, an order placed, a form filled, something")
+        );
+        assert!(
+            main.contains("sent), and anything they ask you to hand off. Everything else you do")
+        );
+        // Ruling 184: everything else stays here.
+        assert!(main.contains("yourself: talking, answering from what you know or from this"));
         assert!(main
-            .contains("computer (what is in a folder), a quick conversion, a follow-up you can"));
-        assert!(main.contains("answer from what is already in this conversation."));
-        // Ticket 134: what goes, so the chat stays free.
+            .contains("conversation, to-dos, reminders and memos, the time, a read-only look on"));
+        assert!(main.contains("their computer (what is in a folder), and writing up what you two"));
+        // The eval's first round: a write-up of this conversation into a
+        // file on the desktop went out once in three as a file written.
         assert!(
-            main.contains("Everything bigger goes to a subtask, so this chat stays free for the")
+            main.contains("discussed, even into a file (a subtask cannot see this conversation).")
         );
-        assert!(
-            main.contains("user: a thing to hand back (a table, a list, a comparison, a report, a")
-        );
-        assert!(main
-            .contains("file), a change on their computer or accounts (files sorted or renamed, a"));
-        assert!(
-            main.contains("booking, a form filled), and a question or story that needs several")
-        );
-        assert!(main
-            .contains("places looked up (what happened in some event, a ranking, a prediction)."));
-        assert!(main.contains("So does anything they ask you to hand off. End your reply with"));
+        assert!(main.contains("To hand something off, end your reply with"));
         // Ticket 126: the tag carries a title for the user's list.
         assert!(main.contains(
             "<subtask title=\"a few words\">what to do</subtask>. The title is what the"
@@ -1516,7 +1546,7 @@ mod tests {
         ));
         assert!(main
             .contains("see this one, so write everything it needs: the goal, the facts the user"));
-        // Ticket 134: a follow-up can go out, so what it leans on goes too.
+        // Ticket 134: a follow-up goes out too, so what it leans on goes with it.
         assert!(main
             .contains("gave, what this conversation already settled that the request leans on,"));
         assert!(main
@@ -1526,38 +1556,28 @@ mod tests {
         );
         assert!(main
             .contains("something or fails, Galley wakes you to check it and tell the user, so do"));
-        assert!(
-            main.contains("not wait on it or watch it. If something you took for quick turns out")
-        );
         assert!(main
-            .contains("bigger partway through, stop there and hand the rest over the same way."));
-        assert!(main.contains(
-            "Do it yourself when the errand's material is this conversation (writing up"
-        ));
-        assert!(main.contains(
-            "what you two discussed), and when it is a to-do, a reminder or a memo. Use"
-        ));
-        assert!(main
-            .contains("this, not the file-based subagent in your memory (subagent.md), which the"));
+            .contains("not wait on it or watch it. Use this, not the file-based subagent in your"));
+        assert!(main.contains("memory (subagent.md), which the user cannot see."));
         assert!(!main.contains("look it up when they ask"));
-        // The tests it replaced: how long the work would keep the chat
-        // busy, several websites among the reasons to hand it off (ticket
-        // 115); a question answered here however long it takes, and never
-        // split (tickets 115 and 127).
+        // The lines it replaced: how long the work would keep the chat busy
+        // (ticket 06a), whether the user is waiting (ticket 115), a step or
+        // two (ticket 134's first round), and its "turns out bigger".
         assert!(!main.contains("keep this chat busy"));
         assert!(!main.contains("Do quick work yourself"));
         assert!(!main.contains("even when it takes a few minutes"));
         assert!(!main.contains("do not split a question"));
+        assert!(!main.contains("takes a step or two"));
+        assert!(!main.contains("turns out"));
         let layer = main.find("Main Chat Entry Layer").unwrap();
         assert!(!main[layer..].contains("websites"));
         // Ticket 127: no cap on how many subtasks go out at once.
         assert!(!main[layer..].contains("at most"));
-        let clause = main
-            .find("Answer yourself only what takes a step or two")
-            .unwrap();
+        let clause = main.find("You do not go online in this chat,").unwrap();
         assert!(layer < clause, "the clause closes the entry layer");
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("<subtask"));
+            assert!(!prompt.contains("You do not go online in this chat"));
         }
     }
 
@@ -1793,8 +1813,26 @@ mod tests {
     /// computer (what is in a folder)" among what is answered here. Without
     /// it 「帮我看看下载文件夹里有哪些超过 1GB 的文件」, one look at a
     /// folder, went to a subtask in all three runs as "a list" to hand
-    /// back: 4675 → 4729.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4729;
+    /// back: 4675 → 4729. Lowered 4729 → 4475 by ticket 134's third round
+    /// (main chat PRD ruling 184): −254 bytes. The opening says what goes
+    /// by what the work touches (the web, always, the weather included;
+    /// changes on the user's computer or accounts; anything they ask to
+    /// hand off) and what stays, this conversation's own material and the
+    /// to-dos, reminders and memos folded into it, in place of what is
+    /// answered here and what goes by kind (+6). The sentence keeping this
+    /// conversation's material and the notes here is folded into the
+    /// opening (−146), and "If something you took for quick turns out
+    /// bigger" is gone (−114): whether work needs the web or changes
+    /// something can be told before it starts. Raised 4475 → 4493 by the
+    /// third round's eval (+18): ", even into a file" on writing up what the
+    /// two discussed. Without it 「把我们今天聊的整理成一份 Markdown，放到
+    /// 桌面」 went to a subtask once in three runs as a file written, and a
+    /// subtask cannot see this conversation. Raised 4493 → 4524 (+31): the
+    /// opening says going online any other way, curl and the like in
+    /// `code_run`, is out too, as ticket 135's guard now says; the guard
+    /// catches the browser tools only, so the words are what keep
+    /// `code_run` off the web.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4524;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

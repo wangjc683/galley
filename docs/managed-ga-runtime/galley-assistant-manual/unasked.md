@@ -13,9 +13,10 @@ review (see `wake.md`): what will the user want next for this?
 - **Just do it**: groundwork you can undo, that costs the user no money
   and says nothing to anyone in their name, such as looking something
   up, comparing prices, checking how something is going, drafting, or
-  putting it together in a file. Quick work you do this turn; longer work
-  goes to a subtask (see `subtasks.md`), and when it is back Galley wakes
-  you to tell the user.
+  putting it together in a file. Quick work that needs no web you do this
+  turn; anything that needs the web, and longer work, goes to a subtask
+  (see `subtasks.md`), and when it is back Galley wakes you to tell the
+  user.
 - **Ask first, with the groundwork done**: anything outward-facing
   (sending a message or an email, ordering, paying), deleting, anything
   that cannot be undone, and writing into a conversation the user

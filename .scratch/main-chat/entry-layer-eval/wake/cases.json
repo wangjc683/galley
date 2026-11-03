@@ -1,5 +1,5 @@
 {
- "_note": "叫醒评测用例（票 30）。history 是主对话当前段里已有的轮次（派活回复末尾是回放标记，已叫醒过的一轮压成一行，同票 29 的回放写法）；subtasks 是假 CLI 的固定数据（子任务的会话行与消息）；files 放进假 HOME 的 ~/Downloads（证据文件）；wake 是这次叫醒里的几件，run.py 按 wording.md 的措辞拼成消息；expect 是自动判定的规则，expect_text 是票 30 写的期望。票 63 起，「结果够好」（done-evidence）与「两件一起」（two-at-once）的报价日期按运行那天填：`{{Q0:…}}` 是当天，`{{Q1:…}}`、`{{Q2:…}}` 是前一天、前两天（都不早于本周一），`{{W:…}}` 是本周一；冒号后是写法（ymd 2026-10-19、md 10-19、mmdd 1019、cn 10 月 19 日、cnc 10月19日、en 19 Oct 2026）。之前写死在 10 月 12 日这一周，换个星期跑，模型就把它当成上周的报价打回。票 73：{{HOME}} 是这次运行的假 HOME（绝对路径，结果里写成 $TMPDIR/…），子任务交回的文件路径用它，不写本机真实路径；expect.file_ref 是交代里要有单独一行的 [FILE:<绝对路径>]，路径以这一段结尾（run.py 的 wake_facts）。票 134：w-table、w-long 测成品贴回（裁决 183 第 4 条，手册 subtasks.md 改过的那一条）。prompt 写了的用例用那份主对话提示词（\"v2\"：dispatch-criterion/galley-prompt/main_chat.v2.txt，本票改过的入口层），不写的用 galley-prompt/ 那份。expect.table_rows：回复里要有这几行表格（逐格比对，去掉加粗与多余空格，表头也算）；expect.absent_any：回复里不该出现的话（子任务讲自己怎么做的）；expect.where_any：回复里至少要有其中一个，说明全文在哪。票 134 第二轮：Core 的完成那段改成按 subtasks.md 交代（答案本身就是用户要的，整份给），core 措辞跟着改；w-long 的回答改成满足它的派活说明（每张截图的完整路径与各自写着什么、每天一个必去其余可选、门到门的车、同城的雨天备选、按航班定的回程）。",
+ "_note": "叫醒评测用例（票 30）。history 是主对话当前段里已有的轮次（派活回复末尾是回放标记，已叫醒过的一轮压成一行，同票 29 的回放写法）；subtasks 是假 CLI 的固定数据（子任务的会话行与消息）；files 放进假 HOME 的 ~/Downloads（证据文件）；wake 是这次叫醒里的几件，run.py 按 wording.md 的措辞拼成消息；expect 是自动判定的规则，expect_text 是票 30 写的期望。票 63 起，「结果够好」（done-evidence）与「两件一起」（two-at-once）的报价日期按运行那天填：`{{Q0:…}}` 是当天，`{{Q1:…}}`、`{{Q2:…}}` 是前一天、前两天（都不早于本周一），`{{W:…}}` 是本周一；冒号后是写法（ymd 2026-10-19、md 10-19、mmdd 1019、cn 10 月 19 日、cnc 10月19日、en 19 Oct 2026）。之前写死在 10 月 12 日这一周，换个星期跑，模型就把它当成上周的报价打回。票 73：{{HOME}} 是这次运行的假 HOME（绝对路径，结果里写成 $TMPDIR/…），子任务交回的文件路径用它，不写本机真实路径；expect.file_ref 是交代里要有单独一行的 [FILE:<绝对路径>]，路径以这一段结尾（run.py 的 wake_facts）。票 134：w-table、w-long 测成品贴回（裁决 183 第 4 条，手册 subtasks.md 改过的那一条）。prompt 写了的用例用那份主对话提示词（\"v2\"：dispatch-criterion/galley-prompt/main_chat.v2.txt，本票改过的入口层），不写的用 galley-prompt/ 那份。expect.table_rows：回复里要有这几行表格（逐格比对，去掉加粗与多余空格，表头也算）；expect.absent_any：回复里不该出现的话（子任务讲自己怎么做的）；expect.where_any：回复里至少要有其中一个，说明全文在哪。票 134 第二轮：Core 的完成那段改成按 subtasks.md 交代（答案本身就是用户要的，整份给），core 措辞跟着改；w-long 的回答改成满足它的派活说明（每张截图的完整路径与各自写着什么、每天一个必去其余可选、门到门的车、同城的雨天备选、按航班定的回程）。票 134 第三轮：w-table、w-long 改用 v3（裁决 184 的入口层，main_chat.v3.txt）。",
  "main_chat": "s-mgn4k2x1-7q3z9w0e",
  "cases": [
   {
@@ -739,7 +739,7 @@
    "id": "w-table",
    "no": 11,
    "expect_text": "票 134：子任务交回的是答案本身（一张 8 行的对比表加两句结论，开头一句是它怎么查的，证据是两张规格页截图）→ 把表原样给用户（表头与各行都在，数字没改），不带它讲自己怎么做的话；不打回、不出 <no-reply/>",
-   "prompt": "v2",
+   "prompt": "v3",
    "history": [
     {
      "role": "user",
@@ -863,7 +863,7 @@
    "id": "w-long",
    "no": 12,
    "expect_text": "票 134：子任务交回的是一份很长的攻略（超过 3,000 字，叫醒消息里被截断，末尾写着怎么读全；证据是 5 张官网页面截图）→ 给要点，并说全文在哪（在子任务里，或交一个文件的完整路径）；不要求贴全文；不打回、不出 <no-reply/>",
-   "prompt": "v2",
+   "prompt": "v3",
    "history": [
     {
      "role": "user",

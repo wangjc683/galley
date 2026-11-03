@@ -674,9 +674,9 @@ mod tests {
         // A to-do's reminder only reminds (wake.md's since ticket 63).
         let wake = part("wake.md");
         assert!(
-            wake.contains("work. A to-do's reminder only reminds: do not tick the to-do off until")
+            wake.contains("A to-do's reminder only reminds: do not tick the to-do off until the")
         );
-        assert!(wake.contains("the user says it is done or has happened."));
+        assert!(wake.contains("user says it is done or has happened."));
         // Authority.
         assert!(part("authority.md")
             .contains("- Note, change, tick off or cancel the user's to-dos, and their"));
@@ -799,8 +799,7 @@ mod tests {
         let wake = part("wake.md");
         assert!(wake
             .contains("- Then do what it says. Do not recite it (「提醒：装修完工」): think what"));
-        assert!(wake
-            .contains("(「702 装修预计今天完工，完了吗？要不要约个时间验收？」); look something"));
+        assert!(wake.contains("(「702 装修预计今天完工，完了吗？要不要约个时间验收？」)."));
         let change = part("todos-change.md");
         assert!(change.contains(
             "  (「这类别提醒我」), cancel the one you set, and say the kind, briefly, at"
@@ -836,7 +835,10 @@ mod tests {
             "- If it went off late (the computer was asleep, Galley was closed), tell",
             "- Then do what it says. Do not recite it (「提醒：装修完工」): think what",
             "is of use to the user now, and say that in a sentence or two",
-            "work. A to-do's reminder only reminds: do not tick the to-do off until",
+            "A to-do's reminder only reminds: do not tick the to-do off until the",
+            // Ruling 184 point 9: a check that needs the web goes to a
+            // subtask, the round silent until it is back.
+            "- When it says to check something that needs the web (a parcel, a price,",
             "A scheduled task that starts a new conversation (one the user made with",
         ] {
             let at = wake
@@ -947,6 +949,47 @@ mod tests {
         }
     }
 
+    /// Main chat PRD ruling 184 point 9 (ticket 134's third round): the
+    /// main chat does not go online, the rounds Galley wakes it for
+    /// included (ticket 135's guard covers every round). A reminder that
+    /// says to check something online hands the check to a subtask and says
+    /// nothing yet (the tag and `<no-reply/>`), and tells the user once it
+    /// is back; a reminder that only reminds speaks at once. The silent
+    /// reply is allowed there and in the morning review only; the review's
+    /// look at a memo goes to a subtask; quick work this turn is work with
+    /// no web. Single-line fragments only (CRLF on Windows).
+    #[test]
+    fn manual_hands_web_checks_on_wake_to_a_subtask() {
+        let wake = part("wake.md");
+        let due = wake.find("## When a reminder comes due").unwrap();
+        let scheduled = wake
+            .find("A scheduled task that starts a new conversation")
+            .unwrap();
+        let mut at = Vec::new();
+        for rule in [
+            "- When it says to check something that needs the web (a parcel, a price,",
+            "the weather), you do not go online here: hand the check to a subtask",
+            "and write nothing for the user yet, the subtask tag and `<no-reply/>`,",
+            "nothing else. Tell them when it is back, in one message, how late it",
+            "came included. Other long work goes to a subtask too.",
+        ] {
+            let found = wake
+                .find(rule)
+                .unwrap_or_else(|| panic!("wake.md lost: {rule}"));
+            assert!(
+                due < found && found < scheduled,
+                "{rule} is not under its heading"
+            );
+            at.push(found);
+        }
+        assert!(at.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(!wake.contains("look something up first"));
+        assert!(!wake.contains("up first when it says to check something"));
+        for (name, body) in PARTS {
+            assert!(!body.contains("Quick work you do this turn"), "{name}");
+        }
+    }
+
     /// Ticket 73 (assistant PRD ruling 10): what the user is in the middle
     /// of and sets aside is a to-do with no date, beside the three tests,
     /// not while they carry on with it (the eval's carried chats), and a passing
@@ -984,7 +1027,10 @@ mod tests {
             "## Doing things without being asked",
             "What you do on your own is work, not advice: get something done, then",
             "- **Just do it**: groundwork you can undo, that costs the user no money",
-            "goes to a subtask (see `subtasks.md`), and when it is back Galley wakes",
+            // Ruling 184 point 9: quick work this turn only without the web.
+            "putting it together in a file. Quick work that needs no web you do this",
+            "turn; anything that needs the web, and longer work, goes to a subtask",
+            "(see `subtasks.md`), and when it is back Galley wakes you to tell the",
             "- **Ask first, with the groundwork done**: anything outward-facing",
             "with it in hand (「Banner 草稿做好了，要发群里吗？」).",
             "- **Got nothing done, say nothing**: no offers. Never 「要不要我帮你……」",
@@ -1056,7 +1102,10 @@ mod tests {
             "`\"supervisor\": \"{}\"`",
             crate::scheduler::REVIEW_SUPERVISOR
         )));
-        assert!(wake.contains("Never write it in any other reply but the morning review's"));
+        assert!(wake.contains("nothing. Never write it in any other reply but two (both below): a"));
+        // Ruling 184 point 9: and a reminder whose check went to a subtask.
+        assert!(wake
+            .contains("reminder whose check you handed to a subtask, and the morning review's."));
         assert!(
             wake.contains("task ran, or that it is time for the morning review. The user did not")
         );
@@ -1199,8 +1248,10 @@ mod tests {
             "get done for the user that they would want to know. Most need nothing.",
             "A settled fact or a preference (「不吃香菜」): skip it, and usually a",
             "situation with an end date too (a trip). Something out in the world",
-            "that changes (a team they follow, a policy they watch): look it up, and",
-            "speak only when there is something they would want to know. Something",
+            // Ruling 184 point 9: the look goes to a subtask.
+            "that changes (a team they follow, a policy they watch): have a subtask",
+            "look it up (you do not go online here), and speak only when there is",
+            "something they would want to know. Something",
             "they want to do but gave no next step for (「想学吉他」): speak only with",
             "groundwork you can hand them, never 「要不要我帮你找」. The two subtasks",
             "are for the to-dos and the memos together, the to-dos first.",

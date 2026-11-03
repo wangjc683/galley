@@ -1,21 +1,23 @@
 {
-  "_note": "票 115（主对话 PRD 裁决 160）：派活判据从「会占多久」换成「你在不在等」。每条在 old（main 上今天的主对话提示词）与 new（本票改过的）两组下各跑，提示词都是 Rust 的 compose_main_chat_runtime_prompt 生成的（galley-prompt/）。should_dispatch 按裁决 160 标：你在问、在等答案的自己答（false）；交办的差事、拿回来的是一件东西或一个状态、超过两三步的派（true）；你明说派的照派；材料是这段对话本身的、记待办提醒备忘的自己做。from 写了 dispatch-cases.json 的，消息沿用那里（只写在一处）。history 是同一段里前面的轮次（不是从分段前带过来的）。found_any：做着做着交出去的用例，派活说明里提到其中任何一个名字就算带上了已经查到的（只记，不判）。票 134（裁决 183，修正裁决 160 第 2、3 条）：标注改按裁决 183。只有一两步答得完的自己答（一个事实、一次换算、凭这段对话就能接的追问；材料是这段对话的、记待办提醒备忘的照旧自己做）；要一份成品、动电脑或账号上的东西、要查好几处才讲得清的问题或故事都派。q-injuries、q-east、q-story 从 false 改成 true；q-notes-apps 不计分（scored: false，凭自己知道的一两步答完也合理，照实列）；新加 q-headphones、q-fact-injury、q-followup-quick。max_tags：派了超过这个数的标签不合格（要合成一份的不拆）；brief_has_any：派了但派活说明里一个词都没有，不合格（追问派出去要带上它依赖的前文，子任务看不见这段对话）。三组提示词：old（票 115 之前）、new（main 今天的，读 dispatch-parallel/galley-prompt/main_chat.new.txt）、v2（票 134 改过的）。",
+  "_note": "票 115（主对话 PRD 裁决 160）：派活判据从「会占多久」换成「你在不在等」。每条在 old（main 上今天的主对话提示词）与 new（本票改过的）两组下各跑，提示词都是 Rust 的 compose_main_chat_runtime_prompt 生成的（galley-prompt/）。should_dispatch 按裁决 160 标：你在问、在等答案的自己答（false）；交办的差事、拿回来的是一件东西或一个状态、超过两三步的派（true）；你明说派的照派；材料是这段对话本身的、记待办提醒备忘的自己做。from 写了 dispatch-cases.json 的，消息沿用那里（只写在一处）。history 是同一段里前面的轮次（不是从分段前带过来的）。found_any：做着做着交出去的用例，派活说明里提到其中任何一个名字就算带上了已经查到的（只记，不判）。票 134（裁决 183，修正裁决 160 第 2、3 条）：标注改按裁决 183。只有一两步答得完的自己答（一个事实、一次换算、凭这段对话就能接的追问；材料是这段对话的、记待办提醒备忘的照旧自己做）；要一份成品、动电脑或账号上的东西、要查好几处才讲得清的问题或故事都派。q-injuries、q-east、q-story 从 false 改成 true；q-notes-apps 不计分（scored: false，凭自己知道的一两步答完也合理，照实列）；新加 q-headphones、q-fact-injury、q-followup-quick。max_tags：派了超过这个数的标签不合格（要合成一份的不拆）；brief_has_any：派了但派活说明里一个词都没有，不合格（追问派出去要带上它依赖的前文，子任务看不见这段对话）。三组提示词：old（票 115 之前）、new（main 今天的，读 dispatch-parallel/galley-prompt/main_chat.new.txt）、v2（票 134 改过的）。票 134 第三轮（裁决 184，取代裁决 183 第 2 条）：标注改按「上网就派」。要上网的一律派（天气、汇率、某人伤没伤也派）；要改电脑上或账号里的东西的派；明说派的派；其余自己做（凭已有知识答、凭这段对话接、记待办提醒备忘、看时间、只读看一眼本机、整理这段对话）。q-weather、quick-usd（「现在」的汇率要上网）、q-fact-injury 从 false 改成 true；q-notes-apps 恢复计分，false（凭已有知识答）。q-injuries、q-story 标 true（要上网查），凭已有知识自己答的照判定落在「合规（三次以内自己做完）」。四组都按它判，并另列第一个工具是不是浏览器工具（票 135 的硬闸拦的就是它）。",
   "cases": [
     {"id": "q-injuries", "group": "问答", "should_dispatch": true, "message": "NBA 历史上还有哪些很严重的伤病？",
-     "note": "裁决 183：要查好几处才讲得清，派（裁决 160 下是自己答）。"},
+     "note": "裁决 184：要上网查，派（裁决 183 下按「要查好几处」派，裁决 160 下是自己答）；凭已有知识自己答算合规。"},
     {"id": "q-east", "group": "问答", "should_dispatch": true, "message": "东部呢？",
-     "note": "裁决 183：一份预测要查好几处，派（裁决 160 下是自己答）；派活说明要带上「接着西部那轮问东部」的前文，提到西部就算带上。",
+     "note": "裁决 184：预测要上网查，派（裁决 183 下同样派，裁决 160 下是自己答）；派活说明要带上「接着西部那轮问东部」的前文，提到西部就算带上。",
      "brief_has_any": ["西部"],
      "history": [
        {"role": "user", "content": "新赛季 NBA 西部你怎么预测？"},
        {"role": "assistant", "content": "我的预测（只代表现在的判断，伤病会改变很多）：\n\n1. 雷霆：核心阵容基本完整，亚历山大和霍姆格伦的组合还在上升期，常规赛头名最稳。\n2. 掘金：约基奇在就是保底前三，替补深度比去年好。\n3. 火箭：年轻核心再进一步，防守是联盟前列，杜兰特的出勤率是变数。\n4. 森林狼：爱德华兹继续扛进攻，内线轮换够厚。\n5. 湖人：东契奇领衔，上限高，但防守是隐患。\n6. 勇士：库里还能打出顶级效率，能不能进前六看巴特勒的状态。\n\n附加赛区间大概是快船、灰熊、马刺、国王里出三队；马刺的文班亚马如果全勤，有机会直接冲进前六。"}
      ]},
     {"id": "q-story", "group": "问答", "should_dispatch": true, "message": "讲讲保罗·乔治当年断腿那件事",
-     "note": "裁决 183：要查好几处才讲得清的「讲讲某件事」，派（裁决 160 下是自己答）。"},
-    {"id": "q-weather", "group": "问答", "should_dispatch": false, "message": "厦门明天天气怎么样？"},
-    {"id": "q-notes-apps", "group": "问答", "should_dispatch": false, "scored": false, "message": "Mac 上有哪些好用的本地笔记软件？",
-     "note": "裁决 183 下不计分：凭自己知道的一两步答完也合理，派出去也说得通，照实列。"},
-    {"id": "quick-usd", "group": "问答", "should_dispatch": false, "from": "dispatch-cases.json"},
+     "note": "裁决 184：要上网查，派（裁决 183 下按「讲讲某件事」派，裁决 160 下是自己答）；凭已有知识自己答算合规。"},
+    {"id": "q-weather", "group": "问答", "should_dispatch": true, "message": "厦门明天天气怎么样？",
+     "note": "裁决 184：要上网，派，天气不留例外（裁决 160、183 下是自己答）。"},
+    {"id": "q-notes-apps", "group": "问答", "should_dispatch": false, "message": "Mac 上有哪些好用的本地笔记软件？",
+     "note": "裁决 184：凭已有知识答，自己做（裁决 183 下不计分）。"},
+    {"id": "quick-usd", "group": "问答", "should_dispatch": true, "from": "dispatch-cases.json",
+     "note": "裁决 184：「现在」的汇率要上网查，派（dispatch-cases.json 里按票 06 标的是不派）。"},
     {"id": "quick-downloads", "group": "问答", "should_dispatch": false, "from": "dispatch-cases.json"},
     {"id": "todo-note", "group": "记事", "should_dispatch": false, "message": "记一个待办：周五前把酒店项目的资料清单发给业主"},
     {"id": "conv-writeup", "group": "材料是这段对话", "should_dispatch": false, "message": "把我们今天聊的整理成一份 Markdown，放到桌面",
@@ -39,13 +41,21 @@
     {"id": "q-headphones", "group": "要一份成品", "should_dispatch": true, "max_tags": 1,
      "message": "帮我比较 Meze 109 Pro 和森海塞尔 HD 490 PRO 这两款耳机，整理成一张表",
      "note": "票 134：v0.7.5 草稿冒烟那句（11-03 主对话自己答了，13 步、4 分 4 秒）。要一张对比表：派；要合成一份，只一个标签，两个以上不合格。"},
-    {"id": "q-fact-injury", "group": "问一个事实", "should_dispatch": false, "message": "查一下湖人队的里夫斯最近是不是受伤了？",
-     "note": "票 134：一个事实，一两步答得完，自己答。"},
+    {"id": "q-fact-injury", "group": "问一个事实", "should_dispatch": true, "message": "查一下湖人队的里夫斯最近是不是受伤了？",
+     "note": "票 134 第一轮按裁决 183 标自己答（一个事实）；第三轮按裁决 184：要上网查，派。"},
     {"id": "q-followup-quick", "group": "凭这段对话接的追问", "should_dispatch": false, "message": "那他大概什么时候能复出？",
      "note": "票 134：上一轮的回答里已经写明伤情与预计复出时间，凭这段对话就能接，自己答。伤情是为用例编的。",
      "history": [
        {"role": "user", "content": "掘金的穆雷最近是不是受伤了？"},
        {"role": "assistant", "content": "是的。穆雷在 10 月 30 日对国王的比赛里扭伤了右脚踝，第三节就没再回来。球队 11 月 1 日公布了检查结果：右踝扭伤，没有骨折，预计缺阵两到三周，11 月中旬复查后再定复出时间。"}
+     ]},
+    {"id": "q-followup-sourced", "group": "凭这段对话接的追问", "should_dispatch": false, "message": "那他大概什么时候能复出？",
+     "note": "票 134 第三轮：q-followup-quick 的上一轮回答没有出处，v3 下三遍都说「未经核实」、派子任务重查。这一条照裁决 184 下真会有的样子：伤情是子任务查回来的（派活回复、叫醒的回放行、带出处的交代），追问凭这段对话就能接，自己答。伤情是为用例编的。",
+     "history": [
+       {"role": "user", "content": "掘金的穆雷最近是不是受伤了？"},
+       {"role": "assistant", "content": "要上网查，交给子任务了，查到告诉你。\n\n[subtask s-mh5a2c7e-9d3f1b6k: 查穆雷伤情]"},
+       {"role": "user", "content": "[Galley: subtask s-mh5a2c7e-9d3f1b6k \"查穆雷伤情\" finished — details: session show s-mh5a2c7e-9d3f1b6k]"},
+       {"role": "assistant", "content": "查到了：穆雷在 10 月 30 日对国王的比赛里扭伤了右脚踝，第三节就没再回来。掘金队 11 月 1 日的伤情通报说：右踝扭伤，没有骨折，预计缺阵两到三周，11 月中旬复查后再定复出时间。出处是掘金队官网 11 月 1 日的伤情通报。"}
      ]}
   ]
 }

@@ -283,7 +283,7 @@ CRIT_PROMPT_DIR = CRIT_DIR / "galley-prompt"
 CRIT_JSON = CRIT_DIR / "results.json"
 CRIT_MD = CRIT_DIR / "results.md"
 CRIT_COMPOSED_DIR = CRIT_DIR / "composed"
-CRIT_VARIANTS = ("old", "new", "v2")
+CRIT_VARIANTS = ("old", "new", "v2", "v3")
 CRIT_DUMP_CASES = ("e-invoices", "q-east")
 CRIT_REPEATS = 1
 # Ticket 127 (main chat PRD ruling 174): several errands that do not
@@ -303,7 +303,7 @@ PAR_PROMPT_DIR = PAR_DIR / "galley-prompt"
 PAR_JSON = PAR_DIR / "results.json"
 PAR_MD = PAR_DIR / "results.md"
 PAR_COMPOSED_DIR = PAR_DIR / "composed"
-PAR_VARIANTS = ("new", "v2")
+PAR_VARIANTS = ("new", "v2", "v3")
 PAR_DUMP_CASES = ("p-three-errands", "p-errand-and-question")
 PAR_TITLE_MAX = 20
 # Ticket 134 (main chat PRD ruling 183): only what takes a step or two is
@@ -324,9 +324,17 @@ PAR_TITLE_MAX = 20
 # the first wording, which every v2 run but quick-downloads' ran under;
 # main_chat.v2.txt adds "a quick look on their computer (what is in a
 # folder)" to what is answered here, and quick-downloads ran again.
+# Ticket 134's third round (main chat PRD ruling 184): `v3` is the clause
+# that sends whatever needs the web or changes things to a subtask
+# (main_chat.v3.txt, the one file both suites and the wake cases read);
+# every run is judged by ruling 184's labels, and whether a run's first
+# tool call was a browser tool (the leak ticket 135's guard catches) is
+# reported beside the verdict. Its one round of rewording: main_chat.v3-r1.txt
+# is the first wording, without ", even into a file" on writing up this
+# conversation; only conv-writeup ran again under main_chat.v3.txt.
 CRIT_PROMPTS = {"old": CRIT_PROMPT_DIR / "main_chat.old.txt", "new": PAR_PROMPT_DIR / "main_chat.new.txt",
-                "v2": CRIT_PROMPT_DIR / "main_chat.v2.txt"}
-PAR_PROMPTS = {"new": PAR_PROMPT_DIR / "main_chat.new.txt", "v2": CRIT_PROMPTS["v2"]}
+                "v2": CRIT_PROMPT_DIR / "main_chat.v2.txt", "v3": CRIT_PROMPT_DIR / "main_chat.v3.txt"}
+PAR_PROMPTS = {"new": PAR_PROMPT_DIR / "main_chat.new.txt", "v2": CRIT_PROMPTS["v2"], "v3": CRIT_PROMPTS["v3"]}
 # api::memo::MEMO_TEXT_MAX_CHARS, MEMO_TOTAL_MAX_CHARS.
 MEMO_TEXT_MAX_CHARS, MEMO_TOTAL_MAX_CHARS = 100, 2000
 # ga.py NO_BROWSER_CONNECTION_MSG: what GA's browser tools return with no
@@ -2535,7 +2543,13 @@ def sched_prompt(case: dict[str, Any], now: datetime, template: Path | None = No
     """The main chat prompt as the real Rust code composed it
     (schedule/galley-prompt/, with placeholders; ticket 115: `template`,
     another plain one in that form), segment facts and the case's In Hand
-    lines filled; the manual's directory is filled per run."""
+    lines filled; the manual's directory is filled per run. Ticket 134's
+    third round: a case with `prompt` (a key of CRIT_PROMPTS, "v3") takes
+    that prompt, In Hand and Memo filled the same way."""
+    if case.get("prompt") and template is None:
+        if case["prompt"] not in CRIT_PROMPTS:
+            fail(f"{case['id']}: no prompt {case['prompt']!r} ({', '.join(CRIT_PROMPTS)})")
+        template = CRIT_PROMPTS[case["prompt"]]
     turns = sum(1 for m in case.get("history") or [] if m.get("role") == "user")
     if case.get("carried") and turns:
         if template is not None:
@@ -4383,7 +4397,8 @@ def make_sched_jobs(cases: list[dict[str, Any]], now: datetime, mykeys: dict[str
 def crit_cases() -> list[dict[str, Any]]:
     """Ticket 115: dispatch-criterion/cases.json, numbered; a case `from`
     dispatch-cases.json takes its message from there (written in one
-    place), with the same expectation."""
+    place); its expectation is this suite's (since ticket 134's third
+    round they can differ)."""
     spec = json.loads(CRIT_CASES.read_text(encoding="utf-8"))["cases"]
     earlier = {c["id"]: c for c in json.loads(DISPATCH_CASES.read_text(encoding="utf-8"))["cases"]}
     out = []
@@ -4392,8 +4407,9 @@ def crit_cases() -> list[dict[str, Any]]:
         if c.get("from"):
             if c["from"] != DISPATCH_CASES.name or c["id"] not in earlier or "message" in c:
                 fail(f"{CRIT_CASES.name}: {c['id']} cannot come from {c['from']}")
-            if earlier[c["id"]].get("should_dispatch") != c["should_dispatch"]:
-                fail(f"{CRIT_CASES.name}: {c['id']} is labelled otherwise in {c['from']}")
+            # Ticket 134's third round: the label is this suite's own
+            # (ruling 184 sends quick-usd's live rate out); the message
+            # stays written in one place.
             c["message"] = earlier[c["id"]]["message"]
         if c.get("carried") or not isinstance(c.get("should_dispatch"), bool) or not c.get("message"):
             fail(f"{CRIT_CASES.name}: {c['id']}: a message, should_dispatch, not carried")
@@ -5656,6 +5672,9 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     asked = (r.get("tool_call") or {}).get("args") if stop == "ask_user" else None
     said = body + ("\n" + json.dumps(asked, ensure_ascii=False) if asked else "")
     calls = r.get("calls") or []
+    # Ticket 134's third round: the leak ticket 135's guard catches.
+    first_web = bool(calls) and str(calls[0].get("name", "")).startswith("web_")
+    web_code = web_via_code(calls)
     write_at = next((c["n"] for c in calls
                      if any(cli_name(a) in ALL_WRITES for a in c.get("galley_calls") or [])), None)
     manual, reads = manual_column(calls, write_at)
@@ -5684,8 +5703,21 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         reasons.append("没走到最终回复：" + STOP_LABELS.get(stop, str(stop)))
     if held:
         reasons.append("用了会卡住主对话的命令：" + "、".join(sorted(set(held))))
-    if "session new" in names or SUBTASK_OPEN_RE.search(reply):
+    # Ticket 134's third round (ruling 184 point 9): a reminder that says to
+    # check something online hands the check to a subtask and says nothing
+    # yet: `expect.subtask` wants a tag in the final reply, and with
+    # `no_reply` the rest of it is exactly <no-reply/>.
+    want_tag = bool(exp.get("subtask"))
+    tags = read_subtask_tags(reply) if stop == "final_reply" else []
+    if "session new" in names or (SUBTASK_OPEN_RE.search(reply) and not want_tag):
         reasons.append("开了子任务或新会话")
+    if want_tag:
+        if not tags:
+            reasons.append("该把要上网查的交给子任务，最终回复里没有 <subtask>")
+        if web_code:
+            reasons.append("在主对话里用 code_run 上网（第 " + "、".join(str(n) for n in web_code) + " 次调用）")
+        body = SUBTASK_FULL_RE.sub("", body).strip()
+        is_no_reply = bool(NO_REPLY_RE.fullmatch(body))
     for words, flags in creates:
         if flags.get("target") != "assistant":
             reasons.append("schedule create 没带 --target=assistant")
@@ -5832,6 +5864,9 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "stop": stop,
         "made_todos": made_todos,
         "first_lines": first_lines,
+        "first_web": first_web,
+        "web_code": web_code,
+        "subtask_tags": [{"title": t["title"], "brief": t["brief"]} for t in tags],
         "pass": not reasons,
         "pass_before_105": before_105,
         "reasons": reasons,
@@ -7808,6 +7843,26 @@ def render_memo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
 # a fail: the sandbox's placeholder files can make an errand that small);
 # one that went past it without handing off fails.
 CRIT_SMALL_CALLS = 3
+# Ticket 134's third round (ruling 184): a code_run whose script reaches
+# the network goes online as surely as a browser tool, and ticket 135's
+# guard does not catch it. A command or library that fetches, or a fetch
+# of an http(s) URL; a URL alone (an XML namespace, a link written into a
+# file) is not.
+WEB_CODE_RE = re.compile(
+    r"\b(?:curl|wget|Invoke-WebRequest|Invoke-RestMethod|iwr|irm)\b|\brequests\.(?:get|post|put|patch|head|request|"
+    r"Session)\b|\burllib\b|\bhttpx\b|\burlopen\b|\baiohttp\b|\bhttp\.client\b|\bfetch\s*\(\s*['\"]https?://",
+    re.IGNORECASE)
+
+
+def web_via_code(calls: list[dict[str, Any]]) -> list[int]:
+    """The calls (their numbers) that are a code_run reaching the network."""
+    out = []
+    for c in calls:
+        args = c.get("args") or {}
+        script = str(args.get("script") or args.get("code") or "") if isinstance(args, dict) else str(args)
+        if c.get("name") == "code_run" and WEB_CODE_RE.search(script):
+            out.append(c.get("n"))
+    return out
 # Stops before it would have decided: still looking (a browser tool) or
 # asking. Listed apart where the case should be handed off; where it
 # should not, it was doing it itself, so it passes.
@@ -7850,6 +7905,11 @@ def crit_judge(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     n = len(calls)
     d = r.get("dispatch") or {}
     out: dict[str, Any] = {"should": should, "tool_calls": n, "found_in_brief": None, "brief_has": None,
+                           # Ticket 134's third round: the leak ticket 135's
+                           # guard catches (ruling 184 point 2 judges by it).
+                           "first_web": bool(calls) and str(calls[0].get("name", "")).startswith("web_"),
+                           "any_web": any(str(c.get("name", "")).startswith("web_") for c in calls),
+                           "web_code": web_via_code(calls),
                            "titles": list(d.get("titles") or []) if d.get("dispatched") else [],
                            "todos_added": [], "home_added": list(r.get("home_added") or []),
                            "downloads_changes": r.get("downloads_changes") or {}}
@@ -7910,7 +7970,10 @@ def crit_cell(r: dict[str, Any] | None, case: dict[str, Any]) -> str:
         return "未运行"
     f = crit_facts(r, case)
     titles = "；标题 " + "、".join(f"「{t}」" if t else "（没写）" for t in f["titles"]) if f["titles"] else ""
-    return f"{f['label']}{titles}：{f['verdict']}"
+    web = "；第一个工具是浏览器" if f.get("first_web") else ""
+    if f.get("web_code"):
+        web += "；code_run 上网（第 " + "、".join(str(n) for n in f["web_code"]) + " 次调用）"
+    return f"{f['label']}{titles}{web}：{f['verdict']}"
 
 
 def crit_should_words(case: dict[str, Any]) -> str:
@@ -7958,8 +8021,13 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "都由 Rust 的 `compose_main_chat_runtime_prompt` 生成，三份只差派活那一段。v2 改过一轮措辞：第一轮是 "
         "`galley-prompt/main_chat.v2-r1.txt`，除 `quick-downloads` 外都跑在它下面；`quick-downloads` 不过，"
         "在自己答的那几样里加上「a quick look on their computer (what is in a folder)」（`main_chat.v2.txt`）后只重跑它。",
-        "- **标注**：票 134 起按裁决 183 标（`cases.json` 的 `should_dispatch`），三组都按它判，old 的旧结果也按它重判；"
-        "`q-notes-apps` 不计分，照实列；`q-headphones` 最多一个标签；`q-east` 的派活说明要带上前文（提到西部）。",
+        "- **v3**（票 134 第三轮）：裁决 184 的条款（`galley-prompt/main_chat.v3.txt`）：主对话不上网，要上网的一律派（天气也派），"
+        "要改电脑上或账号里的东西的派，明说派的派，其余自己做。",
+        "- **标注**：票 134 第三轮起按裁决 184 标（`cases.json` 的 `should_dispatch`），四组都按它判，旧结果也按它重判；"
+        "`q-headphones` 最多一个标签；`q-east` 的派活说明要带上前文（提到西部）。格里另写「第一个工具是浏览器」："
+        "裁决 184 按它判，票 135 的硬闸拦的就是它（沙盒里浏览器工具不执行，运行停在那里）；另写「code_run 上网」："
+        "`code_run` 的脚本里有 curl、wget、requests、urllib、httpx、urlopen、Invoke-WebRequest 或去取 http(s) 网址的，"
+        "硬闸拦不到这一路（沙盒没有网络，这一步会失败）。",
         "- **沙盒**：待办评测的沙盒与假 `galley`（里面什么都没有，记下的待办留在它的状态里），手册各部分放在状态根里，"
         "`~/Downloads` 是派活对照（票 06）那套占位文件（30 个 PDF，其中十来个是发票、收据、水单），"
         f"每次运行最多 {SANDBOX_TOOL_CAP} 次工具调用；浏览器工具与 `ask_user` 不执行，运行停在那里。",
@@ -7997,7 +8065,14 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for v in variants:
         t = tally[v]
         shown = [k for k in CRIT_VERDICTS + ("未运行",) if t[k] or k in ("合格", "不合格")]
-        out.append(f"- **{v}**：" + "，".join(f"{k} {t[k]}" for k in shown) + "。")
+        web = [f"{r['id']}" for c in cases for r in by_case.get((c["id"], v)) or []
+               if crit_facts(r, c).get("first_web")]
+        code = [f"{r['id']}" for c in cases for r in by_case.get((c["id"], v)) or []
+                if crit_facts(r, c).get("web_code")]
+        out.append(f"- **{v}**：" + "，".join(f"{k} {t[k]}" for k in shown) + "。第一个工具是浏览器："
+                   + (f"{len(web)} 遍（" + "、".join(sorted(set(web))) + "）" if web else "0 遍")
+                   + "；code_run 上网：" + (f"{len(code)} 遍（" + "、".join(sorted(set(code))) + "）" if code else "0 遍")
+                   + "。")
     out += [""]
     if meta.get("superseded_runs"):
         out += ["被替换的运行原样留在 results.json 的 `meta.superseded_runs`："]
@@ -8187,11 +8262,14 @@ def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "`dispatch-criterion/galley-prompt/main_chat.v2.txt`；这 6 条跑在第一轮措辞 `main_chat.v2-r1.txt` 下，"
         "与最终那份只差「a quick look on their computer」一处）。都由 Rust 的 `compose_main_chat_runtime_prompt` 生成，"
         "两份只差派活那一段。",
-        "- **用例**：本票 6 条（前 6 行），另把票 115 的用例原样带进来（票 134 起 19 条）。v2 只跑本票 6 条："
+        "- **用例**：本票的用例（前 7 行；第 7 条 `p-errand-and-question-full` 是票 134 第三轮加的），另把票 115 的用例原样带进来（票 134 起 20 条）。v2 只跑本票 6 条："
         "带进来的那些在 v2 下的运行与 `dispatch-criterion` 的 v2 一模一样（同一份提示词、同一套沙盒与判定），"
         "结果在那边，这里不重跑。",
+        "- **v3**（票 134 第三轮）：裁决 184 的条款（`dispatch-criterion/galley-prompt/main_chat.v3.txt`：主对话不上网，"
+        "要上网的、要改东西的都派），同样只跑本票的用例（第 7 条只在 v3 下跑）。",
         "- **标注**：票 134 起按裁决 183（`p-question-parts` 从 0 个标签改成 1 个：要查好几处的问题要派，一个问题不拆），"
-        "两组都按它判，new 的旧结果也按它重判。",
+        "第三轮起按裁决 184（`p-errand-and-question` 改成 2 个：订票与查天气都要上网，各派一个），各组都按现在的标注判，"
+        "旧结果也按它重判。格里另写「第一个工具是浏览器」（票 135 的硬闸拦的就是它）。",
         "- **沙盒**：同票 115（待办评测的沙盒与假 `galley`，手册在状态根，`~/Downloads` 是派活对照那套占位文件，"
         f"每次运行最多 {SANDBOX_TOOL_CAP} 次工具调用，浏览器工具与 `ask_user` 不执行、运行停在那里）；"
         "本票的用例另把用户说到的文件夹放进假 HOME（`cases.json` 的 `home_files`）。",
@@ -8217,7 +8295,7 @@ def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         for v in variants:
             runs = by_case.get((case["id"], v)) or []
             if not runs:
-                if v == "v2" and key == "old":
+                if v in ("v2", "v3") and key == "old":
                     cells.append("（见 dispatch-criterion）")
                 else:
                     tally[(v, key)]["未运行"] += 1
@@ -8228,7 +8306,9 @@ def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                 f = par_facts(r, case)
                 w = f["verdict"]
                 tally[(v, key)][w if w in tally[(v, key)] else "合格" if w.startswith("合格") else "单列"] += 1
-                shown.append(f"{f['label']}：{w}" + (f"；{par_titles_cell(f)}" if f.get("titles") else ""))
+                shown.append(f"{f['label']}：{w}" + (f"；{par_titles_cell(f)}" if f.get("titles") else "")
+                             + ("；第一个工具是浏览器" if f.get("first_web") else "")
+                             + ("；code_run 上网" if f.get("web_code") else ""))
                 if f["pass"] is False:
                     failed[v].append(case["id"])
                 if f.get("titles_ok") is False:
@@ -8237,9 +8317,9 @@ def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         out.append(f"| {case['no']} | {case['id']} | {case['group']} | {par_expected(case)} | " + " | ".join(cells) + " |")
     out += [""]
     for v in variants:
-        for key, name in (("new", "本票 6 条"), ("old", "票 115 的用例")):
+        for key, name in (("new", "本票的用例"), ("old", "票 115 的用例")):
             t = tally[(v, key)]
-            if v == "v2" and key == "old" and not any(t.values()):
+            if v in ("v2", "v3") and key == "old" and not any(t.values()):
                 continue
             shown_k = [k for k in CRIT_VERDICTS + ("未运行",) if t[k] or k in ("合格", "不合格")]
             out.append(f"- **{v}，{name}**：" + "，".join(f"{k} {t[k]}" for k in shown_k) + "。")
@@ -8267,7 +8347,7 @@ def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
             out[-1] = ""
         for v in variants:
             runs = by_case.get((case["id"], v)) or []
-            if not runs and v == "v2" and not case.get("tags"):
+            if not runs and v in ("v2", "v3") and not case.get("tags"):
                 continue
             for r in runs or [None]:
                 out += [f"### {v}" + (f"（第 {r['repeat']} 遍）" if r and r.get("repeat", 1) != 1 else ""), ""]
@@ -8448,13 +8528,14 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
     crcases = {c["id"]: c for c in crit_cases()}
     crit_scripts = {"crit-e-invoices": ("e-invoices", "new", "crit-look-tag"),
                     "crit-midway": ("midway-invoices", "old", "crit-look-tag"),
-                    "crit-q-weather": ("q-weather", "old", "crit-web"),
+                    "crit-q-weather": ("q-followup-quick", "old", "crit-web"),
                     # Ticket 134: q-east is to be handed off now; a follow-up
                     # this conversation answers takes its place here.
                     "crit-followup": ("q-followup-quick", "new", "final"),
                     "crit-todo-note": ("todo-note", "new", "crit-todo"),
                     "crit-mid-tag": ("big-pdfs", "new", "crit-mid-tag"),
-                    "crit-v2-east": ("q-east", "v2", "crit-east-tag")}
+                    "crit-v2-east": ("q-east", "v2", "crit-east-tag"),
+                    "crit-v3-east": ("q-east", "v3", "crit-east-tag")}
     for run_id, (case_id, variant, script) in crit_scripts.items():
         for job in make_crit_jobs([crcases[case_id]], [variant], snow, mykeys, ga_lang, set(), 1, script):
             job["case_id"] = run_id
@@ -8464,7 +8545,8 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
     par_scripts = {"par-three": ("p-three-errands", "new", "par-three-tags"),
                    "par-untitled": ("p-same-tab", "new", "par-untitled"),
                    "par-question": ("p-question-parts", "new", "crit-web"),
-                   "par-v2-question": ("p-question-parts", "v2", "crit-east-tag")}
+                   "par-v2-question": ("p-question-parts", "v2", "crit-east-tag"),
+                   "par-v3-question": ("p-question-parts", "v3", "crit-east-tag")}
     for run_id, (case_id, variant, script) in par_scripts.items():
         for job in make_crit_jobs([pcases[case_id]], [variant], snow, mykeys, ga_lang, set(), 1, script,
                                   suite=PAR_SUITE):
@@ -8673,9 +8755,9 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
               and "Galley wakes you" in system and "you can look it up when they ask" not in system,
               "the ticket 30 entry layer follows the Main Chat section")
         if case.get("prompt"):
-            check("Answer yourself only what takes a step or two" in system and "### In Hand" not in system
+            check("You do not go online in this chat." in system and "### In Hand" not in system
                   and "__IN_HAND__" not in system and "__MEMO__" not in system and "Galley version: 0.7.4" in system,
-                  "ticket 134: the case's v2 prompt, its In Hand and Memo placeholders dropped")
+                  "ticket 134's third round: the case's v3 prompt, its In Hand and Memo placeholders dropped")
         roles = [x["role"] for x in msgs]
         check(roles == ["system"] + [h["role"] for h in case["history"]] + ["user"], f"history, then the note ({roles})")
         last = msgs[-1]["content"]
@@ -8743,11 +8825,11 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
               if any(m.get("final") for m in s["messages"])),
           "the cases before ticket 134 have no answer long enough to cut")
     jobs = make_wake_jobs([cases["w-table"]], ["core"], now, {}, "en", set(), 1)
-    check("Answer yourself only what takes a step or two" in jobs[0]["galley_prompt"]
+    check("You do not go online in this chat." in jobs[0]["galley_prompt"]
           and "__IN_HAND__" not in jobs[0]["galley_prompt"]
-          and "Answer yourself only" not in make_wake_jobs([cases["done-evidence"]], ["draft"], now, {}, "en", set(),
+          and "You do not go online" not in make_wake_jobs([cases["done-evidence"]], ["draft"], now, {}, "en", set(),
                                                            1)[0]["galley_prompt"],
-          "w-table runs under the v2 prompt, the old cases under theirs")
+          "w-table runs under the v3 prompt, the old cases under theirs")
     wt = wake_dated(cases["w-table"], now)
     table_md = "\n".join(["| " + " | ".join(row) + " |" for row in wt["expect"]["table_rows"][:1]]
                          + ["| --- | --- | --- |"]
@@ -8802,6 +8884,41 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
     as a to-do and a thing to get done set as a plain reminder from the
     right way round."""
     from datetime import timezone
+
+    # Ticket 134's third round (ruling 184 point 9): a reminder that says
+    # to check something online hands the check to a subtask, the round
+    # silent; a reminder that only reminds speaks. Both under the v3 prompt.
+    print("schedule: reminders under ruling 184 point 9")
+    at = datetime(2026, 11, 3, 15, 0).astimezone()
+    parcel, water = cases["rem-parcel-online"], cases["rem-water-only"]
+    for c in (parcel, water):
+        job = make_sched_jobs([c], at, {}, "en", set(), 1)[0]
+        check("You do not go online in this chat." in job["galley_prompt"]
+              and "### In Hand" not in job["galley_prompt"] and "came due" in job["message"],
+              f"{c['id']}: the v3 prompt, the reminder's wake note")
+    tag = '<subtask title="查顺丰物流">上顺丰官网查单号 SF1402 7735 8861 的物流</subtask>'
+    for reply, ok, why in (
+            (f"{tag}\n<no-reply/>", True, "the tag and <no-reply/>"),
+            (f"<summary>查物流</summary>\n{tag}\n<no-reply/>", True, "a summary aside"),
+            (f"物流交给子任务去查了。\n{tag}", False, "words for the user"),
+            ("<no-reply/>", False, "no tag"),
+            ("快递到杭州了。", False, "an answer with no tag")):
+        f = sched_facts(synth_run(parcel, at, reply), parcel)
+        check(f["pass"] is ok, f"rem-parcel-online: {why} {'passes' if ok else 'fails'} ({f['reasons']})")
+    for reply, ok, why in (
+            ("该喝水了，起来倒一杯吧。", True, "spoken"),
+            (f"{tag}\n<no-reply/>", False, "a subtask for a nudge"),
+            ("<no-reply/>", False, "silent")):
+        f = sched_facts(synth_run(water, at, reply), water)
+        check(f["pass"] is ok, f"rem-water-only: {why} {'passes' if ok else 'fails'} ({f['reasons']})")
+    r = dict(synth_run(parcel, at, ""), stop_reason="web_tool", calls=[{"n": 1, "name": "web_scan", "args": {}}])
+    f = sched_facts(r, parcel)
+    check(f["first_web"] is True and not f["pass"], "rem-parcel-online: a browser tool first is flagged and fails")
+    r = dict(synth_run(parcel, at, f"{tag}\n<no-reply/>"),
+             calls=[{"n": 1, "name": "code_run", "args": {"script": "curl -s https://www.sf-express.com/x"}}])
+    f = sched_facts(r, parcel)
+    check(f["web_code"] == [1] and not f["pass"] and any("code_run 上网" in x for x in f["reasons"]),
+          f"rem-parcel-online: a code_run online is flagged and fails ({f['reasons']})")
 
     print("schedule: ports against Rust (rust-samples.json)")
     samples = json.loads(SCHED_SAMPLES.read_text(encoding="utf-8"))
@@ -10570,10 +10687,11 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     earlier = {c["id"]: c for c in json.loads(DISPATCH_CASES.read_text(encoding="utf-8"))["cases"]}
     reused = [c for c in cases.values() if c.get("from")]
     not_to = {c["id"] for c in cases.values() if not c["should_dispatch"]}
-    check(len(cases) == 19 and not_to == {"q-weather", "q-notes-apps", "quick-usd", "quick-downloads", "todo-note",
-                                          "conv-writeup", "q-fact-injury", "q-followup-quick"}
-          and [c["id"] for c in cases.values() if not c.get("scored", True)] == ["q-notes-apps"]
-          and all(cases[i]["should_dispatch"] for i in ("q-injuries", "q-east", "q-story", "q-headphones"))
+    check(len(cases) == 20 and not_to == {"q-notes-apps", "quick-downloads", "todo-note", "conv-writeup",
+                                          "q-followup-quick", "q-followup-sourced"}
+          and not [c["id"] for c in cases.values() if not c.get("scored", True)]
+          and all(cases[i]["should_dispatch"] for i in ("q-injuries", "q-east", "q-story", "q-headphones", "q-weather",
+                                                        "quick-usd", "q-fact-injury"))
           and cases["q-headphones"].get("max_tags") == 1 and cases["q-east"].get("brief_has_any") == ["西部"]
           and cases["q-headphones"]["message"] == "帮我比较 Meze 109 Pro 和森海塞尔 HD 490 PRO 这两款耳机，整理成一张表"
           and cases["q-fact-injury"]["message"] == "查一下湖人队的里夫斯最近是不是受伤了？"
@@ -10581,11 +10699,12 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
           and len(cases["q-followup-quick"]["history"]) == 2
           and {c["id"] for c in reused} == set(earlier)
           and all(c["message"] == earlier[c["id"]]["message"] for c in reused),
-          "ticket 134: 19 cases, ruling 183's labels (8 not to hand off, q-notes-apps not scored); "
-          "the five of dispatch-cases.json word for word")
+          "ticket 134's third round: 20 cases, ruling 184's labels (6 not to hand off, the weather and a live rate "
+          "handed off); the five of dispatch-cases.json word for word")
     old_t = (CRIT_PROMPT_DIR / "main_chat.old.txt").read_text(encoding="utf-8")
     new_t = CRIT_PROMPTS["new"].read_text(encoding="utf-8")
     v2_t = CRIT_PROMPTS["v2"].read_text(encoding="utf-8")
+    v3_t = CRIT_PROMPTS["v3"].read_text(encoding="utf-8")
     check(CRIT_PROMPTS["new"] == PAR_PROMPTS["new"] and CRIT_PROMPTS["v2"] == PAR_PROMPTS["v2"]
           and CRIT_PROMPTS["v2"].parent == CRIT_PROMPT_DIR,
           "ticket 134: both suites read one new (main today) and one v2")
@@ -10600,9 +10719,28 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     old_c = clause(old_t, "Work that would keep this chat busy")
     new_c = clause(new_t, "Answer what the user asks you yourself")
     v2_c = clause(v2_t, "Answer yourself only what takes a step or two")
+    v3_c = clause(v3_t, "You do not go online in this chat.")
     check(old_t.replace(old_c, "<clause>") == new_t.replace(new_c, "<clause>") == v2_t.replace(v2_c, "<clause>")
-          and old_t.index(old_c) == new_t.index(new_c) == v2_t.index(v2_c),
-          "old, new and v2 differ only in the dispatch clause, in the same place")
+          == v3_t.replace(v3_c, "<clause>")
+          and old_t.index(old_c) == new_t.index(new_c) == v2_t.index(v2_c) == v3_t.index(v3_c),
+          "old, new, v2 and v3 differ only in the dispatch clause, in the same place")
+    flat3 = re.sub(r"\s+", " ", v3_c)
+    check(all(w in flat3 for w in (
+        "You do not go online in this chat. Anything that needs the web (the browser, or going online any other way) "
+        "goes to a subtask, always, the weather or a score included.",
+        "So does anything that changes things on the user's computer or accounts",
+        "and anything they ask you to hand off.",
+        "Everything else you do yourself: talking, answering from what you know or from this conversation, to-dos, "
+        "reminders and memos, the time, a read-only look on their computer (what is in a folder), and writing up what "
+        "you two discussed", '<subtask title="a few words">what to do</subtask>',
+        "Keep in one tag what has to come back as one thing", "what this conversation already settled",
+        "not wait on it or watch it.", "subagent.md"))
+          and "turns out" not in flat3 and "step or two" not in flat3,
+          "v3: ruling 184's clause, the title, parallel and instruction sentences kept, no \"turns out bigger\"")
+    r1 = (CRIT_PROMPT_DIR / "main_chat.v3-r1.txt").read_text(encoding="utf-8")
+    check(r1 == v3_t.replace("what you two discussed, even into a file (a subtask cannot see this\nconversation).",
+                             "what you two discussed (a subtask cannot see this conversation)."),
+          "v3-r1 (the first round's wording, kept for the runs under it) lacks only \", even into a file\"")
     flat = re.sub(r"\s+", " ", v2_c)
     check(all(w in flat for w in (
         "Answer yourself only what takes a step or two: a single fact (the weather, a score, whether someone is "
@@ -10678,10 +10816,27 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     check(not SUBTASK_OPEN_RE.search("见 <subtasks> 一节") and SUBTASK_OPEN_RE.search('a <subtask title="x">'),
           "an opener with attributes is one, <subtasks> is not")
 
+    # Ticket 134's third round: code_run reaching the network.
+    for script, net in (("curl -s https://api.example.com/rate", True), ("import requests\nrequests.get(u)", True),
+                        ("from urllib.request import urlopen", True), ("import httpx", True),
+                        ("Invoke-WebRequest -Uri $u", True), ("fetch('https://example.com')", True),
+                        ("wget -q http://x/y", True),
+                        ('ET.register_namespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main")',
+                         False),
+                        ("open('notes.md','w').write('见 https://example.com')", False),
+                        ("print(sorted(os.listdir(os.path.expanduser('~/Downloads'))))", False)):
+        got = web_via_code([{"n": 1, "name": "code_run", "args": {"script": script}}])
+        check(bool(got) is net, f"code_run {'reaches' if net else 'does not reach'} the network: {script[:40]!r}")
+    r = synth("q-weather")
+    r["calls"] = [{"n": 1, "turn": 1, "name": "code_run", "args": {"script": "curl -s wttr.in/Xiamen"}}]
+    f = crit_facts(r, cases["q-weather"])
+    check(f["web_code"] == [1] and "code_run 上网（第 1 次调用）" in crit_cell(r, cases["q-weather"]),
+          f"a code_run online is its own column ({crit_cell(r, cases['q-weather'])})")
     # Should not be handed off.
-    f = judged(synth("q-weather", True, brief="查厦门明天天气"), "q-weather")
-    check(f["pass"] is False and f["verdict"] == "不合格", f"a question handed off: fails ({f['verdict']})")
-    f = judged(synth("q-fact-injury", stop="cap_reached", calls=SANDBOX_TOOL_CAP), "q-fact-injury")
+    f = judged(synth("q-notes-apps", True, brief="整理 Mac 本地笔记软件"), "q-notes-apps")
+    check(f["pass"] is False and f["verdict"] == "不合格", f"a question answered from what it knows handed off: fails "
+                                                         f"({f['verdict']})")
+    f = judged(synth("q-followup-quick", stop="cap_reached", calls=SANDBOX_TOOL_CAP), "q-followup-quick")
     check(f["pass"] is True and f["category"] == "self", f"a question worked on to the cap: passes ({f['verdict']})")
     f = judged(synth("q-story", mid="查保罗·乔治受伤经过"), "q-story")
     check(f["pass"] is None and f["category"] == "mid_tag" and f["label"].startswith(CRIT_MID_TAG),
@@ -10734,12 +10889,17 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     f = judged(synth("q-followup-quick"), "q-followup-quick")
     check(f["pass"] is True, "a follow-up this conversation answers, answered here: passes")
     f = judged(synth("q-fact-injury", True, brief="查里夫斯伤病"), "q-fact-injury")
-    check(f["pass"] is False, "a single fact handed off: fails")
+    check(f["pass"] is True, "ruling 184: a single fact that needs the web handed off: passes")
+    f = judged(synth("q-weather", stop="web_tool", calls=1), "q-weather")
+    check(f["pass"] is None and f["first_web"] is True and "第一个工具是浏览器" in crit_cell(
+        synth("q-weather", stop="web_tool", calls=1), cases["q-weather"]),
+          f"ruling 184: the weather looked up here, its first tool a browser tool: listed apart, flagged ({f['label']})")
+    unscored = dict(cases["q-notes-apps"], scored=False)
     for dispatched in (True, False):
-        f = judged(synth("q-notes-apps", dispatched, brief="整理 Mac 本地笔记软件"), "q-notes-apps")
-        check(f["pass"] is None and f["verdict"] == "不计分", f"q-notes-apps: not scored either way ({f['label']})")
-    f = judged(synth("q-notes-apps", status="timeout"), "q-notes-apps")
-    check(f["pass"] is False and f["verdict"] == "运行失败", "q-notes-apps: a failed run still fails")
+        f = crit_facts(synth("q-notes-apps", dispatched, brief="整理 Mac 本地笔记软件"), unscored)
+        check(f["pass"] is None and f["verdict"] == "不计分", f"a case not scored: not scored either way ({f['label']})")
+    f = crit_facts(synth("q-notes-apps", status="timeout"), unscored)
+    check(f["pass"] is False and f["verdict"] == "运行失败", "a case not scored: a failed run still fails")
     by_run = {r["id"]: r for r in results}
     for run_id, (case_id, variant, script) in sorted(scripts.items()):
         r = by_run.get(run_id)
@@ -10756,6 +10916,8 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                      ("Answer yourself only what takes a step or two" in system
                       and "Answer what the user asks" not in system)
                      if variant == "v2" else
+                     ("You do not go online in this chat." in system and "step or two" not in system)
+                     if variant == "v3" else
                      ("Work that would keep this chat busy" in system and "Answer what the user asks" not in system))
         check(clause_ok and r.get("crit_variant") == variant and r["variant"] == f"{variant}-1"
               and "## Galley Main Chat Entry Layer" in system and "__MANUAL_DIR__" not in system
@@ -10826,7 +10988,7 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                          "results": shown}, list(cases.values()))
     check("## 一览" in md and all(f"| {c['id']} |" in md for c in cases.values()) and "派活说明（title" in md
           and "未运行" in md and CRIT_MID_TAG in md and "工具调用 1 次" in md and "| v2 |" in md
-          and "「预测东部季后赛」" in md and "| 不计分 |" in md and "是（最多 1 个标签）" in md
+          and "「预测东部季后赛」" in md and "| v3 |" in md and "是（最多 1 个标签）" in md
           and "带上了前文（西部）" in md,
           "results.md renders (every case in the table, the instructions in full, v2 and the titles)")
 
@@ -10846,14 +11008,16 @@ def dry_test_par(results: list[dict[str, Any]], scripts: dict[str, tuple[str, st
             "p-same-tab": ("在京东把购物车里那三样东西下单", {"exact": 1}),
             "p-same-files": ("把下载文件夹里的 PDF 先去重，再按内容分类", {"exact": 1}),
             "p-question-parts": ("新赛季西部和东部各有哪几支队能进季后赛？", {"exact": 1}),
-            "p-errand-and-question": ("帮我订周五去厦门的高铁票，顺便告诉我厦门这周末天气怎么样", {"exact": 1})}
+            "p-errand-and-question": ("帮我订周五去厦门的高铁票，顺便告诉我厦门这周末天气怎么样", {"exact": 2}),
+            "p-errand-and-question-full": ("帮我订周五上午从上海虹桥去厦门北的高铁票，二等座一个人，顺便告诉我厦门这周末天气怎么样",
+                                           {"exact": 2})}
     ordered = sorted(cases.values(), key=lambda c: c["no"])
-    check([c["id"] for c in ordered[:6]] == list(want)
-          and all((c["message"], c["tags"]) == want[c["id"]] for c in ordered[:6])
-          and [c["id"] for c in ordered[6:]] == list(crit)
+    check([c["id"] for c in ordered[:7]] == list(want)
+          and all((c["message"], c["tags"]) == want[c["id"]] for c in ordered[:7])
+          and [c["id"] for c in ordered[7:]] == list(crit)
           and all(c["message"] == crit[c["id"]]["message"] and c["should_dispatch"] == crit[c["id"]]["should_dispatch"]
-                  for c in ordered[6:])
-          and [c["should_dispatch"] for c in ordered[:6]] == [True] * 6 and len(ordered) == 6 + 19,
+                  for c in ordered[7:])
+          and [c["should_dispatch"] for c in ordered[:7]] == [True] * 7 and len(ordered) == 7 + 20,
           "the ticket's six cases word for word (ticket 134: p-question-parts one tag), then ticket 115's as they are")
     new_t = (PAR_PROMPT_DIR / "main_chat.new.txt").read_text(encoding="utf-8")
     crit_t = (CRIT_PROMPT_DIR / "main_chat.new.txt").read_text(encoding="utf-8")
@@ -10926,13 +11090,15 @@ def dry_test_par(results: list[dict[str, Any]], scripts: dict[str, tuple[str, st
     f = judged(synth("p-question-parts", [("预测东西部季后赛", "查新赛季西部和东部能进季后赛的队")]))
     check(f["pass"] is True, "ticket 134: the question in one titled tag: passes")
     f = judged(synth("p-errand-and-question", [("订厦门高铁", "订周五去厦门的高铁票")], calls=2))
-    check(f["pass"] is True, "the booking handed off, one tag: passes")
+    check(f["pass"] is False, "ruling 184: the booking alone handed off, the weather kept: fails")
+    f = judged(synth("p-errand-and-question", [("订厦门高铁", "订周五去厦门的高铁票"), ("厦门周末天气", "查厦门周末天气")]))
+    check(f["pass"] is True, "ruling 184: the booking and the weather, one tag each: passes")
     f = judged(synth("p-errand-and-question", stop="web_tool", calls=1))
     check(f["pass"] is None and f["verdict"] == "单列", "the errand case at the browser: listed apart")
     f = judged(synth("e-invoices", [("整理发票", "把下载文件夹里的发票整理好")]))
     check(f["pass"] is True and f["regressed"] is False and f["titles_ok"], "ticket 115's errand handed off, titled")
-    f = judged(synth("q-weather", [("查天气", "查厦门天气")]))
-    check(f["regressed"] is True, "ticket 115's question handed off: a regression")
+    f = judged(synth("q-notes-apps", [("笔记软件推荐", "整理 Mac 本地笔记软件")]))
+    check(f["regressed"] is True, "a question answered from what it knows handed off: fails under today's labels")
     f = judged(synth("e-template", [(None, "做模板")]))
     check(f["pass"] is True and f["titles_ok"] is False and not f["regressed"],
           "ticket 115's case keeps ticket 115's verdict, its title listed apart")
@@ -10979,7 +11145,7 @@ def dry_test_par(results: list[dict[str, Any]], scripts: dict[str, tuple[str, st
                         "results": shown}, sorted(cases.values(), key=lambda c: c["no"]))
     check("## 一览" in md and all(f"| {c['id']} |" in md for c in cases.values()) and "「发票按月归档」" in md
           and "没写 title" in md and "未运行" in md and "按现在的标注判不合格的" in md and "~/Desktop/" in md
-          and "| new | v2 |" in md and "（见 dispatch-criterion）" in md and "### v2" in md,
+          and "| new | v2 | v3 |" in md and "（见 dispatch-criterion）" in md and "### v2" in md and "### v3" in md,
           "results.md renders (every case in the table, new and v2, the titles, the case's files)")
 
 
@@ -11374,7 +11540,9 @@ def main() -> int:
                      f"tag's title (there, at most {PAR_TITLE_MAX} characters, not the instructions' first line); "
                      "ticket 134 (ruling 183): the six again under v2 (dispatch-criterion/galley-prompt/main_chat.v2.txt), "
                      "p-question-parts relabelled to one tag, every run judged by ruling 183's labels; ticket 115's "
-                     "cases ran under v2 in dispatch-criterion"
+                     "cases ran under v2 in dispatch-criterion; ticket 134's third round (ruling 184): the six again "
+                     "under v3 (dispatch-criterion/galley-prompt/main_chat.v3.txt), p-errand-and-question relabelled "
+                     "to two tags"
             if par else
                      "dispatch-criterion (ticket 115, main chat PRD ruling 160): dispatch-criterion/cases.json under "
                      "two main chat prompts composed by the real Rust code (galley-prompt/main_chat.old.txt: main's "
@@ -11383,7 +11551,9 @@ def main() -> int:
                      "~/Downloads fixtures; judged as T was, a <subtask> tag in a reply being a dispatch; ticket 134 "
                      "(ruling 183): new is main today (../dispatch-parallel/galley-prompt/main_chat.new.txt, tickets "
                      "126 and 127 in it), v2 the ticket's (galley-prompt/main_chat.v2.txt), three cases added, every "
-                     "run judged by ruling 183's labels",
+                     "run judged by ruling 183's labels; ticket 134's third round (ruling 184): v3 "
+                     "(galley-prompt/main_chat.v3.txt), every run judged by ruling 184's labels, a run's first tool "
+                     "call being a browser tool reported beside its verdict",
             "model_access": f"API key 接入，模型 id {args.model_id}" if not args.mykey else source,
             "variants_order": list(all_variants),
             "repeats": args.repeats,

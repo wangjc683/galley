@@ -575,6 +575,33 @@ describe("assistantLinePlan", () => {
     expect(lastVisibleMessage(turns, zh)?.text).toBe(EARLIER_REPLY);
   });
 
+  // Main chat PRD ruling 184 point 9 (ticket 134's third round): a
+  // reminder that says to check something online wakes the main chat,
+  // which does not go online, so it hands the check to a subtask and says
+  // nothing yet. Its round is drawn like the review's above: the silent
+  // report round is keyed on the report row's origin, which Core stamps
+  // on every wake, reminders included, not on the review.
+  it("draws nothing of a woken reminder round that only dispatched", () => {
+    const rows = dispatchRoundRows({ woken: true }).map((row) =>
+      row.id === "msg_s-main_31_user"
+        ? {
+            ...row,
+            content:
+              "[Galley — not a message from the user] A reminder you set came due. …",
+            origin_note: "sched_7c2e9a41d3b05f68",
+          }
+        : row,
+    );
+    const turns = rowsToTurns(rows);
+    const plan = planOf(turns);
+    expect([...plan.message]).toEqual([0, 1]);
+    expect(plan.flat.size).toBe(0);
+    expect(plan.steps.size).toBe(0);
+    expect(plan.reports.size).toBe(0);
+    expect([...hiddenReportTurns(turns)].sort()).toEqual([2, 3, 4, 5]);
+    expect(lastVisibleMessage(turns, zh)?.text).toBe(EARLIER_REPLY);
+  });
+
   it("draws the user's own dispatch as before, with <no-reply/> or without", () => {
     const [bare, tagged] = [false, true].map((noReply) =>
       rowsToTurns(dispatchRoundRows({ woken: false, noReply })),

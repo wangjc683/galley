@@ -377,3 +377,88 @@ If it holds, tell the user what they asked for, as `subtasks.md` says: the answe
 4. 按严格验收打回仍会发生（`w-long` 第 2 遍）：派活更积极以后，答案型结果多一轮打回、更晚到的风险还在。
 5. `todo/cases.json` 两条用例带过来的叫醒消息换成了新原话，它们的旧结果是旧原话下跑的，重跑那两条时会有差别。
 6. 叫醒评测的结束标签写「达到 8 次上限」，叫醒这一套的上限其实是 10 次（`STOP_LABELS` 用的是派活套件的常数），是评测脚本的旧问题，没改。
+
+### 第三轮（2026-11-03，裁决 184「上网就派」与第 9 条「到点提醒不上网」）
+
+第二轮已提交（Core 叫醒那句、成品贴回评测），这一轮在它上面改条款、手册与评测。
+
+**条款最终原文**（`core/src/managed_prompt.rs` 的 `main_chat_entry_layer`）：
+
+```text
+You do not go online in this chat, neither with the browser nor any
+other way (curl and the like in code_run). Anything that needs the web
+goes to a subtask, always, the weather or a score included. So does
+anything that changes things on the user's computer or accounts (files
+sorted, renamed or written, an order placed, a form filled, something
+sent), and anything they ask you to hand off. Everything else you do
+yourself: talking, answering from what you know or from this
+conversation, to-dos, reminders and memos, the time, a read-only look on
+their computer (what is in a folder), and writing up what you two
+discussed, even into a file (a subtask cannot see this conversation).
+To hand something off, end your reply with
+<subtask title="a few words">what to do</subtask>. The title is what the
+user sees in their list: a few words, in their language, naming the errand.
+When the user hands you several errands that do not depend on each other,
+or one errand splits into parts whose results each stand on their own,
+write one tag per part in the same reply: they run at the same time. Keep
+in one tag what has to come back as one thing (a comparison, one table,
+one report, the answer to one question) and the parts that need the same
+browser tab or the same files.
+Galley starts each after this reply, as a separate conversation that cannot
+see this one, so write everything it needs: the goal, the facts the user
+gave, what this conversation already settled that the request leans on,
+what you have found so far, and what to hand back, with the evidence for
+it (a confirmation number, a file path, a link, a screenshot path).
+Tell the user in a sentence that it is on its way. When it finishes, asks
+something or fails, Galley wakes you to check it and tell the user, so do
+not wait on it or watch it. Use this, not the file-based subagent in your
+memory (subagent.md), which the user cannot see.
+```
+
+- 相对主会话给的要点：「如果拿不准是小事、做着发现变大」那句删了。现在要答的是「要不要上网、要不要改东西」，开工前就分得清；只读看一眼发现要改的，靠派活说明里的「what you have found so far」把看到的交出去，用不着单列一句。
+- 评测改了一轮措辞：「writing up what you two discussed」后加「, even into a file」。第一轮措辞下「把我们今天聊的整理成一份 Markdown，放到桌面」三遍里有一遍被当成「写文件」派了出去。
+- 评测之后按主会话的补充，把开头改成「neither with the browser nor any other way (curl and the like in code_run)」，与票 135 硬闸的新说法一致；这一处没有再跑评测（评测用的是 `dispatch-criterion/galley-prompt/main_chat.v3.txt`，开头是「the browser, or going online any other way」）。
+
+**Core 叫醒那句**（第二轮定的，这一轮没改）：「If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or two with the evidence (a confirmation number, a file path, a link).」
+
+**字节预算**：`MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` 4729 → 4524，本机实测 4524（不留余量；入口层没有按平台分的内容，`\r` 不计，Windows 相同）。分项：按要碰的东西重写开头 +6，留在这里的那句并进开头 −146，「turns out bigger」删掉 −114（到 4475）；评测加的「, even into a file」+18（4493）；curl 那句 +31（4524）。
+
+**手册**（裁决 184 第 9 条）：
+
+- `wake.md`「When a reminder comes due」：去掉「look something up first when it says to check something」；加一条：提醒说要查网上的东西（快递、价格、天气），这里不上网，交给子任务，这一轮只写子任务标签和 `<no-reply/>`，回来时一条消息说清，晚到的话一并说；只提醒的照旧到点说。「A to-do's reminder only reminds」挪到一行开头，保持能整句搜到。
+- `wake.md` 开头 `<no-reply/>` 那条：除巡看外，加上「提醒的查询交给了子任务」这一种。
+- `wake.md` 巡看看备忘那条：「look it up」改成「have a subtask look it up (you do not go online here)」，与硬闸一致（主会话没点名这一处，我顺手改了，请看）。
+- `unasked.md`：「Quick work you do this turn; longer work goes to a subtask」改成「Quick work that needs no web you do this turn; anything that needs the web, and longer work, goes to a subtask」。
+- 手册没有字节预算。
+
+**改了哪些文件、哪些断言**：
+
+- `core/src/managed_prompt.rs`：条款、上方文档注释加第三轮一段（裁决 184、为什么删「turns out bigger」、与硬闸同一句话）、预算与理由。测试改名 `main_chat_entry_layer_hands_the_web_and_changes_to_a_subtask`，换成新原文的单行片段，锚点 `You do not go online in this chat,`，另断言 `takes a step or two`、`turns out` 不在，工作台与 IM 的提示词里没有这一句。
+- `core/src/assistant_manual.rs`：新测试 `manual_hands_web_checks_on_wake_to_a_subtask`；`manual_covers_the_users_to_dos`、`manual_follows_up_what_comes_up_on_a_date`、`manual_wakes_with_what_is_of_use`、`manual_acts_unasked_and_reviews_each_morning`、`manual_keeps_the_users_memos` 里钉旧句的片段跟着改。
+- 手册 `wake.md`、`unasked.md`；`docs/managed-ga-runtime/prompt-composition.md` 的入口层一条与预算一条。
+- `gui/src/lib/assistant-conversation.test.ts`：加一条 vitest，只派活加 `<no-reply/>` 的提醒叫醒轮次界面不画（只动测试，没动 GUI 代码）。
+- 评测：`run.py`（v3、按裁决 184 判、第一个工具是不是浏览器、`code_run` 上网、到点提醒的判定）、三套的 `cases.json` 与 `schedule/cases.json`、`dispatch-criterion/galley-prompt/main_chat.v3.txt` 与 `main_chat.v3-r1.txt`、各套件结果、`README.md`。
+
+**界面判静默**：看报告行的来源（`gui/src/lib/subtasks.ts:95-99` 的 `isSubtaskReport`：`via: "system"` 加 `supervisor: "galley-report"`），Core 给每种叫醒都盖这个来源（`core/src/subtask_report.rs` 的 `deliver`，`Origin::subtask_report`），提醒也在内，不只认巡看。新加的 vitest 过了。
+
+**评测**（模型 `mm_1792576875658`，API key 接入的 gpt-6.1-sol；先 `--dry-test` 全过）：
+
+1. 派活判据 v3（20 条 × 3 遍）：合格 49、合规 6（`q-injuries`、`q-story` 凭已有知识自己答）、不合格 5（`q-followup-quick` 3、`q-followup-sourced` 2）。60 遍里第一个工具是浏览器 0 遍，`code_run` 上网 0 遍；对照 new 4 遍、v2 8 遍第一个工具是浏览器。逐条见 README「派活判据（票 115）」里第三轮那张表。
+2. 并行 v3（本票 6 条 × 3 遍，另加 1 条 × 3）：几件差事 3 个标签、一件拆三块 3 个、同一批文件 1 个、同一个标签页 1 个、分东西部的问题 1 个，都三遍合格；`p-errand-and-question` 三遍只派了天气、订票先问出发地，按 2 个标签判不合格；写全出发地的 `p-errand-and-question-full` 三遍都派了 2 个（「订厦门高铁票」「查厦门周末天气」）。我的判断：裁决 184 下两件都该派，缺了只有用户才知道的东西时先问那一件、能派的先派，也说得过去。
+3. 成品贴回 v3：`w-table` 3/3，三遍都把表原样贴回；`w-long` 0/3，第 3 遍给了要点并 `[FILE:…]` 交出全文，只因 1,568 字超过脚本定的 1,500 字判为不过，另两遍做到 10 次工具调用上限没回复。
+4. 到点提醒（`schedule/` 新加两条，v3）：6/6。查物流三遍都是一个子任务标签加 `<no-reply/>`，没给用户写字；喝水三遍都到点说一句，没派子任务。
+
+真模型调用：第三轮 250 次（派活判据 148，并行 50，成品贴回 41，到点提醒 11），上限 390。
+
+验证（rebase 到 main 之后）：见本节末尾。
+
+**第三轮看到的（Open risks）**：
+
+1. 上线的条款开头（curl 那句）没跑过评测，评测用的是前一版说法；两版只差开头那半句。
+2. `code_run` 上网硬闸拦不到，只靠条款；这一轮 96 遍 v3 运行里没有一遍这样做，但样本里没有专门诱导它的用例（比如「用 curl 查一下汇率」）。
+3. `q-followup-quick`、`q-followup-sourced`：凭这段对话就能接的追问，模型总想先核实出处，核不到就派子任务重查。真机上前一轮是子任务查回来的、`session show` 看得到，可能好些；评测的假 CLI 里没有那件子任务，测不出来。
+4. `q-injuries`、`q-story`（讲过去的事）按裁决 184 第 2 条③「凭已有知识答」自己答了，按主会话给的标注（派）落在「合规」。这类到底派不派，裁决的两条（上网就派 / 凭已有知识答）会打架，请 JC 定。
+5. `w-long` 验收仍会做到工具调用上限：反复读手册、想读截图。长回答的「给要点、说全文在哪」只在第二轮 1 遍、第三轮 1 遍（超字数）走到。
+6. 主对话把长回答写进文件时放在状态根的 `temp` 下（`managed-ga-state/temp/…`），不在用户的文件夹里；文件卡片能点开，但位置不直观。
+7. 巡看看备忘那条我顺手改成交给子任务（裁决 184 第 9 条只点了提醒与 `unasked.md`），请看是否同意。
+8. 评测各套件的旧结果都按新标注（裁决 184）重判了，README 里票 115、134 第一轮写的数字是当时的标注下的。

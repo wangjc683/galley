@@ -450,25 +450,29 @@ that finishes a task and restates the result. The layer says three things:
   the core prompt's reply shape as the IM layer).
 - **Pick up what a break left open** (ticket 11's carried turns) when the
   user comes back to it, without recapping it unasked.
-- **Hand everything past a step or two to a subtask** (ticket 06a, PRD
-  rulings 52, 53; the test since ticket 134, main chat PRD ruling 183):
-  only what takes a step or two is answered in the main chat (a single
-  fact, a quick look on the user's computer, a quick conversion, a
-  follow-up this conversation already answers); everything bigger goes to
-  a subtask so the chat stays free: a thing to hand back (a table, a list,
-  a comparison, a report, a file), a change on their computer or accounts,
-  a question or story that needs several places looked up, and anything
-  they ask to hand off; anything taken for quick that turns out bigger
-  partway hands the rest over; an errand whose material is this
-  conversation (a subtask cannot see it), and a to-do, a reminder or a
-  memo, stay. Until ticket 115 the test was "work that would keep the chat
-  busy for a long time (many steps, several websites, a long batch of
-  files)", quick work staying: the model cannot tell how long work will
-  take before it starts, and in two weeks it never handed work off on its
-  own. From ticket 115 to ticket 134 (ruling 160) a question was answered
-  here however long it took and only errands went; ruling 183 moved the
-  line after a two-headphone comparison held the chat for four minutes. A
-  hand-off ends the reply with
+- **Hand the web and changes to a subtask** (ticket 06a, PRD rulings 52,
+  53; the test since ticket 134's third round, main chat PRD ruling 184):
+  the main chat does not go online, neither with the browser nor any other
+  way (curl and the like in `code_run`); anything that needs the web goes
+  to a subtask, always, the weather or a score included, and so does
+  anything that changes things on the user's computer or accounts (files
+  sorted, renamed or written, an order placed, a form filled, something
+  sent) and anything the user asks to hand off. Everything else stays:
+  talking, answering from what it knows or from this conversation, to-dos,
+  reminders and memos, the time, a read-only look on the computer, and
+  writing up what the two discussed, even into a file (a subtask cannot
+  see this conversation). Ticket 135's runner guard answers a browser
+  tool in the main chat with the same hand-off instead of running it;
+  `code_run` it cannot tell apart, so there the words do the work. Until
+  ticket 115 the test was "work that would keep the chat busy for a long
+  time (many steps, several websites, a long batch of files)", quick work
+  staying: the model cannot tell how long work will take before it
+  starts. From ticket 115 to ticket 134 (ruling 160) a question was
+  answered here however long it took and only errands went; ruling 183
+  then sent everything past a step or two, by kind, and its eval kept
+  needing new examples; ruling 184 draws the line by what the work
+  touches, which the model can tell up front. A hand-off ends the reply
+  with
   `<subtask title="a few words">what to do</subtask>` (the title since
   ticket 126, main chat PRD ruling 175: what the user sees in their list, a
   few words in their language naming the errand; without one Core keeps the
@@ -756,7 +760,7 @@ that finishes a task and restates the result. The layer says three things:
   after writing memory. Ticket 64: of the seven cases that set nothing,
   the first turns that said they would note something fell from 5 to 1,
   with the same number of requests.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4729, no headroom,
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4524, no headroom,
   `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
@@ -790,7 +794,11 @@ that finishes a task and restates the result. The layer says three things:
   look on the user's computer +54 came from the eval's first round; one tag
   for what comes back as one thing +102; what the conversation settled in
   the instructions +66; anything that turns out bigger +14, ruling 183):
-  4729.
+  4729; its third round took 254 off (ruling 184: the opening by what the
+  work touches +6, the sentence keeping this conversation's material and
+  the notes folded into it −146, "turns out bigger" gone −114): 4475;
+  the third round's eval added ", even into a file" (+18) and the words on
+  curl in `code_run` (+31): 4524.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 
