@@ -894,48 +894,33 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.5..HEAD`. Hold: `v0.7.6` waits for
-main chat PRD ruling 186 (tickets 136-139: interjecting mid-run, a line
-mid-run, subtasks that carry the chat, then the entry layer cut to a few
-judgments and ticket 135's guard removed), which turns ruling 184 back;
-JC chose to ship both together rather than 184 first (2026-11-03).
-Merged since `v0.7.5`
-(2026-11-03), not dogfooded yet: the main chat does not go online (main
-chat PRD ruling 184, replacing 183's sort by the nature of the request):
-anything that needs the web, the weather included, and anything that
-changes things on the user's computer or accounts goes to a subtask, and
-so does a question about a fact in the world, even one it thinks it knows,
-answered with its sources (ruling 185); it talks, explains, gives its
-view, answers from the conversation, keeps the notebook and takes a
-read-only look on the computer itself, and handing off it does not cite
-the rule (ticket 134, entry layer; eval v4: a browser as the first tool
-0 of 72 runs, rule talk 0 of 72). A subtask the main chat dispatches carries the main
-chat's last turns (up to 10, 15,000 characters, the ones its runner holds)
-as read-only background in its runtime prompt, stored with the dispatch
-record (ruling 186, ticket 138, migration 056). In the managed main chat, text
-sent while a run is going is interjected: Core hands it to the runner,
-which writes GA's `intervene`, the next step reads it, and it is saved
-right after that step; unread at the run's end, it goes out as the next
-turn (ruling 186, ticket 136; `session send` may answer
-`dispatch: "interjected"`). In the managed runtime each model request gets 300
-seconds from sending to its last line read; past that the stream is cut
-without a retry and the model sees an interrupted-stream marker (ruling
-188, ticket 140, patch `0031`; two degenerate requests ran ~900 s). The managed main chat's
-model has a `tell_user` tool (runner layer, not the patch stack): a line
-to the user mid-run, saved right after the step that said it and drawn
-as a bubble while the run goes on; no notification of its own (ruling
-186, ticket 137). In a run you started, words the model writes outside
-`<summary>` in a step that calls tools reach you the same way before the
-tools run; Galley's own wakes send nothing mid-run (ruling 191, ticket
-142). A
-reminder that says to check something hands the check to a subtask and
-stays silent until it is back; the morning review's look-ups go the same
-way (ruling 184 point 9; `wake.md`, `unasked.md`). Answer-like results
-come back in full: the manual's `subtasks.md` and Core's wake note (ruling
-183 point 4). In the managed runtime the main chat's runner refuses
-browser tools (`GALLEY_MAIN_CHAT`, ticket 135); going online through
-`code_run` is not caught and waits on a signal in deferred (ruling 184
-point 10). The GUI draws `Bash` / `PowerShell` calls as `code_run`
+Release-scope truth is `git log v0.7.5..HEAD`. Merged since `v0.7.5`
+(2026-11-03/04), not all dogfooded yet. The main chat now leans on the
+model with a few hands instead of dispatch rules (main chat PRD ruling
+186, which turns back rulings 183-185's dispatch lines and ticket 135's
+browser guard; JC chose to ship this as one `v0.7.6`): its entry layer is
+a few judgments (do it yourself, on the web too, or hand it to subtasks,
+several at once; look a fact in the world up and give sources; change
+things on the user's computer or accounts by `authority.md`'s three
+levels), and it runs what the manual's parts will ask for in the step it
+reads them (ruling 192; ticket 139, eval v5). Text sent while its run is
+going is interjected: Core hands it to the runner, which writes GA's
+`intervene`; the next step reads it and it is saved right after that
+step; unread at the run's end, it goes out as the next turn (ticket 136;
+`session send` may answer `dispatch: "interjected"`). The model has a
+`tell_user` tool (runner layer, not the patch stack) for a line to the
+user mid-run, and in a run the user started, words it writes outside
+`<summary>` in a step that calls tools reach the user the same way
+before the tools run (tickets 137, 142; ruling 191). A subtask it
+dispatches carries the main chat's last turns (up to 10, 15,000
+characters) as read-only background, stored with the dispatch record
+(ticket 138, migration 056, ruling 187). Answer-like results come back in
+full (ruling 183 point 4). Reminders and the morning review check things
+themselves or by a subtask. In the managed runtime each model request
+gets 300 seconds from sending to its last line read; past that the
+stream is cut without a retry and the model sees an interrupted-stream
+marker (ruling 188, ticket 140, patch `0031`; two degenerate requests ran
+~900 s). The GUI draws `Bash` / `PowerShell` calls as `code_run`
 (baseline ticket 02), and a step whose heading falls back reads a lone
 tool's name instead of 「调用了 code_run」 (baseline ticket 03). GA baseline `a9a36b4` -> `d66509b` (target
 `v0.7.6`, [devlog](./devlog/2026-11-03-ga-upstream-upgrade-a9a36b4-to-d66509b.md)):

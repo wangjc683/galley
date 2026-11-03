@@ -575,9 +575,9 @@ describe("assistantLinePlan", () => {
     expect(lastVisibleMessage(turns, zh)?.text).toBe(EARLIER_REPLY);
   });
 
-  // Main chat PRD ruling 184 point 9 (ticket 134's third round): a
-  // reminder that says to check something online wakes the main chat,
-  // which does not go online, so it hands the check to a subtask and says
+  // Main chat PRD ruling 184 point 9 (ticket 134's third round), kept as
+  // one of the two ways since ruling 186 (ticket 139): a reminder that
+  // says to check something may hand the check to a subtask and say
   // nothing yet. Its round is drawn like the review's above: the silent
   // report round is keyed on the report row's origin, which Core stamps
   // on every wake, reminders included, not on the review.
