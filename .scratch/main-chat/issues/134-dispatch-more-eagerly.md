@@ -367,7 +367,7 @@ If it holds, tell the user what they asked for, as `subtasks.md` says: the answe
 
 真模型调用：第二轮 53 次（上限 80）；两轮合计 442 次。
 
-验证（rebase 到 main 之后）：见下一段提交说明前的检查，结果写在这里：`cargo test --workspace`、`managed_prompt`、`assistant_manual`、`subtask_report` 三组过滤、改过的 Rust 文件 `rustfmt --check`、`check-docs-links`、`git diff --check`，`run.py --dry-test` 全过。
+验证：第二轮的全量测试被第三轮打断，合在第三轮末尾一起跑（见第三轮）；当时跑过的 `managed_prompt`、`assistant_manual`、`subtask_report` 三组过滤、`rustfmt --check`、`check-docs-links`、`git diff --check`、`run.py --dry-test` 全过。
 
 **第二轮看到的（Open risks）**：
 
@@ -450,7 +450,7 @@ memory (subagent.md), which the user cannot see.
 
 真模型调用：第三轮 250 次（派活判据 148，并行 50，成品贴回 41，到点提醒 11），上限 390。
 
-验证（rebase 到 main 之后）：见本节末尾。
+验证（rebase 到 main `9cfa26f8` 之后）：`cargo test --workspace` 1,301 过、0 不过；`managed_prompt` 46、`assistant_manual` 14、`subtask_report` 20 全过；三份改过的 Rust 文件 `rustfmt --check` 干净；`check-docs-links` 493 个文件 OK；`git diff --check` 干净；`run.py --dry-test` 全过；新 vitest 所在文件 26 条全过，eslint、prettier 干净。
 
 **第三轮看到的（Open risks）**：
 
