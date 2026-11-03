@@ -1,6 +1,6 @@
 # 137 先说一句：主对话在一轮中间先回你一句，不结束这一轮
 
-Status: ready-for-agent（2026-11-03 票 136 已合入）
+Status: needs-dogfood（2026-11-03 快进合入 `9cd9fd32`…`c4a7f732`。工具在 runner 层（JC 选甲），条件是两条会报警的测试：主会话自己跑 `test_tell_user_survives_gas_tool_list_reload`、`test_tell_user_never_reaches_a_request_elsewhere`（工作台、外置）都过；代理验证 workspace 1,333 条、runner 738 条、vitest 2,810 条与门禁过。评测：插话的用例 36 遍用了 2 遍，不插话的 24 遍没用；票 139 收完派活条款后要重跑）
 
 来源：[主对话 PRD](../PRD.md) 裁决 186 第 2 条（「少规矩、多手」的第二只手）。只在内置运行时的主对话；外置零变化（宪法第 1 条：外置 GA 不打补丁、不加工具）。
 

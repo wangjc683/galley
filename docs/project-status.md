@@ -920,7 +920,11 @@ turn (ruling 186, ticket 136; `session send` may answer
 `dispatch: "interjected"`). In the managed runtime each model request gets 300
 seconds from sending to its last line read; past that the stream is cut
 without a retry and the model sees an interrupted-stream marker (ruling
-188, ticket 140, patch `0031`; two degenerate requests ran ~900 s). A
+188, ticket 140, patch `0031`; two degenerate requests ran ~900 s). The managed main chat's
+model has a `tell_user` tool (runner layer, not the patch stack): a line
+to the user mid-run, saved right after the step that said it and drawn
+as a bubble while the run goes on; no notification of its own (ruling
+186, ticket 137). A
 reminder that says to check something hands the check to a subtask and
 stays silent until it is back; the morning review's look-ups go the same
 way (ruling 184 point 9; `wake.md`, `unasked.md`). Answer-like results
