@@ -1373,3 +1373,257 @@ def test_whitespace_runaway_cut_on_a_claude_stream() -> None:
         {"type": "text", "text": "\n\n" + _ARGS_MARKER},
         {"type": "tool_use", "id": "call_1", "name": "web_execute_js", "input": {"_raw": _OPENING}},
     ]
+
+
+# Patch 0031 (ticket 140): a model request gets 300 s from sending to the last
+# line read. On 2026-11-03 a sub-task's `web_execute_js` call on the plan
+# backend opened normally, then streamed ~82 KB of looping junk (not
+# whitespace, so 0030 did not match) for 901 s. The fakes advance a fake
+# monotonic clock one second per line read (after an optional wait before the
+# first line), so the deadline passes on line 301 and nothing waits 300 s.
+
+_JUNK = "}u}g}6}#}t}e}"
+_JUNK_RUNAWAY = (_JUNK,) * 2000
+_DEADLINE_MARKER: str = llmcore._GALLEY_DEADLINE_MARKER
+_MAX_SEC: int = llmcore._GALLEY_REQUEST_MAX_SEC
+_KEEP: int = llmcore._GALLEY_ARGS_KEEP
+
+
+class _TimedResponse(_StreamedResponse):
+    """A `_StreamedResponse` on a fake clock: the first line comes `wait`
+    seconds after the request, every line one second after the one before."""
+
+    def __init__(self, lines: list[str], clock: list[float], wait: float = 0.0) -> None:
+        super().__init__(lines)
+        self.clock = clock
+        self.wait = wait
+
+    def iter_lines(self, *_args: object, **_kwargs: object) -> Any:
+        self.clock[0] += self.wait
+        for line in self._lines:
+            self.clock[0] += 1.0
+            self.read += 1
+            yield line
+
+
+def _serve_timed(
+    monkeypatch: pytest.MonkeyPatch, lines: list[str], wait: float = 0.0
+) -> tuple[_TimedResponse, list[str], list[Any]]:
+    clock = [5_000.0]
+    monkeypatch.setattr(llmcore.time, "monotonic", lambda: clock[0])
+    resp = _TimedResponse(lines, clock, wait)
+    posts = _serve_once(monkeypatch, resp)
+    usage: list[Any] = []
+    monkeypatch.setattr(llmcore, "_record_usage", lambda u, _mode: usage.append(u))
+    return resp, posts, usage
+
+
+def _ask_native_claude() -> tuple[Any, list[str], Any]:
+    sess = llmcore.NativeClaudeSession(
+        {
+            "name": "t140",
+            "apikey": "k",
+            "apibase": "https://api.example.test",
+            "model": "claude-test",
+            "max_retries": 2,
+        }
+    )
+    msg = {"role": "user", "content": [{"type": "text", "text": "open the search page"}]}
+    chunks, response = _collect(sess.ask(msg))
+    return sess, chunks, response
+
+
+_SESSIONS: dict[str, Any] = {
+    "plan_responses": lambda: _ask_native_oai(
+        {"apibase": "https://api.example.test/v1", "api_mode": "responses", "codex_backend": True}
+    ),
+    "chat_completions": lambda: _ask_native_oai(
+        {"apibase": "https://api.example.test/v1", "api_mode": "chat_completions"}
+    ),
+    "claude": _ask_native_claude,
+}
+# Stream builder per session, and how many lines it puts around the
+# argument deltas (before them, in all).
+_SESSION_LINES: dict[str, tuple[Any, int, int]] = {
+    "plan_responses": (_responses_lines, 3, 4),
+    "chat_completions": (_chat_lines, 3, 3),
+    "claude": (_claude_lines, 6, 8),
+}
+
+
+def _split(text: str, n: int) -> tuple[str, ...]:
+    return tuple(text[i * len(text) // n : (i + 1) * len(text) // n] for i in range(n))
+
+
+def test_deadline_cut_keeps_heads_and_places_the_marker() -> None:
+    cut = llmcore._galley_deadline_cut
+    marker = _DEADLINE_MARKER
+
+    assert _MAX_SEC == 300 and _KEEP == 800
+    # Upstream's interrupted-stream form, short enough for do_no_tool's
+    # `'[!!! 流异常中断' in content[-100:]`.
+    assert marker.startswith("[!!! 流异常中断") and marker.endswith("!!!]") and len(marker) < 100
+    long = "x" * 3000
+    signed = {"type": "thinking", "thinking": long, "signature": "sig"}
+    parsed = {"type": "tool_use", "id": "a", "name": "file_write", "input": {"content": long}}
+    raw = {"type": "tool_use", "id": "b", "name": "code_run", "input": {"_raw": "y" * 900}}
+    blocks: list[dict[str, Any]] = [
+        signed,
+        {"type": "thinking", "thinking": long},
+        {"type": "text", "text": long},
+        parsed,
+        raw,
+        {"type": "text", "text": "after"},
+    ]
+
+    chunk, out = cut(blocks)
+
+    assert chunk == "\n\n" + marker
+    assert out == [
+        signed,  # signed thinking is complete; its signature covers every character
+        {"type": "thinking", "thinking": "x" * 800},
+        {"type": "text", "text": "x" * 800 + "\n\n" + marker},  # the text before the first call
+        parsed,  # arguments that parsed arrived whole
+        {"type": "tool_use", "id": "b", "name": "code_run", "input": {"_raw": "y" * 800}},
+        {"type": "text", "text": "after"},
+    ]
+    assert blocks[2]["text"] == long  # the parser's blocks are left alone
+    # `_raw` drops the whitespace its head ends in, as 0030's cut does.
+    _, out = cut([{"type": "tool_use", "id": "c", "name": "n", "input": {"_raw": "{" + " " * 900}}])
+    assert out[1]["input"] == {"_raw": "{"}
+    # No text before the first call: the marker is a text block of its own
+    # there (upstream's warning slot); nothing at all: the marker alone.
+    _, out = cut([{"type": "thinking", "thinking": "t", "signature": "s"}, raw])
+    assert [b["type"] for b in out] == ["thinking", "text", "tool_use"]
+    assert out[1] == {"type": "text", "text": marker}
+    assert cut([]) == (marker, [{"type": "text", "text": marker}])
+
+
+def test_do_no_tool_regenerates_on_the_deadline_marker() -> None:
+    """A cut reply without a tool call relies on upstream's own check."""
+    ga_source = (_MANAGED_GA_CODE / "ga.py").read_text(encoding="utf-8")
+    check = "if '[!!! 流异常中断' in content[-100:]"
+    assert check in ga_source
+    assert 'return self._retry_or_exit("[ERROR] Incomplete response.' in ga_source.split(check)[1]
+
+
+@pytest.mark.parametrize("session", sorted(_SESSIONS))
+def test_a_normal_stream_read_by_the_deadline_is_untouched(
+    monkeypatch: pytest.MonkeyPatch, session: str
+) -> None:
+    """Its last line comes at 300 s exactly: read to the end, nothing cut."""
+    build, _before, around = _SESSION_LINES[session]
+    args = json.dumps(_NORMAL_ARGS, indent=2)
+    resp, posts, _usage = _serve_timed(monkeypatch, build(_split(args, _MAX_SEC - around)))
+    assert len(resp._lines) == _MAX_SEC
+
+    sess, chunks, response = _SESSIONS[session]()
+
+    assert len(posts) == 1
+    assert resp.read == len(resp._lines)
+    assert chunks == [_SUMMARY]
+    [call] = response.tool_calls
+    assert json.loads(call.function.arguments) == _NORMAL_ARGS
+    assert _DEADLINE_MARKER not in json.dumps(sess.history, ensure_ascii=False)
+
+
+@pytest.mark.parametrize("session", sorted(_SESSIONS))
+def test_a_junk_runaway_in_tool_arguments_is_cut_at_the_deadline(
+    monkeypatch: pytest.MonkeyPatch, session: str
+) -> None:
+    """The 11-03 shape: an opening, then looping junk that never stops."""
+    build, before, _around = _SESSION_LINES[session]
+    resp, posts, usage = _serve_timed(monkeypatch, build((_OPENING, *_JUNK_RUNAWAY)))
+
+    sess, chunks, response = _SESSIONS[session]()
+
+    # One request: reading stopped on the first line past 300 s and the
+    # response was closed right there, unread; nothing retried.
+    assert len(posts) == 1
+    assert resp.read == _MAX_SEC + 1
+    assert resp.closed_after == resp.read < len(resp._lines)
+    # The model's reply says why, after what it streamed.
+    assert chunks == [_SUMMARY, "\n\n" + _DEADLINE_MARKER]
+    assert response.content == (_SUMMARY + "\n\n" + _DEADLINE_MARKER).strip()
+    # The arguments read by then keep their first 800 characters: not valid
+    # JSON, so `_raw` as before, the tool says what is missing, and the model
+    # sends the call again.
+    junk = _JUNK * (_MAX_SEC - before)
+    kept = (_OPENING + junk)[:_KEEP]
+    [call] = response.tool_calls
+    assert call.function.name == "web_execute_js"
+    assert json.loads(call.function.arguments) == {"_raw": kept}
+    assert sess.history[-1]["content"] == [
+        {"type": "text", "text": _SUMMARY + "\n\n" + _DEADLINE_MARKER},
+        {"type": "tool_use", "id": "call_1", "name": "web_execute_js", "input": {"_raw": kept}},
+    ]
+    assert len(json.dumps(sess.history, ensure_ascii=False)) < 2000
+    # No usage event was read and none is made up; the Anthropic stream had
+    # recorded its input side at message_start.
+    assert usage == ([{"input_tokens": 10}] if session == "claude" else [])
+
+
+def test_a_runaway_reply_without_a_tool_call_is_cut_and_regenerated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Junk in the reply text: shown as it streams, cut in history, and the
+    reply ends in the marker do_no_tool regenerates on."""
+    lines = _oai_stream({"content": _SUMMARY}, *({"content": _JUNK} for _ in range(2000)))
+    resp, posts, _usage = _serve_timed(monkeypatch, lines)
+
+    sess, chunks, response = _SESSIONS["chat_completions"]()
+
+    assert len(posts) == 1 and resp.read == _MAX_SEC + 1
+    assert chunks == [_SUMMARY, *[_JUNK] * (_MAX_SEC - 1), "\n\n" + _DEADLINE_MARKER]
+    assert response.tool_calls == []
+    text = (_SUMMARY + _JUNK * (_MAX_SEC - 1))[:_KEEP] + "\n\n" + _DEADLINE_MARKER
+    assert sess.history[-1]["content"] == [{"type": "text", "text": text}]
+    assert "[!!! 流异常中断" in response.content[-100:]
+
+
+def test_a_reasoning_runaway_is_cut_to_the_marker_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reasoning that never reaches an answer: its head stays, the reply is
+    the marker, which do_no_tool regenerates on."""
+    lines = _oai_stream(*({"reasoning_content": _JUNK} for _ in range(2000)))
+    resp, posts, _usage = _serve_timed(monkeypatch, lines)
+
+    sess, chunks, response = _SESSIONS["chat_completions"]()
+
+    assert len(posts) == 1 and resp.read == _MAX_SEC + 1
+    assert chunks[0] == "<thinking>" + _JUNK
+    assert chunks[-2:] == ["</thinking>", _DEADLINE_MARKER]
+    assert sess.history[-1]["content"] == [
+        {"type": "thinking", "thinking": (_JUNK * _MAX_SEC)[:_KEEP]},
+        {"type": "text", "text": _DEADLINE_MARKER},
+    ]
+    assert response.content == _DEADLINE_MARKER
+    assert "[!!! 流异常中断" in response.content[-100:]
+
+
+@pytest.mark.parametrize("wait", [185.0, 186.0])
+def test_the_whitespace_guard_and_the_deadline_never_both_cut(
+    monkeypatch: pytest.MonkeyPatch, wait: float
+) -> None:
+    """Line 115 of this stream makes the whitespace run 2,000 long (0030).
+    It comes at 300 s after a 185 s wait, at 301 s after a 186 s one: the
+    line decides, and only one of the two cuts the reply, once."""
+    trip = 3 + _WS_PIECES_TO_TRIP
+    assert trip == 115
+    resp, posts, _usage = _serve_timed(
+        monkeypatch, _responses_lines((_OPENING, *_WS_RUNAWAY)), wait=wait
+    )
+
+    sess, chunks, response = _SESSIONS["plan_responses"]()
+
+    assert len(posts) == 1
+    marker = _ARGS_MARKER if wait == 185.0 else _DEADLINE_MARKER
+    other = _DEADLINE_MARKER if wait == 185.0 else _ARGS_MARKER
+    # 0030 stops reading on line 115; the deadline drops line 115 unread, so
+    # the run stays at 1,998 and 0030 never sees it.
+    assert resp.read == resp.closed_after == trip
+    assert chunks == [_SUMMARY, "\n\n" + marker]
+    history = json.dumps(sess.history, ensure_ascii=False)
+    assert history.count(marker) == 1 and other not in history
+    # Either way the arguments are the opening, the whitespace dropped.
+    [call] = response.tool_calls
+    assert json.loads(call.function.arguments) == {"_raw": _OPENING}

@@ -551,6 +551,40 @@ def _stamp_oai_cache_markers(messages, model):
             c = list(c); c[-1] = dict(c[-1], cache_control={'type': 'ephemeral'})
             messages[idx] = {**messages[idx], 'content': c}
 
+# Galley (ticket 140, ruling 188): a model request gets 300 s from sending to the last line read.
+# Twice a sub-task's request ran ~900 s, which looks like the server's own 15-minute limit: 400k
+# whitespace characters in a tool call's arguments on 2026-10-21 (ticket 116; 0030 cuts that shape
+# within seconds) and ~82 KB of looping junk in the same tool's arguments on 2026-11-03, which 0030
+# does not match. A route may send no output cap (0007) and the read timeout only measures the gap
+# between two lines. Engine logs, 1,433 requests: median 9 s, p90 18 s, p99 73 s, the longest normal
+# one 178 s; only those two passed 180 s. _stream_with_retry checks the clock on every line it reads,
+# so one check covers every parser, tool arguments they buffer without yielding included. Past the
+# deadline it reads no more and hands the parser an Anthropic message_stop instead (_parse_claude_sse
+# then ends without a 流异常中断 warning of its own; both OpenAI parsers pass over that event), the
+# parser builds its blocks from what it has, and leaving `with requests.post` closes the unread
+# response; nothing retries. Text, unsigned thinking and unparsed (`_raw`) tool arguments keep their
+# first _GALLEY_ARGS_KEEP characters (0030's cut), so the junk stays out of history. The marker,
+# upstream's interrupted-stream form, joins the text before the first tool call: a call then fails on
+# its cut arguments and is sent again, and a reply without one is what ga.py's do_no_tool already
+# regenerates ('[!!! 流异常中断' in content[-100:]). Usage is not made up: the cut comes before it.
+_GALLEY_REQUEST_MAX_SEC = 300
+_GALLEY_DEADLINE_STOP = 'data: {"type": "message_stop"}'
+_GALLEY_DEADLINE_MARKER = f"[!!! 流异常中断，请求超过 {_GALLEY_REQUEST_MAX_SEC} 秒被截断，正文与工具参数只留前 {_GALLEY_ARGS_KEEP} 字符 !!!]"
+def _galley_deadline_cut(blocks):
+    """(chunk to stream, blocks) for a reply the deadline cut: long parts keep their head, the marker joins the text before the first tool call."""
+    keep, out = _GALLEY_ARGS_KEEP, [dict(b) for b in blocks]
+    for b in out:
+        t, inp = b.get("type"), b.get("input")
+        if t == "text": b["text"] = b.get("text", "")[:keep]
+        elif t == "thinking" and not b.get("signature"): b["thinking"] = b.get("thinking", "")[:keep]
+        elif t == "tool_use" and isinstance(inp, dict) and list(inp) == ["_raw"]: b["input"] = {"_raw": str(inp["_raw"])[:keep].rstrip(_GALLEY_ARGS_WS)}
+    at = next((i for i, b in enumerate(out) if b.get("type") == "tool_use"), len(out))
+    i = next((j for j in range(at - 1, -1, -1) if out[j].get("type") == "text"), None)
+    if i is None: i = at; out.insert(at, {"type": "text", "text": ""})
+    m = ("\n\n" if out[i]["text"] else "") + _GALLEY_DEADLINE_MARKER; out[i]["text"] += m
+    print(f"[WARN] {_GALLEY_DEADLINE_MARKER}")
+    return m, out
+
 def _stream_with_retry(sess, url, headers, payload, parse_fn):
     STATS['session'] = sess.name
     _RETRYABLE = {408, 409, 425, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 529}
@@ -570,6 +604,7 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
         if _stopped(): return []
         streamed = False
         STATS.update(t_start=time.time(), t_ttft=None)
+        deadline, cut = time.monotonic() + _GALLEY_REQUEST_MAX_SEC, []  # Galley (ticket 140): this request's deadline
         if not sess.stream: STATS['t_ttft'] = STATS['t_start']
         try:
             sess._tid = threading.get_ident()  # abort() looks up _INFLIGHT[_tid]
@@ -596,6 +631,7 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                     def _probe(*a, **k):
                         for line in _il(*a, **k):
                             if line and STATS.get('t_ttft') is None: STATS['t_ttft'] = time.time()
+                            if time.monotonic() > deadline: cut.append(1); yield _GALLEY_DEADLINE_STOP; return  # Galley (ticket 140): read no more
                             yield line
                     r.iter_lines = _probe
                 gen = parse_fn(r)
@@ -607,6 +643,7 @@ def _stream_with_retry(sess, url, headers, payload, parse_fn):
                         if chunk and STATS.get('t_ttft') is None: STATS['t_ttft'] = time.time()
                         streamed = True; yield chunk
                 except StopIteration as e:
+                    if cut: m, blocks = _galley_deadline_cut(e.value or []); yield m; STATS['t_end'] = time.time(); return blocks  # Galley (ticket 140): no retry
                     if not e.value and not streamed: raise requests.ConnectionError("empty response")
                     STATS['t_end'] = time.time()
                     STATS['tps'] = STATS.get('out', 0) / max(1e-9, STATS['t_end'] - max(STATS['t_ttft'] or 0, STATS['t_start']))
