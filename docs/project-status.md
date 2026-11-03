@@ -912,7 +912,12 @@ the rule (ticket 134, entry layer; eval v4: a browser as the first tool
 0 of 72 runs, rule talk 0 of 72). A subtask the main chat dispatches carries the main
 chat's last turns (up to 10, 15,000 characters, the ones its runner holds)
 as read-only background in its runtime prompt, stored with the dispatch
-record (ruling 186, ticket 138, migration 056). A
+record (ruling 186, ticket 138, migration 056). In the managed main chat, text
+sent while a run is going is interjected: Core hands it to the runner,
+which writes GA's `intervene`, the next step reads it, and it is saved
+right after that step; unread at the run's end, it goes out as the next
+turn (ruling 186, ticket 136; `session send` may answer
+`dispatch: "interjected"`). A
 reminder that says to check something hands the check to a subtask and
 stays silent until it is back; the morning review's look-ups go the same
 way (ruling 184 point 9; `wake.md`, `unasked.md`). Answer-like results
