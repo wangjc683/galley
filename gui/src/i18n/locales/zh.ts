@@ -280,15 +280,15 @@ export const zhCopy = {
   subtask: {
     /** 卡片的无障碍名、通知正文的类别名。 */
     label: "子任务",
-    /** 卡片右侧：在主区打开这个子任务。 */
-    open: "打开",
-    /** 完成但没有一行结果可写时。在问你时状态行借侧栏的「等你回复」；
-     * 叫醒没送到、提问画在卡片里时不写状态行，提问气泡自己写（裁决 101）。 */
-    done: "已完成",
     /** 卡片里答提问时的输入框与发送按钮：只在叫醒没送到时出现（裁决 101）。 */
     replyPlaceholder: "回复…",
     send: "发送",
+    /** 已删除的子任务：卡片右边不写字，这句在标题的悬停与卡片的无障碍名里（裁决 179）。 */
     gone: "这个子任务已经删除",
+    /** 卡片右边的短词（裁决 179，票 130）：没派出去的写「没有开始」，原因全文
+     * （下面两句与「没能启动：……」）在悬停与无障碍名里；在问你借侧栏的
+     * 「等你回复」，出错写 failedBare，没跑完写 didNotFinish。 */
+    notStartedBare: "没有开始",
     notStartedEmpty: "没有开始：Galley 没写要做什么",
     notStartedUnclosed: "没有开始：Galley 没写完要做什么",
     couldNotStart: (detail: string) => `没能启动：${detail}`,
@@ -296,8 +296,6 @@ export const zhCopy = {
     failed: (message: string) => `出错：${message}`,
     failedBare: "出错",
     didNotFinish: "没有跑完",
-    /** 卡片在跑那一行：助手打回过（票 29、31），前面写第几轮，后面照旧。 */
-    roundPrefix: (round: number) => `第 ${round} 轮 · `,
     /** 子任务第一条消息（Galley 写的说明）上方的来源图标，提示与读屏同一句（工作台对话 PRD 裁决 8）。 */
     galleyCreated: "Galley 创建",
     /** 子任务在问你时，顶栏身份行的第二行（裁决 30）；侧栏助手卡片的第二行

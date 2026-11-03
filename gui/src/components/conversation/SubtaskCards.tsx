@@ -1,17 +1,22 @@
-import { PaperPlaneRight, PauseCircle } from "@phosphor-icons/react";
+import {
+  CircleDashed,
+  PaperPlaneRight,
+  PauseCircle,
+} from "@phosphor-icons/react";
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { AskUserBubble } from "@/components/conversation/AskUserBubble";
-import { Button, IconButton } from "@/components/ui/button";
+import { IconButton } from "@/components/ui/button";
 import { useCopy } from "@/lib/i18n";
 import { isImeCompositionKeydown } from "@/lib/ime";
 import { StatusIcon } from "@/lib/status-icon";
 import { answerSubtask } from "@/lib/subtask-answer";
 import {
   deriveSubtaskCard,
-  subtaskCardLine,
+  subtaskCardWord,
   type SubtaskCardState,
+  type SubtaskCardWord,
   type SubtaskDispatch,
 } from "@/lib/subtasks";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
@@ -29,21 +34,32 @@ import type { Turn } from "@/types/conversation";
  * only — a card is never part of the model's context; the model looks
  * a subtask up through the CLI when the user asks.
  *
- * A card is the subtask's row in the document register (spec:
- * docs/design/conversation.md 「子任务卡片」): the attention-block frame
- * of a tool callout (hairline, 8px radius, a 3px state bar on the left)
- * holding the session row's three signals — status icon, title, one
- * state line — and 「打开」 on the right. The state comes from
- * `deriveSubtaskCard` over the same stores the sidebar row reads:
+ * A card is a one-line receipt of what the reply sent off (main chat
+ * PRD ruling 179, ticket 130; spec: docs/design/conversation.md
+ * 「子任务卡片」), of the to-do card's family (TodoCards): a hairline
+ * `border-line`, `rounded-md`, the page ground, one line of at least
+ * 40px — a still status icon, the title, and a short word at the right
+ * end only for what needs you or did not get done. No state bar, no
+ * tinted ground, no step or result line: the sidebar row says who runs
+ * and who waits for you (ticket 128), Galley says how it went, the card
+ * says what this reply sent and opens it. The title is the way in, as
+ * a to-do card's: as wide as its words, underlined on hover, a ring on
+ * keyboard focus; it opens the subtask in the main area. The state
+ * comes from `deriveSubtaskCard` over the same stores the sidebar row
+ * reads; the word from `subtaskCardWord`:
  *
- *   running   brand bar, spinner, 「第 N 步 · …」 (the row's subline)
- *   asking    warning bar + tint, 「等你回复」: the assistant takes the
- *             question to the main chat and the user answers there
- *             (ruling 101); only when Core could not wake it for this
- *             question is it drawn and answered right here
- *   done      faint bar on the page, check, one line of result
- *   failed    red bar + tint, the reason
- *   not started  faint red bar, the reason, nothing to open
+ *   running      a still dashed ring, muted (the sidebar row spins)
+ *   asking       the amber pause, 「等你回复」: the assistant takes the
+ *                question to the main chat and the user answers there
+ *                (ruling 101); only when Core could not wake it for this
+ *                question is it drawn and answered right here, under
+ *                the line, the card on a faint amber ground
+ *   done         the muted check, no word
+ *   failed       the red cross, 「出错」 (the reason on hover), or
+ *                「没有跑完」 in muted ink for a run cut short
+ *   not started  the red cross, 「没有开始」 (the reason on hover),
+ *                nothing to open
+ *   gone         the muted prohibit sign, nothing to open
  */
 export function SubtaskCards({
   dispatches,
@@ -125,66 +141,89 @@ function SubtaskCard({ dispatch }: { dispatch: SubtaskDispatch }) {
   }, [needsRestore, sid]);
 
   const title = session?.title || dispatch.title || copy.subtask.label;
-  const line = subtaskCardLine(state, copy);
+  const word = subtaskCardWord(state, copy);
   const canOpen =
     sid !== null && state.kind !== "notStarted" && state.kind !== "gone";
-  const frame = FRAMES[state.kind];
+  const answering = state.kind === "asking" && state.inCard && sid !== null;
+  // The card's name carries what its line shows and the reason the word
+  // keeps in its hover; a deleted one says so (it has no word).
+  const said =
+    word?.reason ??
+    word?.text ??
+    (state.kind === "gone" ? copy.subtask.gone : null);
 
   return (
     <div
+      role="group"
       data-role="subtask-card"
       data-subtask-state={state.kind}
       data-session-id={sid ?? undefined}
-      aria-label={`${copy.subtask.label} · ${title}`}
+      aria-label={[copy.subtask.label, title, said].filter(Boolean).join(" · ")}
       className={cn(
-        "relative overflow-hidden rounded-md border border-line",
-        frame.ground,
+        "rounded-md border border-line",
+        // Answered here, the card is the place to act: the faint amber of
+        // a question, no bar, under the conversation's bubbles.
+        answering ? "bg-warning/[var(--opacity-subtle)]" : "bg-app",
       )}
     >
-      {frame.bar && (
-        <div
-          aria-hidden
-          className={cn("absolute inset-y-0 left-0 w-[3px]", frame.bar)}
-        />
-      )}
-      <div className="flex select-none items-start gap-2.5 py-2.5 pl-4 pr-2.5">
+      <div className="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3">
         <span className="flex h-5 w-4 shrink-0 items-center justify-center">
           <CardIcon state={state} />
         </span>
-        <div className="min-w-0 flex-1">
-          <div
-            className="truncate text-[13px] font-medium leading-5 text-ink"
-            onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, title)}
+        {canOpen && sid ? (
+          // The to-do card's title button: as wide as its words,
+          // underlined on hover, a ring on keyboard focus.
+          <span className="min-w-0 flex-1 text-[13px] leading-5">
+            <button
+              type="button"
+              data-role="subtask-card-title"
+              onClick={() => openSubtask(sid)}
+              onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, title)}
+              className={cn(
+                "block max-w-full truncate rounded-sm text-left text-ink outline-none",
+                "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
+              )}
+            >
+              {title}
+            </button>
+          </span>
+        ) : (
+          <span
+            data-role="subtask-card-title"
+            // Deleted: why it does not open, on hover.
+            title={state.kind === "gone" ? copy.subtask.gone : undefined}
+            onPointerEnter={
+              state.kind === "gone"
+                ? undefined
+                : (e) => syncTruncatedTitle(e.currentTarget, title)
+            }
+            className="min-w-0 flex-1 truncate text-[13px] leading-5 text-ink"
           >
             {title}
-          </div>
-          {line && (
-            <div
-              className={cn(
-                "mt-0.5 truncate text-[12px] leading-[1.45] tabular-nums",
-                LINE_TONES[state.kind],
-              )}
-              onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, line)}
-            >
-              {line}
-            </div>
-          )}
-        </div>
-        {canOpen && sid && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="shrink-0"
-            onClick={() => openSubtask(sid)}
-          >
-            {copy.subtask.open}
-          </Button>
+          </span>
         )}
+        {word && <CardWord word={word} />}
       </div>
-      {state.kind === "asking" && state.inCard && sid && (
-        <SubtaskAnswer sessionId={sid} state={state} />
-      )}
+      {answering && sid && <SubtaskAnswer sessionId={sid} state={state} />}
     </div>
+  );
+}
+
+/** The word at the right end: 12px, in its state's colour, the reason in
+ * full on hover (a native tooltip; the card's name carries it for a
+ * screen reader). */
+function CardWord({ word }: { word: SubtaskCardWord }) {
+  return (
+    <span
+      data-role="subtask-card-word"
+      title={word.reason}
+      className={cn(
+        "shrink-0 select-none text-[12px] leading-5",
+        WORD_TONES[word.tone],
+      )}
+    >
+      {word.text}
+    </span>
   );
 }
 
@@ -218,8 +257,9 @@ function SubtaskAnswer({
       pending={state.pending}
       onPickCandidate={send}
       onFillCandidate={setReply}
-      // The card carries the warning bar and tint; the bubble sits in
-      // it bare, under the card's own row.
+      // The card carries the faint amber; the bubble sits in it bare,
+      // under the card's line, on the title's 42px edge (pl-4 + the
+      // 16px icon column + gap-2.5).
       className="my-0 rounded-none border-l-0 bg-transparent pb-3 pl-[42px] pr-3 pt-0"
     >
       <div className="mt-2.5 flex items-center gap-1.5">
@@ -250,10 +290,16 @@ function SubtaskAnswer({
   );
 }
 
+/** Still glyphs (ruling 179 point 3): the sidebar row already spins for
+ * one that runs. Running is a dashed ring in muted ink — not yet done;
+ * a spinner that stands still would read as stuck. The rest are the
+ * session rows' set, as before. */
 function CardIcon({ state }: { state: SubtaskCardState }) {
   switch (state.kind) {
     case "running":
-      return <StatusIcon status="running" size={14} />;
+      return (
+        <CircleDashed size={14} weight="regular" className="text-ink-muted" />
+      );
     case "asking":
       return <PauseCircle size={14} weight="fill" className="text-warning" />;
     case "done":
@@ -269,8 +315,9 @@ function CardIcon({ state }: { state: SubtaskCardState }) {
 }
 
 /** Open the subtask in the main area, the way the sidebar opens a
- * session (App `openSession`); the sidebar keeps the main chat's row
- * selected and the header shows 「主对话 ›」. */
+ * session (App `openSession`); the header shows 「Galley ›」, and the
+ * sidebar selects its row under the card, or the card when it has none
+ * (ticket 128). */
 function openSubtask(sessionId: string): void {
   const sessions = useSessionsStore.getState();
   sessions.setActiveProjectFilter(undefined);
@@ -278,30 +325,10 @@ function openSubtask(sessionId: string): void {
   useUiStore.getState().setScreen("main");
 }
 
-/** The tool callout's attention-block registers (tools-and-approvals.md):
- * a live state gets its full bar on a raised ground, a settled one a
- * faint bar on the page. */
-const FRAMES: Record<
-  SubtaskCardState["kind"],
-  { bar: string | null; ground: string }
-> = {
-  running: { bar: "bg-brand", ground: "bg-surface" },
-  asking: { bar: "bg-warning", ground: "bg-warning/[var(--opacity-subtle)]" },
-  done: { bar: "bg-brand/[var(--opacity-medium)]", ground: "bg-app" },
-  failed: { bar: "bg-error", ground: "bg-error/[var(--opacity-subtle)]" },
-  notStarted: { bar: "bg-error/[var(--opacity-medium)]", ground: "bg-app" },
-  gone: { bar: null, ground: "bg-app" },
-  loading: { bar: null, ground: "bg-app" },
-};
-
-/** The state line's tone: the sidebar subline's (warning / error /
- * running brand / muted). */
-const LINE_TONES: Record<SubtaskCardState["kind"], string> = {
-  running: "text-brand-strong/85",
-  asking: "font-medium text-warning",
-  done: "text-ink-muted",
-  failed: "font-medium text-error",
-  notStarted: "text-error",
-  gone: "text-ink-muted",
-  loading: "text-ink-muted",
+/** The word's colour: the sidebar's 「等你回复」 (amber, medium), red for
+ * what went wrong, muted for a run cut short. */
+const WORD_TONES: Record<SubtaskCardWord["tone"], string> = {
+  warning: "font-medium text-warning",
+  error: "text-error",
+  muted: "text-ink-muted",
 };

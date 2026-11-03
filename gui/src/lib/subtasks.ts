@@ -1,7 +1,6 @@
 import type { AppCopy } from "@/i18n/types";
 import { isFinalAnswerTurn } from "@/lib/agent-turn";
 import { buildRunGroups, type RunGroup } from "@/lib/run-groups";
-import { displaySessionSummary } from "@/lib/session-summary";
 import type { BridgeStatus } from "@/stores/runtime/shared";
 import type {
   Origin,
@@ -490,43 +489,63 @@ function firstLine(text: string): string | null {
   return null;
 }
 
-/** The card's one state line, in the UI language. Null for a state
- * that shows no line: a question answered in the card (its bubble says
- * 「等你回复」 above it), loading. Asking otherwise says 「等你回复」, the
- * sidebar row's words (ruling 101). */
-export function subtaskCardLine(
+/** The word at the right end of a card's line (main chat PRD ruling 179,
+ * ticket 130): only for what needs you or did not get done. */
+export interface SubtaskCardWord {
+  text: string;
+  tone: "warning" | "error" | "muted";
+  /** Why, in full, when it says more than the word: a failure's or a
+   * subtask that never started's reason (`failureText`), for the hover
+   * and the card's accessible name. */
+  reason?: string;
+}
+
+/**
+ * The card's one word, in the UI language, or null: asking 「等你回复」
+ * (the sidebar row's words, ruling 101; none while the question is
+ * answered in the card, whose bubble says it right under the line),
+ * failed 「出错」, a run cut short 「没有跑完」, never started 「没有开始」.
+ * Running, done, gone and loading say none: the sidebar row says what
+ * runs, Galley says how it went (ruling 179 point 3).
+ */
+export function subtaskCardWord(
   state: SubtaskCardState,
   copy: AppCopy,
-): string | null {
+): SubtaskCardWord | null {
   switch (state.kind) {
-    case "notStarted":
-    case "failed":
-      return failureText(state.failure, copy);
-    case "gone":
-      return copy.subtask.gone;
-    case "running": {
-      const summary = state.summary
-        ? displaySessionSummary(state.summary, copy.sidebar.turnProtocolFailure)
-        : null;
-      const line =
-        state.step != null && summary
-          ? copy.sidebar.stepSummary(state.step, summary)
-          : copy.sidebar.thinking;
-      // Sent back: which round, then the step as before (ruling 68
-      // keeps a subtask's steps). Only while it runs.
-      return state.round ? copy.subtask.roundPrefix(state.round) + line : line;
-    }
-    case "done": {
-      const line = state.line
-        ? displaySessionSummary(state.line, copy.sidebar.turnProtocolFailure)
-        : "";
-      return line || copy.subtask.done;
-    }
     case "asking":
-      return state.inCard ? null : copy.sidebar.waitingForYou;
+      return state.inCard
+        ? null
+        : { text: copy.sidebar.waitingForYou, tone: "warning" };
+    case "failed":
+      if (state.failure.kind === "didNotFinish") {
+        return { text: copy.subtask.didNotFinish, tone: "muted" };
+      }
+      return withReason(
+        copy.subtask.failedBare,
+        "error",
+        failureText(state.failure, copy),
+      );
+    case "notStarted":
+      return withReason(
+        copy.subtask.notStartedBare,
+        "error",
+        failureText(state.failure, copy),
+      );
+    case "running":
+    case "done":
+    case "gone":
     case "loading":
       return null;
   }
+}
+
+function withReason(
+  text: string,
+  tone: SubtaskCardWord["tone"],
+  reason: string,
+): SubtaskCardWord {
+  return reason && reason !== text ? { text, tone, reason } : { text, tone };
 }
 
 /** Why it failed or never started, in words: a tag Core could not use

@@ -100,44 +100,85 @@ beforeEach(() => {
   state.askInCard = {};
 });
 
+/** The card's opening tag. */
+const cardTag = (html: string) =>
+  html.slice(
+    html.lastIndexOf("<", html.indexOf('data-role="subtask-card"')),
+    html.indexOf(">", html.indexOf('data-role="subtask-card"')) + 1,
+  );
+/** The element carrying `role`, opening tag to the first close after it. */
+const part = (html: string, role: string) => {
+  const at = html.indexOf(`data-role="${role}"`);
+  if (at < 0) return null;
+  return html.slice(html.lastIndexOf("<", at), html.indexOf("</", at));
+};
+
+// Ruling 179 (ticket 130): a one-line receipt in the to-do card's frame.
 describe("a subtask card", () => {
-  it("runs: spinner, the sidebar's step line, 打开", () => {
+  it("is the to-do card's frame: one line, the page ground, no bar, no tint", () => {
+    liveMessages({ agentRunning: true });
+    for (const html of [
+      render([dispatch()]),
+      (() => {
+        liveMessages({
+          pendingAskUser: { question: "要把发票单独放吗？", candidates: [] },
+        });
+        return render([dispatch()]);
+      })(),
+      (() => {
+        liveMessages({});
+        state.runErrors = { "s-sub": "quota exceeded" };
+        return render([dispatch()]);
+      })(),
+    ]) {
+      expect(cardTag(html)).toContain(
+        'class="rounded-md border border-line bg-app"',
+      );
+      expect(html).toContain(
+        'class="flex min-h-10 items-center gap-2.5 py-1.5 pl-4 pr-3"',
+      );
+      expect(html).not.toContain("w-[3px]");
+      expect(html).not.toMatch(/bg-(brand|warning|error|surface)/);
+      expect(html).not.toContain(">打开<");
+    }
+  });
+
+  it("runs: a still dashed ring, the title, no word, no step line", () => {
     state.sessions = [
       { ...subtask, lastStepIndex: 3, summary: "读了 12 个 PDF" },
     ];
     liveMessages({ agentRunning: true });
-    const html = render([dispatch()]);
+    const html = render([dispatch({ sendBacks: 1 })]);
     expect(html).toContain('data-subtask-state="running"');
-    expect(html).toContain(">把下载文件夹里的 PDF 按内容分类<");
-    expect(html).toContain(">第 3 步 · 读了 12 个 PDF<");
-    expect(html).toContain(">打开<");
-    expect(html).toContain("bg-brand");
+    expect(html).toContain(">把下载文件夹里的 PDF 按内容分类</button>");
+    // Still: the sidebar row spins.
+    expect(html).not.toContain("spin");
+    expect(html).toMatch(/<svg[^>]*class="text-ink-muted"/);
+    expect(part(html, "subtask-card-word")).toBeNull();
+    expect(html).not.toContain("第 3 步");
+    expect(html).not.toContain("读了 12 个 PDF");
+    expect(html).not.toContain("第 2 轮");
+    expect(html).not.toContain("思考中");
   });
 
-  // Ticket 31: sent back by the assistant, it runs its second round.
-  it("runs a later round: 「第 2 轮 · 」 before the step line, and only while it runs", () => {
-    state.sessions = [
-      { ...subtask, lastStepIndex: 3, summary: "补查了 2 个 PDF" },
-    ];
+  it("titles itself as the to-do card does: 13px ink at regular weight, a button as wide as its words", () => {
     liveMessages({ agentRunning: true });
-    expect(render([dispatch({ sendBacks: 1 })])).toContain(
-      ">第 2 轮 · 第 3 步 · 补查了 2 个 PDF<",
+    const title = part(render([dispatch()]), "subtask-card-title")!;
+    expect(title).toMatch(/^<button type="button"/);
+    expect(title).toContain(
+      "block max-w-full truncate rounded-sm text-left text-ink outline-none",
     );
-    liveMessages({
-      agentRunning: false,
-      turns: [
-        { role: "user", content: "x" },
-        { role: "agent", tools: [], finalAnswer: "补好了。" },
-      ],
-    });
-    const done = render([dispatch({ sendBacks: 1 })]);
-    expect(done).toContain('data-subtask-state="done"');
-    expect(done).not.toContain("第 2 轮");
+    expect(title).toContain("hover:underline");
+    expect(title).toContain("focus-visible:ring-2");
+    expect(title).not.toContain("font-medium");
+    expect(render([dispatch()])).toContain(
+      '<span class="min-w-0 flex-1 text-[13px] leading-5"><button',
+    );
   });
 
   // Ruling 101: the question is the assistant's to take to the main
   // chat, where the user answers it; the card only says it waits.
-  it("asks: only the waiting line, the question goes to the assistant", () => {
+  it("asks: the amber pause and 「等你回复」, the question goes to the assistant", () => {
     liveMessages({
       pendingAskUser: {
         question: "要把发票单独放吗？",
@@ -146,10 +187,13 @@ describe("a subtask card", () => {
     });
     const html = render([dispatch()]);
     expect(html).toContain('data-subtask-state="asking"');
-    expect(html).toContain(">等你回复<");
-    expect(html).toContain("bg-warning");
-    expect(html).toContain("text-warning");
-    expect(html).toContain(">打开<");
+    expect(part(html, "subtask-card-word")).toMatch(
+      /class="shrink-0 select-none text-\[12px\] leading-5 font-medium text-warning">等你回复$/,
+    );
+    expect(html).toMatch(/<svg[^>]*class="text-warning"/);
+    expect(cardTag(html)).toContain(
+      'aria-label="子任务 · 把下载文件夹里的 PDF 按内容分类 · 等你回复"',
+    );
     expect(html).not.toContain("要把发票单独放吗？");
     expect(html).not.toContain(">不要<");
     expect(html).not.toContain('data-role="ask-user-bubble"');
@@ -157,7 +201,7 @@ describe("a subtask card", () => {
     expect(html).not.toContain('aria-label="发送"');
   });
 
-  it("asks in the card when Core could not wake the main chat for it", () => {
+  it("asks in the card when Core could not wake the main chat for it, under the line, on faint amber", () => {
     const pending = {
       question: "要把发票单独放吗？",
       candidates: ["要", "不要"],
@@ -166,21 +210,30 @@ describe("a subtask card", () => {
     state.askInCard = { "s-sub": { ...pending } };
     const html = render([dispatch()]);
     expect(html).toContain('data-subtask-state="asking"');
-    expect(html).toContain('data-role="ask-user-bubble"');
+    expect(cardTag(html)).toContain(
+      'class="rounded-md border border-line bg-warning/[var(--opacity-subtle)]"',
+    );
+    expect(html).not.toContain("w-[3px]");
+    // Under the line, on the title's edge.
+    expect(html.indexOf('data-role="ask-user-bubble"')).toBeGreaterThan(
+      html.indexOf('data-role="subtask-card-title"'),
+    );
+    expect(html).toMatch(/data-role="ask-user-bubble"[^>]*pl-\[42px\]/);
     expect(html).toContain("要把发票单独放吗？");
     expect(html).toContain(">不要<");
     expect(html).toContain('placeholder="回复…"');
     expect(html).toContain('aria-label="发送"');
-    expect(html).toContain("bg-warning");
-    expect(html).toContain(">打开<");
-    // The bubble says 「等你回复」 once; the card's own line stays out.
+    // The bubble says 「等你回复」 once; the line says no word.
     expect(html.split("等你回复").length - 1).toBe(1);
+    expect(part(html, "subtask-card-word")).toBeNull();
+    // Still openable from its title.
+    expect(part(html, "subtask-card-title")).toMatch(/^<button/);
     // Core's word came before the page had the question: the one it asks.
     state.askInCard = { "s-sub": null };
     expect(render([dispatch()])).toContain('placeholder="回复…"');
   });
 
-  it("goes back to the waiting line on a new question, and to running when it runs", () => {
+  it("goes back to the word on a new question, and to running when it runs", () => {
     state.askInCard = {
       "s-sub": { question: "要把发票单独放吗？", candidates: ["要", "不要"] },
     };
@@ -188,16 +241,17 @@ describe("a subtask card", () => {
       pendingAskUser: { question: "合同放哪一类？", candidates: [] },
     });
     const asked = render([dispatch()]);
-    expect(asked).toContain(">等你回复<");
+    expect(part(asked, "subtask-card-word")).toMatch(/>等你回复$/);
     expect(asked).not.toContain("合同放哪一类？");
     expect(asked).not.toContain('placeholder="回复…"');
+    expect(cardTag(asked)).toContain("bg-app");
     liveMessages({ agentRunning: true });
     const running = render([dispatch()]);
     expect(running).toContain('data-subtask-state="running"');
     expect(running).not.toContain('placeholder="回复…"');
   });
 
-  it("is done: one line of result and 打开", () => {
+  it("is done: the muted check and the title, no result line, no word", () => {
     state.sessions = [{ ...subtask, summary: "30 个 PDF 分成 5 类" }];
     liveMessages({
       turns: [
@@ -207,28 +261,68 @@ describe("a subtask card", () => {
     });
     const html = render([dispatch()]);
     expect(html).toContain('data-subtask-state="done"');
-    expect(html).toContain(">30 个 PDF 分成 5 类<");
-    expect(html).toContain(">打开<");
+    expect(html).not.toContain("30 个 PDF 分成 5 类");
+    expect(part(html, "subtask-card-word")).toBeNull();
+    expect(part(html, "subtask-card-title")).toMatch(/^<button/);
   });
 
-  it("fails: the reason and 打开", () => {
+  it("fails: the red cross and 「出错」, the reason on hover and in its name", () => {
     liveMessages({});
     state.runErrors = { "s-sub": "quota exceeded" };
     const html = render([dispatch()]);
     expect(html).toContain('data-subtask-state="failed"');
-    expect(html).toContain(">出错：quota exceeded<");
-    expect(html).toContain(">打开<");
+    expect(part(html, "subtask-card-word")).toMatch(
+      /title="出错：quota exceeded" class="[^"]*text-error">出错$/,
+    );
+    expect(cardTag(html)).toContain(
+      'aria-label="子任务 · 把下载文件夹里的 PDF 按内容分类 · 出错：quota exceeded"',
+    );
+    expect(html).toMatch(/<svg[^>]*class="text-error"/);
+    expect(part(html, "subtask-card-title")).toMatch(/^<button/);
   });
 
-  it("never started: the reason, and nothing to open", () => {
+  it("did not finish: 「没有跑完」 in muted ink", () => {
+    liveMessages({
+      turns: [
+        { role: "user", content: "x" },
+        {
+          role: "agent",
+          tools: [{ id: "t", name: "code_run", status: "success-historical" }],
+          finalAnswer: null,
+        },
+      ],
+    });
+    const html = render([dispatch()]);
+    expect(html).toContain('data-subtask-state="failed"');
+    const word = part(html, "subtask-card-word")!;
+    expect(word).toMatch(/text-ink-muted">没有跑完$/);
+    expect(word).not.toContain("title=");
+  });
+
+  it("never started: 「没有开始」 with the reason, and nothing to open", () => {
     const html = render([
       dispatch({ sessionId: null, title: "", failure: "unclosed" }),
     ]);
     expect(html).toContain('data-subtask-state="notStarted"');
-    // No title to show: it says what it is.
-    expect(html).toContain(">子任务<");
-    expect(html).toContain(">没有开始：Galley 没写完要做什么<");
-    expect(html).not.toContain(">打开<");
+    // No title to show: it says what it is, as words, not a button.
+    const title = part(html, "subtask-card-title")!;
+    expect(title).toMatch(/^<span/);
+    expect(title).toMatch(/>子任务$/);
+    expect(part(html, "subtask-card-word")).toMatch(
+      /title="没有开始：Galley 没写完要做什么" class="[^"]*text-error">没有开始$/,
+    );
+    expect(html).not.toContain("<button");
+  });
+
+  it("is gone: words only, why on hover and in its name", () => {
+    state.sessions = [];
+    const html = render([dispatch()]);
+    expect(html).toContain('data-subtask-state="gone"');
+    const title = part(html, "subtask-card-title")!;
+    expect(title).toMatch(/^<span[^>]*title="这个子任务已经删除"/);
+    expect(part(html, "subtask-card-word")).toBeNull();
+    expect(cardTag(html)).toContain(" · 这个子任务已经删除");
+    expect(html).not.toContain("<button");
   });
 
   it("stacks one card per tag, in tag order", () => {

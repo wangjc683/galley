@@ -17,7 +17,7 @@ import {
   subtaskQuestionLocked,
   subtaskQuestionPlaces,
   subtaskBreadcrumb,
-  subtaskCardLine,
+  subtaskCardWord,
   unpromotedSubtasksOf,
   type MainChatQuestionView,
   type SubtaskDispatch,
@@ -134,8 +134,10 @@ describe("merging dispatch records", () => {
 });
 
 describe("the card's state", () => {
-  it("never started: the dispatch's reason, and nothing to open", () => {
-    for (const [failure, text] of [
+  // Ruling 179 (ticket 130): the card says one short word, the reason
+  // in full behind it.
+  it("never started: 「没有开始」, the dispatch's reason behind it, and nothing to open", () => {
+    for (const [failure, reason] of [
       ["empty", "没有开始：Galley 没写要做什么"],
       ["unclosed", "没有开始：Galley 没写完要做什么"],
     ] as const) {
@@ -145,7 +147,11 @@ describe("the card's state", () => {
         live(),
       );
       expect(state.kind).toBe("notStarted");
-      expect(subtaskCardLine(state, zh)).toBe(text);
+      expect(subtaskCardWord(state, zh)).toEqual({
+        text: "没有开始",
+        tone: "error",
+        reason,
+      });
     }
     const failed = deriveSubtaskCard(
       dispatch({
@@ -157,33 +163,42 @@ describe("the card's state", () => {
       live(),
     );
     expect(failed.kind).toBe("notStarted");
-    expect(subtaskCardLine(failed, zh)).toBe(
+    expect(subtaskCardWord(failed, zh)?.reason).toBe(
       "没能启动：the managed runtime is not configured",
     );
-    expect(subtaskCardLine(failed, en)).toBe(
-      "Could not start: the managed runtime is not configured",
-    );
+    expect(subtaskCardWord(failed, en)).toEqual({
+      text: "Not started",
+      tone: "error",
+      reason: "Could not start: the managed runtime is not configured",
+    });
   });
 
-  it("is gone when its session is", () => {
-    expect(deriveSubtaskCard(dispatch(), undefined, live()).kind).toBe("gone");
+  it("is gone when its session is, and says no word", () => {
+    const gone = deriveSubtaskCard(dispatch(), undefined, live());
+    expect(gone.kind).toBe("gone");
+    expect(subtaskCardWord(gone, zh)).toBeNull();
   });
 
-  it("runs with the sidebar's own subline", () => {
+  it("runs with the sidebar's own step and recap, and says no word", () => {
     const thinking = deriveSubtaskCard(
       dispatch(),
       subtask,
       live({ agentRunning: true, turns: [userTurn] }),
     );
     expect(thinking).toEqual({ kind: "running", step: null, summary: null });
-    expect(subtaskCardLine(thinking, zh)).toBe("思考中");
+    expect(subtaskCardWord(thinking, zh)).toBeNull();
 
     const stepping = deriveSubtaskCard(
       dispatch(),
       { ...subtask, lastStepIndex: 3, summary: "读了 12 个 PDF" },
       live({ agentRunning: true, turns: [userTurn, agent()] }),
     );
-    expect(subtaskCardLine(stepping, zh)).toBe("第 3 步 · 读了 12 个 PDF");
+    expect(stepping).toEqual({
+      kind: "running",
+      step: 3,
+      summary: "读了 12 个 PDF",
+    });
+    expect(subtaskCardWord(stepping, zh)).toBeNull();
     // A runner still starting is running too.
     expect(
       deriveSubtaskCard(dispatch(), subtask, live({ bridgeStatus: "spawning" }))
@@ -191,8 +206,9 @@ describe("the card's state", () => {
     ).toBe("running");
   });
 
-  // Ticket 31: sent back, the running line says which round first.
-  it("says which round it runs once the assistant sent it back", () => {
+  // Ticket 31: sent back, the state knows which round it runs; the card
+  // no longer says it (ruling 179), nor any word while it runs.
+  it("knows which round it runs once the assistant sent it back", () => {
     const stepping = {
       ...subtask,
       lastStepIndex: 3,
@@ -210,29 +226,24 @@ describe("the card's state", () => {
       summary: "补查了 2 个 PDF",
       round: 2,
     });
-    expect(subtaskCardLine(second, zh)).toBe(
-      "第 2 轮 · 第 3 步 · 补查了 2 个 PDF",
-    );
-    expect(subtaskCardLine(second, en)).toMatch(/^Round 2 · /);
+    expect(subtaskCardWord(second, zh)).toBeNull();
     const thinking = deriveSubtaskCard(
       dispatch({ sendBacks: 2 }),
       subtask,
       live({ agentRunning: true, turns: [userTurn] }),
     );
-    expect(subtaskCardLine(thinking, zh)).toBe("第 3 轮 · 思考中");
-    // The first round says none, and no other state does.
+    expect(thinking).toMatchObject({ kind: "running", round: 3 });
+    // The first round has none.
     expect(
-      subtaskCardLine(
-        deriveSubtaskCard(dispatch({ sendBacks: 0 }), stepping, running),
-        zh,
-      ),
-    ).toBe("第 3 步 · 补查了 2 个 PDF");
+      deriveSubtaskCard(dispatch({ sendBacks: 0 }), stepping, running),
+    ).not.toHaveProperty("round");
     const done = deriveSubtaskCard(
       dispatch({ sendBacks: 1 }),
       { ...subtask, summary: "30 个 PDF 分成 5 类" },
       live({ turns: [userTurn, agent({ finalAnswer: "分好了。" })] }),
     );
-    expect(subtaskCardLine(done, zh)).toBe("30 个 PDF 分成 5 类");
+    expect(done).toEqual({ kind: "done", line: "30 个 PDF 分成 5 类" });
+    expect(subtaskCardWord(done, zh)).toBeNull();
     const asking = deriveSubtaskCard(
       dispatch({ sendBacks: 1 }),
       subtask,
@@ -241,13 +252,13 @@ describe("the card's state", () => {
         turns: [userTurn, agent()],
       }),
     );
-    expect(subtaskCardLine(asking, zh)).toBe("等你回复");
+    expect(subtaskCardWord(asking, zh)?.text).toBe("等你回复");
     const failed = deriveSubtaskCard(
       dispatch({ sendBacks: 1 }),
       subtask,
       live({ runError: "quota exceeded", turns: [userTurn] }),
     );
-    expect(subtaskCardLine(failed, zh)).toBe("出错：quota exceeded");
+    expect(subtaskCardWord(failed, zh)?.reason).toBe("出错：quota exceeded");
   });
 
   // Ruling 101: the assistant takes a subtask's question to the main
@@ -263,9 +274,12 @@ describe("the card's state", () => {
       live({ pendingAskUser: pending, turns: [userTurn, agent()] }),
     );
     expect(state).toEqual({ kind: "asking", pending, inCard: false });
-    // The sidebar row's words, nothing of the question.
-    expect(subtaskCardLine(state, zh)).toBe("等你回复");
-    expect(subtaskCardLine(state, en)).toBe("Waiting for you");
+    // The sidebar row's words, amber, nothing of the question.
+    expect(subtaskCardWord(state, zh)).toEqual({
+      text: "等你回复",
+      tone: "warning",
+    });
+    expect(subtaskCardWord(state, en)?.text).toBe("Waiting for you");
   });
 
   it("asks in the card when its report could not wake the main chat", () => {
@@ -283,8 +297,8 @@ describe("the card's state", () => {
       }),
     );
     expect(state).toEqual({ kind: "asking", pending, inCard: true });
-    // The bubble in the card says 「等你回复」; the state line stays empty.
-    expect(subtaskCardLine(state, zh)).toBeNull();
+    // The bubble in the card says 「等你回复」; the line says no word.
+    expect(subtaskCardWord(state, zh)).toBeNull();
   });
 
   it("answers in the card only the question Core could not deliver", () => {
@@ -309,7 +323,7 @@ describe("the card's state", () => {
     );
   });
 
-  it("is done with one line of result: the recap, else the answer's first line", () => {
+  it("is done with one line of result: the recap, else the answer's first line; the card says no word", () => {
     const answer = agent({
       finalAnswer: "## 分好了\n\n30 个 PDF 分成 5 类。",
       tools: [],
@@ -320,13 +334,13 @@ describe("the card's state", () => {
       live({ turns: [userTurn, answer] }),
     );
     expect(recap).toEqual({ kind: "done", line: "30 个 PDF 分成 5 类" });
-    expect(subtaskCardLine(recap, zh)).toBe("30 个 PDF 分成 5 类");
+    expect(subtaskCardWord(recap, zh)).toBeNull();
     const bare = deriveSubtaskCard(
       dispatch(),
       subtask,
       live({ turns: [userTurn, answer] }),
     );
-    expect(subtaskCardLine(bare, zh)).toBe("分好了");
+    expect(bare).toEqual({ kind: "done", line: "分好了" });
   });
 
   it("fails on an error, a crash, a runner that never started, or a run cut short", () => {
@@ -335,7 +349,16 @@ describe("the card's state", () => {
       subtask,
       live({ runError: "quota exceeded", turns: [userTurn] }),
     );
-    expect(subtaskCardLine(err, zh)).toBe("出错：quota exceeded");
+    expect(subtaskCardWord(err, zh)).toEqual({
+      text: "出错",
+      tone: "error",
+      reason: "出错：quota exceeded",
+    });
+    expect(subtaskCardWord(err, en)).toEqual({
+      text: "Failed",
+      tone: "error",
+      reason: "Failed: quota exceeded",
+    });
     // Even while it looked running: the error wins, as on the sidebar.
     const crash = deriveSubtaskCard(
       dispatch(),
@@ -343,14 +366,19 @@ describe("the card's state", () => {
       live({ bridgeStatus: "error", bridgeError: null, agentRunning: true }),
     );
     expect(crash.kind).toBe("failed");
-    expect(subtaskCardLine(crash, zh)).toBe("出错");
+    // No more to say than the word: no hover.
+    expect(subtaskCardWord(crash, zh)).toEqual({ text: "出错", tone: "error" });
 
     const neverRan = deriveSubtaskCard(
       dispatch({ failure: "start_failed", failureDetail: "spawn failed" }),
       { ...subtask, turnCount: 0 },
       live({ turns: [userTurn] }),
     );
-    expect(subtaskCardLine(neverRan, zh)).toBe("没能启动：spawn failed");
+    expect(subtaskCardWord(neverRan, zh)).toEqual({
+      text: "出错",
+      tone: "error",
+      reason: "没能启动：spawn failed",
+    });
 
     const cut = deriveSubtaskCard(
       dispatch(),
@@ -366,13 +394,21 @@ describe("the card's state", () => {
         ],
       }),
     );
-    expect(subtaskCardLine(cut, zh)).toBe("没有跑完");
+    // Cut short: 「没有跑完」, muted — not an error to read about.
+    expect(subtaskCardWord(cut, zh)).toEqual({
+      text: "没有跑完",
+      tone: "muted",
+    });
   });
 
-  it("waits for history it has not read yet", () => {
-    expect(
-      deriveSubtaskCard(dispatch(), { ...subtask, turnCount: 4 }, live()).kind,
-    ).toBe("loading");
+  it("waits for history it has not read yet, and says no word", () => {
+    const loading = deriveSubtaskCard(
+      dispatch(),
+      { ...subtask, turnCount: 4 },
+      live(),
+    );
+    expect(loading.kind).toBe("loading");
+    expect(subtaskCardWord(loading, zh)).toBeNull();
   });
 });
 

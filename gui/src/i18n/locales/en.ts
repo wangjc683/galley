@@ -276,11 +276,10 @@ export const enCopy: AppCopy = {
   },
   subtask: {
     label: "Subtask",
-    open: "Open",
-    done: "Done",
     replyPlaceholder: "Reply…",
     send: "Send",
     gone: "This subtask was deleted",
+    notStartedBare: "Not started",
     notStartedEmpty: "Not started: the instructions were empty",
     notStartedUnclosed: "Not started: the instructions were cut off",
     couldNotStart: (detail: string) => `Could not start: ${detail}`,
@@ -288,7 +287,6 @@ export const enCopy: AppCopy = {
     failed: (message: string) => `Failed: ${message}`,
     failedBare: "Failed",
     didNotFinish: "Did not finish",
-    roundPrefix: (round) => `Round ${round} · `,
     galleyCreated: "Created by Galley",
     sidebarWaiting: "A subtask is asking you",
     sidebarRowLabel: (title, state) =>
