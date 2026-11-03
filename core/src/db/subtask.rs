@@ -259,11 +259,25 @@ impl SqliteGalley {
     /// Record one tag's dispatch. A record already there for the same
     /// tag stays as it is (a reply is dispatched once).
     pub async fn record_subtask_dispatch(&self, dispatch: &SubtaskDispatch) -> Result<()> {
+        self.record_subtask_dispatch_with_background(dispatch, None)
+            .await
+    }
+
+    /// [`Self::record_subtask_dispatch`] with the main chat's last turns
+    /// the subtask is told of (ticket 138, migration 056): JSON, as
+    /// [`crate::subtask_background`] writes it, or `None` for none. One
+    /// statement, so the record and its background land together, before
+    /// the subtask's runner starts.
+    pub async fn record_subtask_dispatch_with_background(
+        &self,
+        dispatch: &SubtaskDispatch,
+        background: Option<&str>,
+    ) -> Result<()> {
         sqlx::query(
             "INSERT OR IGNORE INTO subtask_dispatches \
              (parent_session_id, turn_index, ordinal, session_id, title, failure, \
-              failure_detail, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+              failure_detail, created_at, background) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&dispatch.parent_session_id)
         .bind(dispatch.turn_index)
@@ -273,10 +287,26 @@ impl SqliteGalley {
         .bind(dispatch.failure.map(SubtaskFailure::as_sql))
         .bind(&dispatch.failure_detail)
         .bind(&dispatch.created_at)
+        .bind(background)
         .execute(&self.pool)
         .await
         .map_err(|e| map_constraint_err("record_subtask_dispatch", e))?;
         Ok(())
+    }
+
+    /// The background stored with the record that created `session_id`
+    /// (ticket 138), as written; `None` for a session no reply dispatched,
+    /// or one dispatched with none.
+    pub async fn subtask_background(&self, session_id: &SessionId) -> Result<Option<String>> {
+        let background: Option<Option<String>> = sqlx::query_scalar(
+            "SELECT background FROM subtask_dispatches WHERE session_id = ? \
+             ORDER BY created_at LIMIT 1",
+        )
+        .bind(session_id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(background.flatten())
     }
 
     /// A recorded subtask whose runner then did not start:

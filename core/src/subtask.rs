@@ -58,6 +58,10 @@
 //!   per subtask ([`mark_rows`]). A record carries how many times the
 //!   assistant sent its subtask back (`send_backs`), announced again when
 //!   the assistant writes into it ([`announce_send_back`]).
+//! - **Background** (ticket 138, [`crate::subtask_background`]): the main
+//!   chat's last turns, read once per reply before its tags start and
+//!   stored with each record that made a session; the subtask's runtime
+//!   prompt carries them, the same on every runner it gets.
 //!
 //! Attach mode has no main chat (PRD ruling 3), so none of this runs
 //! there.
@@ -297,6 +301,17 @@ pub async fn mark_replay_rows(
     main_chat: &SessionId,
     rows: &mut [PersistedMessageRow],
 ) -> Result<(), GalleyError> {
+    let dispatches = named_dispatches(galley, main_chat).await?;
+    mark_rows(rows, &dispatches);
+    Ok(())
+}
+
+/// The main chat's dispatches, each named as [`mark_replay_rows`] names
+/// it: by its session's current title while the session is there.
+pub async fn named_dispatches(
+    galley: &SqliteGalley,
+    main_chat: &SessionId,
+) -> Result<Vec<SubtaskDispatch>, GalleyError> {
     let mut dispatches = galley.subtask_dispatches(main_chat).await?;
     let titles = galley.subtask_session_titles(main_chat).await?;
     for dispatch in &mut dispatches {
@@ -304,8 +319,7 @@ pub async fn mark_replay_rows(
             dispatch.title.clone_from(title);
         }
     }
-    mark_rows(rows, &dispatches);
-    Ok(())
+    Ok(dispatches)
 }
 
 // ---------------- dispatch ----------------
@@ -432,6 +446,11 @@ pub async fn after_run_complete(
 /// message do, before its runner is up — so its card shows at once; a
 /// runner that then fails to start updates its record and announces it
 /// again. Returns the records in tag order, as they ended up.
+///
+/// Before any tag starts, the main chat's last turns are read once
+/// ([`crate::subtask_background::snapshot`], ticket 138) and stored with
+/// each record that made a session, so every subtask of the reply is
+/// told the same background, from its first runner on.
 pub async fn dispatch_reply(
     host: &RunnerHost<'_>,
     parent_id: &str,
@@ -452,6 +471,19 @@ pub async fn dispatch_reply(
             None
         }
     };
+    let background = if tags
+        .iter()
+        .any(|tag| matches!(tag, SubtaskTag::Instructions { .. }))
+    {
+        crate::subtask_background::snapshot(
+            host.galley,
+            &SessionId(parent_id.to_string()),
+            reply.turn_index,
+        )
+        .await
+    } else {
+        None
+    };
     let dispatches =
         futures_util::future::join_all(tags.into_iter().enumerate().map(|(ordinal, tag)| {
             dispatch_tag(
@@ -461,6 +493,7 @@ pub async fn dispatch_reply(
                 reply.turn_index,
                 ordinal as i64,
                 tag,
+                background.as_deref(),
             )
         }))
         .await;
@@ -480,6 +513,7 @@ async fn dispatch_tag(
     turn_index: i64,
     ordinal: i64,
     tag: SubtaskTag,
+    background: Option<&str>,
 ) -> SubtaskDispatch {
     let record = |title: String,
                   session_id: Option<String>,
@@ -499,7 +533,7 @@ async fn dispatch_tag(
     let (title, title_source, instructions) = match tag {
         SubtaskTag::Empty => {
             let dispatch = record(String::new(), None, Some(SubtaskFailure::Empty), None);
-            settle(host, &dispatch).await;
+            settle(host, &dispatch, None).await;
             return dispatch;
         }
         SubtaskTag::Unclosed { partial, title } => {
@@ -509,7 +543,7 @@ async fn dispatch_tag(
                 Some(SubtaskFailure::Unclosed),
                 None,
             );
-            settle(host, &dispatch).await;
+            settle(host, &dispatch, None).await;
             return dispatch;
         }
         // The model's title is the session's own; a first line stands in
@@ -532,12 +566,13 @@ async fn dispatch_tag(
             Ok(created) => created,
             Err(detail) => {
                 let dispatch = record(title, None, Some(SubtaskFailure::StartFailed), Some(detail));
-                settle(host, &dispatch).await;
+                settle(host, &dispatch, None).await;
                 return dispatch;
             }
         };
     let started = record(title, Some(session_id.clone()), None, None);
-    settle(host, &started).await;
+    // With its background, before its runner starts and reads it.
+    settle(host, &started, background).await;
     match run_instructions(host, &session_id, message).await {
         Ok(()) => started,
         Err(detail) => {
@@ -559,9 +594,14 @@ async fn dispatch_tag(
     }
 }
 
-/// Record a dispatch and announce it.
-async fn settle(host: &RunnerHost<'_>, dispatch: &SubtaskDispatch) {
-    if let Err(e) = host.galley.record_subtask_dispatch(dispatch).await {
+/// Record a dispatch (with the background its subtask is told of, ticket
+/// 138) and announce it.
+async fn settle(host: &RunnerHost<'_>, dispatch: &SubtaskDispatch, background: Option<&str>) {
+    if let Err(e) = host
+        .galley
+        .record_subtask_dispatch_with_background(dispatch, background)
+        .await
+    {
         eprintln!(
             "[subtask {}] recording tag {} of turn {} failed: {e}",
             dispatch.parent_session_id, dispatch.ordinal, dispatch.turn_index

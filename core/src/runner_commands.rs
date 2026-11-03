@@ -397,13 +397,20 @@ fn managed_runtime_env(
 /// place of the one every managed session gets, and [`MAIN_CHAT_ENV`]
 /// set to `1` (ticket 135).
 fn mark_main_chat_env(env: &mut Vec<(String, String)>, runtime_prompt: String) {
+    set_runtime_prompt(env, runtime_prompt);
+    env.push((MAIN_CHAT_ENV.into(), "1".into()));
+}
+
+/// A managed runner's env with `runtime_prompt` in place of the one every
+/// managed session gets: the main chat's ([`mark_main_chat_env`]), or a
+/// subtask's with the main chat's background (ticket 138).
+fn set_runtime_prompt(env: &mut [(String, String)], runtime_prompt: String) {
     if let Some(entry) = env
         .iter_mut()
         .find(|(key, _)| key == "GALLEY_RUNTIME_PROMPT_TEXT")
     {
         entry.1 = runtime_prompt;
     }
-    env.push((MAIN_CHAT_ENV.into(), "1".into()));
 }
 
 async fn shared_credential_ipc_config(
@@ -491,6 +498,20 @@ pub(crate) async fn prepare_managed_spawn_args(
                 in_hand.as_deref(),
                 memo.as_deref(),
                 &manual_dir.to_string_lossy(),
+            ),
+        );
+    } else if let Some(background) =
+        crate::subtask_background::prompt_section(&app.state::<SqliteGalley>(), &args.session_id)
+            .await
+    {
+        // A subtask the main chat dispatched (ticket 138): the main
+        // chat's last turns as they stood at dispatch, stored with its
+        // record, so every runner it gets is told the same.
+        set_runtime_prompt(
+            &mut context.env,
+            managed_prompt::compose_subtask_runtime_prompt(
+                &app.package_info().version.to_string(),
+                &background,
             ),
         );
     }
@@ -1190,6 +1211,119 @@ mod tests {
             }
             let expected: &[&str] = if main_chat { &["1"] } else { &[] };
             assert_eq!(env_value(&env, MAIN_CHAT_ENV), expected, "{id}");
+        }
+    }
+
+    /// Ticket 138: `prepare_managed_spawn_args` gives a runner the
+    /// subtask prompt when `subtask_background::prompt_section` answers
+    /// for its session (the gate replayed on a real database, as above):
+    /// a subtask whose dispatch stored a background yes, unmarked; the
+    /// main chat, a workbench session and a subtask stored without one
+    /// keep the prompt they had.
+    #[tokio::test]
+    async fn only_a_subtask_with_a_stored_background_gets_it() {
+        use crate::api::{CreateSessionInput, Origin, SessionId, SubtaskDispatch};
+        use crate::db::{MainChatSeed, RenameTitleSource};
+
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite");
+        crate::apply_all_migrations_for_tests(&pool)
+            .await
+            .expect("migrate");
+        let galley = SqliteGalley::from_pool(pool);
+        let gui = Origin {
+            via: crate::api::OriginVia::Gui,
+            supervisor: None,
+            reason: None,
+            client: None,
+        };
+        let input = |id: &str| CreateSessionInput {
+            id: id.into(),
+            title: id.into(),
+            project_id: None,
+            selected_llm_index: None,
+            selected_llm_key: None,
+            selected_llm_display_name: None,
+            ga_runtime_kind: Some(RuntimeKind::Managed),
+            ga_runtime_id: None,
+            prompt_profile: None,
+        };
+        galley
+            .get_or_create_main_chat("s-main", gui.clone(), &MainChatSeed { greeting: None })
+            .await
+            .expect("main chat");
+        galley
+            .create_session(input("s-side"), gui)
+            .await
+            .expect("workbench session");
+        for (ordinal, (id, background)) in [
+            (
+                "s-told",
+                Some(r#"{"turns":[{"turnIndex":1,"saidAt":"2026-11-03T01:00:00Z","user":"周五去上海","reply":"好。"}]}"#),
+            ),
+            ("s-untold", None),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            galley
+                .create_subtask_session(
+                    input(id),
+                    Origin::subtask(),
+                    &SessionId("s-main".into()),
+                    Some("订周五的高铁".into()),
+                    RenameTitleSource::User,
+                )
+                .await
+                .expect("subtask");
+            galley
+                .record_subtask_dispatch_with_background(
+                    &SubtaskDispatch {
+                        parent_session_id: "s-main".into(),
+                        turn_index: 1,
+                        ordinal: ordinal as i64,
+                        message_id: SubtaskDispatch::reply_message_id("s-main", 1),
+                        session_id: Some(id.into()),
+                        title: id.into(),
+                        failure: None,
+                        failure_detail: None,
+                        created_at: "2026-11-03T01:00:01Z".into(),
+                        send_backs: 0,
+                    },
+                    background,
+                )
+                .await
+                .expect("record");
+        }
+
+        for (id, told) in [
+            ("s-told", true),
+            ("s-untold", false),
+            ("s-side", false),
+            ("s-main", false),
+        ] {
+            let mut env = managed_runtime_env(
+                "/state",
+                Path::new("/state/models.json"),
+                "workbench prompt".into(),
+                "{}".into(),
+            );
+            if let Some(background) = crate::subtask_background::prompt_section(&galley, id).await {
+                set_runtime_prompt(
+                    &mut env,
+                    managed_prompt::compose_subtask_runtime_prompt("1.2.3", &background),
+                );
+            }
+            let prompt = env_value(&env, "GALLEY_RUNTIME_PROMPT_TEXT");
+            assert_eq!(prompt.len(), 1, "{id}");
+            assert_eq!(
+                prompt[0].contains(crate::subtask_background::SECTION_HEADING),
+                told,
+                "{id}"
+            );
+            assert_eq!(prompt[0].contains("周五去上海"), told, "{id}");
+            assert!(env_value(&env, MAIN_CHAT_ENV).is_empty(), "{id}");
         }
     }
 

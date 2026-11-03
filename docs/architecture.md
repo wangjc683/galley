@@ -154,7 +154,10 @@ The main chat hands long work to subtasks (ticket 06a,
 task reads the reply's `<subtask>` tags and starts each as an ordinary managed
 session through Core's own send, records them in `subtask_dispatches`, and
 replays the main chat with a line naming each subtask instead of its
-instructions. See
+instructions. Each subtask is also told the main chat's last turns as they
+stood at dispatch, stored with its record and put in its runtime prompt
+by every runner it gets ([`subtask_background.rs`](../core/src/subtask_background.rs),
+ticket 138). See
 [runtime modes and sessions](./managed-ga-runtime/runtime-modes-and-sessions.md#main-chat-subtasks).
 When a subtask's run ends, the same task reports it to the main chat and
 wakes it for a turn ([`subtask_report.rs`](../core/src/subtask_report.rs),

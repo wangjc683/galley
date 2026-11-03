@@ -33,6 +33,10 @@ differ in one paragraph of "What Only The User Changes In Galley"
 ticket 135 the same place also gives the main chat's runner, and no other,
 `GALLEY_MAIN_CHAT=1`, which the runner reads to refuse browser tools
 ([runtime modes](./runtime-modes-and-sessions.md#the-main-chat-does-not-browse)).
+Since ticket 138 a subtask the main chat dispatched gets one more section
+after its state block, the main chat's last turns
+(`compose_subtask_runtime_prompt`, below); its prompt is otherwise the
+workbench's, byte for byte.
 
 ## Admission Test For Static Clauses
 
@@ -434,6 +438,56 @@ What you noted about the user, oldest first, each with the day you last noted or
 - **Switch**: none; main chat only, as In Hand (every other prompt is
   tested never to carry it). Data: outside the static budget and the prompt
   hash.
+
+### Main Chat Background (main chat subtasks only)
+
+Since ticket 138 (`.scratch/main-chat/issues/138-subtask-carries-the-chat.md`,
+main chat PRD ruling 186) a subtask the main chat dispatched is told the
+main chat's last turns, as they stood when the reply dispatched it, in a
+section after its state block (`section_in` in
+`core/src/subtask_background.rs`; the prompt is
+`compose_subtask_runtime_prompt` in `core/src/managed_prompt.rs`, chosen in
+`runner_commands::prepare_managed_spawn_args` for a session whose dispatch
+record stored one):
+
+```text
+## Main Chat Background
+
+This conversation is a subtask that the user's main chat handed you; below are the main chat's last turns with the user, as they stood at that moment. Read them as background, not as a conversation to continue: your first message, the instructions, is what to do and wins where they differ, and what you hand back goes to the main chat, as it says.
+
+<turn at="<YYYY-MM-DD HH:MM>">
+<user>
+<the user's message>
+</user>
+<main-chat>
+<every reply up to the next user message>
+</main-chat>
+</turn>
+```
+
+- **Facts**: the turns are taken once per reply, before any of its tags
+  starts, and stored with each record that made a session
+  (`subtask_dispatches.background`, migration 056); which turns is in
+  [runtime modes](./runtime-modes-and-sessions.md#main-chat-subtasks). A
+  turn's time is its last reply's `created_at`, local time to the minute,
+  as the carried turns' in the Main Chat section. A user message's images
+  are named by count only (`[2 images attached]`): the section carries no
+  image, and a local path would break admission rule 4.
+- **Why the prompt, not the conversation**: the desktop's first user
+  message stays the instructions and the replay stays the subtask's own
+  rows, and the model reads the turns as someone else's conversation, not
+  as something it said. Put before the instructions in the first message,
+  it would not reach the model at all: GA moves a user message over 2,000
+  characters into a file (`agentmain.py`'s task loop).
+- **Fixed for the subtask** (admission rule 3): every runner the subtask
+  gets reads the same stored turns, whatever the main chat said since.
+- **Cost**: the section rides every request of the subtask, a stable
+  prefix the provider can cache, and GA never trims it the way it trims
+  history. At most 15,000 characters of turns (the carry's cap) plus the
+  markup.
+- **Switch**: none. A subtask dispatched before ticket 138, a workbench
+  session, IM and attach mode never carry it. Data: outside the static
+  budget and the prompt hash.
 
 ## Main Chat Entry Layer
 

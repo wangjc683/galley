@@ -11,6 +11,9 @@
 //!   carrying the instructions, in the carried turns too;
 //! - promotion: a person's message promotes, an answer, a subtask's own
 //!   message, a CLI or socket send do not.
+//! - the background a subtask is told (ticket 138): the main chat's last
+//!   turns at dispatch, stored once, in the prompt of every runner it
+//!   gets; none for a session no reply dispatched.
 //!
 //! Parsing, titles and the marker text are unit-tested in
 //! `core/src/subtask.rs`; the phone list in `remote_module_test.rs`; the
@@ -29,6 +32,7 @@ use galley_core_lib::runner_manager::{
     is_side_question, BroadcastItem, HeldClose, QueueOffer, ReadySnapshot, RunState,
     RunnerSpawnError, SendCommandError, ShutdownError, SpawnArgs,
 };
+use galley_core_lib::session_runner::carry::{CARRY_MAX_CHARS, CARRY_TURNS, CUT_MARKER};
 use galley_core_lib::session_runner::{
     ensure_session_runner, EnsureOptions, ReplayTimeouts, RunnerHost, SpawnEnv,
 };
@@ -40,6 +44,7 @@ use galley_core_lib::subtask::{
     claim_pending_reply, dispatch_reply, pending_reply, PendingReply, VIA_SUBTASK,
     VIA_SUBTASK_PROMOTED,
 };
+use galley_core_lib::subtask_background::{prompt_section_in, SubtaskBackground, SECTION_HEADING};
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -1128,4 +1133,363 @@ async fn an_answer_or_a_message_not_from_the_user_does_not_promote() {
         .await
         .unwrap();
     assert_eq!(brief.promoted, None);
+}
+
+// ---------------- the background a subtask is told (ticket 138) ----------------
+
+/// What every runtime prompt but the main chat's and a subtask's is,
+/// standing in for `managed_prompt::compose_runtime_prompt`.
+const WORKBENCH_PROMPT: &str = "workbench prompt";
+
+/// [`FakeEnv`] plus the one thing `prepare_managed_spawn_args` does for a
+/// subtask (ticket 138), through the function it calls: the runtime
+/// prompt gains the "Main Chat Background" section the dispatch stored,
+/// read when the runner spawns. Times in UTC.
+struct BackgroundEnv {
+    galley: SqliteGalley,
+}
+
+#[async_trait]
+impl SpawnEnv for BackgroundEnv {
+    fn bundled_python(&self) -> Option<PathBuf> {
+        FakeEnv.bundled_python()
+    }
+    fn bridge_cwd(&self) -> Result<PathBuf, String> {
+        FakeEnv.bridge_cwd()
+    }
+    async fn prepare_managed(&self, args: SpawnArgs) -> Result<SpawnArgs, RunnerSpawnError> {
+        let mut args = FakeEnv.prepare_managed(args).await?;
+        let prompt = match prompt_section_in(&self.galley, &args.session_id, &Utc).await {
+            Some(section) => format!("{WORKBENCH_PROMPT}\n\n{section}"),
+            None => WORKBENCH_PROMPT.to_string(),
+        };
+        args.env.push(("GALLEY_RUNTIME_PROMPT_TEXT".into(), prompt));
+        Ok(args)
+    }
+}
+
+fn host_with<'a>(
+    galley: &'a SqliteGalley,
+    runner: &'a Runner,
+    env: &'a dyn SpawnEnv,
+    notifier: Arc<Recorder>,
+) -> RunnerHost<'a> {
+    RunnerHost {
+        galley,
+        runner,
+        notifier,
+        env: Some(env),
+    }
+}
+
+/// The runtime prompt of every runner spawned for `sid`, in order.
+fn prompts(runner: &Runner, sid: &str) -> Vec<String> {
+    runner
+        .spawned
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|args| args.session_id == sid)
+        .map(|args| {
+            args.env
+                .iter()
+                .find(|(key, _)| key == "GALLEY_RUNTIME_PROMPT_TEXT")
+                .map(|(_, prompt)| prompt.clone())
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+/// The background stored with the dispatch that created `sid`.
+async fn stored_background(galley: &SqliteGalley, sid: &str) -> Option<SubtaskBackground> {
+    galley
+        .subtask_background(&SessionId(sid.into()))
+        .await
+        .expect("read")
+        .map(|json| serde_json::from_str(&json).expect("stored background parses"))
+}
+
+fn user_and_reply(background: &SubtaskBackground) -> Vec<(&str, &str)> {
+    background
+        .turns
+        .iter()
+        .map(|turn| (turn.user.as_str(), turn.reply.as_str()))
+        .collect()
+}
+
+/// The window is the dispatching reply's segment up to the reply, read
+/// as the main chat's replay reads it: an earlier reply names its
+/// subtask, the dispatching one loses its tags with no marker, nothing
+/// from before the boundary or after the reply. Every subtask of the
+/// reply is told the same.
+#[tokio::test]
+async fn the_background_is_the_segment_up_to_the_dispatching_reply() {
+    let (_pool, galley) = with_main_chat().await;
+    let main = SessionId(MAIN.into());
+    let before = exchange(&galley, MAIN, "上一段说的", "上一段的回复", None).await;
+    galley
+        .record_main_chat_segment(&main, before + 1)
+        .await
+        .expect("boundary");
+    exchange(
+        &galley,
+        MAIN,
+        "先查报价",
+        "好。\n<subtask title=\"报价\">查三家打印店的报价</subtask>",
+        None,
+    )
+    .await;
+    let earlier = settle(&galley, &Runner::default(), Arc::new(Recorder::default())).await;
+    let earlier_id = earlier[0].session_id.clone().expect("a subtask");
+    exchange(&galley, MAIN, "谢谢", "不客气。", None).await;
+    exchange(
+        &galley,
+        MAIN,
+        "周五去上海开会，帮我订高铁和酒店",
+        "<thinking>两件事</thinking>好，两件都去办了。\n\
+         <subtask title=\"订票\">订周五去上海的高铁</subtask>\n\
+         <subtask title=\"订酒店\">订周五上海的酒店</subtask>",
+        None,
+    )
+    .await;
+    // A message the user sent meanwhile, waiting for its reply.
+    galley
+        .send_message(main.clone(), "还有别的吗".into(), Origin::desktop())
+        .await
+        .expect("queued message");
+
+    let dispatches = settle(&galley, &Runner::default(), Arc::new(Recorder::default())).await;
+    assert_eq!(dispatches.len(), 2);
+    let ticket = dispatches[0].session_id.clone().expect("a subtask");
+    let hotel = dispatches[1].session_id.clone().expect("a subtask");
+
+    let background = stored_background(&galley, &ticket)
+        .await
+        .expect("a background");
+    assert_eq!(
+        user_and_reply(&background),
+        vec![
+            (
+                "先查报价",
+                format!("好。\n\n[subtask {earlier_id}: 报价]").as_str()
+            ),
+            ("谢谢", "不客气。"),
+            (
+                "周五去上海开会，帮我订高铁和酒店",
+                "<thinking>两件事</thinking>好，两件都去办了。"
+            ),
+        ]
+    );
+    assert_eq!(stored_background(&galley, &hotel).await, Some(background));
+    // The earlier subtask was told the segment as it stood then: its own
+    // reply's turn alone.
+    assert_eq!(
+        user_and_reply(&stored_background(&galley, &earlier_id).await.expect("one")),
+        vec![("先查报价", "好。")]
+    );
+}
+
+/// The carry's limits hold: the last ten turns, and a latest turn over
+/// the cap alone, cut where the carry cuts it.
+#[tokio::test]
+async fn the_background_keeps_the_carrys_ten_turns_and_its_cap() {
+    let (_pool, galley) = with_main_chat().await;
+    for i in 0..11 {
+        exchange(&galley, MAIN, &format!("第{i}句"), &format!("回{i}"), None).await;
+    }
+    exchange(
+        &galley,
+        MAIN,
+        "订票",
+        "去订了。<subtask title=\"订票\">订周五的高铁</subtask>",
+        None,
+    )
+    .await;
+    let dispatches = settle(&galley, &Runner::default(), Arc::new(Recorder::default())).await;
+    let background = stored_background(&galley, dispatches[0].session_id.as_deref().unwrap())
+        .await
+        .expect("a background");
+    let users: Vec<&str> = background.turns.iter().map(|t| t.user.as_str()).collect();
+    let mut expected: Vec<String> = (2..11).map(|i| format!("第{i}句")).collect();
+    expected.push("订票".into());
+    assert_eq!(users, expected);
+    assert_eq!(background.turns.len(), CARRY_TURNS);
+
+    // A paste too long for the cap: the older turns go, it is cut in the
+    // middle and keeps the request at its end.
+    let paste = format!("{}这份合同帮我找律师看看", "贴".repeat(CARRY_MAX_CHARS));
+    exchange(
+        &galley,
+        MAIN,
+        &paste,
+        "好。<subtask title=\"找律师\">把合同发给律师</subtask>",
+        None,
+    )
+    .await;
+    let dispatches = settle(&galley, &Runner::default(), Arc::new(Recorder::default())).await;
+    let background = stored_background(&galley, dispatches[0].session_id.as_deref().unwrap())
+        .await
+        .expect("a background");
+    assert_eq!(background.turns.len(), 1);
+    let turn = &background.turns[0];
+    assert_eq!(turn.reply, "好。");
+    assert!(turn.user.starts_with('贴'));
+    assert!(turn.user.contains(CUT_MARKER));
+    assert!(turn.user.ends_with("这份合同帮我找律师看看"));
+    assert_eq!(background.chars(), CARRY_MAX_CHARS);
+}
+
+/// The subtask's first runner is told the background in its runtime
+/// prompt, not its conversation; a runner started after a restart, the
+/// main chat having moved on, is told the same.
+#[tokio::test]
+async fn every_runner_of_a_subtask_is_told_the_same_background() {
+    let (_pool, galley) = with_main_chat().await;
+    exchange(&galley, MAIN, "周五要去上海开会", "好的，记下了。", None).await;
+    exchange(
+        &galley,
+        MAIN,
+        "帮我订高铁",
+        "去订了。\n<subtask title=\"订票\">订周五去上海的高铁，上午出发</subtask>",
+        None,
+    )
+    .await;
+    let env = BackgroundEnv {
+        galley: galley.clone(),
+    };
+    let runner = Runner::default();
+    let reply = pending_reply(&galley, MAIN).await.unwrap().unwrap();
+    let dispatches = dispatch_reply(
+        &host_with(&galley, &runner, &env, Arc::new(Recorder::default())),
+        MAIN,
+        &reply,
+    )
+    .await;
+    let sub = dispatches[0].session_id.clone().expect("a subtask");
+
+    // First runner: the prompt carries the turns; the first message is
+    // the instructions alone, as the desktop shows it.
+    let first = prompts(&runner, &sub);
+    assert_eq!(first.len(), 1);
+    let section = first[0]
+        .strip_prefix(&format!("{WORKBENCH_PROMPT}\n\n{SECTION_HEADING}\n\n"))
+        .expect("the section follows the workbench prompt");
+    assert!(section
+        .contains("<user>\n周五要去上海开会\n</user>\n<main-chat>\n好的，记下了。\n</main-chat>"));
+    assert!(section.contains("<user>\n帮我订高铁\n</user>\n<main-chat>\n去订了。\n</main-chat>"));
+    assert!(!section.contains("上午出发"));
+    assert_eq!(
+        runner.user_messages(&sub),
+        vec!["订周五去上海的高铁，上午出发".to_string()]
+    );
+    let rows = galley
+        .persisted_message_rows(&SessionId(sub.clone()))
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].content, "订周五去上海的高铁，上午出发");
+
+    // The subtask answers; the main chat moves on.
+    galley
+        .persist_assistant_message(PersistAssistantMessage {
+            session_id: SessionId(sub.clone()),
+            turn_index: u32::try_from(rows[0].turn_index).unwrap(),
+            content: "订好了：G1 次。".into(),
+            tool_calls: None,
+            tool_results: None,
+            thinking: None,
+            final_answer: Some("订好了：G1 次。".into()),
+            summary: None,
+            preamble: None,
+            visibility: MessageVisibility::Visible,
+            telemetry: None,
+        })
+        .await
+        .unwrap();
+    galley
+        .bump_session_after_turn(SessionId(sub.clone()), Some("订好了".into()), None, false)
+        .await
+        .unwrap();
+    exchange(&galley, MAIN, "改成周六吧", "好。", None).await;
+
+    // Core restarts: a cold runner for the subtask (a send-back, the
+    // desktop opening it) is told what the first one was, and gets its
+    // own conversation back without the background in it.
+    let cold = Runner::default();
+    ensure_session_runner(
+        &host_with(&galley, &cold, &env, Arc::new(Recorder::default())),
+        &sub,
+        opening(),
+    )
+    .await
+    .expect("cold start");
+    assert_eq!(prompts(&cold, &sub), first);
+    assert_eq!(
+        cold.load_histories(),
+        vec![turn("订周五去上海的高铁，上午出发", "订好了：G1 次。")]
+    );
+    assert!(!first[0].contains("改成周六吧"));
+}
+
+/// A session no reply dispatched is told nothing: a workbench session,
+/// one an agent opened through the CLI, the main chat itself, and a
+/// subtask recorded before ticket 138.
+#[tokio::test]
+async fn sessions_no_reply_dispatched_carry_no_background() {
+    let (_pool, galley) = with_main_chat().await;
+    exchange(&galley, MAIN, "周五要去上海开会", "好的。", None).await;
+    side_chat(&galley, "s-side", RuntimeKind::Managed).await;
+    galley
+        .create_session(
+            CreateSessionInput {
+                id: "s-cli".into(),
+                title: "CLI 开的".into(),
+                project_id: None,
+                selected_llm_index: None,
+                selected_llm_key: None,
+                selected_llm_display_name: None,
+                ga_runtime_kind: Some(RuntimeKind::Managed),
+                ga_runtime_id: None,
+                prompt_profile: None,
+            },
+            Origin::cli(Some("ga-1".into()), None),
+        )
+        .await
+        .expect("cli session");
+    bare_subtask(&galley, "s-old").await;
+    galley
+        .record_subtask_dispatch(&SubtaskDispatch {
+            parent_session_id: MAIN.into(),
+            turn_index: 0,
+            ordinal: 0,
+            message_id: SubtaskDispatch::reply_message_id(MAIN, 0),
+            session_id: Some("s-old".into()),
+            title: "分类 PDF".into(),
+            failure: None,
+            failure_detail: None,
+            created_at: "2026-11-01T00:00:00Z".into(),
+            send_backs: 0,
+        })
+        .await
+        .expect("record");
+
+    let env = BackgroundEnv {
+        galley: galley.clone(),
+    };
+    for sid in ["s-side", "s-cli", "s-old", MAIN] {
+        assert_eq!(prompt_section_in(&galley, sid, &Utc).await, None, "{sid}");
+        let runner = Runner::default();
+        ensure_session_runner(
+            &host_with(&galley, &runner, &env, Arc::new(Recorder::default())),
+            sid,
+            opening(),
+        )
+        .await
+        .expect("runner");
+        assert_eq!(
+            prompts(&runner, sid),
+            vec![WORKBENCH_PROMPT.to_string()],
+            "{sid}"
+        );
+    }
 }

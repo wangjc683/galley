@@ -341,5 +341,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/055_main_chat_title_galley.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 56,
+            description: "subtask dispatches: the main chat's last turns, as background",
+            sql: include_str!("../migrations/056_subtask_background.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

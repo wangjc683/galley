@@ -184,6 +184,23 @@ about the tag reaches GA, which keeps no subtask tool and no patch for it.
   are its first message, written with the row in one transaction; then
   its run starts as Core's send starts one (the run gate, a runner on the
   shared path, the dispatch). The tags start concurrently.
+- **Background** (ticket 138,
+  `.scratch/main-chat/issues/138-subtask-carries-the-chat.md`, PRD ruling
+  186; `core/src/subtask_background.rs`): before any tag starts, Core reads
+  the main chat's last turns once — a new segment's opening
+  ([carry](#main-chat-segments): 10 turns, 15,000 characters, cut the same
+  way) read up to the dispatching reply, within the reply's own segment,
+  rows read as the replay reads them; the dispatching reply keeps its text
+  and loses its tags, with no marker line — and stores them as JSON with
+  each record that made a session (`subtask_dispatches.background`,
+  migration 056), before the subtask's runner starts. Every runner the
+  subtask gets (its first, a cold start after a restart or an eviction, a
+  send-back, the desktop opening it) is told the same turns, in a section
+  of its runtime prompt ([prompt composition](./prompt-composition.md#main-chat-background-main-chat-subtasks-only)),
+  not its conversation: its first message is still the instructions, and
+  its replay is its own rows. A main chat reset deletes the records, and
+  the copy with them. Neither `SubtaskDispatch` nor the Agent API carries
+  it.
 - **Records**: `subtask_dispatches` keeps one row per tag, including an
   empty one (`empty`), an unclosed one (`unclosed`) and one whose session
   could not be created or started (`start_failed` with the error; with a

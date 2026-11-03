@@ -1,0 +1,19 @@
+-- 056_subtask_background.sql · what a subtask is told of the main chat
+-- (.scratch/main-chat/issues/138-subtask-carries-the-chat.md; main chat PRD
+-- ruling 186)
+--
+-- A subtask used to start knowing only its instructions: the main chat
+-- had to copy into them everything the conversation had settled. Now the
+-- main chat's last turns go with it, as read-only background in the
+-- subtask's runtime prompt (`crate::subtask_background`).
+--
+-- `background` holds them as they were when the reply dispatched, so a
+-- runner started later — after a restart, an eviction, a send-back — is
+-- told the same, not the main chat as it has moved on since: JSON
+-- `{"turns": [{"turnIndex", "saidAt", "user", "images"?, "reply"}]}`,
+-- taken once per reply and written with each record that made a session.
+-- NULL for a tag that made none, for a reply with nothing to carry, and
+-- for every subtask dispatched before this migration (they run as
+-- before). The record goes with the main chat (ON DELETE CASCADE, 048),
+-- and its copy of the conversation with it.
+ALTER TABLE subtask_dispatches ADD COLUMN background TEXT;

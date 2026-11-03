@@ -292,6 +292,15 @@ pub(crate) fn compose_im_runtime_prompt(app_version: &str) -> String {
     compose(app_version, false, None)
 }
 
+/// A main chat subtask's variant (ticket 138): the workbench prompt, byte
+/// for byte, with its state block followed by `background`, the "Main
+/// Chat Background" section its dispatch stored
+/// ([`crate::subtask_background::prompt_section`]). A subtask without
+/// one gets [`compose_runtime_prompt`].
+pub(crate) fn compose_subtask_runtime_prompt(app_version: &str, background: &str) -> String {
+    format!("{}\n\n{background}", compose_runtime_prompt(app_version))
+}
+
 /// The main chat's own state-block section (ticket 03b). Its segments
 /// (03a) leave earlier parts of the thread out of the model's context;
 /// this says so, with the facts the model needs to tell an earlier

@@ -49,6 +49,7 @@ pub mod session_writes;
 pub mod socket_listener;
 pub mod sop_install;
 pub mod subtask;
+pub mod subtask_background;
 pub mod subtask_report;
 mod tray;
 pub mod turn_persistence;

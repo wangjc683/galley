@@ -68,10 +68,11 @@ const MIG_052: &str = include_str!("../migrations/052_provider_auth_kind_none.sq
 const MIG_053: &str = include_str!("../migrations/053_memos.sql");
 const MIG_054: &str = include_str!("../migrations/054_todo_subitems.sql");
 const MIG_055: &str = include_str!("../migrations/055_main_chat_title_galley.sql");
+const MIG_056: &str = include_str!("../migrations/056_subtask_background.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = pool_through_054().await;
-    for sql in [MIG_055] {
+    for sql in [MIG_055, MIG_056] {
         sqlx::raw_sql(sql)
             .execute(&pool)
             .await

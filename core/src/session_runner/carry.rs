@@ -54,7 +54,9 @@
 //!   agree on it.
 //!
 //! Main chat only: no other session has a boundary, and attach mode has
-//! no main chat.
+//! no main chat. The same window, read up to a dispatching reply instead
+//! of up to a boundary, is what the main chat's subtasks are told
+//! ([`crate::subtask_background`], ticket 138).
 
 use super::replay::{merge_into, ConversationMessage, ReplayRow};
 use crate::api::SessionId;
