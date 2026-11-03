@@ -9,17 +9,17 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.7.4`.
-- Git tag / GitHub Release: `v0.7.4` is the current published stable release
-  (tagged at `6c3bf7b2` on 2026-10-30, published 2026-10-30, GitHub Latest).
+- Package version: `0.7.5`.
+- Git tag / GitHub Release: `v0.7.5` is the current published stable release
+  (tagged at `6e4fc6f0` on 2026-11-03, published 2026-11-03, GitHub Latest).
 - Agent API schema: `schemaVersion: 3` (since the Goal removal on
   2026-10-13, first shipped in `v0.7.0`; `2` first shipped in `v0.5.0`). The
   server keeps answering `1` and `2` for every command that did not change;
   every goal command, v1 and v2, is `unknown_command` under every pin.
-- Release tier: stable patch; default update channel points at `v0.7.4`.
+- Release tier: stable patch; default update channel points at `v0.7.5`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `a9a36b4` (audited 2026-10-26, first shipped in
-  `v0.7.1`, again in `v0.7.2`, `v0.7.3` and `v0.7.4`; two `ga.py` fixes, no Galley change). The previous `b70079d`
+  `v0.7.1`, again in `v0.7.2`, `v0.7.3`, `v0.7.4` and `v0.7.5`; two `ga.py` fixes, no Galley change). The previous `b70079d`
   shipped `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never shipped
   on its own; upstream's new mykey store broke the managed loader, fixed in
   the runner); `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` `v0.5.1` …
@@ -32,6 +32,45 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.7.5` (2026-11-03) is a patch four days after `v0.7.4`, 98 commits. The
+main chat hands work out differently: what you ask it answers itself, an
+errand you hand it goes to a subtask past two or three steps (main chat
+ruling 160, ticket 115); errands that do not depend on each other go out in
+one reply as one subtask each, run at the same time and carry a few-word
+title (rulings 174–175, tickets 126–127); its running and asking subtasks
+hang under its card in the sidebar and leave when they stop, a subtask's
+error no longer counts as needing you, and a failed wake still notifies
+(rulings 176–178, tickets 128–129). The cards under a reply sit in one
+frame, one 24px line each, the subtask's a one-line receipt (rulings
+179–182, tickets 130–133); a run without an answer folds into 「中途停下 ·
+N 步」 and the workbench keeps a stopped run's live window (ruling 159,
+ticket 114; workbench ticket 04); scrolling back no longer runs into blank
+and the main chat shows a floating day (rulings 170–172, tickets 123–124);
+on screen the main chat is just Galley (ruling 173, ticket 125; migration
+055); the memo page groups by time period (ticket 121). Bundled GA: patch
+`0030` cuts a whitespace runaway in tool-call arguments (ticket 118);
+patch `0007` waits at least 30 s for Core's token, and the errors are
+logged (ticket 122). Graded patch: the largest pieces (parallel dispatch,
+the one frame) extend the `v0.7.0` main chat; no system removed, no Agent
+API change. GA baseline unchanged at `a9a36b4`: upstream `main` was 17
+commits past `e4d956f`, among them `llmcore.py`'s split into
+`legacy_llmcore.py`, right where patches `0007` and `0030` sit, so the bump
+gets its own round (target `v0.7.6`). JC chose to ship the same day (the
+main session had recommended tagging the next morning, after half a day of
+dev use). Pre-flight: `check.yml` green on `008dfae0` before the tag (run
+41594453188) and on the bump commit `6e4fc6f0` (run 41596646226), all seven
+jobs; the bundled-runtime gate on `mac-x64` in a `git archive` copy; vitest
+in two time zones. The agent checked the draft's Intel DMG read-only and
+the `latest.json` candidate. JC's smoke: the reply notification read
+「Galley · …」 and the one frame looked right; the first dispatch sentence
+(compare two headphones into a table) was answered in the main chat,
+correctly under ruling 160 (the main session's test sentence was wrong),
+and led to ruling 183 (dispatch everything past a step or two; ticket 134,
+for `v0.7.6`). JC approved publish without the two replacement dispatch
+sentences or W1. Stable promoted and verified the same session (run
+41605673604). Full narrative: devlog
+[2026-11-03-v0.7.5-release](./devlog/2026-11-03-v0.7.5-release.md).
 
 `v0.7.4` (2026-10-30) is a patch two days after `v0.7.3`, 67 commits. A
 to-do of yours opens in place in the to-do panel and its title and notes
@@ -683,20 +722,19 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.7.4` is published and promoted as the live stable release (published
-2026-10-30 06:49 UTC). The default `updates/stable/latest.json` channel points
-at `v0.7.4`, with the legacy `updates/beta/latest.json` alias pointing at the
+`v0.7.5` is published and promoted as the live stable release (published
+2026-11-03 08:45 UTC). The default `updates/stable/latest.json` channel points
+at `v0.7.5`, with the legacy `updates/beta/latest.json` alias pointing at the
 same version for older installed builds. The live verifier passed with
 `--cache-bust` for both channels across all three platforms (darwin-aarch64,
-darwin-x86_64, windows-x86_64), in the promote run and again locally (channel
-branch at `f9835f20`); a plain `curl` read 0.7.4 about a minute after
-promote. Two draft cuts: the first (release run 40998075988, on the bump
-commit `abf7f3c9`) was withdrawn and its tag deleted after JC's smoke found
-the main chat blank at launch; the second (release run 41007507310, on
-`6c3bf7b2` with ticket 113) passed S1, and JC approved publishing without
-reporting the rest, which is owed under Unreleased On Main. No
-bundled-runtime gate (no managed GA change); `check.yml` was green on the
-re-tag commit (run 41007507288, all seven jobs).
+darwin-x86_64, windows-x86_64), in the promote run (41605673604) and again
+locally (channel branch at `00952110`); a plain `curl` read 0.7.5 right
+after promote. One draft cut (release run 41596646551, on the bump commit
+`6e4fc6f0`); JC smoked the notification and the reply frame on it and
+approved publishing; the two replacement dispatch sentences and W1 are
+owed under Unreleased On Main. The bundled-runtime gate passed on
+`mac-x64`; `check.yml` was green on `008dfae0` (run 41594453188) and on the
+bump commit (run 41596646226), all seven jobs.
 
 `v0.7.3` (2026-10-28) went through the same path as `v0.7.2`: one draft cut
 (release run 40662506980), JC approved publishing without reporting smoke
@@ -797,11 +835,11 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.7.3` → `v0.7.4` (and `v0.7.0` →
-   `v0.7.1` → `v0.7.2` → `v0.7.3` before it) is owed. JC's Mac was installed
-   straight from the draft all four times, so it needs a machine still on an
-   older build (the Windows one, for instance); the CDN served 0.7.4 without
-   cache-bust at about 06:51 UTC (promoted 06:50). `v0.6.2` → `v0.7.0` passed on JC's
+1. App-update dogfood (SOP step 10): `v0.7.4` → `v0.7.5` (and `v0.7.0` →
+   `v0.7.1` → `v0.7.2` → `v0.7.3` → `v0.7.4` before it) is owed. JC's Mac was installed
+   straight from the draft all five times, so it needs a machine still on an
+   older build (the Windows one, for instance); the CDN served 0.7.5 without
+   cache-bust at 08:46 UTC, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -853,64 +891,32 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.4..HEAD`. User-facing since `v0.7.4`
-(2026-10-30): a run that ends without an answer (stopped, failed, at the
-step cap) no longer unfolds in full. The main chat draws it as one line,
-「中途停下 · N 步」, that opens the process card (main chat PRD ruling 159,
-ticket 114; dogfooded). The workbench keeps the live window as it was at
-the stop, the header reading 「中途停下 · N 步」 and the last step left out
-(workbench conversation PRD ruling 9, ticket 04; both runtimes). The main
-chat now decides what to hand to a subtask by whether you are waiting: what
-you ask it answers itself, even when that takes minutes of looking things
-up; an errand you hand it goes to a subtask past two or three steps (main
-chat PRD ruling 160, ticket 115; eval new 16 of 16; managed only, not yet
-dogfooded). The managed engine cuts a tool call whose arguments run into
-2,000 whitespace characters in a row, so a model that degenerates that way
-no longer stalls a run for fifteen minutes (managed GA patch `0030`, main
-chat PRD ruling 162, ticket 118; unit tests and a local fake stream only).
-The memo page groups by the sidebar's time periods (today, this week, this
-month, earlier), full width, the exact day showing beside the ⋯ on hover;
-ticket 119's left column came and went the same day (main chat PRD rulings
-164 and 166, tickets 119 and 121; rows 28px and a faint dot before each
-memo, where a to-do has its box, rulings 168 and 169; JC looked in the real
-window, 2026-11-02). The managed engine waits at least 30 seconds
-for Core's token, so a refresh after a long idle no longer fails the first
-request (it cost the 11-02 morning review); Core, the runner and the review
-log now keep what went wrong (main chat PRD ruling 167, ticket 122).
-Scrolling back a long conversation no longer runs into blank and jumps: a
-blank runway above the loaded turns takes each page that lands, since
-WebKit drops a `scrollTop` written during a flick's momentum; the next
-page is read ten screens ahead, the runway is refilled at rest and goes
-once the first turn is in, and a flick past the first turn stops there
-(main chat PRD rulings 170–172, ticket 123; all conversations, GUI only;
-JC flicked it nine times in tauri dev with a probe, 2026-11-02). Scrolling
-back the main chat, a capsule at the top says which day you are on, not
-while that is today (ruling 171, ticket 124; JC looked). On screen the
-main chat has no name of its own: it is Galley in both languages, so the
-reply and question notifications read 「Galley · …」, and the reset and the
-find scope say 「重置和 Galley 的对话」 and 「在这个对话里」 (main chat PRD
-ruling 173, ticket 125; migration 055 renames the stored title 「主聊天」;
-JC looked). Several errands that do not depend on each other go out as one
-subtask each in the same reply and run at the same time, each named on its
-tag in a few words (rulings 174 and 175, tickets 126 and 127; eval: three
-errands gave three tags both times, 21 titles of 6–14 characters; JC sent
-two in tauri dev, 2026-11-03). Galley's subtasks that are running or
-asking you are listed under its card in the sidebar; one that stops leaves
-at once, and a subtask's error no longer counts as needing you (rulings 176
-and 177, ticket 128). The cards under a main chat reply (files, subtasks, to-dos, reminders,
-memos) sit in one frame per reply, the process card's, one 24px line each,
-as wide as the widest line; the subtask's is a one-line receipt (rulings
-179–182, tickets 130–133; JC compared three styles in tauri dev,
-2026-11-03). A wake turn that ends
-on an error now tells the desktop its subtask reports were not delivered,
-so a failed subtask still notifies (ruling 178, ticket 129). Owed:
-ticket 04's second real-machine step, stopping a workbench run you watch
-(no workbench run in the database since the merge); ticket 133's frame in daily use (a lone item still reading as a
-card, 12px file names, two frames when 过程 is open; long titles and
-whole-line clicks only checked on a static page); the notifications of tickets 125 and 129, which
-a dev build does not send. Still owed from
-`v0.7.2`'s scope: ticket 98's noticed interest (the 「看你……常问」 memo has
-no live record yet).
+Release-scope truth is `git log v0.7.5..HEAD`. Nothing user-facing yet
+since `v0.7.5` (2026-11-03). In flight: main chat PRD ruling 183, ticket
+134: the main chat hands everything past a step or two to a subtask (a
+single fact, a quick conversion and a follow-up the conversation already
+answers stay), keeps what comes back as one thing in one tag, and pastes
+answer-like results back in full (entry layer and the manual's
+`subtasks.md`; managed only; eval running in a worktree). JC's 「两分钟」
+is a guess up front (ruling 183 point 6); the Core two-minute nudge waits
+on a signal in deferred. The GA baseline bump (upstream 17 commits past
+`e4d956f`) is its own round, target `v0.7.6`.
+
+**Owed from the `v0.7.5` smoke** (the list is in the release devlog). S1
+and S3 passed by JC's word: the reply notification read 「Galley · …」 and
+the one frame looked right (ticket 133's three daily-use risks, a lone item
+reading as a card, 12px file names and two frames with 过程 open, were not
+reported one by one). S2: the weather question was answered in the main
+chat (8 steps); the first dispatch sentence was answered too, correctly
+under ruling 160 (the sentence was wrong), and became ruling 183; the two
+replacement sentences (a research report; two independent file errands in
+one message) were not sent, so parallel dispatch on a packaged build is
+unseen (JC sent two in tauri dev for ticket 127). Ticket 129's
+undelivered-report notification was not provoked. Not done: W1, a Windows
+install, which would also be the first packaged build to run migrations
+053–055 on an older database. Still owed from before: ticket 04's second
+real-machine step (stopping a workbench run you watch); ticket 98's noticed
+interest (from `v0.7.2`).
 
 **Owed from the 10-28 trial review** (run in the `v0.7.4` pre-flight, verdict
 do not tighten; the report is in the release devlog). JC's answers: whether
@@ -1138,7 +1144,10 @@ shipped in it, then again in `v0.7.2` with upstream `main` still at it, and
 in `v0.7.3` with upstream at `e4d956f`: six commits that touch only
 `frontends/conductor.py` and `memory/` seed files, so the audit was skipped
 (reasoning in the `v0.7.3` release devlog), and in `v0.7.4` with upstream
-still at `e4d956f`.
+still at `e4d956f`, and in `v0.7.5` with upstream 17 commits past
+`e4d956f`: among them `llmcore.py`'s split into `legacy_llmcore.py`, right
+where patches `0007` and `0030` sit, so the bump gets its own round
+(reasoning in the `v0.7.5` release devlog).
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -1182,10 +1191,10 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.7.4 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.7.5 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `a9a36b4` (2026-10-26), shipped since `v0.7.1` (again in `v0.7.2`, `v0.7.3` and `v0.7.4`; `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `a9a36b4` (2026-10-26), shipped since `v0.7.1` (again in `v0.7.2`, `v0.7.3`, `v0.7.4` and `v0.7.5`; `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -1208,7 +1217,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.7.4`. For the next release, bump every
+- Current package metadata uses `0.7.5`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
