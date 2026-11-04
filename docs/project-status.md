@@ -943,6 +943,18 @@ upstream anchored L0 to the code dir, which would have switched off managed
 memory distillation; patch `0001` points it at the state root, so Feishu,
 Telegram and Discord now read L0 too. Not dogfooded in dev.
 
+**`v0.7.6`'s first draft was withdrawn** (2026-11-04,
+[devlog](./devlog/2026-11-04-v0.7.6-release.md)): main carries version
+`0.7.6` (`559ea1af`), but the draft and the tag were deleted after smoke
+S3. When a batch of subtasks the user dispatched came back, the main
+chat's merge round ran 100 s with nothing drawn for its first ~54 s (main
+chat ruling 134 point 2 drew no progress in a woken round). Before the
+retag: a merge round for subtasks you dispatched draws like your own
+round, the to-do panel stops listing subtasks, the sidebar's 「还有 N
+件在办」 expands in place (ruling 197, ticket 146); the merge round reads
+the reports without detouring through a file (upstream GA saves any input
+over 2,000 characters to one; ruling 198, ticket 147, measure first).
+
 **Owed from the `v0.7.5` smoke** (the list is in the release devlog). S1
 and S3 passed by JC's word: the reply notification read 「Galley · …」 and
 the one frame looked right (ticket 133's three daily-use risks, a lone item
