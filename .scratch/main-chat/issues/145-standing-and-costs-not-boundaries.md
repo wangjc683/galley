@@ -570,4 +570,165 @@ v8 由 Rust 现生成（临时测试，跑完删掉），`--dry-test` 核对：�
 10. **评测脚本加了锁**：`run.py` 在系统临时目录放 `entry-layer-eval-<套件>-results.lock` 一类的锁文件，进程退出就释放，不进仓库。
 11. **没动的文档**：`docs/project-status.md`、主对话 PRD、devlog，留给主会话。
 
+### 第三轮（裁决 196）
+
+（2026-11-04，执行代理。分支 rebase 到 main `6291cf02`（只多了裁决 196 那一个提交），无冲突。没动入口层这两句以外的条款、静态规则、手册、GUI、runner、CLI、Agent API、迁移、IM、外置。）
+
+#### 1. 派活段的最终原文
+
+```text
+How to go about a thing is yours to weigh. Doing it yourself is quicker
+and lighter, and the user can talk to you while you work: what they say
+reaches you at your next step, and `tell_user` answers them in a line
+without stopping. A subtask starts fresh with this conversation's last
+turns as background, looks into one thing in depth and runs alongside any
+others; each takes a few minutes, and Galley wakes you once they are all
+back, for you to check and put together. Something the user will use to
+decide, pass on or keep, and that takes looking into (a comparison, a
+plan, a report, a survey), goes to subtasks to be done in depth: one tag
+per part when it splits (a product, a place, a source each), all at once,
+and you merge them when they are back. A question, a remark or a single
+fact you answer yourself. When you do it yourself and it will take more
+than a moment, say in a line how you will go about it before you start.
+Their memos on how they like things done come first. When the user says
+to do it here or to hand it off, do that; when they say otherwise, do it
+their way, and note it as a memo when it is how they want such things
+done.
+A fact in the world (a person, an event, a game, the news, a figure, a
+price, how someone is doing lately): look it up before you answer,
+yourself or by a subtask, and give your sources. An idea, a reason, how
+to do something, your view, or what this conversation already answers
+(what a subtask brought back included): answer it directly, without
+looking it up again.
+To change things on the user's computer or accounts, go by the three
+levels of authority in `authority.md`.
+To hand something off, end your reply with
+<subtask title="a few words">what to do</subtask>. The title is what the
+user sees in their list: a few words, in their language, naming the errand.
+Write one tag per part, in the same reply, and they run at the same time;
+when the user hands you several errands that do not depend on each other,
+send them all out at once, one tag each. Keep in one tag the parts that
+need the same browser tab or the same files.
+Galley starts each after this reply, with this conversation's last turns
+as background, so write the goal, what you have found so far, and what to
+hand back, with the evidence for it (a confirmation number, a file path, a
+link, a screenshot path).
+Do not call this chat the main chat. Galley wakes you when they finish,
+ask something or fail, so do not wait on them or watch them.
+Use this, not the file-based subagent in your memory (subagent.md), which
+the user cannot see.
+```
+
+放回的两句，原文：
+
+- 打算句（裁决 196 第 3 条，只管自己做的），接在「A question, a remark or a single fact you answer yourself.」之后：「When you do it yourself and it will take more than a moment, say in a line how you will go about it before you start.」与主会话给的意思一字不差，没改措辞。
+- 差事并行（裁决 174 的意思放回），接在「Write one tag per part, in the same reply, and they run at the same time;」之后：「when the user hands you several errands that do not depend on each other, send them all out at once, one tag each.」原来那半句「keep in one tag the parts that need the same browser tab or the same files」照留，因为前面句号断开，改成大写开头的「Keep in one tag …」一句，字没动。
+
+#### 2. 字节预算
+
+入口层 `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES`：5183 → 5416，本机实测 5416（不留余量，`\r` 不计）。+233：打算句 118；差事并行 115（标签那一段 150 → 265）。静态规则的两个预算不变。
+
+#### 3. 改了哪些文件、哪些断言
+
+- `core/src/managed_prompt.rs`：两句；入口层文档注释末尾加第九轮一段（裁决 196；自己上网先说打算 9/38 → 20/50 → 2/37，第一次见字中位 10.7 → 9.9 → 23.7 秒；裁决 195 只看了总数 47/83 对 47/84；三件差事 3/3 → 1/3，裁决 174 那句是第一轮连带删掉的）；预算常量与分项。测试 `main_chat_entry_layer_leaves_the_hand_off_to_judgment`：打算句的两个单行片段（「fact you answer yourself. When you do it yourself and it will take more」「than a moment, say in a line how you will go about it before you start.」）与其后重新换行的三个片段；差事并行的三个片段（「when the user hands you several errands that do not depend on each other,」「send them all out at once, one tag each. Keep in one tag the parts that」「need the same browser tab or the same files.」），替换原来那一行「keep in one tag the parts that need the same browser tab or the same files.」；「不在」的清单去掉 `say in a line`、`how you will go about it`、`When the user hands you several errands`；工作台与 IM 的提示词里没有 `say in a line how you will go about it`、`several errands that do not depend on each other`。测试上方说明补第三轮一句。
+- `docs/managed-ga-runtime/prompt-composition.md`：入口层那条（打算句与理由的数、差事并行回来）、预算一条 5416 与分项、条款台账加一行。
+- 评测：`run.py`（`v9`、`v9glm`、`v9ds`；`--dry-test` 的 Rust 核对移到 v9，另核 v9 与 v8 只差这两句）、`dispatch-criterion/galley-prompt/main_chat.v9.txt`（新）、两套 `results.*`、`composed/`、`README.md`。
+
+#### 4. 评测 v9
+
+v9 由 Rust 现生成（临时测试，跑完删掉），`--dry-test` 核对：入口层与 Rust 一字不差，与 v8 只差这两句（打算句接在「A question, a remark or a single fact you answer yourself.」之后，差事并行接在「they run at the same time;」之后，其余一字不差）。只重跑这两句碰到的：gpt-6.1-sol（下称 sol）的派活判据与并行各 3 遍，glm-5.3-flash（glm）、deepseek-flash（ds）的并行各 2 遍，分歧的补第 3 遍（glm 的 `p-three-errands`）。v8 一列是第二轮那几遍。
+
+| 模型·套件·版本 | 派出去 | 先说打算（合计） | 派出去的那些遍 | 自己上网 | 自己做 | 第一次见字 中位 / 最长（秒；停前无字） | 事实带出处 | 对比与报告各遍的标签数 | p-three-errands 各遍标签数 | 模型调用、输入 / 缓存 / 输出 token |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| gpt-6.1-sol 派活判据 v8 | 21/90 | 31/82 | 21/21 | 2/37 | 8/24 | 23.7 / 247.1（35） | 56/60 | q-headphones 2、2、2；c-headphones-pair 2、2、2；c-phones-three 3、3、3；big-research 3、4、4；c-research-report 3、3、2 | — | 90 遍 220 次，1,526,266 / 755,200 / 98,783 |
+| gpt-6.1-sol 派活判据 v9 | 26/90 | 52/84 | 26/26 | 13/38 | 13/20 | 10.7 / 65.2（25） | 54/60 | q-headphones 2、2、2；c-headphones-pair 2、2、2；c-phones-three 3、3、3；big-research 3、3、6；c-research-report 3、3、3 | — | 90 遍 209 次，1,466,745 / 740,224 / 82,149 |
+| gpt-6.1-sol 并行 v8 | 8/21 | 14/21 | 7/8 | 2/7 | 5/6 | 16.5 / 73.0（5） | — | — | 3、自己、自己 | 21 遍 70 次，559,477 / 326,656 / 29,701 |
+| gpt-6.1-sol 并行 v9 | 12/21 | 19/21 | 12/12 | 4/6 | 3/3 | 9.8 / 35.4（2） | — | — | 3、3、3 | 21 遍 60 次，445,372 / 248,832 / 25,605 |
+| glm-5.3-flash 并行 v8 | 0/14 | 9/14 | 0/0 | 3/8 | 6/6 | 15.1 / 78.7（5） | — | — | 自己、自己 | 14 遍 46 次，397,137 / 243,968 / 36,830 |
+| glm-5.3-flash 并行 v9 | 1/15 | 11/15 | 1/1 | 5/8 | 5/6 | 18.4 / 44.2（3） | — | — | 自己、3、自己 | 15 遍 45 次，416,119 / 267,776 / 49,830 |
+| deepseek-flash 并行 v8 | 0/14 | 2/14 | 0/0 | 2/8 | 0/6 | 24.1 / 37.2（6） | — | — | 自己、自己 | 14 遍 56 次，501,025 / 374,784 / 29,514 |
+| deepseek-flash 并行 v9 | 0/14 | 6/14 | 0/0 | 5/8 | 1/6 | 3.0 / 35.9（4） | — | — | 自己、自己 | 14 遍 47 次，425,826 / 304,896 / 29,500 |
+
+（先说打算只算不止一步或派出去的那些遍，按做法拆成派出去 / 自己上网 / 自己做；第一次见字的中位只算有字的那些遍，括号里是停在浏览器前一个字也没有的遍数。）
+
+**读法**（对着裁决 196 第 3 条的三个条件）：
+
+- **打算句回来了**：sol 派活判据自己上网的那些遍先说打算 2/37（v8）→ 13/38（v9），自己做的 8/24 → 13/20；合计 31/82 → 52/84，比 v6（47/83）、v7（47/84）都多。第一次见字的中位 23.7 → 10.7 秒，最长 247.1 → 65.2 秒；停前无字 35 → 25 遍。并行套件 14/21 → 19/21，中位 16.5 → 9.8 秒。glm、ds 的并行也多说了（9/14 → 11/15，2/14 → 6/14）。
+- **差事并行回来了**：`p-three-errands` sol 3 个标签 ×3（v8 是 1/3，v6、v7 都是 3/3）；glm 1/3（v8 0/2），ds 0/2（v8 0/2，三版都没派过）。`p-split-one` sol 照旧 2/3。
+- **对比没被带偏**：sol 的对比三条仍一款一个标签，`q-headphones` 2、2、2，`c-headphones-pair` 2、2、2，`c-phones-three` 3、3、3（与 v8 一样）；报告 `big-research` 3、3、6，`c-research-report` 3、3、3。派活判据派出去 21 → 26/90。
+- **事实带出处**：sol 56/60 → 54/60，v9 的 2 遍不合格都是 `q-followup-sourced`（假 CLI 看不到子任务记录就上网核实，票 139 起的老问题）；世上的事实没有一遍凭记忆答。
+- **193 的溢出更足了**（裁决 195 第 5 条接受的）：`q-notes-apps` 3/3 派（v8 2/3）、`e-invoices` 3/3 派（v8 1/3）、`p-question-parts` 3/3 拆成东西部两块（v8 2/3），都回到 v6 的样子。
+
+**每条用例各遍的记录**（只列这一轮跑过的；格式同第一轮第 4 节）：
+
+派活判据（「网」自己上网，「做」自己做，「答」直接答，「派N」派了 N 个标签，×后是遍数）：
+
+| 用例 | sol v8 | sol v9 |
+| --- | --- | --- |
+| q-injuries | 网×3 | 网×3 |
+| q-east | 网×3 | 网×3 |
+| q-story | 网×3 | 网×3 |
+| q-weather | 网×3 | 网×3 |
+| q-notes-apps | 派1×2 网×1 | 派1×3 |
+| quick-usd | 网×3 | 网×3 |
+| quick-downloads | 做×3 | 做×3 |
+| todo-note | 做×3 | 做×3 |
+| conv-writeup | 做×3 | 做×3 |
+| e-invoices | 做×2 派1×1 | 派1×3 |
+| e-template | 做×3 | 做×1 派1×2 |
+| big-quotes | 网×3 | 网×3 |
+| big-pdfs | 做×3 | 做×3 |
+| big-research | 派3×1 派4×2 | 派3×2 派6×1 |
+| ask-dispatch | 派1×3 | 派1×3 |
+| midway-invoices | 做×3 | 做×3 |
+| q-headphones | 派2×3 | 派2×3 |
+| q-fact-injury | 网×3 | 网×3 |
+| q-followup-quick | 网×3 | 网×3 |
+| q-followup-sourced | 做×2 答×1 | 做×1 网×2 |
+| q-followup-shown | 做×2 答×1 | 做×3 |
+| q-recent-fact | 网×3 | 网×3 |
+| q-concept | 答×3 | 答×3 |
+| q-howto | 答×3 | 答×3 |
+| q-browser-insist | 网×3 | 网×3 |
+| c-headphones-pair | 派2×3 | 派2×3 |
+| c-phones-three | 派3×3 | 派3×3 |
+| c-research-report | 派2×1 派3×2 | 派3×3 |
+| c-weather-sh | 网×3 | 网×3 |
+| c-story-finals | 网×3 | 网×3 |
+
+并行：
+
+| 用例 | sol v8 | sol v9 | glm v8 | glm v9 | ds v8 | ds v9 |
+| --- | --- | --- | --- | --- | --- | --- |
+| p-three-errands | 做×2 派3×1 | 派3×3 | 做×2 | 做×2 派3×1 | 做×2 | 做×2 |
+| p-split-one | 做×1 派3×2 | 做×1 派3×2 | 做×2 | 做×2 | 做×2 | 做×2 |
+| p-same-tab | 网×3 | 网×3 | 网×2 | 网×2 | 网×2 | 网×2 |
+| p-same-files | 做×3 | 做×2 派1×1 | 做×2 | 做×2 | 做×2 | 做×2 |
+| p-question-parts | 派2×2 网×1 | 派2×3 | 网×2 | 网×2 | 网×2 | 网×2 |
+| p-errand-and-question | 网×3 | 网×3 | 网×2 | 网×2 | 网×2 | 网×2 |
+| p-errand-and-question-full | 派2×3 | 派2×3 | 网×2 | 网×2 | 网×2 | 网×2 |
+
+**真模型调用**（本轮）：sol 111 次运行、269 次模型调用（派活判据 90 次 209 次，并行 21 次 60 次；输入 1,912,117 token，缓存 989,056，输出 107,754）；glm 15 次、45 次（输入 416,119，缓存 267,776，输出 49,830）；ds 14 次、47 次（输入 425,826，缓存 304,896，输出 29,500）。合计 140 次运行、361 次调用。没有运行失败或撞速率限制。
+
+#### 5. 验证
+
+数字照抄输出：
+
+- `cargo test --manifest-path core/Cargo.toml --workspace`：47 组 `test result`，合计 1345 passed，0 failed，0 ignored（`exit 0`）。
+- `node scripts/check-docs-links.mjs`：`docs link gate OK: 493 files checked.`
+- `git diff --check main`（含新文件）：无输出。
+- `rustfmt --check`：`managed_prompt.rs`、`assistant_manual.rs` 干净。
+- `run.py --dry-test`：1349 条 PASS、0 条 FAIL，`DRY TEST PASSED`（第二轮 1342 条；新加的是 v9 对 Rust 源码与对 v8 的核对）。
+- 新增行扫过本机用户目录、登录名、worktree 与临时目录路径、密钥格式、服务商名与接口主机：本机登录名、worktree 路径、密钥、服务商名、接口主机都是 0 处；`managed-ga/`、`runner/`、`.scratch/` 下没有 `__pycache__`。
+- 全角标点：`t145-cjk-punct.py` 扫整条分支新增行，命中 36 处（第二轮 29 处），多出的 7 处是 v9 提示词里的中文标签与本报告照抄的几段以逗号、分号结尾的英文原文，都是英文语境。
+
+#### 6. 看到但没改的（Open risks）
+
+1. **193 的溢出回到 v6 的样子**：`q-notes-apps`（一句「Mac 上有哪些好用的本地笔记软件？」）、`e-invoices`（整理下载文件夹里的发票）都 3/3 派出去，`p-question-parts` 一句预测问题 3/3 拆成东西部两块。裁决 195 第 5 条接受了，用户可以用一条备忘改；真机上一句问题会起两个子任务。
+2. **glm、ds 上差事并行与派活作用有限**：三件差事 glm 1/3、ds 0/2 分头派；并行套件两家几乎都不派（glm 1/15、ds 0/14），v6 起一直这样，是模型本身。
+3. **打算句的口径**：「先说打算」按 `PLAN_CUE_RE` 判，原文在 `results.md`「最先看到的字」一节可逐条核；v9 下停在浏览器前一个字也没有的 sol 仍有 25 遍（多是天气、汇率、某人近况这类一上来就开浏览器的），那几遍第一次见字要等查完。
+4. **只重跑了这两句碰到的**：偏好套件、叫醒没用 v9 重跑（第二轮 v8 下偏好 sol 全照、叫醒 `w-two-of-three` 2/3），glm、ds 的派活判据也没用 v9 跑。
+5. **沙盒在第一次浏览器调用就停**（同前两轮）：「先看一眼再派」与「整件自己做」分不开。
+6. **没动的文档**：`docs/project-status.md`、主对话 PRD、devlog，留给主会话。
+
 ## Comments

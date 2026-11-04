@@ -295,7 +295,7 @@ CRIT_JSON = CRIT_DIR / "results.json"
 CRIT_MD = CRIT_DIR / "results.md"
 CRIT_COMPOSED_DIR = CRIT_DIR / "composed"
 CRIT_VARIANTS = ("old", "new", "v2", "v3", "v4", "v5", "v6", "v7", "v7glm", "v7ds", "v6glm", "v6ds", "v8", "v8glm",
-                 "v8ds")
+                 "v8ds", "v9", "v9glm", "v9ds")
 CRIT_DUMP_CASES = ("e-invoices", "q-east")
 CRIT_REPEATS = 1
 # Ticket 127 (main chat PRD ruling 174): several errands that do not
@@ -315,7 +315,8 @@ PAR_PROMPT_DIR = PAR_DIR / "galley-prompt"
 PAR_JSON = PAR_DIR / "results.json"
 PAR_MD = PAR_DIR / "results.md"
 PAR_COMPOSED_DIR = PAR_DIR / "composed"
-PAR_VARIANTS = ("new", "v2", "v3", "v4", "v5", "v6", "v7", "v7glm", "v7ds", "v6glm", "v6ds", "v8", "v8glm", "v8ds")
+PAR_VARIANTS = ("new", "v2", "v3", "v4", "v5", "v6", "v7", "v7glm", "v7ds", "v6glm", "v6ds", "v8", "v8glm", "v8ds",
+                "v9", "v9glm", "v9ds")
 PAR_DUMP_CASES = ("p-three-errands", "p-errand-and-question")
 PAR_TITLE_MAX = 20
 # Ticket 137 (main chat PRD ruling 186 point 2): the main chat's own tool,
@@ -448,12 +449,15 @@ CRIT_PROMPTS = {"old": CRIT_PROMPT_DIR / "main_chat.old.txt", "new": PAR_PROMPT_
                 "v7r2": CRIT_PROMPT_DIR / "main_chat.v7.txt", "v7glmr2": CRIT_PROMPT_DIR / "main_chat.v7.txt",
                 "v7dsr2": CRIT_PROMPT_DIR / "main_chat.v7.txt", "v6glm": CRIT_PROMPT_DIR / "main_chat.v6.txt",
                 "v6ds": CRIT_PROMPT_DIR / "main_chat.v6.txt", "v8": CRIT_PROMPT_DIR / "main_chat.v8.txt",
-                "v8glm": CRIT_PROMPT_DIR / "main_chat.v8.txt", "v8ds": CRIT_PROMPT_DIR / "main_chat.v8.txt"}
+                "v8glm": CRIT_PROMPT_DIR / "main_chat.v8.txt", "v8ds": CRIT_PROMPT_DIR / "main_chat.v8.txt",
+                "v9": CRIT_PROMPT_DIR / "main_chat.v9.txt", "v9glm": CRIT_PROMPT_DIR / "main_chat.v9.txt",
+                "v9ds": CRIT_PROMPT_DIR / "main_chat.v9.txt"}
 PAR_PROMPTS = {"new": PAR_PROMPT_DIR / "main_chat.new.txt", "v2": CRIT_PROMPTS["v2"], "v3": CRIT_PROMPTS["v3"],
                "v4": CRIT_PROMPTS["v4"], "v5": CRIT_PROMPTS["v5"], "v6": CRIT_PROMPTS["v6"],
                "v7": CRIT_PROMPTS["v7"], "v7glm": CRIT_PROMPTS["v7glm"], "v7ds": CRIT_PROMPTS["v7ds"],
                "v6glm": CRIT_PROMPTS["v6glm"], "v6ds": CRIT_PROMPTS["v6ds"], "v8": CRIT_PROMPTS["v8"],
-               "v8glm": CRIT_PROMPTS["v8glm"], "v8ds": CRIT_PROMPTS["v8ds"]}
+               "v8glm": CRIT_PROMPTS["v8glm"], "v8ds": CRIT_PROMPTS["v8ds"], "v9": CRIT_PROMPTS["v9"],
+               "v9glm": CRIT_PROMPTS["v9glm"], "v9ds": CRIT_PROMPTS["v9ds"]}
 # Ticket 145 (main chat PRD ruling 194): `v7` gives the model its standing
 # (in the main chat the static rules open with the user's personal
 # assistant, a team behind it, GA's role above being how its engine works
@@ -478,7 +482,9 @@ V7_MODELS = {"v7": ("mm_1792576875658", "gpt-6.1-sol"), "v7glm": ("mm_1787796272
              "v7dsr2": ("mm_1789025687188", "deepseek-flash"),
              "v6glm": ("mm_1787796272610", "glm-5.3-flash"), "v6ds": ("mm_1789025687188", "deepseek-flash"),
              "v8": ("mm_1792576875658", "gpt-6.1-sol"), "v8glm": ("mm_1787796272610", "glm-5.3-flash"),
-             "v8ds": ("mm_1789025687188", "deepseek-flash")}
+             "v8ds": ("mm_1789025687188", "deepseek-flash"),
+             "v9": ("mm_1792576875658", "gpt-6.1-sol"), "v9glm": ("mm_1787796272610", "glm-5.3-flash"),
+             "v9ds": ("mm_1789025687188", "deepseek-flash")}
 # What each of them is beside its model: v7 (main_chat.v7-r1.txt, the
 # ticket's first wording, every suite); v7's second wording (main_chat.v7.txt,
 # the one round the ticket allows, rerun on the cases that did not pass);
@@ -489,7 +495,8 @@ V7_MODELS = {"v7": ("mm_1792576875658", "gpt-6.1-sol"), "v7glm": ("mm_1787796272
 # one now): the standing and the costs, ruling 193's default back after
 # them, the user's word on here or handed off, the plan line gone.
 V7_LABELS = {"v7": "v7", "v7glm": "v7", "v7ds": "v7", "v7r2": "v7 第二轮措辞", "v7glmr2": "v7 第二轮措辞",
-             "v7dsr2": "v7 第二轮措辞", "v6glm": "v6", "v6ds": "v6", "v8": "v8", "v8glm": "v8", "v8ds": "v8"}
+             "v7dsr2": "v7 第二轮措辞", "v6glm": "v6", "v6ds": "v6", "v8": "v8", "v8glm": "v8", "v8ds": "v8",
+             "v9": "v9", "v9glm": "v9", "v9ds": "v9"}
 
 
 def v7_col(variant: str) -> str:
@@ -9024,7 +9031,9 @@ def v7_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: Any)
            + "，都是 API key 接入；第一轮措辞 `main_chat.v7-r1.txt`。名字后面括号里写「v7 第二轮措辞」的是票面允许的那一轮措辞（"
            "`main_chat.v7.txt`），只重跑第一轮没过的用例；写「v6」的是 v6 提示词（裁决 193）在同一个模型上、同样提供 `tell_user` "
            "跑的对照；写「v8」的是票 145 第二轮（裁决 195，`main_chat.v8.txt`，与 Rust 一字不差：定位与代价照留，裁决 193 "
-           "那句默认放回、用户明说在这里做或派出去照办，删了先说一句打算）。所有模型名后的括号是提示词）；同主对话一样提供 `tell_user`，调工具那一步写在 `<summary>` 外的字算送到（票 142，读法同 "
+           "那句默认放回、用户明说在这里做或派出去照办，删了先说一句打算）；写「v9」的是票 145 第三轮（裁决 196，"
+           "`main_chat.v9.txt`，与 Rust 一字不差：自己做的事先说一句打算放回，几件互不相干的差事一件一个标签同时派放回）。"
+           "所有模型名后的括号是提示词）；同主对话一样提供 `tell_user`，调工具那一步写在 `<summary>` 外的字算送到（票 142，读法同 "
            "`runner/step_text.py`）。**不判该派不该派**：派没派、几个标签、没派时自己上没上网，照记。量四样："
            "①**先说打算**：不止一步（调了工具）或派出去的那些遍，用户最先看到的字（步骤里的字、`tell_user`、派活那条回复）"
            "里有没有说它打算怎么做（`PLAN_CUE_RE`，下面「最先看到的字」原文可核）；做完才给的答案、停下前没有字，都算没说；"
@@ -12713,11 +12722,13 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
           "ticket 143: both suites read one v6")
     # Ticket 145: since then that is v8 (its second round; dry_test_v7
     # checks it against the Rust source); v6 and v7 no longer.
-    v8_t = CRIT_PROMPTS["v8"].read_text(encoding="utf-8")
+    # Its third round: v9 is the Rust one now.
+    v9_t = CRIT_PROMPTS["v9"].read_text(encoding="utf-8")
     layer = m_head.group(1) + m_rest.group(1).replace("{manual_dir}", "__MANUAL_DIR__") if m_head and m_rest else "<none>"
-    check(v8_t.endswith(layer) and not v6_t.endswith(layer)
-          and not CRIT_PROMPTS["v7r2"].read_text(encoding="utf-8").endswith(layer),
-          "v8: the entry layer as core/src/managed_prompt.rs has it, word for word (v6 and v7 no longer)")
+    check(v9_t.endswith(layer) and not v6_t.endswith(layer)
+          and not CRIT_PROMPTS["v7r2"].read_text(encoding="utf-8").endswith(layer)
+          and not CRIT_PROMPTS["v8"].read_text(encoding="utf-8").endswith(layer),
+          "v9: the entry layer as core/src/managed_prompt.rs has it, word for word (v6, v7 and v8 no longer)")
     v5_c = clause(v5_t, "You can do the work yourself,")
     v6_c = clause(v6_t, "You can do the work yourself,")
     check(v5_t.replace(v5_c, "<clause>") == v6_t.replace(v6_c, "<clause>") and v5_t.index(v5_c) == v6_t.index(v6_c)
@@ -13316,6 +13327,24 @@ def dry_test_v7(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str
           and not any(w in flat8 for w in ("say in a line", "As a starting point", "wait for depth",
                                            "how you will go about it")),
           "v8: ruling 193's default back after the costs, the user's word, the plan line gone; the rest kept")
+    # Ticket 145's third round: v9 is v8 with the plan line for work done
+    # here and ruling 174's unrelated errands at once, one tag each.
+    v9_t = CRIT_PROMPTS["v9"].read_text(encoding="utf-8")
+    v9_c = para(v9_t, "How to go about a thing is yours to weigh.") if "How to go about" in v9_t else ""
+    flat9 = re.sub(r"\s+", " ", v9_c)
+    check(all(CRIT_PROMPTS[v] == CRIT_PROMPTS["v9"] and CRIT_PROMPTS[v] == PAR_PROMPTS[v]
+              for v in ("v9", "v9glm", "v9ds"))
+          and v8_t.replace(v8_c, "<clause>") == v9_t.replace(v9_c, "<clause>")
+          and flat9 == flat8.replace(
+              "A question, a remark or a single fact you answer yourself. ",
+              "A question, a remark or a single fact you answer yourself. When you do it yourself and it will take more "
+              "than a moment, say in a line how you will go about it before you start. ").replace(
+              "they run at the same time; keep in one tag the parts that need the same browser tab or the same files.",
+              "they run at the same time; when the user hands you several errands that do not depend on each other, "
+              "send them all out at once, one tag each. Keep in one tag the parts that need the same browser tab or the "
+              "same files."),
+          "v9: v8 with the plan line for work done here and several unrelated errands at once, one tag each; the rest "
+          "of v8 word for word")
     check(v6_t.replace(v6_c, "<clause>").replace(opening, "<open>", 1)
           == v7_t.replace(v7_c, "<clause>").replace(standing, "<open>", 1),
           "v6 differs from v7 in the opening and the dispatch paragraph only")

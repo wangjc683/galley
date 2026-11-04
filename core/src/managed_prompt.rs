@@ -720,6 +720,23 @@ look it up with the Galley CLI (search, then
 /// prediction, a recommendation, a folder of invoices handed off),
 /// accepted (ruling 195 point 5). Gone with the line: "worth a subtask's
 /// wait for depth", the starting point the first round had.
+///
+/// Ticket 145's third round (main chat PRD ruling 196), the ninth: two
+/// sentences back. The second round's eval (v8) split the plan line by
+/// path: gpt-6.1-sol, looking things up online itself, said first how it
+/// would go about it in 9 runs of 38 under ruling 193, 20 of 50 with the
+/// line (ruling 194), 2 of 37 without it (ruling 195), and the user's
+/// first words came at a median of 10.7, 9.9 and 23.7 seconds; a
+/// hand-off's reply says what went out anyway. Ruling 195 had dropped the
+/// line on the totals alone (47 of 83 against 47 of 84), which fewer
+/// hand-offs had evened out. So the line comes back for work done here:
+/// "When you do it yourself and it will take more than a moment, say in a
+/// line how you will go about it before you start." And ruling 174's
+/// several errands that do not depend on each other, one tag each, sent at
+/// once: the first round took its condition out with the rest of the
+/// line, unmeant, and ruling 195's default speaks of deliverables only;
+/// three unrelated errands went out in three tags 3 runs of 3 under
+/// rulings 193 and 194, 1 of 3 under ruling 195.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -735,10 +752,12 @@ decide, pass on or keep, and that takes looking into (a comparison, a
 plan, a report, a survey), goes to subtasks to be done in depth: one tag
 per part when it splits (a product, a place, a source each), all at once,
 and you merge them when they are back. A question, a remark or a single
-fact you answer yourself. Their memos on how they like things done come
-first. When the user says to do it here or to hand it off, do that; when
-they say otherwise, do it their way, and note it as a memo when it is how
-they want such things done.
+fact you answer yourself. When you do it yourself and it will take more
+than a moment, say in a line how you will go about it before you start.
+Their memos on how they like things done come first. When the user says
+to do it here or to hand it off, do that; when they say otherwise, do it
+their way, and note it as a memo when it is how they want such things
+done.
 A fact in the world (a person, an event, a game, the news, a figure, a
 price, how someone is doing lately): look it up before you answer,
 yourself or by a subtask, and give your sources. An idea, a reason, how
@@ -751,7 +770,9 @@ To hand something off, end your reply with
 <subtask title="a few words">what to do</subtask>. The title is what the
 user sees in their list: a few words, in their language, naming the errand.
 Write one tag per part, in the same reply, and they run at the same time;
-keep in one tag the parts that need the same browser tab or the same files.
+when the user hands you several errands that do not depend on each other,
+send them all out at once, one tag each. Keep in one tag the parts that
+need the same browser tab or the same files.
 Galley starts each after this reply, with this conversation's last turns
 as background, so write the goal, what you have found so far, and what to
 hand back, with the evidence for it (a confirmation number, a file path, a
@@ -1716,7 +1737,8 @@ mod tests {
     /// that takes looking into goes out in depth, split and merged; a
     /// question, a remark or a single fact stays) with the user's word on
     /// here or handed off, and takes out the line on how it will go about
-    /// it.
+    /// it; its third (ruling 196) puts that line back for work done here
+    /// and ruling 174's several errands, one tag each, at once.
     #[test]
     fn main_chat_entry_layer_leaves_the_hand_off_to_judgment() {
         let main =
@@ -1748,10 +1770,13 @@ mod tests {
             // The user's memos first (ruling 194 point 2, 甲); the user's word
             // goes (back from ruling 193); their way, kept as a memo when it
             // is how they want such things done.
-            "fact you answer yourself. Their memos on how they like things done come",
-            "first. When the user says to do it here or to hand it off, do that; when",
-            "they say otherwise, do it their way, and note it as a memo when it is how",
-            "they want such things done.",
+            // Ruling 196: a line on how it will go about it, for work done
+            // here only (a hand-off's reply says so anyway).
+            "fact you answer yourself. When you do it yourself and it will take more",
+            "than a moment, say in a line how you will go about it before you start.",
+            "Their memos on how they like things done come first. When the user says",
+            "to do it here or to hand it off, do that; when they say otherwise, do it",
+            "their way, and note it as a memo when it is how they want such things",
         ] {
             assert!(main.contains(line), "entry layer lost: {line}");
         }
@@ -1793,9 +1818,13 @@ mod tests {
         // it, several errands or a piece of work split, is gone).
         assert!(main
             .contains("Write one tag per part, in the same reply, and they run at the same time;"));
-        assert!(main.contains(
-            "keep in one tag the parts that need the same browser tab or the same files."
-        ));
+        // Ruling 196 (ruling 174's, back): several errands that do not
+        // depend on each other go out at once, one tag each.
+        assert!(main
+            .contains("when the user hands you several errands that do not depend on each other,"));
+        assert!(main
+            .contains("send them all out at once, one tag each. Keep in one tag the parts that"));
+        assert!(main.contains("need the same browser tab or the same files."));
         // Ticket 138: the subtask carries this conversation's last turns,
         // so the instructions carry the goal, what was found so far (not in
         // the background) and what to hand back with its evidence.
@@ -1816,24 +1845,21 @@ mod tests {
             .contains("Use this, not the file-based subagent in your memory (subagent.md), which"));
         assert!(main.contains("the user cannot see."));
         // Ticket 145: what went. Ruling 186's neutral sentence; "the user
-        // can talk to you" with its hand-off (folded into the costs); the
-        // condition before one tag per part; "on its way"; the write-up of
-        // this conversation (a subtask carries it now, ticket 138). Its
-        // second round (ruling 195): the line on how it will go about it
-        // (no effect in the eval: 47 of 84 runs against 47 of 83 under
-        // ruling 193) and the starting point it had in place of ruling
-        // 193's default ("worth a subtask's wait for depth").
+        // can talk to you" with its hand-off (folded into the costs); "a
+        // piece of work split into parts done apart"; "on its way"; the
+        // write-up of this conversation (a subtask carries it now, ticket
+        // 138); the starting point the first round had in place of ruling
+        // 193's default ("worth a subtask's wait for depth"). The line on
+        // how it will go about it went in its second round and came back,
+        // for work done here, in its third (ruling 196).
         for gone in [
             "You can do the work yourself",
             "A write-up of what this conversation already holds",
             "The user can talk to you at any time",
             "hand it off and answer them first",
-            "When the user hands you several errands",
             "one piece of work splits into parts done apart",
             "Tell the user in a sentence that it is on its way",
             "on its way",
-            "say in a line",
-            "how you will go about it",
             "As a starting point",
             "wait for depth",
         ] {
@@ -1887,6 +1913,8 @@ mod tests {
             assert!(!prompt.contains("Something the user will use to decide"));
             assert!(!prompt.contains("to be done in depth"));
             assert!(!prompt.contains("how they like things done"));
+            assert!(!prompt.contains("say in a line how you will go about it"));
+            assert!(!prompt.contains("several errands that do not depend on each other"));
             assert!(!prompt.contains("Write one tag per part"));
             assert!(!prompt.contains("Do not call this chat the main chat"));
         }
@@ -2297,7 +2325,13 @@ mod tests {
     /// and their way (107; "when the user says otherwise" now "when they
     /// say otherwise"), in place of the line on how it will go about it
     /// (85) and the user's way (112). The memos first (53) stays.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 5183;
+    /// Raised 5183 → 5416 by ticket 145's third round (main chat PRD
+    /// ruling 196): +233. The line on how it will go about it, for work
+    /// done here, after the question, the remark and the single fact
+    /// (118); several errands that do not depend on each other sent at
+    /// once, one tag each, beside one tag per part (115; the paragraph 150
+    /// → 265, "keep in one tag …" now its own sentence).
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 5416;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

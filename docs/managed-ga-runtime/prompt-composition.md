@@ -559,7 +559,9 @@ that finishes a task and restates the result. The layer says three things:
   plan, a report, a survey), goes to subtasks to be done in depth, one tag
   per part when it splits (a product, a place, a source each), all at
   once, merged when they are back; a question, a remark or a single fact
-  is answered here. The user's memos on how they like things done come
+  is answered here. Work done here that will take more than a moment gets
+  a line on how the model will go about it before it starts (since ruling
+  196). The user's memos on how they like things done come
   first (ruling 194 point 2, option 甲; `memo.md`'s "What they prefer or
   avoid" has the example 「对比类不用派，直接查就行」); what the user says
   to do here or to hand off is done so; otherwise their way, noted as a
@@ -576,7 +578,11 @@ that finishes a task and restates the result. The layer says three things:
   round's eval saw them fall without it); a memo the user wrote
   plainly was followed every time. Ruling 195 keeps the standing and the
   costs, puts ruling 193's default back for a memo to override, and takes
-  the line out. Two
+  the line out. Ruling 196 puts it back for work done here: split by path,
+  gpt-6.1-sol looking things up online itself had said first how it would
+  go about it 9 of 38 runs under ruling 193, 20 of 50 with the line, 2 of
+  37 without it, the first words at a median of 10.7, 9.9 and 23.7
+  seconds (a hand-off's reply says what went out anyway). Two
   guidelines: a fact in the world (a person, an event, a
   game, the news, a figure, a price, how someone is doing lately) is
   looked up before it is told, by the model or a subtask, with its
@@ -626,8 +632,12 @@ that finishes a task and restates the result. The layer says three things:
   ticket 126, main chat PRD ruling 175: what the user sees in their list, a
   few words in their language naming the errand; without one Core keeps the
   first line as a derived title for the auto-title to replace); one tag
-  per part, in the same reply, and they run at the same time, while parts
-  that need the same browser tab or the same files stay in one tag
+  per part, in the same reply, and they run at the same time; several
+  errands that do not depend on each other go out at once, one tag each
+  (ticket 127's sentence, out from ticket 145's first round, back since
+  ruling 196: three unrelated errands went out in three tags 3 runs of 3
+  under rulings 193 and 194, 1 of 3 without it); parts that need the same
+  browser tab or the same files stay in one tag
   (ticket 127, ruling 174; until ticket 145 the sentence opened with when
   to split, "several errands that do not depend on each other, or parts of
   one piece of work done apart", and from ticket 134, ruling 183, until
@@ -926,7 +936,7 @@ that finishes a task and restates the result. The layer says three things:
   after writing memory. Ticket 64: of the seven cases that set nothing,
   the first turns that said they would note something fell from 5 to 1,
   with the same number of requests.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 5183, no headroom,
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 5416, no headroom,
   `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
@@ -995,7 +1005,10 @@ that finishes a task and restates the result. The layer says three things:
   the paragraph, 865 → 1040: ruling 193's default 287 with a question, a
   remark or a single fact 59 in place of the starting point 142; the
   user's word on here or handed off 61 and their way 107 in place of the
-  line on how it will go about it 85 and the user's way 112): 5183.
+  line on how it will go about it 85 and the user's way 112): 5183; its
+  third round added 233 (ruling 196: the line on how it will go about
+  work done here 118; several unrelated errands at once, one tag each,
+  115): 5416.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 
@@ -1104,6 +1117,7 @@ row.
 | Redirect sentence outside the main chat: "To-dos, reminders and scheduled tasks are the assistant's: ask the user to tell it in the Galley conversation atop the sidebar (a top bar's to-do only lists them; its ＋ goes there), and never say one is noted or set." | JC ruling, 2026-10-22, v0.7.0 pre-flight item 40: on the checklist's first live run of item 40 (gpt-6.1-sol, API key) a workbench session asked 「加一个待办：周五交房租」 made no write either time, but sent the user to the to-do in the conversation's top bar to type it in (「请打开本会话顶部的『待办』，在那里告诉助手……」), merging "tell it there" with the feature map's top bar line; the panel has no input, and since ticket 89 its header ＋ 「跟 Galley 说」 goes to Galley. Compared old and new on that model with the prompts the Rust code writes (`.scratch/release-v0.7.0/workbench-todo-eval/`): item 40 0/3 → 3/3, item 9 in a workbench session 0/2 → 2/2 (the old sentence sent it to the panel too), item 41 on Telegram 2/2 → 2/2, no reply told the user to open a panel. Static cap 6826 → 6869 (+43, Windows; POSIX 6851) in the same diff; the feature map is unchanged, and the main chat's static rules are byte for byte as before (it swaps the whole paragraph for its own) |
 | Main chat static rules: the standing in place of the opening line (「In this conversation you are the user's personal assistant, with a team behind you …」), `MAIN_CHAT_STATIC_PROMPT_BUDGET_BYTES`; the entry layer's dispatch paragraph as the costs of each path, one starting point, the user's memos first, a line on how it will go about it, the user's way noted as a memo | main chat PRD ruling 194, ticket 145 (2026-11-04): the dispatch paragraph had eight versions in a month, each a line drawn finer; JC asked for the standing and the abilities instead, and the model to judge. The model's prompt opened with GA's executor role, and the team behind it was only in `subtasks.md`. Run on three models with an outcome eval (plan line, time to first words, sourced facts, following a preference memo; `.scratch/main-chat/entry-layer-eval/`). Main chat cap 7092 (Windows; POSIX 7074); entry layer cap 5268 → 5008 |
 | Main chat entry layer: ruling 193's default back after the costs (something to decide by that takes looking into to subtasks, split and merged; a question, a remark or a single fact here), the user's word on here or handed off; the line on how it will go about it removed | main chat PRD ruling 195, ticket 145's second round (2026-11-04): given the costs alone the models took the quick path (v7: gpt-6.1-sol 10 of 90 handed off, 25 under ruling 193) and the line had no effect (47 of 84 runs against 47 of 83), while a plain memo was followed every time; JC wants both a default and the model's judgment, a memo overriding the default. Run on three models (v8, `.scratch/main-chat/entry-layer-eval/`). Entry layer cap 5008 → 5183 |
+| Main chat entry layer: the line on how it will go about work done here, before it starts; several unrelated errands sent at once, one tag each | main chat PRD ruling 196, ticket 145's third round (2026-11-04): split by path the v8 eval showed the line had worked where the model did the work itself (gpt-6.1-sol online 9/38 → 20/50 → 2/37 under rulings 193, 194, 195; first words median 10.7 → 9.9 → 23.7 s), and three unrelated errands went out in three tags 3/3 → 1/3 once ruling 174's sentence was gone. Run as v9 on what these touch. Entry layer cap 5183 → 5416 |
 | Removed 2026-10-13: Goal in the feature map's message-box line, `goal` in the IM entry layer's CLI write list | Goal was removed (devlog [2026-10-13 remove Goal](../devlog/2026-10-13-remove-goal.md)). Both caps lowered in the same diff to stay at no headroom: static 6855 → 6775 bytes (Windows; POSIX 6757), IM 1383 → 1376 (Telegram) |
 
 ## Dogfood Regression Checklist
