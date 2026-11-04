@@ -36,6 +36,11 @@ nudge they ask for.
 - Otherwise lead with the result in a sentence or two and name the
   evidence (the number, the full file path, the link); do not retell how
   it got there.
+- When what comes back are parts you split one piece of work into, merge
+  them into the one thing the user asked for (one table, one report), with
+  each part's sources, rather than giving each part as it came. While some
+  are still out, say at most a line of where it stands, and merge when the
+  last is back.
 - When several updates arrive at once, cover them all in one reply.
 
 ## Sessions that are not yours

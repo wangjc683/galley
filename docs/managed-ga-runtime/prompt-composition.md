@@ -542,18 +542,32 @@ that finishes a task and restates the result. The layer says three things:
   thing: while the main chat worked the user could not reach it. Ruling
   186 gave it hands for that instead (ticket 136's interjections, ticket
   137's `tell_user`, ticket 138's background) and took the line, the
-  guard and the sentences written for them out. A hand-off ends the reply
+  guard and the sentences written for them out. Since ticket 143 (main
+  chat PRD ruling 193) one judgment by what the work is for follows
+  "several at once": something the user will use to decide, pass on or
+  keep, and that takes looking into (a comparison, a plan, a report, a
+  survey), goes to subtasks to be done in depth, one tag per part when it
+  splits (a product, a place, a source each), all at once, merged into one
+  when the last part is back; a question, a remark or a single fact is
+  answered here; what the user says to do here or to hand off is done so;
+  a write-up of this conversation with nothing to look up stays here.
+  Under ruling 186 alone ticket 139's eval handed off 6 runs of 72; on the
+  dev machine three phones compared by three subtasks at once took 496
+  seconds against 189 alone and came back with 9 sources against 3. How
+  the parts are merged when they come back is in `subtasks.md`; Core wakes
+  the main chat once for a batch (ticket 144). A hand-off ends the reply
   with
   `<subtask title="a few words">what to do</subtask>` (the title since
   ticket 126, main chat PRD ruling 175: what the user sees in their list, a
   few words in their language naming the errand; without one Core keeps the
   first line as a derived title for the auto-title to replace); several
-  errands that do not depend on each other, or parts of one whose results
-  each stand on their own, go out as one tag each in the same reply and run
-  at the same time, while what has to come back as one thing (a comparison,
-  one table, one report, the answer to one question) and parts that need
-  the same browser tab or the same files stay in one tag (ticket 127,
-  ruling 174; ticket 134, ruling 183);
+  errands that do not depend on each other, or parts of one piece of work
+  done apart, whether they stand on their own or are merged when they are
+  back, go out as one tag each in the same reply and run at the same time,
+  while parts that need the same browser tab or the same files stay in one
+  tag (ticket 127, ruling 174; from ticket 134, ruling 183, until ticket
+  143, ruling 193, what had to come back as one thing, a comparison, one
+  table, one report or the answer to one question, stayed in one tag too);
   the subtask carries this conversation's last turns as background
   (ticket 138), so the instructions carry the goal, what the model has
   found so far (ticket 115; not in the background, which holds the
@@ -842,7 +856,7 @@ that finishes a task and restates the result. The layer says three things:
   after writing memory. Ticket 64: of the seven cases that set nothing,
   the first turns that said they would note something fell from 5 to 1,
   with the same number of requests.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 4805, no headroom,
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 5268, no headroom,
   `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
@@ -891,7 +905,14 @@ that finishes a task and restates the result. The layer says three things:
   guidelines in place of what goes and what stays, 1059 → 809, −250; the
   instructions sentence leaning on the subtask's background, 361 → 247,
   −114; "on its way" keeping only the inner name, 136 → 91, −45; the
-  manual paragraph's same-step reads, ticket 141's option 乙, +231): 4805.
+  manual paragraph's same-step reads, ticket 141's option 乙, +231): 4805;
+  ticket 143 added 463 (ruling 193: after "several at once" the judgment
+  by what the work is for +518, of which a deliverable that takes looking
+  into to subtasks in depth, split and merged +304, a question, a remark
+  or a single fact here +59, the user's word +61, a write-up of this
+  conversation here +94; parts done apart split whether they stand on
+  their own or are merged +50; "what has to come back as one thing" no
+  longer kept in one tag −105): 5268.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 

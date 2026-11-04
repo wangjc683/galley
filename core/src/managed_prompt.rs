@@ -612,15 +612,50 @@ look it up with the Galley CLI (search, then
 /// in 14 runs of 14 where a runner first touched to-dos, reminders or
 /// memos it took two steps of reading, against 2 runs of 10 once the
 /// parts were in its context.
+///
+/// Ticket 143 (main chat PRD ruling 193), the clause's sixth round, adds
+/// one judgment, by what the work is for. Under ruling 186's neutral
+/// sentence the model did nearly everything itself: in ticket 139's eval
+/// it handed off 6 runs of 72, a comparison or a write-up almost never.
+/// Since ticket 136 the user reaches the main chat while it works, so a
+/// hand-off is no longer for keeping the chat free but for depth, and for
+/// parts run side by side (JC, 11-04). On the dev machine (ruling 193
+/// point 2) the main chat compared three phones itself in 189 seconds,
+/// with 3 sources; three subtasks, one phone each, run at once, took 496
+/// seconds and came back with every lens, the launch prices, what differs
+/// between versions and 9 sources, the model waiting for all three before
+/// it merged the table. So something the user will use to decide, pass on
+/// or keep, and that takes looking into (a comparison, a plan, a report, a
+/// survey), goes to subtasks to be done in depth, one tag per part when it
+/// splits, all at once, merged into one when the last part is back; a
+/// question, a remark or a single fact is answered here (a fact still
+/// looked up and sourced); what the user says to do here or to hand off is
+/// done so; a write-up of this conversation with nothing to look up stays
+/// here. Gone: "Keep in one tag what has to come back as one thing (a
+/// comparison, one table, one report, the answer to one question)", which
+/// kept a comparison in one tag (ruling 183 point 5); parts that need the
+/// same browser tab or the same files still stay in one. "One errand
+/// splits into parts whose results each stand on their own" became parts
+/// done apart, standing on their own or merged when they are back.
+/// `subtasks.md` says how to merge them when they come back, and Core
+/// wakes the main chat once for a batch (ticket 144).
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
 
 You can do the work yourself, on the web too, or hand it to subtasks,
-several at once. The user can talk to you at any time: what they say
-reaches you at your next step. When they bring up something else and
-what you have in hand will take long, hand it off and answer them first,
-or tell them a line now (`tell_user`) and carry on.
+several at once. Something the user will use to decide, pass on or keep,
+and that takes looking into (a comparison, a plan, a report, a survey),
+goes to subtasks to be done in depth: one tag per part when it splits (a
+product, a place, a source each), all at once, and when the last part is
+back you merge them into one. A question, a remark or a single fact you
+answer yourself. When the user says to do it here or to hand it off, do
+that. A write-up of what this conversation already holds, with nothing
+to look up, you do yourself.
+The user can talk to you at any time: what they say reaches you at your
+next step. When they bring up something else and what you have in hand
+will take long, hand it off and answer them first, or tell them a line
+now (`tell_user`) and carry on.
 A fact in the world (a person, an event, a game, the news, a figure, a
 price, how someone is doing lately): look it up before you answer,
 yourself or by a subtask, and give your sources. An idea, a reason, how
@@ -633,11 +668,10 @@ To hand something off, end your reply with
 <subtask title="a few words">what to do</subtask>. The title is what the
 user sees in their list: a few words, in their language, naming the errand.
 When the user hands you several errands that do not depend on each other,
-or one errand splits into parts whose results each stand on their own,
-write one tag per part in the same reply: they run at the same time. Keep
-in one tag what has to come back as one thing (a comparison, one table,
-one report, the answer to one question) and the parts that need the same
-browser tab or the same files.
+or one piece of work splits into parts done apart, whether they stand on
+their own or you merge them when they are back, write one tag per part in
+the same reply: they run at the same time. Keep in one tag the parts that
+need the same browser tab or the same files.
 Galley starts each after this reply, with this conversation's last turns
 as background, so write the goal, what you have found so far, and what to
 hand back, with the evidence for it (a confirmation number, a file path, a
@@ -1569,7 +1603,13 @@ mod tests {
     /// answered directly; a change goes by `authority.md`; the
     /// instructions need not copy this conversation, which the subtask
     /// carries (ticket 138); handing off, it does not call this chat the
-    /// main chat (ruling 173).
+    /// main chat (ruling 173). Ticket 143 (ruling 193, in place of ruling
+    /// 183 point 5): what the user will use to decide, pass on or keep and
+    /// that takes looking into goes to subtasks, one tag per part when it
+    /// splits, merged when the last is back; a question, a remark or a
+    /// single fact is answered here; what the user says goes; a write-up
+    /// of this conversation stays. What comes back as one thing is no
+    /// longer kept in one tag; the same tab or files still are.
     #[test]
     fn main_chat_entry_layer_leaves_the_hand_off_to_judgment() {
         let main =
@@ -1582,15 +1622,36 @@ mod tests {
         assert!(
             main.contains("You can do the work yourself, on the web too, or hand it to subtasks,")
         );
-        assert!(
-            main.contains("several at once. The user can talk to you at any time: what they say")
-        );
-        assert!(
-            main.contains("reaches you at your next step. When they bring up something else and")
-        );
+        // Ruling 193: by what the work is for. A deliverable that takes
+        // looking into goes out in depth, split one tag per part and
+        // merged when the last is back; a question, a remark or a single
+        // fact stays; the user's word goes; a write-up of this
+        // conversation stays.
         assert!(main
-            .contains("what you have in hand will take long, hand it off and answer them first,"));
-        assert!(main.contains("or tell them a line now (`tell_user`) and carry on."));
+            .contains("several at once. Something the user will use to decide, pass on or keep,"));
+        assert!(main
+            .contains("and that takes looking into (a comparison, a plan, a report, a survey),"));
+        assert!(main
+            .contains("goes to subtasks to be done in depth: one tag per part when it splits (a"));
+        assert!(main
+            .contains("product, a place, a source each), all at once, and when the last part is"));
+        assert!(main
+            .contains("back you merge them into one. A question, a remark or a single fact you"));
+        assert!(main
+            .contains("answer yourself. When the user says to do it here or to hand it off, do"));
+        assert!(
+            main.contains("that. A write-up of what this conversation already holds, with nothing")
+        );
+        assert!(main.contains("to look up, you do yourself."));
+        assert!(main
+            .contains("The user can talk to you at any time: what they say reaches you at your"));
+        assert!(
+            main.contains("next step. When they bring up something else and what you have in hand")
+        );
+        assert!(
+            main.contains("will take long, hand it off and answer them first, or tell them a line")
+        );
+        assert!(main.contains("now (`tell_user`) and carry on."));
         // Ruling 185's half that stays: a fact is looked up, by it or a
         // subtask, and sourced; the rest is answered directly, this
         // conversation taken as it stands (the fourth round's eval).
@@ -1625,20 +1686,22 @@ mod tests {
         ));
         // Ticket 127: several independent errands, or independent parts
         // of one, as one tag each in the same reply; no cap on the count.
-        // Ticket 134: a part splits off only when its result stands on its
-        // own, and what has to come back as one thing stays in one tag.
+        // Ticket 143 (ruling 193): parts done apart split whether they
+        // stand on their own or are merged when back; only the same
+        // browser tab or the same files keep parts in one tag (ticket
+        // 134's "what has to come back as one thing" is gone).
         assert!(main
             .contains("When the user hands you several errands that do not depend on each other,"));
-        assert!(
-            main.contains("or one errand splits into parts whose results each stand on their own,")
-        );
         assert!(main
-            .contains("write one tag per part in the same reply: they run at the same time. Keep"));
+            .contains("or one piece of work splits into parts done apart, whether they stand on"));
         assert!(main
-            .contains("in one tag what has to come back as one thing (a comparison, one table,"));
+            .contains("their own or you merge them when they are back, write one tag per part in"));
         assert!(main
-            .contains("one report, the answer to one question) and the parts that need the same"));
-        assert!(main.contains("browser tab or the same files."));
+            .contains("the same reply: they run at the same time. Keep in one tag the parts that"));
+        assert!(main.contains("need the same browser tab or the same files."));
+        assert!(!main.contains("Keep in one tag what has to come back as one thing"));
+        assert!(!main.contains("what has to come back as one thing"));
+        assert!(!main.contains("whose results each stand on their own"));
         // Ticket 138: the subtask carries this conversation's last turns,
         // so the instructions carry the goal, what was found so far (not in
         // the background) and what to hand back with its evidence.
@@ -1696,6 +1759,10 @@ mod tests {
             assert!(!prompt.contains("<subtask"));
             assert!(!prompt.contains("You can do the work yourself"));
             assert!(!prompt.contains("tell_user"));
+            // Ticket 143: the judgment is the main chat's only.
+            assert!(!prompt.contains("Something the user will use to decide"));
+            assert!(!prompt.contains("to be done in depth"));
+            assert!(!prompt.contains("merge them"));
         }
     }
 
@@ -2013,7 +2080,24 @@ mod tests {
     /// to-do, `todo list` to say what is left, `date` for a relative time;
     /// a runner that had not read the parts yet read a part and ran the
     /// read a step later, in all 14 such runs of the diagnosis.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 4805;
+    /// Raised 4805 → 5268 by ticket 143 (main chat PRD ruling 193): +463
+    /// bytes. After "several at once" the opening judges by what the work
+    /// is for (+518): something the user will use to decide, pass on or
+    /// keep, that takes looking into, goes to subtasks in depth, one tag
+    /// per part when it splits, all at once, merged when the last part is
+    /// back (+304); a question, a remark or a single fact is answered here
+    /// (+59); what the user says to do here or hand off is done (+61); a
+    /// write-up of this conversation with nothing to look up stays (+94).
+    /// Under ruling 186's neutral sentence ticket 139's eval handed off 6
+    /// runs of 72; on the dev machine three subtasks, one phone each, came
+    /// back with 9 sources where the main chat alone had 3. The parallel
+    /// sentence splits parts done apart, standing on their own or merged
+    /// when back, in place of parts whose results each stand on their own
+    /// (+50), and keeps in one tag only the parts that need the same
+    /// browser tab or files: "what has to come back as one thing (a
+    /// comparison, one table, one report, the answer to one question)" is
+    /// gone (−105).
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 5268;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

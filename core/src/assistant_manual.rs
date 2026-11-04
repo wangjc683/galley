@@ -913,7 +913,12 @@ mod tests {
     /// with the result in a sentence or two and the evidence, as before.
     /// "Do not paste the subtask's answer" is gone: the table stayed in the
     /// subtask, a tap away. Both rules in "Checking a result and reporting
-    /// it". Single-line fragments only (CRLF on Windows).
+    /// it". Ticket 143 (main chat PRD ruling 193 point 5): parts the model
+    /// split one piece of work into are merged into the one thing the user
+    /// asked for, with each part's sources, not given part by part as the
+    /// rule above would; while some are still out, at most a line, merged
+    /// when the last is back. Several updates at once still get one reply.
+    /// Single-line fragments only (CRLF on Windows).
     #[test]
     fn manual_hands_back_an_answer_in_full() {
         let subtasks = part("subtasks.md");
@@ -930,6 +935,12 @@ mod tests {
             "whole is (the full file path).",
             "- Otherwise lead with the result in a sentence or two and name the",
             "evidence (the number, the full file path, the link); do not retell how",
+            "- When what comes back are parts you split one piece of work into, merge",
+            "them into the one thing the user asked for (one table, one report), with",
+            "each part's sources, rather than giving each part as it came. While some",
+            "are still out, say at most a line of where it stands, and merge when the",
+            "last is back.",
+            "- When several updates arrive at once, cover them all in one reply.",
         ] {
             let found = subtasks
                 .find(rule)

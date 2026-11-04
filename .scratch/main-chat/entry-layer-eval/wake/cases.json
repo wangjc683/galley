@@ -1,5 +1,5 @@
 {
- "_note": "叫醒评测用例（票 30）。history 是主对话当前段里已有的轮次（派活回复末尾是回放标记，已叫醒过的一轮压成一行，同票 29 的回放写法）；subtasks 是假 CLI 的固定数据（子任务的会话行与消息）；files 放进假 HOME 的 ~/Downloads（证据文件）；wake 是这次叫醒里的几件，run.py 按 wording.md 的措辞拼成消息；expect 是自动判定的规则，expect_text 是票 30 写的期望。票 63 起，「结果够好」（done-evidence）与「两件一起」（two-at-once）的报价日期按运行那天填：`{{Q0:…}}` 是当天，`{{Q1:…}}`、`{{Q2:…}}` 是前一天、前两天（都不早于本周一），`{{W:…}}` 是本周一；冒号后是写法（ymd 2026-10-19、md 10-19、mmdd 1019、cn 10 月 19 日、cnc 10月19日、en 19 Oct 2026）。之前写死在 10 月 12 日这一周，换个星期跑，模型就把它当成上周的报价打回。票 73：{{HOME}} 是这次运行的假 HOME（绝对路径，结果里写成 $TMPDIR/…），子任务交回的文件路径用它，不写本机真实路径；expect.file_ref 是交代里要有单独一行的 [FILE:<绝对路径>]，路径以这一段结尾（run.py 的 wake_facts）。票 134：w-table、w-long 测成品贴回（裁决 183 第 4 条，手册 subtasks.md 改过的那一条）。prompt 写了的用例用那份主对话提示词（\"v2\"：dispatch-criterion/galley-prompt/main_chat.v2.txt，本票改过的入口层），不写的用 galley-prompt/ 那份。expect.table_rows：回复里要有这几行表格（逐格比对，去掉加粗与多余空格，表头也算）；expect.absent_any：回复里不该出现的话（子任务讲自己怎么做的）；expect.where_any：回复里至少要有其中一个，说明全文在哪。票 134 第二轮：Core 的完成那段改成按 subtasks.md 交代（答案本身就是用户要的，整份给），core 措辞跟着改；w-long 的回答改成满足它的派活说明（每张截图的完整路径与各自写着什么、每天一个必去其余可选、门到门的车、同城的雨天备选、按航班定的回程）。票 134 第三轮：w-table、w-long 改用 v3（裁决 184 的入口层，main_chat.v3.txt）。",
+ "_note": "叫醒评测用例（票 30）。history 是主对话当前段里已有的轮次（派活回复末尾是回放标记，已叫醒过的一轮压成一行，同票 29 的回放写法）；subtasks 是假 CLI 的固定数据（子任务的会话行与消息）；files 放进假 HOME 的 ~/Downloads（证据文件）；wake 是这次叫醒里的几件，run.py 按 wording.md 的措辞拼成消息；expect 是自动判定的规则，expect_text 是票 30 写的期望。票 63 起，「结果够好」（done-evidence）与「两件一起」（two-at-once）的报价日期按运行那天填：`{{Q0:…}}` 是当天，`{{Q1:…}}`、`{{Q2:…}}` 是前一天、前两天（都不早于本周一），`{{W:…}}` 是本周一；冒号后是写法（ymd 2026-10-19、md 10-19、mmdd 1019、cn 10 月 19 日、cnc 10月19日、en 19 Oct 2026）。之前写死在 10 月 12 日这一周，换个星期跑，模型就把它当成上周的报价打回。票 73：{{HOME}} 是这次运行的假 HOME（绝对路径，结果里写成 $TMPDIR/…），子任务交回的文件路径用它，不写本机真实路径；expect.file_ref 是交代里要有单独一行的 [FILE:<绝对路径>]，路径以这一段结尾（run.py 的 wake_facts）。票 134：w-table、w-long 测成品贴回（裁决 183 第 4 条，手册 subtasks.md 改过的那一条）。prompt 写了的用例用那份主对话提示词（\"v2\"：dispatch-criterion/galley-prompt/main_chat.v2.txt，本票改过的入口层），不写的用 galley-prompt/ 那份。expect.table_rows：回复里要有这几行表格（逐格比对，去掉加粗与多余空格，表头也算）；expect.absent_any：回复里不该出现的话（子任务讲自己怎么做的）；expect.where_any：回复里至少要有其中一个，说明全文在哪。票 134 第二轮：Core 的完成那段改成按 subtasks.md 交代（答案本身就是用户要的，整份给），core 措辞跟着改；w-long 的回答改成满足它的派活说明（每张截图的完整路径与各自写着什么、每天一个必去其余可选、门到门的车、同城的雨天备选、按航班定的回程）。票 134 第三轮：w-table、w-long 改用 v3（裁决 184 的入口层，main_chat.v3.txt）。票 143（裁决 193）：w-merge-three、w-two-of-three、w-third-back 测拆开的几块回来怎么交代（手册 subtasks.md 新补的一条），用 v6（dispatch-criterion/galley-prompt/main_chat.v6.txt）与 core 措辞；三款手机是虚构的（同 w-table：用公开型号时模型会拿自己知道的规格去核，跟固定数据打架）。history 里带 wake 的一轮是之前那次叫醒，内容按这次运行的措辞现拼（run.py 的 wake_history），content 只是占位说明。expect.tables：回复里 Markdown 表的张数（min、max）；one_table_has_all：这些字要在同一张表里都出现（几块合在一起）；sources_groups：每组至少出现一个（每块的出处：官网域名或截图文件名）；absent_values：还没回齐时不该出现的、已回来那几块的规格；max_lines：正文非空行数上限。",
  "main_chat": "s-mgn4k2x1-7q3z9w0e",
  "cases": [
   {
@@ -961,6 +961,499 @@
      "[FILE:"
     ],
     "max_chars": 1500
+   }
+  },
+  {
+   "id": "w-merge-three",
+   "no": 13,
+   "expect_text": "票 143：同一条回复拆出去的三块（一款手机一块）一起回来 → 合成一张表（三款都在同一张表里），附各块的出处（官网网址或截图），不一块一块贴；不打回、不出 <no-reply/>、不带子任务讲自己怎么做的话",
+   "prompt": "v6",
+   "history": [
+    {
+     "role": "user",
+     "content": "比较星澜 S9、青梧 P70和远岫 M5这三款手机，整理成一张表"
+    },
+    {
+     "role": "assistant",
+     "content": "好，三款分头去查，一款一个，查齐了我合成一张表给你。\n\n[subtask s-mh8a1c3e-2k7p9q4w: 查星澜 S9规格]\n[subtask s-mh8a1c3f-5n2r8t6x: 查青梧 P70规格]\n[subtask s-mh8a1c3g-9v4b1m7z: 查远岫 M5规格]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mh8a1c3e-2k7p9q4w",
+     "title": "查星澜 S9规格",
+     "instructions": "查星澜 S9这款手机的主要规格，整理成一列 Markdown 表格交回\n\n目标：一列表格，行是上市价、处理器、屏幕、主摄、长焦、电池与充电、重量；数字以官网为准。\n背景：用户要比较星澜 S9、青梧 P70、远岫 M5三款手机，三款分头查，这是其中一款，回来由主对话合成一张表。\n交回：表格写在回复里，末尾附出处（官网规格页的网址）。\n证据：官网规格页截图，存到 ~/Downloads/手机对比/，给出完整路径。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开官网规格页",
+       "content": "打开星澜官网的规格页。"
+      },
+      {
+       "role": "agent",
+       "summary": "整理规格并截图",
+       "content": "逐项抄下规格，存好截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "我打开了星澜官网的规格页和发布会页，一共 3 个页面。整理如下：\n\n| 项目 | 星澜 S9 |\n| --- | --- |\n| 上市价 | 5,999 元起（12GB+256GB） |\n| 处理器 | 澜芯 X3 |\n| 屏幕 | 6.7 英寸 OLED，120Hz |\n| 主摄 | 5000 万像素，1/1.3 英寸 |\n| 长焦 | 5000 万像素潜望，3.5 倍 |\n| 电池与充电 | 5,500 mAh，90W 有线、50W 无线 |\n| 重量 | 218 g |\n\n数字以官网为准。\n\n出处：星澜官网规格页 https://www.xinglan-mobile.cn/s9/specs\n截图：{{HOME}}/Downloads/手机对比/星澜_S9_规格.png"
+      }
+     ]
+    },
+    {
+     "id": "s-mh8a1c3f-5n2r8t6x",
+     "title": "查青梧 P70规格",
+     "instructions": "查青梧 P70这款手机的主要规格，整理成一列 Markdown 表格交回\n\n目标：一列表格，行是上市价、处理器、屏幕、主摄、长焦、电池与充电、重量；数字以官网为准。\n背景：用户要比较星澜 S9、青梧 P70、远岫 M5三款手机，三款分头查，这是其中一款，回来由主对话合成一张表。\n交回：表格写在回复里，末尾附出处（官网规格页的网址）。\n证据：官网规格页截图，存到 ~/Downloads/手机对比/，给出完整路径。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开官网规格页",
+       "content": "打开青梧官网的规格页。"
+      },
+      {
+       "role": "agent",
+       "summary": "整理规格并截图",
+       "content": "逐项抄下规格，存好截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "我先看了青梧官网的规格页，又对照了京东的商品页，一共 2 个页面。整理如下：\n\n| 项目 | 青梧 P70 |\n| --- | --- |\n| 上市价 | 4,799 元起（12GB+256GB） |\n| 处理器 | 梧桐 G2 |\n| 屏幕 | 6.6 英寸 OLED，144Hz |\n| 主摄 | 5000 万像素，1/1.56 英寸 |\n| 长焦 | 1200 万像素，2 倍 |\n| 电池与充电 | 6,000 mAh，100W 有线，不支持无线 |\n| 重量 | 205 g |\n\n数字以官网为准。\n\n出处：青梧官网规格页 https://www.qingwu-tech.cn/p70/specs\n截图：{{HOME}}/Downloads/手机对比/青梧_P70_规格.png"
+      }
+     ]
+    },
+    {
+     "id": "s-mh8a1c3g-9v4b1m7z",
+     "title": "查远岫 M5规格",
+     "instructions": "查远岫 M5这款手机的主要规格，整理成一列 Markdown 表格交回\n\n目标：一列表格，行是上市价、处理器、屏幕、主摄、长焦、电池与充电、重量；数字以官网为准。\n背景：用户要比较星澜 S9、青梧 P70、远岫 M5三款手机，三款分头查，这是其中一款，回来由主对话合成一张表。\n交回：表格写在回复里，末尾附出处（官网规格页的网址）。\n证据：官网规格页截图，存到 ~/Downloads/手机对比/，给出完整路径。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开官网规格页",
+       "content": "打开远岫官网的规格页。"
+      },
+      {
+       "role": "agent",
+       "summary": "整理规格并截图",
+       "content": "逐项抄下规格，存好截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "我打开了远岫官网的规格页和两篇评测，一共 4 个页面。整理如下：\n\n| 项目 | 远岫 M5 |\n| --- | --- |\n| 上市价 | 6,299 元起（16GB+512GB） |\n| 处理器 | 岫光 R1 |\n| 屏幕 | 6.8 英寸 OLED，120Hz |\n| 主摄 | 5000 万像素，1 英寸 |\n| 长焦 | 2 亿像素潜望，3 倍 |\n| 电池与充电 | 5,000 mAh，80W 有线、50W 无线 |\n| 重量 | 229 g |\n\n数字以官网为准。\n\n出处：远岫官网规格页 https://www.yuanxiu-phone.cn/m5/specs\n截图：{{HOME}}/Downloads/手机对比/远岫_M5_规格.png"
+      }
+     ]
+    }
+   ],
+   "files": {
+    "手机对比/星澜_S9_规格.png": {
+     "png": [
+      "Xinglan Mobile  |  S9  |  Specifications",
+      "From 5,999 CNY (12GB+256GB)   Chip: Lanxin X3",
+      "6.7-inch OLED 120Hz   Main 50MP 1/1.3\"   Periscope 50MP 3.5x",
+      "5,500 mAh   90W wired / 50W wireless   218 g"
+     ]
+    },
+    "手机对比/青梧_P70_规格.png": {
+     "png": [
+      "Qingwu  |  P70  |  Specifications",
+      "From 4,799 CNY (12GB+256GB)   Chip: Wutong G2",
+      "6.6-inch OLED 144Hz   Main 50MP 1/1.56\"   Tele 12MP 2x",
+      "6,000 mAh   100W wired / no wireless   205 g"
+     ]
+    },
+    "手机对比/远岫_M5_规格.png": {
+     "png": [
+      "Yuanxiu  |  M5  |  Specifications",
+      "From 6,299 CNY (16GB+512GB)   Chip: Xiuguang R1",
+      "6.8-inch OLED 120Hz   Main 50MP 1\"   Periscope 200MP 3x",
+      "5,000 mAh   80W wired / 50W wireless   229 g"
+     ]
+    }
+   },
+   "wake": [
+    {
+     "kind": "done",
+     "subtask": "s-mh8a1c3e-2k7p9q4w",
+     "send_backs": 0
+    },
+    {
+     "kind": "done",
+     "subtask": "s-mh8a1c3f-5n2r8t6x",
+     "send_backs": 0
+    },
+    {
+     "kind": "done",
+     "subtask": "s-mh8a1c3g-9v4b1m7z",
+     "send_backs": 0
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "tables": {
+     "min": 1,
+     "max": 1
+    },
+    "one_table_has_all": [
+     "星澜 S9",
+     "青梧 P70",
+     "远岫 M5",
+     "澜芯 X3",
+     "梧桐 G2",
+     "岫光 R1"
+    ],
+    "sources_groups": [
+     [
+      "www.xinglan-mobile.cn",
+      "星澜_S9_规格.png"
+     ],
+     [
+      "www.qingwu-tech.cn",
+      "青梧_P70_规格.png"
+     ],
+     [
+      "www.yuanxiu-phone.cn",
+      "远岫_M5_规格.png"
+     ]
+    ],
+    "absent_any": [
+     "个页面"
+    ]
+   }
+  },
+  {
+   "id": "w-two-of-three",
+   "no": 14,
+   "expect_text": "票 143：三块里两块回来、第三块还在跑（Core 等满 5 分钟先送来的样子）→ 最多一句到哪了（提到还在查的那一款），不贴表、不贴已回来那两块的规格；不打回、不出 <no-reply/>",
+   "prompt": "v6",
+   "history": [
+    {
+     "role": "user",
+     "content": "比较星澜 S9、青梧 P70和远岫 M5这三款手机，整理成一张表"
+    },
+    {
+     "role": "assistant",
+     "content": "好，三款分头去查，一款一个，查齐了我合成一张表给你。\n\n[subtask s-mh8a1c3e-2k7p9q4w: 查星澜 S9规格]\n[subtask s-mh8a1c3f-5n2r8t6x: 查青梧 P70规格]\n[subtask s-mh8a1c3g-9v4b1m7z: 查远岫 M5规格]"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mh8a1c3e-2k7p9q4w",
+     "title": "查星澜 S9规格",
+     "instructions": "查星澜 S9这款手机的主要规格，整理成一列 Markdown 表格交回\n\n目标：一列表格，行是上市价、处理器、屏幕、主摄、长焦、电池与充电、重量；数字以官网为准。\n背景：用户要比较星澜 S9、青梧 P70、远岫 M5三款手机，三款分头查，这是其中一款，回来由主对话合成一张表。\n交回：表格写在回复里，末尾附出处（官网规格页的网址）。\n证据：官网规格页截图，存到 ~/Downloads/手机对比/，给出完整路径。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开官网规格页",
+       "content": "打开星澜官网的规格页。"
+      },
+      {
+       "role": "agent",
+       "summary": "整理规格并截图",
+       "content": "逐项抄下规格，存好截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "我打开了星澜官网的规格页和发布会页，一共 3 个页面。整理如下：\n\n| 项目 | 星澜 S9 |\n| --- | --- |\n| 上市价 | 5,999 元起（12GB+256GB） |\n| 处理器 | 澜芯 X3 |\n| 屏幕 | 6.7 英寸 OLED，120Hz |\n| 主摄 | 5000 万像素，1/1.3 英寸 |\n| 长焦 | 5000 万像素潜望，3.5 倍 |\n| 电池与充电 | 5,500 mAh，90W 有线、50W 无线 |\n| 重量 | 218 g |\n\n数字以官网为准。\n\n出处：星澜官网规格页 https://www.xinglan-mobile.cn/s9/specs\n截图：{{HOME}}/Downloads/手机对比/星澜_S9_规格.png"
+      }
+     ]
+    },
+    {
+     "id": "s-mh8a1c3f-5n2r8t6x",
+     "title": "查青梧 P70规格",
+     "instructions": "查青梧 P70这款手机的主要规格，整理成一列 Markdown 表格交回\n\n目标：一列表格，行是上市价、处理器、屏幕、主摄、长焦、电池与充电、重量；数字以官网为准。\n背景：用户要比较星澜 S9、青梧 P70、远岫 M5三款手机，三款分头查，这是其中一款，回来由主对话合成一张表。\n交回：表格写在回复里，末尾附出处（官网规格页的网址）。\n证据：官网规格页截图，存到 ~/Downloads/手机对比/，给出完整路径。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开官网规格页",
+       "content": "打开青梧官网的规格页。"
+      },
+      {
+       "role": "agent",
+       "summary": "整理规格并截图",
+       "content": "逐项抄下规格，存好截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "我先看了青梧官网的规格页，又对照了京东的商品页，一共 2 个页面。整理如下：\n\n| 项目 | 青梧 P70 |\n| --- | --- |\n| 上市价 | 4,799 元起（12GB+256GB） |\n| 处理器 | 梧桐 G2 |\n| 屏幕 | 6.6 英寸 OLED，144Hz |\n| 主摄 | 5000 万像素，1/1.56 英寸 |\n| 长焦 | 1200 万像素，2 倍 |\n| 电池与充电 | 6,000 mAh，100W 有线，不支持无线 |\n| 重量 | 205 g |\n\n数字以官网为准。\n\n出处：青梧官网规格页 https://www.qingwu-tech.cn/p70/specs\n截图：{{HOME}}/Downloads/手机对比/青梧_P70_规格.png"
+      }
+     ]
+    },
+    {
+     "id": "s-mh8a1c3g-9v4b1m7z",
+     "title": "查远岫 M5规格",
+     "instructions": "查远岫 M5这款手机的主要规格，整理成一列 Markdown 表格交回\n\n目标：一列表格，行是上市价、处理器、屏幕、主摄、长焦、电池与充电、重量；数字以官网为准。\n背景：用户要比较星澜 S9、青梧 P70、远岫 M5三款手机，三款分头查，这是其中一款，回来由主对话合成一张表。\n交回：表格写在回复里，末尾附出处（官网规格页的网址）。\n证据：官网规格页截图，存到 ~/Downloads/手机对比/，给出完整路径。",
+     "live": {
+      "agentRunning": true,
+      "openRun": true,
+      "busy": true,
+      "lastExit": null
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开官网规格页",
+       "content": "打开远岫官网的规格页。"
+      }
+     ],
+     "ended_minutes_ago": 0.5
+    }
+   ],
+   "files": {
+    "手机对比/星澜_S9_规格.png": {
+     "png": [
+      "Xinglan Mobile  |  S9  |  Specifications",
+      "From 5,999 CNY (12GB+256GB)   Chip: Lanxin X3",
+      "6.7-inch OLED 120Hz   Main 50MP 1/1.3\"   Periscope 50MP 3.5x",
+      "5,500 mAh   90W wired / 50W wireless   218 g"
+     ]
+    },
+    "手机对比/青梧_P70_规格.png": {
+     "png": [
+      "Qingwu  |  P70  |  Specifications",
+      "From 4,799 CNY (12GB+256GB)   Chip: Wutong G2",
+      "6.6-inch OLED 144Hz   Main 50MP 1/1.56\"   Tele 12MP 2x",
+      "6,000 mAh   100W wired / no wireless   205 g"
+     ]
+    }
+   },
+   "wake": [
+    {
+     "kind": "done",
+     "subtask": "s-mh8a1c3e-2k7p9q4w",
+     "send_backs": 0
+    },
+    {
+     "kind": "done",
+     "subtask": "s-mh8a1c3f-5n2r8t6x",
+     "send_backs": 0
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "tables": {
+     "max": 0
+    },
+    "max_lines": 2,
+    "max_chars": 120,
+    "mentions_any": [
+     "远岫",
+     "M5",
+     "还差",
+     "还在",
+     "第三",
+     "另一款",
+     "最后一款"
+    ],
+    "absent_values": [
+     "澜芯 X3",
+     "梧桐 G2",
+     "5,999",
+     "4,799",
+     "5,500 mAh",
+     "6,000 mAh",
+     "218 g",
+     "205 g"
+    ]
+   }
+  },
+  {
+   "id": "w-third-back",
+   "no": 15,
+   "expect_text": "票 143：第三块后来回来，前两块的报告在上文（那次叫醒的完整消息和它回的一句进度）→ 三块合成一张表，附各块的出处；不打回、不出 <no-reply/>",
+   "prompt": "v6",
+   "history": [
+    {
+     "role": "user",
+     "content": "比较星澜 S9、青梧 P70和远岫 M5这三款手机，整理成一张表"
+    },
+    {
+     "role": "assistant",
+     "content": "好，三款分头去查，一款一个，查齐了我合成一张表给你。\n\n[subtask s-mh8a1c3e-2k7p9q4w: 查星澜 S9规格]\n[subtask s-mh8a1c3f-5n2r8t6x: 查青梧 P70规格]\n[subtask s-mh8a1c3g-9v4b1m7z: 查远岫 M5规格]"
+    },
+    {
+     "role": "user",
+     "wake": [
+      {
+       "kind": "done",
+       "subtask": "s-mh8a1c3e-2k7p9q4w",
+       "send_backs": 0
+      },
+      {
+       "kind": "done",
+       "subtask": "s-mh8a1c3f-5n2r8t6x",
+       "send_backs": 0
+      }
+     ],
+     "content": "（满 5 分钟那次叫醒：前两块的完整报告，按这次运行的措辞现拼，见 run.py 的 wake_history）"
+    },
+    {
+     "role": "assistant",
+     "content": "星澜 S9和青梧 P70查好了，远岫 M5还在查，齐了合成一张表给你。"
+    }
+   ],
+   "subtasks": [
+    {
+     "id": "s-mh8a1c3e-2k7p9q4w",
+     "title": "查星澜 S9规格",
+     "instructions": "查星澜 S9这款手机的主要规格，整理成一列 Markdown 表格交回\n\n目标：一列表格，行是上市价、处理器、屏幕、主摄、长焦、电池与充电、重量；数字以官网为准。\n背景：用户要比较星澜 S9、青梧 P70、远岫 M5三款手机，三款分头查，这是其中一款，回来由主对话合成一张表。\n交回：表格写在回复里，末尾附出处（官网规格页的网址）。\n证据：官网规格页截图，存到 ~/Downloads/手机对比/，给出完整路径。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开官网规格页",
+       "content": "打开星澜官网的规格页。"
+      },
+      {
+       "role": "agent",
+       "summary": "整理规格并截图",
+       "content": "逐项抄下规格，存好截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "我打开了星澜官网的规格页和发布会页，一共 3 个页面。整理如下：\n\n| 项目 | 星澜 S9 |\n| --- | --- |\n| 上市价 | 5,999 元起（12GB+256GB） |\n| 处理器 | 澜芯 X3 |\n| 屏幕 | 6.7 英寸 OLED，120Hz |\n| 主摄 | 5000 万像素，1/1.3 英寸 |\n| 长焦 | 5000 万像素潜望，3.5 倍 |\n| 电池与充电 | 5,500 mAh，90W 有线、50W 无线 |\n| 重量 | 218 g |\n\n数字以官网为准。\n\n出处：星澜官网规格页 https://www.xinglan-mobile.cn/s9/specs\n截图：{{HOME}}/Downloads/手机对比/星澜_S9_规格.png"
+      }
+     ]
+    },
+    {
+     "id": "s-mh8a1c3f-5n2r8t6x",
+     "title": "查青梧 P70规格",
+     "instructions": "查青梧 P70这款手机的主要规格，整理成一列 Markdown 表格交回\n\n目标：一列表格，行是上市价、处理器、屏幕、主摄、长焦、电池与充电、重量；数字以官网为准。\n背景：用户要比较星澜 S9、青梧 P70、远岫 M5三款手机，三款分头查，这是其中一款，回来由主对话合成一张表。\n交回：表格写在回复里，末尾附出处（官网规格页的网址）。\n证据：官网规格页截图，存到 ~/Downloads/手机对比/，给出完整路径。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开官网规格页",
+       "content": "打开青梧官网的规格页。"
+      },
+      {
+       "role": "agent",
+       "summary": "整理规格并截图",
+       "content": "逐项抄下规格，存好截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "我先看了青梧官网的规格页，又对照了京东的商品页，一共 2 个页面。整理如下：\n\n| 项目 | 青梧 P70 |\n| --- | --- |\n| 上市价 | 4,799 元起（12GB+256GB） |\n| 处理器 | 梧桐 G2 |\n| 屏幕 | 6.6 英寸 OLED，144Hz |\n| 主摄 | 5000 万像素，1/1.56 英寸 |\n| 长焦 | 1200 万像素，2 倍 |\n| 电池与充电 | 6,000 mAh，100W 有线，不支持无线 |\n| 重量 | 205 g |\n\n数字以官网为准。\n\n出处：青梧官网规格页 https://www.qingwu-tech.cn/p70/specs\n截图：{{HOME}}/Downloads/手机对比/青梧_P70_规格.png"
+      }
+     ]
+    },
+    {
+     "id": "s-mh8a1c3g-9v4b1m7z",
+     "title": "查远岫 M5规格",
+     "instructions": "查远岫 M5这款手机的主要规格，整理成一列 Markdown 表格交回\n\n目标：一列表格，行是上市价、处理器、屏幕、主摄、长焦、电池与充电、重量；数字以官网为准。\n背景：用户要比较星澜 S9、青梧 P70、远岫 M5三款手机，三款分头查，这是其中一款，回来由主对话合成一张表。\n交回：表格写在回复里，末尾附出处（官网规格页的网址）。\n证据：官网规格页截图，存到 ~/Downloads/手机对比/，给出完整路径。",
+     "live": {
+      "lastExit": "CURRENT_TASK_DONE"
+     },
+     "messages": [
+      {
+       "role": "agent",
+       "summary": "打开官网规格页",
+       "content": "打开远岫官网的规格页。"
+      },
+      {
+       "role": "agent",
+       "summary": "整理规格并截图",
+       "content": "逐项抄下规格，存好截图。"
+      },
+      {
+       "role": "agent",
+       "final": true,
+       "content": "我打开了远岫官网的规格页和两篇评测，一共 4 个页面。整理如下：\n\n| 项目 | 远岫 M5 |\n| --- | --- |\n| 上市价 | 6,299 元起（16GB+512GB） |\n| 处理器 | 岫光 R1 |\n| 屏幕 | 6.8 英寸 OLED，120Hz |\n| 主摄 | 5000 万像素，1 英寸 |\n| 长焦 | 2 亿像素潜望，3 倍 |\n| 电池与充电 | 5,000 mAh，80W 有线、50W 无线 |\n| 重量 | 229 g |\n\n数字以官网为准。\n\n出处：远岫官网规格页 https://www.yuanxiu-phone.cn/m5/specs\n截图：{{HOME}}/Downloads/手机对比/远岫_M5_规格.png"
+      }
+     ]
+    }
+   ],
+   "files": {
+    "手机对比/星澜_S9_规格.png": {
+     "png": [
+      "Xinglan Mobile  |  S9  |  Specifications",
+      "From 5,999 CNY (12GB+256GB)   Chip: Lanxin X3",
+      "6.7-inch OLED 120Hz   Main 50MP 1/1.3\"   Periscope 50MP 3.5x",
+      "5,500 mAh   90W wired / 50W wireless   218 g"
+     ]
+    },
+    "手机对比/青梧_P70_规格.png": {
+     "png": [
+      "Qingwu  |  P70  |  Specifications",
+      "From 4,799 CNY (12GB+256GB)   Chip: Wutong G2",
+      "6.6-inch OLED 144Hz   Main 50MP 1/1.56\"   Tele 12MP 2x",
+      "6,000 mAh   100W wired / no wireless   205 g"
+     ]
+    },
+    "手机对比/远岫_M5_规格.png": {
+     "png": [
+      "Yuanxiu  |  M5  |  Specifications",
+      "From 6,299 CNY (16GB+512GB)   Chip: Xiuguang R1",
+      "6.8-inch OLED 120Hz   Main 50MP 1\"   Periscope 200MP 3x",
+      "5,000 mAh   80W wired / 50W wireless   229 g"
+     ]
+    }
+   },
+   "wake": [
+    {
+     "kind": "done",
+     "subtask": "s-mh8a1c3g-9v4b1m7z",
+     "send_backs": 0
+    }
+   ],
+   "expect": {
+    "send": false,
+    "no_reply": false,
+    "tables": {
+     "min": 1,
+     "max": 1
+    },
+    "one_table_has_all": [
+     "星澜 S9",
+     "青梧 P70",
+     "远岫 M5",
+     "澜芯 X3",
+     "梧桐 G2",
+     "岫光 R1"
+    ],
+    "sources_groups": [
+     [
+      "www.xinglan-mobile.cn",
+      "星澜_S9_规格.png"
+     ],
+     [
+      "www.qingwu-tech.cn",
+      "青梧_P70_规格.png"
+     ],
+     [
+      "www.yuanxiu-phone.cn",
+      "远岫_M5_规格.png"
+     ]
+    ],
+    "absent_any": [
+     "个页面"
+    ]
    }
   }
  ]
