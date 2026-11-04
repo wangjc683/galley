@@ -1178,6 +1178,17 @@ class Bridge:
             return
         self.ga.offer_tool(self.agentmain, tell_user.tool_entry)
 
+    def _arm_inline_prompt(self, text: str | None) -> None:
+        """Before a run (main chat ticket 147): a note Core woke the managed
+        main chat with (`text`) reaches the model in full, not as upstream's
+        "Long user prompt saved to …" that costs a step to read back
+        (`GaSession.arm_inline_prompt`); None, for any other run, leaves the
+        task to upstream. Only in the managed main chat (CLAUDE.md Rule 1),
+        the only runner Core wakes."""
+        if not managed_runtime.is_managed_main_chat():
+            return
+        self.ga.arm_inline_prompt(text)
+
     def _tell_user(self, message: str, turn: int) -> bool:
         """The model called `tell_user` in step `turn` (ticket 137): send it
         as `tell_user` while the run is open. Under the completion lock, so
@@ -1841,6 +1852,7 @@ class Bridge:
             self._settle_llm_clients()
             self._told_in_step = (0, 0)
             self._offer_tell_user()
+            self._arm_inline_prompt(cmd.text if cmd.wake else None)
             self._arm_image_delivery(cmd.images)
             display_queue = self.agent.put_task(
                 cmd.text, source="workbench", images=cmd.images
@@ -1872,6 +1884,7 @@ class Bridge:
             self._settle_llm_clients()
             self._told_in_step = (0, 0)
             self._offer_tell_user()
+            self._arm_inline_prompt(None)
             display_queue = self.agent.put_task(cmd.text, source="workbench")
             self._start_progress_drain(display_queue, run_generation)
         elif isinstance(cmd, AbortCommand):

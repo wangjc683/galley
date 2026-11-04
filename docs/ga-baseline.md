@@ -1529,6 +1529,32 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     payload's own `run()` / `agent_runner_loop` in a child process: the words
     are out when GA's `file_read` starts, the answer is not sent, a woken run
     sends nothing).
+24. A long task saved to a file, and the `agent_before` plugin hook
+    (2026-11-04, main chat ticket 147; managed main chat only, no managed
+    patch). Upstream `GenericAgent.run()` saves a task over 2,000 characters
+    to `temp/user_prompt_<pid>_<ns>.md`, starts the loop on "Long user
+    prompt saved to <path>. Read and execute." and appends `[USER]:
+    smart_format(<that line>, 200)` to the history the handler holds. For a
+    run Core woke the main chat for (`user_message` with `wake`), the bridge
+    arms the note (`GaSession.arm_inline_prompt`); a callback Galley
+    registers once on `plugins.hooks` `agent_before` (the hook upstream's
+    `plugins/project_mode.py` uses to add to a round's user message) puts
+    the note back in place of that line in the loop's user message and
+    turns the history line into `[USER]: smart_format(<note>, 200)`; it
+    leaves anything a plugin appended after the line, and does nothing
+    unless the line matches, the message is a string, and this run's agent
+    was armed (it disarms it). The user's own long messages keep upstream's
+    file. Re-check on upgrade: (a) the line's wording and the 2,000
+    threshold; (b) `agent_runner_loop` still triggers `agent_before` with
+    its locals (`messages`, `user_input`, `handler`) before its first model
+    call, through the `plugins.hooks` module `agentmain` loads; (c) `run()`
+    still appends the `[USER]:` line to the list the handler gets as
+    `history_info`. **Run first on an upgrade**:
+    `runner/tests/test_inline_prompt.py`'s
+    `test_the_engine_hands_a_woken_main_chat_its_note_in_full` (the
+    payload's own `run()` / `agent_runner_loop` / `plugins.hooks` in a child
+    process). If it fails, the note goes upstream's way again (the merge
+    round reads the file first), nothing breaks.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
@@ -1539,11 +1565,12 @@ Since 2026-07-11 the agent-object couplings have a single code home —
 start the audit there instead of grepping the bridge:
 
 - **[`runner/ga_session.py`](../runner/ga_session.py)** — items 5, 6, 7,
-  11, 12, 21, 22: every internal/underscore/backend touch (`_turn_end_hooks`,
+  11, 12, 21, 22, 24: every internal/underscore/backend touch (`_turn_end_hooks`,
   `backend.history` set + context estimation, the `GenericAgentHandler`
   module rebinding, the one-shot `backend.ask` image wrapper, the main
   chat's `intervene` write and `injprompt` read, the main chat's
-  `TOOLS_SCHEMA` entry). Read the
+  `TOOLS_SCHEMA` entry, the main chat's `agent_before` hook for a wake
+  note). Read the
   file top to bottom against the new baseline.
 - **[`runner/tell_user.py`](../runner/tell_user.py)** and
   **`runner/handlers.py::WorkbenchHandler.dispatch`** — item 22: the main

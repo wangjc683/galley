@@ -195,6 +195,24 @@ HOLDING_COMMANDS = ("session wait", "session follow", "session watch", "project 
 WRITE_COMMANDS = ("session send", "session stop", "session archive", "session restore", "session move",
                   "session new", "session btw", "project create", "project delete", "llm set")
 
+# Ticket 147: the merge round, measured before and after its two changes
+# (`--t147 <config>`, wake suite, runs kept in meta.ticket147_runs). `inline`:
+# the runner hands the model a wake note over 2,000 characters in full
+# (GaSession.arm_inline_prompt) instead of upstream's "Long user prompt saved
+# to …"; `marker`: the line after an answer Core cut (CUT_MARKERS). The model
+# id names the run (T147_MODEL_TAGS), so three models share the results.
+T147_CONFIGS = {
+    "base": {"inline": False, "marker": "old"},
+    "inline": {"inline": True, "marker": "old"},
+    "rest": {"inline": False, "marker": "new"},
+    "both": {"inline": True, "marker": "new"},
+    # A probe, not built: what if Core's 3,000-character cap held a whole
+    # answer of this size (main chat PRD ruling 183 point 4 sets 3,000).
+    "full": {"inline": True, "marker": "new", "cap": 8000},
+}
+T147_MODEL_TAGS = {"mm_1792576875658": "", "mm_1787796272610": ".glm", "mm_1789025687188": ".ds"}
+T147_KEY = "ticket147_runs"
+
 # Ticket 36: reminders and scheduled tasks (schedule/). The wake suite's
 # sandbox and fake galley, which also answers the `schedule` family and
 # ticket 35's other hands from the case's tasks. The prompt is the real
@@ -1836,10 +1854,12 @@ def wake_dated(case: dict[str, Any], now: datetime) -> dict[str, Any]:
     return filled
 
 
-def wake_note(case: dict[str, Any], words: dict[str, str]) -> str:
+def wake_note(case: dict[str, Any], words: dict[str, str], marker: str | None = None,
+              cap: int | None = None) -> str:
     """The wake message for a case, filled from one wording as ticket 29's
     draft says: the header once, the items in order with a blank line
-    between, the footer when there is more than one."""
+    between, the footer when there is more than one. Ticket 147: `marker`
+    names the line after a cut answer (CUT_MARKERS; default Core's)."""
     subs = {s["id"]: s for s in case["subtasks"]}
     items = []
     for w in case["wake"]:
@@ -1853,7 +1873,7 @@ def wake_note(case: dict[str, Any], words: dict[str, str]) -> str:
             final = [m for m in s["messages"] if m.get("final")][-1]["content"]
             # Ticket 134: as Core does (subtask_report::cut), the answer
             # within REPORT_TEXT_MAX_CHARS and where to read all of it.
-            values["answer"] = report_cut(final, s["id"])
+            values["answer"] = report_cut(final, s["id"], marker, cap)
             tail = words["done_capped"] if send_backs >= 2 else words["done_send_back"]
             template = words["done"] + " " + tail
         elif kind == "asking":
@@ -1963,6 +1983,12 @@ def wake_fixture(case: dict[str, Any], now: datetime) -> dict[str, Any]:
                 row["summary"] = m["summary"]
             if m.get("final"):
                 row["finalAnswer"] = m["content"]
+            if m.get("summary_in_content"):
+                # Ticket 147: as Core stores a step (the real `session
+                # show` row of S3): `content` is the reply with its
+                # <summary>, `finalAnswer` the answer alone, so a row is
+                # about twice the answer.
+                row["content"] = f"<summary>{m['summary']}</summary>\n\n{m['content']}"
             if m.get("ask"):
                 row["askUser"] = m["ask"]
             rows.append(row)
@@ -2136,17 +2162,31 @@ OPENING_SUBTASK = ("[Galley — not a message from the user] A subtask you start
                    "reply to the user. Do not mention this note.")
 SEND_BACK_LIMIT = 2
 REPORT_TEXT_MAX_CHARS = 3000
+# Ticket 147: the line after an answer cut for length, where to read the
+# rest. "old" is Core's before the ticket (the whole message row: its
+# `content` and `finalAnswer` both, about twice the answer); "new" is
+# Core's `cut_answer` since (the dry test reads it from the Rust source).
+# `--t147` runs pick one by name (T147_CONFIGS), the other runs take
+# CUT_MARKER, Core's today.
+CUT_MARKERS = {
+    "old": "[… cut for length; all of it: `session show {sid} --tail=1`]",
+    # Ticket 147: just the rest, a slice of the one field that holds it.
+    "new": "[… cut for length; the rest is `finalAnswer[3000:]` of the JSON line `session show {sid} --tail=1` prints]",
+}
+CUT_MARKER = "new"
 
 
-def report_cut(text: str, sid: str) -> str:
-    """subtask_report::cut: the answer within REPORT_TEXT_MAX_CHARS, and where
-    to read all of it."""
+def report_cut(text: str, sid: str, marker: str | None = None, cap: int | None = None) -> str:
+    """subtask_report::cut_answer: the answer within REPORT_TEXT_MAX_CHARS, and
+    where to read the rest (ticket 147: `marker`, a key of CUT_MARKERS;
+    `cap`, the "full" probe's)."""
     text = text.strip()
+    cap = cap or REPORT_TEXT_MAX_CHARS
     if not text:
         return "(nothing)"
-    if len(text) <= REPORT_TEXT_MAX_CHARS:
+    if len(text) <= cap:
         return text
-    return text[:REPORT_TEXT_MAX_CHARS] + f"\n[… cut for length; all of it: `session show {sid} --tail=1`]"
+    return text[:cap] + "\n" + CUT_MARKERS[marker or CUT_MARKER].format(sid=sid).replace("[3000:]", f"[{cap}:]")
 
 
 def done_paragraph(d: dict[str, Any]) -> str:
@@ -3442,6 +3482,12 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
         "tool": [call("<summary>Look at the Downloads folder</summary>\n我来看一下。",
                       ("code_run", {"type": "bash", "script": f"touch {canary}-code_run"}),
                       ("file_write", {"path": f"{canary}-file_write", "content": "x"}))],
+        # Ticket 147: read the rest of a cut answer, then merge.
+        "t147-look": [call("<summary>Read the rest</summary>",
+                           ("code_run", {"script": "print('the rest')"})),
+                      call("<summary>Merged</summary>\n| 项目 | 澄川 E7 长续航版 | 朔风 S6 后驱 |\n|---|---|---|\n"
+                           "| 价格 | 24.98 万元 | 25.38 万元 |\n\n来源：https://www.chengchuan-auto.cn/e7/config、"
+                           "https://www.shuofeng-ev.cn/s6/specs")],
         "final": [call("<summary>Answered</summary>\n先放蛋。\n"
                        "<next-suggestion>帮我写个番茄炒蛋的完整步骤</next-suggestion>")],
         "tag": [call("<summary>Dispatched</summary>\n交给子任务去整理了。\n"
@@ -4097,6 +4143,10 @@ def worker() -> int:
     # (`file_access_stats.json`, ga.log_memory_access) is not a write.
     memory_before = memory_snapshot(state_root / "memory")
     threading.Thread(target=agent.run, daemon=True).start()
+    if job.get("wake_inline"):
+        # Ticket 147: what the bridge does before put_task for a run Core
+        # woke the main chat for (Bridge.dispatch_command, cmd.wake).
+        ga.arm_inline_prompt(job["message"])
     started = time.time()
     rec["started_at"] = started
     dq = agent.put_task(job["message"], source="workbench")
@@ -4263,6 +4313,18 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             # Ticket 145: the prompt a wake case ran under (its own, or
             # --wake-prompt's).
             result["wake_prompt"] = job["wake_prompt"]
+        if job.get("t147"):
+            # Ticket 147: what the first model call got as the new user
+            # message: the note itself, or upstream's pointer to the file
+            # it was saved to.
+            msgs = (rec["requests"][0] if rec["requests"] else {}).get("messages") or []
+            last = msgs[-1].get("content") if msgs else ""
+            if isinstance(last, list):
+                last = "\n".join(b.get("text", "") for b in last if isinstance(b, dict))
+            last = str(last or "")
+            result["first_user"] = {"chars": len(last), "pointer": last.startswith("Long user prompt saved to "),
+                                    "note_in_full": job["message"] in last,
+                                    "inline_armed": bool(job.get("wake_inline"))}
         if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE, TELL_SUITE, PREF_SUITE):
             result.update({"suite": job["suite"], "now": job["now"], "started_at": rec.get("started_at")})
         # Ticket 145: v7 runs are offered tell_user too, and read the step
@@ -4679,13 +4741,18 @@ def make_dispatch_jobs(cases: list[dict[str, Any]], variants: list[str], now: da
 
 def make_wake_jobs(cases: list[dict[str, Any]], wordings: list[str], now: datetime,
                    mykeys: dict[str, Any], ga_lang: str, allowed_hosts: set[str], repeats: int,
-                   dry: str | None = None, prompt_override: str | None = None) -> list[dict[str, Any]]:
+                   dry: str | None = None, prompt_override: str | None = None,
+                   t147: str | None = None, model_tag: str = "", first: int = 1) -> list[dict[str, Any]]:
     """Ticket 30: each case under each wording, `repeats` times. Sandbox
     mode: the model's tool calls run in the run's sandbox, its CLI calls
     reach only the fixture-driven fake galley. Ticket 145: `prompt_override`
     (a key of CRIT_PROMPTS) in place of the prompt a case names, for the
-    cases that name one."""
+    cases that name one. Ticket 147: `t147`, a key of T147_CONFIGS (the
+    merge round before and after the ticket: the note inlined or not, which
+    line follows a cut answer), offered tell_user as the main chat's runner
+    offers it, named `<config><model_tag>-<n>` from `first` on."""
     words = load_wording()
+    cfg = T147_CONFIGS[t147] if t147 else {}
     jobs = []
     for case in cases:
         if prompt_override and not case.get("prompt"):
@@ -4695,13 +4762,13 @@ def make_wake_jobs(cases: list[dict[str, Any]], wordings: list[str], now: dateti
         for wording in wordings:
             if wording not in words:
                 fail(f"no wording {wording!r} in wording.md ({', '.join(words)})")
-            message = wake_note(case, words[wording])
+            message = wake_note(case, words[wording], cfg.get("marker"), cfg.get("cap"))
             # Ticket 143: an earlier wake note in the history, in this wording.
             filled = wake_history(case, words[wording])
-            for n in range(1, repeats + 1):
+            for n in range(first, first + repeats):
                 jobs.append({
                     "case_id": case["id"],
-                    "variant": f"{wording}-{n}",
+                    "variant": f"{t147}{model_tag}-{n}" if t147 else f"{wording}-{n}",
                     "wording": wording,
                     "repeat": n,
                     "message": message,
@@ -4716,6 +4783,11 @@ def make_wake_jobs(cases: list[dict[str, Any]], wordings: list[str], now: dateti
                     "tool_cap": WAKE_TOOL_CAP,
                     "wake": {"fixture": wake_fixture(filled, now), "files": case.get("files") or {}},
                     "wake_prompt": prompt_override or case.get("prompt"),
+                    # Ticket 147.
+                    "t147": t147,
+                    "model_tag": model_tag,
+                    "wake_inline": bool(cfg.get("inline")),
+                    "tell_user": bool(t147),
                 })
     return jobs
 
@@ -5557,6 +5629,18 @@ def wake_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         for group in exp.get("sources_groups") or []:
             if not any(w in said for w in group):
                 reasons.append("少了一块的出处：" + " / ".join(group))
+        # Ticket 147: no table holds only one part (a part pasted as it
+        # came), and the version each part chose for the main table (the
+        # price level both are compared at) is named.
+        parts = exp.get("single_part_tables") or []
+        if parts:
+            alone = [t for t in tables
+                     if sum(any(w in cell for row in t for cell in row for w in group) for group in parts) == 1]
+            if alone:
+                reasons.append(f"有 {len(alone)} 张表只讲一块（一块一块贴的）")
+        for group in exp.get("caliber_groups") or []:
+            if not any(w in said for w in group):
+                reasons.append("没写明一块选的版本（口径）：" + " / ".join(group))
         hits = [w for w in exp.get("absent_values") or [] if w in said]
         if hits:
             reasons.append("贴了还没回齐的几块的内容：" + "、".join(hits))
@@ -5928,6 +6012,167 @@ def wake_prompt_section(data: dict[str, Any], cases: list[dict[str, Any]]) -> li
     return out
 
 
+# Ticket 147: marks a tool leaves where it cut what it handed back (GA's
+# code_run and file_read cut the middle of a long output; file_read cuts a
+# long line, or reads part of a file).
+T147_CUT_MARKS = ("[omitted long output]", "[omitted long content]", " ... [TRUNCATED]", "PARTIAL")
+T147_CONFIG_WORDS = {
+    "base": "改前（main：说明存成文件，截断后指向整行）",
+    "inline": "甲（说明直接给全文）",
+    "rest": "乙（截断后指向 finalAnswer[3000:]）",
+    "both": "甲＋乙（改后）",
+    "full": "探针，没做：甲＋乙，且 Core 的截断上限从 3,000 放到 8,000 字（两块都整份进说明）",
+}
+
+
+def t147_result_text(c: dict[str, Any]) -> str:
+    """What a call handed the model back: code_run's stdout, a file
+    read's text, else the result as JSON."""
+    res = c.get("result")
+    if isinstance(res, dict) and "stdout" in res:
+        return str(res.get("stdout") or "")
+    return res if isinstance(res, str) else "" if res is None else json.dumps(res, ensure_ascii=False)
+
+
+def t147_read(c: dict[str, Any]) -> dict[str, Any]:
+    """Ticket 147: one tool call of the merge round: what it read (the
+    note saved to a file, manual parts, CLI commands without ids, a slice
+    of a field), how many characters came back, and whether the tool cut
+    them."""
+    args = json.dumps(c.get("args"), ensure_ascii=False)
+    what: list[str] = []
+    if "user_prompt_" in args:
+        what.append("存成文件的叫醒说明")
+    if MANUAL_STATE_PATH in args:
+        names = {x.name for x in manual_parts()}
+        parts = list(dict.fromkeys(m for m in MD_NAME_RE.findall(args) if m in names)) or ["目录"]
+        what.append("手册 " + "、".join(parts))
+    cmds: dict[str, int] = {}
+    for argv in c.get("galley_calls") or []:
+        words = [a for a in argv if not a.startswith("--") and not re.fullmatch(r"s-[a-z0-9]+-[a-z0-9]+", a)]
+        flags = [a.split("=")[0] + ("=" + a.split("=")[1] if a.startswith("--tail") and "=" in a else "")
+                 for a in argv if a.startswith("--")]
+        key = " ".join(words[:2] + flags)
+        cmds[key] = cmds.get(key, 0) + 1
+    if cmds:
+        what.append("CLI " + "；".join(k + (f" ×{n}" if n > 1 else "") for k, n in cmds.items()))
+    # A slice of a long field ("finalAnswer[3000:]", S3's "[5500:]").
+    slices = sorted(set(re.findall(r"\[-?\d{3,}:-?\d*\]", args.replace(" ", ""))))
+    if slices:
+        what.append("切片 " + "、".join(slices))
+    if not what:
+        what.append(call_gist(c))
+    text = t147_result_text(c)
+    return {"n": c.get("n"), "turn": c.get("turn"), "name": c["name"], "what": "，".join(what),
+            "chars": len(text), "cut": [m for m in T147_CUT_MARKS if m in text], "at_s": c.get("at_s")}
+
+
+def t147_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """Ticket 147: a merge round measured. `steps`, the model calls (the
+    tool steps and the reply); `reads`, the tool calls (tell_user aside);
+    `first_s`, when the user first saw words (a tell_user line, or the
+    reply when its step ended: a woken run sends no step's words, ticket
+    142); `reply_s`, when the reply's step ended; the judge's verdict on
+    the reply (wake_facts)."""
+    f = wake_facts(r, case)
+    turns = r.get("turns") or []
+    reply_s = turns[-1].get("after_s") if r.get("stop_reason") == "final_reply" and turns else None
+    cands = [t.get("after_s") for t in r.get("told") or [] if str(t.get("message") or "").strip()]
+    if reply_s is not None and f["body"].strip() and not f["no_reply"]:
+        cands.append(reply_s)
+    cands = [x for x in cands if isinstance(x, (int, float))]
+    reads = [t147_read(c) for c in r.get("calls") or [] if c.get("name") != "tell_user"]
+    return {"steps": r.get("llm_calls"), "reads": reads, "first_s": min(cands) if cands else None,
+            "reply_s": reply_s, "told": [t.get("message") for t in r.get("told") or []],
+            "first_user": r.get("first_user") or {}, "pass": f["pass"], "reasons": f["reasons"],
+            "chars": f["chars"], "tables": f["tables"], "body": f["body"]}
+
+
+def t147_reads_line(x: dict[str, Any]) -> str:
+    cut = "，被截：" + "、".join(m.strip() for m in x["cut"]) if x["cut"] else ""
+    return f"{x['name']}（{x['what']}；回 {x['chars']:,} 字{cut}）"
+
+
+def t147_section(data: dict[str, Any], cases: list[dict[str, Any]]) -> list[str]:
+    """Ticket 147: the merge round's steps, reads and seconds, before and
+    after, per case, model and config (meta.ticket147_runs)."""
+    runs = data["meta"].get(T147_KEY) or []
+    if not runs:
+        return []
+    by_id = {c["id"]: c for c in cases}
+    order = {c["id"]: c.get("no", 99) for c in cases}
+    cfg_order = {k: i for i, k in enumerate(T147_CONFIGS)}
+    model_order = {"gpt-6.1-sol": 0, "glm-5.3-flash": 1, "deepseek-flash": 2}
+
+    def key(r: dict[str, Any]) -> tuple[Any, ...]:
+        t = r.get("t147") or {}
+        return (order.get(r["id"], 99), model_order.get(t.get("model"), 9), cfg_order.get(t.get("config"), 9),
+                r.get("repeat", 0))
+
+    runs = sorted((r for r in runs if r["id"] in by_id), key=key)
+    out = ["## 合成那一轮读几步（票 147）", "",
+           "主对话 PRD 裁决 198：v0.7.6 草稿冒烟 S3 两件同时回来，合成那一轮 6 次模型调用、100 秒才出回复，前 5 步都在读结果。"
+           "这里量同一种合成：`w-merge-three`（三块短的，叫醒说明 3,801 字）与 `w-merge-two-long`（两块各约 3,800 字，"
+           "说明里各截在 3,000 字，出处与几条口径在截掉的那段，接近 S3）。这两条跑 v9 主对话提示词（`--wake-prompt v9`，Core 今天的）；"
+           "其余用例（改前改后各一遍，看不退步）跑各自 `cases.json` 写的提示词。都用 `core` 措辞，提供 `tell_user`"
+           "（主对话的 runner 每一轮都给）。改法（`--t147`）：", ""]
+    out += [f"- `{k}`：{v}" for k, v in T147_CONFIG_WORDS.items()]
+    out += ["", "步数是这一轮的模型调用次数（带工具的几步加写回复那一步）；第一次见字是开跑到用户最先看到字的秒数"
+            "（叫醒的一轮不发步骤里的字，只有 `tell_user` 或回复）；出回复是回复那一步结束的秒数。"
+            "质量照 `expect` 判（一张合起来的表、每块的出处、口径、不一块一块贴、不打回、没有 `<no-reply/>`、不带子任务讲自己怎么做的话）。", ""]
+    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    for r in runs:
+        t = r.get("t147") or {}
+        groups.setdefault((r["id"], t.get("model", "?"), t.get("config", "?")), []).append(r)
+    out += ["| 用例 | 模型 | 改法 | 遍 | 步数 | 第一次见字（秒） | 出回复（秒） | 中位：步／见字／回复 | 质量 |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+
+    def med(xs: list[Any]) -> str:
+        xs = [x for x in xs if isinstance(x, (int, float))]
+        return f"{statistics.median(xs):g}" if xs else "—"
+
+    for (cid, model, config), rs in groups.items():
+        fs = [t147_facts(r, by_id[cid]) for r in rs]
+        steps = [f["steps"] for f in fs]
+        firsts = [f["first_s"] for f in fs]
+        replies = [f["reply_s"] for f in fs]
+        fmt = lambda xs: "、".join("—" if x is None else f"{x:g}" for x in xs)  # noqa: E731
+        good = sum(1 for f in fs if f["pass"])
+        out.append(f"| {cid} | {model} | {config} | {len(rs)} | {fmt(steps)} | {fmt(firsts)} | {fmt(replies)} | "
+                   f"{med(steps)}／{med(firsts)}／{med(replies)} | {good}/{len(rs)} |")
+    out.append("")
+    out += ["### 每一遍读了什么", ""]
+    for r in runs:
+        case = by_id[r["id"]]
+        f = t147_facts(r, case)
+        t = r.get("t147") or {}
+        fu = f["first_user"]
+        given = ("说明全文" if fu.get("note_in_full") else "「Long user prompt saved to …」" if fu.get("pointer")
+                 else "?") + f"（{fu.get('chars', 0):,} 字）"
+        steps = "；".join(f"{x['n']}. " + t147_reads_line(x) for x in f["reads"]) or "没有调工具"
+        verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+        told = ("；tell_user：" + "／".join(f"「{trunc(one_line(str(m)), 60)}」" for m in f["told"])) if f["told"] else ""
+        out.append(f"- **{r['id']} {t.get('model', '?')} {t.get('config', '?')} 第 {r.get('repeat')} 遍**（{t.get('at', '')}，"
+                   f"提示词 {r.get('wake_prompt') or '`galley-prompt/`'}）："
+                   f"第一次调用拿到{given}；{steps}；共 {f['steps']} 次模型调用，见字 {f['first_s']} 秒，"
+                   f"回复 {f['reply_s']} 秒，{f['chars']:,} 字、{f['tables']} 张表{told}。判定：{verdict}")
+    out.append("")
+    two = by_id.get("w-merge-two-long")
+    if two:
+        words = load_wording()["core"]
+        note = wake_note(wake_dated(two, datetime(2026, 11, 4, 16, 0)), words, "old")
+        out += ["### `w-merge-two-long` 的叫醒说明（改前的截断行；日期按运行那天填）", ""] + fenced(note)
+        if "new" in CUT_MARKERS:
+            out += ["改后（乙）只换截断那一行：", ""] + fenced(CUT_MARKERS["new"].format(sid=two["subtasks"][0]["id"]))
+    out += ["### 每一遍的回复", ""]
+    for r in runs:
+        f = t147_facts(r, by_id[r["id"]])
+        t = r.get("t147") or {}
+        out += [f"#### {r['id']} {t.get('model', '?')} {t.get('config', '?')} 第 {r.get('repeat')} 遍", ""]
+        out += fenced(f["body"] or "（空）")
+    return out
+
+
 def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     meta = data["meta"]
     by_case: dict[str, list[dict[str, Any]]] = {}
@@ -5967,6 +6212,7 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     out += (rerun_section(data, cases, wake_facts, "73") + rerun_section(data, cases, wake_facts, "63")
             + rerun_section(data, cases, wake_facts, "59"))
     out += wake_prompt_section(data, cases)
+    out += t147_section(data, cases)
     out += [
         "## 一览",
         "",
@@ -10179,6 +10425,13 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                                   set(), 1, script):
             job["case_id"] = wake_id
             jobs.append(job)
+    # Ticket 147: the S3-like merge, its note as upstream's pointer to a
+    # file (base) or in full (both: the runner's own arm_inline_prompt).
+    for cfg in ("base", "both"):
+        for job in make_wake_jobs([wcases["w-merge-two-long"]], ["core"], now, mykeys, ga_lang, set(), 1,
+                                  "t147-look", t147=cfg):
+            job["case_id"] = f"t147-{cfg}"
+            jobs.append(job)
     scases = {c["id"]: c for c in json.loads(SCHED_CASES.read_text(encoding="utf-8"))["cases"]}
     sched_scripts = {"sched-water-10min": ("water-10min", "sched-create"),
                      "sched-wake-obsolete": ("wake-obsolete", "sched-no-reply"),
@@ -10308,6 +10561,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
         ok = ok and cond
 
     dry_test_wake([r for r in results if r["id"].startswith("wake-")], wake_scripts, wcases, now, check)
+    dry_test_t147([r for r in results if r["id"].startswith("t147-")], wcases, now, check)
     dry_test_sched([r for r in results if r["id"].startswith("sched-")], sched_scripts, scases, snow, check)
     dry_test_todo([r for r in results if r["id"].startswith("todo-")], todo_scripts, tcases, snow, check)
     dry_test_chat([r for r in results if r["id"].startswith("chat-")], chat_scripts, ccases, check)
@@ -10464,6 +10718,70 @@ def dry_test_tell(results: list[dict[str, Any]], cases: dict[str, dict[str, Any]
                         list(cases.values()))
     check("## 插话后多久回音（票 139）" in md and "| `i-question` | v5 | 1 | 做完才回 | 4 步 | 20.0 秒 |" in md
           and "- **v5**：做完才回 1。" in md, "results.md renders the echo table")
+
+
+def dry_test_t147(results: list[dict[str, Any]], cases: dict[str, dict[str, Any]], now: datetime,
+                  check: Any) -> None:
+    """Ticket 147: the note reaches the model as upstream's pointer to the
+    file it saved it to (base) or in full through the runner's own
+    GaSession.arm_inline_prompt (both), whose next step's working memory
+    names the note, not the file; the cut line is Core's (read from the
+    Rust source); the fixture's rows are the shape `session show` gives;
+    the measure reads the steps."""
+    case = wake_dated(cases["w-merge-two-long"], now)
+    words = load_wording()["core"]
+    rust = (REPO / "core" / "src" / "subtask_report.rs").read_text(encoding="utf-8")
+    m = re.search(r"fn cut_answer\(text: &str, id: &str\) -> String \{.*?format!\(\s*\"(.*?)\"\s*\)", rust, re.DOTALL)
+    rust_line = re.sub(r"\\\n\s*", "", m.group(1)) if m else ""
+    check(rust_line.replace("{id}", "{sid}").replace("{REPORT_TEXT_MAX_CHARS}", str(REPORT_TEXT_MAX_CHARS))
+          == CUT_MARKERS["new"] and CUT_MARKER == "new",
+          f"the cut line after an answer is Core's cut_answer, word for word ({rust_line[:60]}…)")
+    old, new = wake_note(case, words, "old"), wake_note(case, words, "new")
+    sids = [s["id"] for s in case["subtasks"]]
+    check(all(CUT_MARKERS["old"].format(sid=x) in old and CUT_MARKERS["new"].format(sid=x) in new for x in sids)
+          and "chengchuan-auto.cn" not in new and "shuofeng-ev.cn" not in new and len(new) > 2000,
+          "w-merge-two-long: both answers cut at 3,000, the sources in the cut-off part, the note over 2,000")
+    fx = wake_fixture(case, now)
+    finals = [r for sid in sids for r in fx["messages"][sid] if r.get("finalAnswer")]
+    check(len(finals) == 2 and all(r["content"].startswith("<summary>") and r["content"].endswith(r["finalAnswer"])
+                                   and len(r["content"]) > len(r["finalAnswer"]) for r in finals),
+          "the final rows: content is the reply with its <summary>, finalAnswer the answer alone (as Core stores them)")
+    by = {r["id"]: r for r in results}
+    for cfg, inline in (("base", False), ("both", True)):
+        r = by.get(f"t147-{cfg}")
+        print(f"t147 {cfg}")
+        check(r is not None and r["status"] == "ok", f"run completed ({(r or {}).get('status')})")
+        if not r or r["status"] != "ok":
+            continue
+        check(not r["blocked"] and not r["do_calls"] and not r["canaries"], "nothing left the sandbox")
+        reqs = r["requests"]
+
+        def text_of(msg: dict[str, Any]) -> str:
+            c = msg.get("content")
+            return c if isinstance(c, str) else "\n".join(b.get("text", "") for b in c or [] if isinstance(b, dict))
+
+        first = text_of(reqs[0]["messages"][-1])
+        later = "\n".join(text_of(x) for x in reqs[1]["messages"]) if len(reqs) > 1 else ""
+        note = wake_note(case, words, T147_CONFIGS[cfg]["marker"])
+        if inline:
+            check(first == note and r["first_user"]["note_in_full"] and not r["first_user"]["pointer"],
+                  "both: the first call's message is the note itself, in full")
+            check("Long user prompt saved to" not in later and "[USER]: [Galley — not a message from the user]" in later,
+                  "both: the next step's working memory names the note, not a file")
+        else:
+            check(first.startswith("Long user prompt saved to ") and note not in first and r["first_user"]["pointer"],
+                  "base: the first call's message is upstream's pointer to the saved file")
+        f = t147_facts(r, case)
+        check(f["steps"] == 2 and [x["name"] for x in f["reads"]] == ["code_run"] and f["reads"][0]["chars"] > 0
+              and f["first_s"] == f["reply_s"] and f["pass"],
+              f"the measure: 2 model calls, one read, words at the reply, the merge passes ({f['reasons']})")
+    bad = t147_facts({"status": "ok", "stop_reason": "final_reply", "calls": [], "galley_log": [], "llm_calls": 1,
+                      "turns": [{"after_s": 3.0}],
+                      "final_reply": "| 项目 | 澄川 E7 |\n|---|---|\n| 价格 | 24.98 万元 |\n\n"
+                                     "| 项目 | 朔风 S6 |\n|---|---|\n| 价格 | 25.38 万元 |"}, case)
+    check(not bad["pass"] and any("只讲一块" in x for x in bad["reasons"])
+          and any("出处" in x for x in bad["reasons"]),
+          f"the judge: a part per table and no sources fail ({bad['reasons']})")
 
 
 def dry_test_sandbox(results: list[dict[str, Any]], scripts: dict[tuple[str, str], str],
@@ -10657,10 +10975,10 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
                                                              "send_backs": 0, "answer": final})
         check(wake_note(c, core) == port, f"{cid}: the core note is Core's words (done_paragraph)")
     long_note = wake_note(wake_dated(cases["w-long"], now), core)
-    check(f"[… cut for length; all of it: `session show {cases['w-long']['subtasks'][0]['id']} --tail=1`]" in long_note
+    check(CUT_MARKERS[CUT_MARKER].format(sid=cases['w-long']['subtasks'][0]['id']) in long_note
           and "嵯峨野观光小火车：https" not in long_note, "w-long: the answer cut at 3,000 characters, as Core cuts it")
     check(all(len([m for m in s["messages"] if m.get("final")][-1]["content"].strip()) <= REPORT_TEXT_MAX_CHARS
-              for c in cases.values() if c["id"] not in ("w-table", "w-long") for s in c["subtasks"]
+              for c in cases.values() if c["id"] not in ("w-table", "w-long", "w-merge-two-long") for s in c["subtasks"]
               if any(m.get("final") for m in s["messages"])),
           "the cases before ticket 134 have no answer long enough to cut")
     jobs = make_wake_jobs([cases["w-table"]], ["core"], now, {}, "en", set(), 1)
@@ -10930,7 +11248,8 @@ def dry_test_sched(results: list[dict[str, Any]], scripts: dict[str, tuple[str, 
                                   for w in mixed)
           and any(d.get("todo") for w in mixed for d in w["reports"])
           and sum(d.get("kind") == "done" for w in mixed for d in w["reports"]) == 2
-          and any("[… cut for length; all of it: `session show " in w["text"] for w in mixed),
+          and any("[… cut for length; the rest is `finalAnswer[3000:]` of the JSON line `session show " in w["text"]
+                  for w in mixed),
           "the review with another update: OPENING_MIXED, CLOSING_MANY and the subtask paragraph are Rust's")
     review_ih = next((ih for ih in samples["in_hand"] if ih["name"] == "review"), None)
     check(review_ih is not None and "Galley's morning review, not set by you" in review_ih["text"],
@@ -13869,6 +14188,9 @@ def main() -> int:
     ap.add_argument("--wake-prompt",
                     help="wake: run the cases that name a prompt under this CRIT_PROMPTS key instead (v7), kept in "
                          "meta.prompt_<key>_runs beside the results (ticket 145)")
+    ap.add_argument("--t147", choices=tuple(T147_CONFIGS),
+                    help="wake: ticket 147's merge round under one config (base, inline, rest, both), offered "
+                         "tell_user, kept in meta.ticket147_runs as <config><model tag>-<n>")
     ap.add_argument("--galley-db", default=str(DEFAULT_GALLEY_DB))
     ap.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     ap.add_argument("--mykey", help="fallback: a GA mykey.py (read-only)")
@@ -13963,6 +14285,9 @@ def main() -> int:
         fail(problem)
     if args.wake_prompt and (not wake or args.wake_prompt not in CRIT_PROMPTS or args.control):
         fail(f"--wake-prompt is for the wake suite, a key of {', '.join(CRIT_PROMPTS)}, without --control")
+    if args.t147 and (not wake or args.control or variants != ["core"] or args.model_id not in T147_MODEL_TAGS):
+        fail(f"--t147 is for the wake suite, --variant core, without --control, with --model-id one of "
+             f"{', '.join(T147_MODEL_TAGS)}")
 
     if args.mykey:
         if not args.mykey_entry:
@@ -14005,7 +14330,8 @@ def main() -> int:
                               first=args.first_repeat, variants=variants)
     elif wake:
         jobs = make_wake_jobs(cases, variants, now, mykeys, args.ga_lang, allowed, args.repeats,
-                              prompt_override=args.wake_prompt)
+                              prompt_override=args.wake_prompt, t147=args.t147,
+                              model_tag=T147_MODEL_TAGS.get(args.model_id, ""), first=args.first_repeat)
     elif dispatch:
         jobs = make_dispatch_jobs(cases, variants, now, draft, mykeys, args.ga_lang, allowed,
                                   sandbox=sandbox_mode)
@@ -14029,7 +14355,15 @@ def main() -> int:
     # Ticket 145: --wake-prompt's runs are kept the same way, under their
     # own key.
     control_key = (f"ticket{args.control}_control" if args.control
+                   else T147_KEY if args.t147
                    else f"prompt_{args.wake_prompt}_runs" if args.wake_prompt else None)
+    if args.t147:
+        # Ticket 147: which model and config ran it, and when (the runs of
+        # three models and four configs share one list).
+        name = describe_mykeys(mykeys)["name"]
+        for r in results:
+            r["t147"] = {"config": args.t147, "model": name, "model_id": args.model_id,
+                         "at": now.strftime("%Y-%m-%d %H:%M")}
     if control_key:
         # Ticket 64: a same-day control (the prompt before the ticket, run
         # in the same hour as the rerun), kept beside the results; merged

@@ -148,6 +148,2937 @@
 | w-third-back | core | 2 | session show s-mh8a1c3e-2k7p9q4w --around=msg_s-mh8a1c3e-2k7p9q4w_0_user；session show s-mh8a1c3e-2k7p9q4w --tail=40；session show s-mh8a1c3f-5n2r8t6x --around=msg_s-mh8a1c3f-5n2r8t6x_0_user；session show s-mh8a1c3f-5n2r8t6x --tail=40；session show s-mh8a1c3g-9v4b1m7z --around=msg_s-mh8a1c3g-9v4b1m7z_0_user；session show s-mh8a1c3g-9v4b1m7z --tail=40 | \/ 项目 \/ 星澜 S9 \/ 青梧 P70 \/ 远岫 M5 \/ ⏎ \/---\/---\/---\/---\/ ⏎ \/ **上市起售价** \/ **5,999 元**（12GB+256GB） \/ **4,799 元**（12GB+256GB） \/ **6,299 元**（16GB+512GB） \/ ⏎ \/ **处理器** \/ 澜芯 X3 \/ 梧桐 G2 \/ 岫光 R1 \/ ⏎ \/ **屏幕** \/ 6.7 英寸 OLED，120Hz \/ 6.6 英寸 OLED，144Hz \/ 6.8 英寸 OLED，120Hz \/ ⏎ \/ **主摄** \/ 5000 万像素，1/1.3 英寸传感器 \/ 5000 万像素，1/1.56 英寸传感器 \/ 5000 万像素，1 英寸传感器 \/ ⏎ \/ **长焦** \/ 5000 万像素潜望，3.5 倍 \/ 1200 万像素，2 倍 \/ 2 亿像素潜望，3 倍 \/ ⏎ \/ **电池容量** \/ 5,500 mAh \/ 6,000 mAh \/ 5,000 mAh \/ ⏎ \/ **有线充电** \/ 90W \/ 100W \/ 80W \/ ⏎ \/ **无线充电** \/ 50W \/ 不支持 \/ 50W \/ ⏎ \/ **重量** \/ 218 g \/ 205 g \/ 229 g \/ ⏎ \/ **规格来源** \/ [星澜官网规格页](https://www.xinglan-mobile.cn/s9/specs) \/ [青梧官网规格页](https://www.qingwu-tech.cn/p70/specs) \/ [远岫官网规格页](https://www.yuanxiu-phone.cn/m5/specs) \/ ⏎ **主要差异：** ⏎ - **青梧 P70**：起售价最低、机身最轻，电池容量和有线充电功率最大，但不支持无线充电。 ⏎ - **星澜 S9**：价格、重量和电池容量居中，支持无线充电，长焦标称倍率最高。 ⏎ - **远岫 M5**：主摄传感器最大、长焦像素最高，起售内存与存储也更大；不过最重，电池容量最小。 ⏎ 以上是规格层面的比较，不能直接据此判定实际性能、成像和续航。数据依据三份查询回传及其官网链接整理；截图文件已确认存在，但截图文字未能自动核验。价格为**上市价，而非当前到手价**。 | 941 | 过 |
 | w-third-back | core | 3 | session show s-mh8a1c3e-2k7p9q4w --around=msg_s-mh8a1c3e-2k7p9q4w_0_user；session show s-mh8a1c3e-2k7p9q4w --tail=40；session show s-mh8a1c3f-5n2r8t6x --around=msg_s-mh8a1c3f-5n2r8t6x_0_user；session show s-mh8a1c3f-5n2r8t6x --tail=40；session show s-mh8a1c3g-9v4b1m7z --around=msg_s-mh8a1c3g-9v4b1m7z_0_user；session show s-mh8a1c3g-9v4b1m7z --tail=40；session show s-mh8a1c3e-2k7p9q4w --around=msg_s-mh8a1c3e-2k7p9q4w_0_user | \/ 项目 \/ 星澜 S9 \/ 青梧 P70 \/ 远岫 M5 \/ ⏎ \/---\/---\/---\/---\/ ⏎ \/ **上市起价** \/ 5,999 元（12GB+256GB） \/ **4,799 元**（12GB+256GB） \/ 6,299 元（16GB+512GB） \/ ⏎ \/ **处理器** \/ 澜芯 X3 \/ 梧桐 G2 \/ 岫光 R1 \/ ⏎ \/ **屏幕** \/ 6.7 英寸 OLED，120Hz \/ 6.6 英寸 OLED，**144Hz** \/ **6.8 英寸** OLED，120Hz \/ ⏎ \/ **主摄** \/ 5000 万像素，1/1.3 英寸传感器 \/ 5000 万像素，1/1.56 英寸传感器 \/ 5000 万像素，**1 英寸传感器** \/ ⏎ \/ **长焦** \/ 5000 万像素潜望，3.5 倍 \/ 1200 万像素，2 倍 \/ 2 亿像素潜望，3 倍 \/ ⏎ \/ **电池容量** \/ 5,500 mAh \/ **6,000 mAh** \/ 5,000 mAh \/ ⏎ \/ **充电** \/ 90W 有线、50W 无线 \/ **100W 有线**，不支持无线 \/ 80W 有线、50W 无线 \/ ⏎ \/ **重量** \/ 218 g \/ **205 g** \/ 229 g \/ ⏎ \/ **规格来源** \/ [星澜官网](https://www.xinglan-mobile.cn/s9/specs) \/ [青梧官网](https://www.qingwu-tech.cn/p70/specs) \/ [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) \/ ⏎ **按纸面规格看：** ⏎ - **重视价格、重量和电池容量：青梧 P70。** 三款中起价最低、最轻、电池最大，但不支持无线充电。 ⏎ - **兼顾影像配置和无线充电：星澜 S9。** 主摄传感器比 P70 大，配潜望长焦，重量低于 M5。 ⏎ - **重视影像硬件和大屏：远岫 M5。** 配 1 英寸主摄和 2 亿像素潜望长焦，但也最重。 ⏎ 注意：表中是**上市价，不是当前到手价**，且 M5 起步内存、存储更大，不能直接视为同配置差价。处理器性能、实际续航和成像表现，不能只凭这些参数判断。 | 945 | 过 |
 
+## 合成那一轮读几步（票 147）
+
+主对话 PRD 裁决 198：v0.7.6 草稿冒烟 S3 两件同时回来，合成那一轮 6 次模型调用、100 秒才出回复，前 5 步都在读结果。这里量同一种合成：`w-merge-three`（三块短的，叫醒说明 3,801 字）与 `w-merge-two-long`（两块各约 3,800 字，说明里各截在 3,000 字，出处与几条口径在截掉的那段，接近 S3）。这两条跑 v9 主对话提示词（`--wake-prompt v9`，Core 今天的）；其余用例（改前改后各一遍，看不退步）跑各自 `cases.json` 写的提示词。都用 `core` 措辞，提供 `tell_user`（主对话的 runner 每一轮都给）。改法（`--t147`）：
+
+- `base`：改前（main：说明存成文件，截断后指向整行）
+- `inline`：甲（说明直接给全文）
+- `rest`：乙（截断后指向 finalAnswer[3000:]）
+- `both`：甲＋乙（改后）
+- `full`：探针，没做：甲＋乙，且 Core 的截断上限从 3,000 放到 8,000 字（两块都整份进说明）
+
+步数是这一轮的模型调用次数（带工具的几步加写回复那一步）；第一次见字是开跑到用户最先看到字的秒数（叫醒的一轮不发步骤里的字，只有 `tell_user` 或回复）；出回复是回复那一步结束的秒数。质量照 `expect` 判（一张合起来的表、每块的出处、口径、不一块一块贴、不打回、没有 `<no-reply/>`、不带子任务讲自己怎么做的话）。
+
+| 用例 | 模型 | 改法 | 遍 | 步数 | 第一次见字（秒） | 出回复（秒） | 中位：步／见字／回复 | 质量 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| done-evidence | gpt-6.1-sol | base | 1 | 8 | 91.4 | 91.4 | 8／91.4／91.4 | 0/1 |
+| done-evidence | gpt-6.1-sol | both | 1 | 6 | 53.9 | 53.9 | 6／53.9／53.9 | 0/1 |
+| done-no-proof | gpt-6.1-sol | base | 1 | 4 | — | 40.6 | 4／—／40.6 | 1/1 |
+| done-no-proof | gpt-6.1-sol | both | 1 | 5 | — | 49.7 | 5／—／49.7 | 1/1 |
+| ask-known | gpt-6.1-sol | base | 1 | 3 | — | 18.3 | 3／—／18.3 | 1/1 |
+| ask-known | gpt-6.1-sol | both | 1 | 3 | — | 23.6 | 3／—／23.6 | 1/1 |
+| ask-sms | gpt-6.1-sol | base | 1 | 2 | 41.9 | 41.9 | 2／41.9／41.9 | 1/1 |
+| ask-sms | gpt-6.1-sol | both | 1 | 2 | 31 | 31 | 2／31／31 | 1/1 |
+| ask-pay | gpt-6.1-sol | base | 1 | 2 | 20.7 | 20.7 | 2／20.7／20.7 | 1/1 |
+| ask-pay | gpt-6.1-sol | both | 1 | 1 | 27.3 | 27.3 | 1／27.3／27.3 | 1/1 |
+| error | gpt-6.1-sol | base | 1 | 1 | 9.7 | 9.7 | 1／9.7／9.7 | 1/1 |
+| error | gpt-6.1-sol | both | 1 | 1 | 10.6 | 10.6 | 1／10.6／10.6 | 1/1 |
+| step-limit | gpt-6.1-sol | base | 1 | 3 | — | 20.1 | 3／—／20.1 | 1/1 |
+| step-limit | gpt-6.1-sol | both | 1 | 3 | — | 20.3 | 3／—／20.3 | 1/1 |
+| two-at-once | gpt-6.1-sol | base | 1 | 3 | 38.1 | 38.1 | 3／38.1／38.1 | 0/1 |
+| two-at-once | gpt-6.1-sol | both | 1 | 3 | 34.8 | 34.8 | 3／34.8／34.8 | 0/1 |
+| third-round | gpt-6.1-sol | base | 1 | 3 | 43.4 | 43.4 | 3／43.4／43.4 | 1/1 |
+| third-round | gpt-6.1-sol | both | 1 | 3 | 44.6 | 44.6 | 3／44.6／44.6 | 1/1 |
+| file-handover | gpt-6.1-sol | base | 1 | 3 | 34.2 | 34.2 | 3／34.2／34.2 | 1/1 |
+| file-handover | gpt-6.1-sol | both | 1 | 3 | 29.9 | 29.9 | 3／29.9／29.9 | 1/1 |
+| w-table | gpt-6.1-sol | base | 1 | 8 | 119 | 119 | 8／119／119 | 1/1 |
+| w-table | gpt-6.1-sol | both | 1 | 8 | 122.5 | 122.5 | 8／122.5／122.5 | 1/1 |
+| w-long | gpt-6.1-sol | base | 1 | 11 | 189.2 | 189.2 | 11／189.2／189.2 | 0/1 |
+| w-long | gpt-6.1-sol | both | 1 | 9 | — | 140 | 9／—／140 | 0/1 |
+| w-merge-three | gpt-6.1-sol | base | 6 | 5、5、5、6、4、6 | 60.4、68、59.6、85.7、55、82.1 | 60.4、68、59.6、85.7、55、82.1 | 5／64.2／64.2 | 6/6 |
+| w-merge-three | gpt-6.1-sol | inline | 3 | 3、4、6 | 55.6、67.2、82.6 | 55.6、67.2、82.6 | 4／67.2／67.2 | 3/3 |
+| w-merge-three | gpt-6.1-sol | both | 6 | 4、3、5、4、4、6 | 53.7、42.9、81.4、62.9、62.3、75.2 | 53.7、42.9、81.4、62.9、62.3、75.2 | 4／62.6／62.6 | 6/6 |
+| w-merge-three | glm-5.3-flash | base | 2 | 2、3 | 28.5、52.1 | 28.5、52.1 | 2.5／40.3／40.3 | 2/2 |
+| w-merge-three | glm-5.3-flash | inline | 2 | 1、1 | 34.3、28.8 | 34.3、28.8 | 1／31.55／31.55 | 2/2 |
+| w-merge-three | glm-5.3-flash | both | 2 | 1、1 | 39.1、24.8 | 39.1、24.8 | 1／31.95／31.95 | 2/2 |
+| w-merge-three | deepseek-flash | base | 2 | 3、5 | 12.7、— | 12.7、— | 4／12.7／12.7 | 1/2 |
+| w-merge-three | deepseek-flash | inline | 2 | 3、4 | 10、13.1 | 10、13.1 | 3.5／11.55／11.55 | 2/2 |
+| w-merge-three | deepseek-flash | both | 2 | 3、2 | 10.1、8.9 | 10.1、8.9 | 2.5／9.5／9.5 | 2/2 |
+| w-two-of-three | gpt-6.1-sol | base | 1 | 5 | 56.3 | 56.3 | 5／56.3／56.3 | 1/1 |
+| w-two-of-three | gpt-6.1-sol | both | 1 | 4 | 43 | 43 | 4／43／43 | 1/1 |
+| w-third-back | gpt-6.1-sol | base | 1 | 4 | 66.8 | 66.8 | 4／66.8／66.8 | 1/1 |
+| w-third-back | gpt-6.1-sol | both | 1 | 4 | 68.4 | 68.4 | 4／68.4／68.4 | 1/1 |
+| w-merge-two-long | gpt-6.1-sol | base | 3 | 4、4、4 | 79.1、82.1、90.5 | 79.1、82.1、90.5 | 4／82.1／82.1 | 3/3 |
+| w-merge-two-long | gpt-6.1-sol | inline | 3 | 3、3、3 | 73、65.7、72.5 | 73、65.7、72.5 | 3／72.5／72.5 | 3/3 |
+| w-merge-two-long | gpt-6.1-sol | rest | 3 | 4、4、4 | 82.5、76.4、75.5 | 82.5、76.4、75.5 | 4／76.4／76.4 | 3/3 |
+| w-merge-two-long | gpt-6.1-sol | both | 3 | 3、3、3 | 68.4、68.1、69.5 | 68.4、68.1、69.5 | 3／68.4／68.4 | 3/3 |
+| w-merge-two-long | gpt-6.1-sol | full | 3 | 3、3、3 | 65.3、65.5、64.8 | 65.3、65.5、64.8 | 3／65.3／65.3 | 3/3 |
+| w-merge-two-long | glm-5.3-flash | base | 2 | 4、5 | 112.7、176 | 112.7、176 | 4.5／144.35／144.35 | 2/2 |
+| w-merge-two-long | glm-5.3-flash | inline | 2 | 1、1 | 64.5、63.1 | 64.5、63.1 | 1／63.8／63.8 | 0/2 |
+| w-merge-two-long | glm-5.3-flash | both | 2 | 1、1 | 82.1、76 | 82.1、76 | 1／79.05／79.05 | 0/2 |
+| w-merge-two-long | glm-5.3-flash | full | 2 | 1、1 | 65.6、77.8 | 65.6、77.8 | 1／71.7／71.7 | 1/2 |
+| w-merge-two-long | deepseek-flash | base | 2 | 9、10 | —、— | —、— | 9.5／—／— | 0/2 |
+| w-merge-two-long | deepseek-flash | inline | 2 | 2、1 | 27.6、15.3 | 27.6、15.3 | 1.5／21.45／21.45 | 0/2 |
+| w-merge-two-long | deepseek-flash | both | 2 | 6、6 | 27.8、30.1 | 27.8、30.1 | 6／28.95／28.95 | 0/2 |
+| w-merge-two-long | deepseek-flash | full | 2 | 3、1 | 22.8、14.4 | 22.8、14.4 | 2／18.6／18.6 | 1/2 |
+
+### 每一遍读了什么
+
+- **done-evidence gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,231 字）；1. code_run（手册 wake.md、subtasks.md；回 8,688 字）；2. code_run（CLI session show --around；session show --tail=40；回 4,275 字）；3. file_read（file_read（ocr_utils.py）；回 7,706 字）；4. code_run（code_run；回 808 字）；5. code_run（code_run；回 425 字）；6. code_run（code_run；回 125 字）；7. file_read（file_read（华立_1103.png）；回 21,176 字，被截：... [TRUNCATED]）；共 8 次模型调用，见字 91.4 秒，回复 91.4 秒，574 字、1 张表。判定：不过：太长：476 字，上限 160
+- **done-evidence gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,231 字）；1. code_run（手册 wake.md、subtasks.md；回 8,689 字）；2. code_run（CLI session show --around；session show --tail=40；回 4,272 字）；3. file_read（file_read（ocr_utils.py）；回 7,706 字）；4. code_run（code_run；回 795 字）；5. code_run（code_run；回 195 字）；共 6 次模型调用，见字 53.9 秒，回复 53.9 秒，573 字、1 张表。判定：不过：太长：475 字，上限 160
+- **done-no-proof gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,012 字）；1. code_run（手册 wake.md、subtasks.md、authority.md、cli.md；回 14,905 字）；2. code_run（CLI session show --around；session show --tail=40；回 2,481 字）；3. code_run（CLI session send --supervisor --reason --ensure-runner；回 721 字）；共 4 次模型调用，见字 None 秒，回复 40.6 秒，11 字、0 张表。判定：过
+- **done-no-proof gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,012 字）；1. code_run（手册 wake.md、subtasks.md、times.md；回 9,256 字）；2. code_run（CLI session show --around；session show --tail=40；回 2,481 字）；3. code_run（手册 authority.md、cli.md；回 6,300 字）；4. code_run（CLI session send --supervisor --reason --ensure-runner；回 683 字）；共 5 次模型调用，见字 None 秒，回复 49.7 秒，11 字、0 张表。判定：过
+- **ask-known gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（801 字）；1. code_run（手册 authority.md、cli.md；回 6,389 字）；2. code_run（CLI session send --supervisor --reason --ensure-runner；回 425 字）；共 3 次模型调用，见字 None 秒，回复 18.3 秒，11 字、0 张表。判定：过
+- **ask-known gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（801 字）；1. code_run（手册 authority.md、cli.md、wake.md、subtasks.md；回 14,925 字）；2. code_run（CLI session send --supervisor --reason --ensure-runner；回 448 字）；共 3 次模型调用，见字 None 秒，回复 23.6 秒，11 字、0 张表。判定：过
+- **ask-sms gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（766 字）；1. code_run（手册 wake.md、subtasks.md；回 8,611 字）；共 2 次模型调用，见字 41.9 秒，回复 41.9 秒，59 字、0 张表。判定：过
+- **ask-sms gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（766 字）；1. file_read（手册 wake.md；回 6,375 字）；共 2 次模型调用，见字 31.0 秒，回复 31.0 秒，58 字、0 张表。判定：过
+- **ask-pay gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（840 字）；1. code_run（手册 wake.md、subtasks.md；回 8,609 字）；共 2 次模型调用，见字 20.7 秒，回复 20.7 秒，130 字、0 张表。判定：过
+- **ask-pay gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（840 字）；没有调工具；共 1 次模型调用，见字 27.3 秒，回复 27.3 秒，83 字、0 张表。判定：过
+- **error gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（363 字）；没有调工具；共 1 次模型调用，见字 9.7 秒，回复 9.7 秒，71 字、0 张表。判定：过
+- **error gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（363 字）；没有调工具；共 1 次模型调用，见字 10.6 秒，回复 10.6 秒，62 字、0 张表。判定：过
+- **step-limit gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（671 字）；1. code_run（手册 wake.md、subtasks.md、authority.md、cli.md；回 14,902 字）；2. code_run（CLI session send --supervisor --reason --ensure-runner；回 410 字）；共 3 次模型调用，见字 None 秒，回复 20.1 秒，11 字、0 张表。判定：过
+- **step-limit gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（671 字）；1. code_run（手册 wake.md、subtasks.md、authority.md、cli.md；回 14,918 字）；2. code_run（CLI session send --supervisor --reason --ensure-runner；回 424 字）；共 3 次模型调用，见字 None 秒，回复 20.3 秒，11 字、0 张表。判定：过
+- **two-at-once gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,493 字）；1. code_run（手册 wake.md、subtasks.md；回 8,682 字）；2. code_run（CLI session show --around；session show --tail=40；回 4,262 字）；共 3 次模型调用，见字 38.1 秒，回复 38.1 秒，528 字、1 张表。判定：不过：太长：431 字，上限 320
+- **two-at-once gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,493 字）；1. code_run（手册 wake.md、subtasks.md、authority.md、cli.md；回 14,903 字）；2. code_run（CLI session show --around；session show --tail=40；回 4,268 字）；共 3 次模型调用，见字 34.8 秒，回复 34.8 秒，558 字、1 张表。判定：不过：太长：462 字，上限 320
+- **third-round gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,140 字）；1. code_run（手册 wake.md、subtasks.md，CLI session show --around；session show --tail=40；回 14,747 字）；2. code_run（code_run；回 298 字）；共 3 次模型调用，见字 43.4 秒，回复 43.4 秒，550 字、1 张表。判定：过
+- **third-round gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,140 字）；1. code_run（手册 wake.md、subtasks.md；回 8,684 字）；2. code_run（CLI session show --around；session show --tail=40；回 6,364 字）；共 3 次模型调用，见字 44.6 秒，回复 44.6 秒，562 字、1 张表。判定：过
+- **file-handover gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,143 字）；1. code_run（手册 wake.md、subtasks.md、cli.md；回 12,302 字）；2. code_run（CLI session show --around；session show --tail=40；回 2,582 字）；共 3 次模型调用，见字 34.2 秒，回复 34.2 秒，215 字、0 张表。判定：过
+- **file-handover gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,143 字）；1. code_run（手册 wake.md、subtasks.md；回 8,792 字）；2. code_run（CLI session show --around；session show --tail=40；回 2,585 字）；共 3 次模型调用，见字 29.9 秒，回复 29.9 秒，206 字、0 张表。判定：过
+- **w-table gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 v3）：第一次调用拿到说明全文（1,478 字）；1. code_run（手册 wake.md、subtasks.md、cli.md；回 12,295 字）；2. code_run（CLI session show --around；session show --tail=40；回 4,631 字）；3. code_run（code_run；回 415 字）；4. file_read（file_read（vision_sop.md）；回 1,819 字）；5. code_run（code_run；回 764 字）；6. code_run（code_run；回 179 字）；7. file_read（file_read（声岚_S7_规格.png）；回 26,670 字，被截：[omitted long content]、... [TRUNCATED]）；共 8 次模型调用，见字 119.0 秒，回复 119.0 秒，698 字、1 张表。判定：过
+- **w-table gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 v3）：第一次调用拿到说明全文（1,478 字）；1. code_run（手册 wake.md、subtasks.md、cli.md；回 12,295 字）；2. code_run（CLI session show --around；session show --tail=40；回 4,395 字）；3. code_run（code_run；回 405 字）；4. file_read（file_read（ocr_utils.py）；回 7,706 字）；5. code_run（code_run；回 796 字）；6. code_run（code_run；回 114 字）；7. code_run（code_run；回 95 字）；共 8 次模型调用，见字 122.5 秒，回复 122.5 秒，700 字、1 张表。判定：过
+- **w-long gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 v3）：第一次调用拿到「Long user prompt saved to …」（212 字）；1. file_read（存成文件的叫醒说明；回 4,691 字）；2. code_run（手册 wake.md、subtasks.md；回 8,682 字）；3. code_run（CLI session show --around；session show --tail=40；回 16,605 字）；4. code_run（手册 authority.md、cli.md；回 6,464 字）；5. file_read（file_read（ocr_utils.py）；回 7,706 字）；6. code_run（code_run；回 797 字）；7. code_run（code_run；回 154 字）；8. file_read（file_read（1_难波酒店.png）；回 21,606 字，被截：... [TRUNCATED]）；9. update_working_checkpoint（update_working_checkpoint；回 38 字）；10. code_run（CLI session show --tail=1；回 195 字）；共 11 次模型调用，见字 189.2 秒，回复 189.2 秒，1,806 字、2 张表。判定：不过：太长：1703 字，上限 1500
+- **w-long gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 v3）：第一次调用拿到说明全文（4,573 字）；1. code_run（手册 wake.md、subtasks.md；回 8,682 字）；2. code_run（手册 authority.md、cli.md，CLI session show --around；session show --tail=40；回 17,053 字，被截：[omitted long output]）；3. code_run（code_run；回 1,875 字）；4. code_run（code_run；回 159 字）；5. code_run（code_run；回 201 字）；6. code_run（code_run；回 1,647 字）；7. code_run（code_run；回 177 字）；8. code_run（CLI session send --supervisor --reason --ensure-runner；回 794 字）；共 9 次模型调用，见字 None 秒，回复 140.0 秒，11 字、0 张表。判定：不过：不该 session send 却发了；不该写 <no-reply/>；没点到：京都 / 奈良 / 大阪；没说全文在哪：全文 / 完整版 / 完整攻略 / 完整的攻略 / 点开 / 卡片 / 回执 / [FILE:
+- **w-merge-three gpt-6.1-sol base 第 1 遍**（2026-11-04 16:39，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（219 字）；1. file_read（存成文件的叫醒说明；回 4,042 字）；2. code_run（手册 wake.md、subtasks.md；回 8,688 字）；3. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,853 字）；4. code_run（code_run；回 558 字）；共 5 次模型调用，见字 60.4 秒，回复 60.4 秒，911 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol base 第 2 遍**（2026-11-04 16:39，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（219 字）；1. file_read（存成文件的叫醒说明；回 4,042 字）；2. code_run（手册 wake.md、subtasks.md；回 8,689 字）；3. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,871 字）；4. code_run（code_run；回 291 字）；共 5 次模型调用，见字 68.0 秒，回复 68.0 秒，950 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol base 第 3 遍**（2026-11-04 16:39，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（219 字）；1. file_read（存成文件的叫醒说明；回 4,042 字）；2. code_run（手册 wake.md、subtasks.md；回 8,692 字）；3. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,871 字）；4. code_run（code_run；回 846 字）；共 5 次模型调用，见字 59.6 秒，回复 59.6 秒，948 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol base 第 4 遍**（2026-11-04 17:15，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（219 字）；1. file_read（存成文件的叫醒说明；回 4,042 字）；2. code_run（手册 wake.md、subtasks.md；回 8,721 字）；3. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,871 字）；4. code_run（code_run；回 7,591 字）；5. code_run（code_run；回 834 字）；共 6 次模型调用，见字 85.7 秒，回复 85.7 秒，962 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol base 第 5 遍**（2026-11-04 17:15，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（219 字）；1. file_read（存成文件的叫醒说明；回 4,042 字）；2. code_run（手册 wake.md、subtasks.md；回 8,688 字）；3. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 12,265 字）；共 4 次模型调用，见字 55.0 秒，回复 55.0 秒，952 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol base 第 6 遍**（2026-11-04 17:15，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（219 字）；1. file_read（存成文件的叫醒说明；回 4,042 字）；2. code_run（手册 wake.md、subtasks.md；回 8,720 字）；3. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,871 字）；4. code_run（code_run；回 461 字）；5. code_run（code_run；回 186 字）；共 6 次模型调用，见字 82.1 秒，回复 82.1 秒，939 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol inline 第 1 遍**（2026-11-04 16:51，提示词 v9）：第一次调用拿到说明全文（3,954 字）；1. code_run（手册 wake.md、subtasks.md，CLI session show --around ×3；session show --tail=40 ×3；回 17,298 字，被截：[omitted long output]）；2. code_run（CLI session show --tail=40；回 1,162 字）；共 3 次模型调用，见字 55.6 秒，回复 55.6 秒，890 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol inline 第 2 遍**（2026-11-04 16:51，提示词 v9）：第一次调用拿到说明全文（3,954 字）；1. code_run（手册 wake.md、subtasks.md；回 8,723 字）；2. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,895 字）；3. code_run（code_run；回 534 字）；共 4 次模型调用，见字 67.2 秒，回复 67.2 秒，886 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol inline 第 3 遍**（2026-11-04 16:51，提示词 v9）：第一次调用拿到说明全文（3,954 字）；1. code_run（手册 wake.md、subtasks.md；回 8,723 字）；2. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 12,295 字）；3. file_read（file_read（ocr_utils.py）；回 7,706 字）；4. code_run（code_run；回 828 字）；5. code_run（code_run；回 236 字）；共 6 次模型调用，见字 82.6 秒，回复 82.6 秒，950 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol both 第 1 遍**（2026-11-04 16:55，提示词 v9）：第一次调用拿到说明全文（3,948 字）；1. code_run（手册 wake.md、subtasks.md；回 8,723 字）；2. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,907 字）；3. code_run（code_run；回 558 字）；共 4 次模型调用，见字 53.7 秒，回复 53.7 秒，950 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol both 第 2 遍**（2026-11-04 16:55，提示词 v9）：第一次调用拿到说明全文（3,948 字）；1. code_run（手册 wake.md、subtasks.md；回 8,735 字）；2. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 12,283 字）；共 3 次模型调用，见字 42.9 秒，回复 42.9 秒，834 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol both 第 3 遍**（2026-11-04 16:55，提示词 v9）：第一次调用拿到说明全文（3,948 字）；1. code_run（手册 wake.md、subtasks.md；回 8,688 字）；2. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,871 字）；3. code_run（code_run；回 461 字）；4. code_run（code_run；回 202 字）；共 5 次模型调用，见字 81.4 秒，回复 81.4 秒，834 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol both 第 4 遍**（2026-11-04 17:16，提示词 v9）：第一次调用拿到说明全文（3,948 字）；1. code_run（手册 wake.md、subtasks.md；回 8,693 字）；2. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,871 字）；3. code_run（code_run；回 540 字）；共 4 次模型调用，见字 62.9 秒，回复 62.9 秒，892 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol both 第 5 遍**（2026-11-04 17:16，提示词 v9）：第一次调用拿到说明全文（3,948 字）；1. code_run（手册 wake.md、subtasks.md；回 8,689 字）；2. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,871 字）；3. code_run（code_run；回 540 字）；共 4 次模型调用，见字 62.3 秒，回复 62.3 秒，1,245 字、1 张表。判定：过
+- **w-merge-three gpt-6.1-sol both 第 6 遍**（2026-11-04 17:16，提示词 v9）：第一次调用拿到说明全文（3,948 字）；1. code_run（手册 wake.md、subtasks.md；回 8,688 字）；2. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,871 字）；3. code_run（code_run；回 1,095 字）；4. file_read（file_read（vision_sop.md）；回 1,819 字）；5. code_run（code_run；回 765 字）；共 6 次模型调用，见字 75.2 秒，回复 75.2 秒，926 字、1 张表。判定：过
+- **w-merge-three glm-5.3-flash base 第 1 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（223 字）；1. file_read（存成文件的叫醒说明；回 4,054 字）；共 2 次模型调用，见字 28.5 秒，回复 28.5 秒，766 字、1 张表。判定：过
+- **w-merge-three glm-5.3-flash base 第 2 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（223 字）；1. file_read（存成文件的叫醒说明；回 4,054 字）；2. file_read（手册 subtasks.md；回 2,692 字）；共 3 次模型调用，见字 52.1 秒，回复 52.1 秒，1,262 字、1 张表。判定：过
+- **w-merge-three glm-5.3-flash inline 第 1 遍**（2026-11-04 17:01，提示词 v9）：第一次调用拿到说明全文（3,966 字）；没有调工具；共 1 次模型调用，见字 34.3 秒，回复 34.3 秒，731 字、1 张表。判定：过
+- **w-merge-three glm-5.3-flash inline 第 2 遍**（2026-11-04 17:01，提示词 v9）：第一次调用拿到说明全文（3,966 字）；没有调工具；共 1 次模型调用，见字 28.8 秒，回复 28.8 秒，873 字、1 张表。判定：过
+- **w-merge-three glm-5.3-flash both 第 1 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（3,960 字）；没有调工具；共 1 次模型调用，见字 39.1 秒，回复 39.1 秒，902 字、1 张表。判定：过
+- **w-merge-three glm-5.3-flash both 第 2 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（3,960 字）；没有调工具；共 1 次模型调用，见字 24.8 秒，回复 24.8 秒，934 字、1 张表。判定：过
+- **w-merge-three deepseek-flash base 第 1 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（222 字）；1. file_read（存成文件的叫醒说明；回 4,051 字）；2. code_run（CLI session show --tail=6 ×3；回 6,180 字）；共 3 次模型调用，见字 12.7 秒，回复 12.7 秒，1,275 字、1 张表。判定：过
+- **w-merge-three deepseek-flash base 第 2 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（222 字）；1. file_read（存成文件的叫醒说明；回 4,051 字）；2. code_run（code_run；回 228 字）；3. code_run（CLI session show --around；回 2,178 字）；4. code_run（code_run；回 213 字）；5. code_run（code_run；回 458 字）；6. web_scan（web_scan（未执行）；回 0 字）；共 5 次模型调用，见字 None 秒，回复 None 秒，0 字、0 张表。判定：不过：没走到最终回复：要用浏览器工具，运行停在这里（没有执行）；表少了：0 张，至少 1 张；没有一张表把几块合在一起：星澜 S9 / 青梧 P70 / 远岫 M5 / 澜芯 X3 / 梧桐 G2 / 岫光 R1；少了一块的出处：www.xinglan-mobile.cn / 星澜_S9_规格.png；少了一块的出处：www.qingwu-tech.cn / 青梧_P70_规格.png；少了一块的出处：www.yuanxiu-phone.cn / 远岫_M5_规格.png
+- **w-merge-three deepseek-flash inline 第 1 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（3,963 字）；1. code_run（CLI session show --around ×3；回 4,731 字，被截：[omitted long output]）；2. file_read（手册 subtasks.md；回 2,692 字）；3. code_run（code_run；回 176 字）；共 3 次模型调用，见字 10.0 秒，回复 10.0 秒，1,231 字、1 张表。判定：过
+- **w-merge-three deepseek-flash inline 第 2 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（3,963 字）；1. code_run（code_run；回 306 字）；2. file_read（手册 subtasks.md；回 2,692 字）；3. code_run（CLI session show --around ×3；回 5,786 字）；4. code_run（code_run；回 176 字）；共 4 次模型调用，见字 13.1 秒，回复 13.1 秒，1,082 字、1 张表。判定：过
+- **w-merge-three deepseek-flash both 第 1 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（3,957 字）；1. code_run（CLI session show --around；回 1,998 字）；2. file_read（手册 subtasks.md；回 2,692 字）；3. code_run（CLI session show --around ×2；回 1,941 字）；共 3 次模型调用，见字 10.1 秒，回复 10.1 秒，873 字、1 张表。判定：过
+- **w-merge-three deepseek-flash both 第 2 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（3,957 字）；1. code_run（code_run；回 146 字）；共 2 次模型调用，见字 8.9 秒，回复 8.9 秒，1,280 字、1 张表。判定：过
+- **w-two-of-three gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 v6）：第一次调用拿到「Long user prompt saved to …」（220 字）；1. file_read（存成文件的叫醒说明；回 2,779 字）；2. code_run（手册 wake.md、subtasks.md；回 8,689 字）；3. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 7,997 字）；4. code_run（code_run；回 398 字）；共 5 次模型调用，见字 56.3 秒，回复 56.3 秒，48 字、0 张表。判定：过
+- **w-two-of-three gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 v6）：第一次调用拿到说明全文（2,699 字）；1. code_run（手册 wake.md、subtasks.md；回 8,690 字）；2. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 7,981 字）；3. code_run（code_run；回 162 字）；共 4 次模型调用，见字 43.0 秒，回复 43.0 秒，50 字、0 张表。判定：过
+- **w-third-back gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 v6）：第一次调用拿到说明全文（1,386 字）；1. code_run（手册 wake.md、subtasks.md，CLI session show --around ×3；session show --tail=40 ×3；回 17,298 字，被截：[omitted long output]）；2. code_run（CLI session show --around；回 2,008 字）；3. code_run（code_run；回 222 字）；共 4 次模型调用，见字 66.8 秒，回复 66.8 秒，920 字、1 张表。判定：过
+- **w-third-back gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 v6）：第一次调用拿到说明全文（1,386 字）；1. code_run（手册 wake.md、subtasks.md；回 8,687 字）；2. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,883 字）；3. code_run（code_run；回 537 字）；共 4 次模型调用，见字 68.4 秒，回复 68.4 秒，940 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol base 第 1 遍**（2026-11-04 16:39，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（222 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（手册 wake.md、subtasks.md、cli.md；回 12,344 字）；3. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；共 4 次模型调用，见字 79.1 秒，回复 79.1 秒，2,735 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol base 第 2 遍**（2026-11-04 16:39，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（222 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（手册 wake.md、subtasks.md；回 8,696 字）；3. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；共 4 次模型调用，见字 82.1 秒，回复 82.1 秒，3,019 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol base 第 3 遍**（2026-11-04 16:39，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（222 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（手册 wake.md、subtasks.md；回 8,725 字）；3. code_run（CLI session show --around ×2；session show --tail=1 ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；共 4 次模型调用，见字 90.5 秒，回复 90.5 秒，2,904 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol inline 第 1 遍**（2026-11-04 16:51，提示词 v9）：第一次调用拿到说明全文（7,943 字）；1. code_run（手册 wake.md、subtasks.md；回 8,693 字）；2. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；共 3 次模型调用，见字 73.0 秒，回复 73.0 秒，2,705 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol inline 第 2 遍**（2026-11-04 16:51，提示词 v9）：第一次调用拿到说明全文（7,943 字）；1. code_run（手册 wake.md、subtasks.md；回 8,693 字）；2. code_run（CLI session show --tail=40 ×2；session show --around ×2；回 17,788 字，被截：[omitted long output]）；共 3 次模型调用，见字 65.7 秒，回复 65.7 秒，2,963 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol inline 第 3 遍**（2026-11-04 16:51，提示词 v9）：第一次调用拿到说明全文（7,943 字）；1. code_run（手册 wake.md、subtasks.md，CLI session show --around ×2；session show --tail=40 ×2；回 17,739 字，被截：[omitted long output]）；2. code_run（CLI session show --around；session show --tail=40；回 8,403 字）；共 3 次模型调用，见字 72.5 秒，回复 72.5 秒，2,592 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol rest 第 1 遍**（2026-11-04 16:54，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（222 字）；1. file_read（存成文件的叫醒说明；回 8,744 字）；2. code_run（手册 wake.md、subtasks.md；回 8,694 字）；3. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；共 4 次模型调用，见字 82.5 秒，回复 82.5 秒，2,478 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol rest 第 2 遍**（2026-11-04 16:54，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（222 字）；1. file_read（存成文件的叫醒说明；回 8,744 字）；2. code_run（手册 wake.md、subtasks.md；回 8,692 字）；3. code_run（CLI session show --around ×2；session show --tail=1 ×2；回 17,788 字，被截：[omitted long output]）；共 4 次模型调用，见字 76.4 秒，回复 76.4 秒，2,697 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol rest 第 3 遍**（2026-11-04 16:54，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（222 字）；1. file_read（存成文件的叫醒说明；回 8,744 字）；2. code_run（手册 wake.md、subtasks.md；回 8,692 字）；3. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；共 4 次模型调用，见字 75.5 秒，回复 75.5 秒，2,813 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol both 第 1 遍**（2026-11-04 16:55，提示词 v9）：第一次调用拿到说明全文（8,035 字）；1. code_run（手册 wake.md、subtasks.md；回 8,691 字）；2. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；共 3 次模型调用，见字 68.4 秒，回复 68.4 秒，2,910 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol both 第 2 遍**（2026-11-04 16:55，提示词 v9）：第一次调用拿到说明全文（8,035 字）；1. code_run（手册 wake.md、subtasks.md，CLI session show --around ×2；session show --tail=40 ×2；回 17,739 字，被截：[omitted long output]）；2. code_run（CLI session show --tail=40 ×2，切片 [3000:]；回 2,048 字）；共 3 次模型调用，见字 68.1 秒，回复 68.1 秒，2,719 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol both 第 3 遍**（2026-11-04 16:55，提示词 v9）：第一次调用拿到说明全文（8,035 字）；1. code_run（手册 wake.md、subtasks.md，CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；2. code_run（CLI session show --tail=40；回 4,242 字）；共 3 次模型调用，见字 69.5 秒，回复 69.5 秒，2,554 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol full 第 1 遍**（2026-11-04 17:04，提示词 v9）：第一次调用拿到说明全文（9,355 字）；1. code_run（手册 wake.md、subtasks.md；回 8,690 字）；2. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；共 3 次模型调用，见字 65.3 秒，回复 65.3 秒，2,697 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol full 第 2 遍**（2026-11-04 17:04，提示词 v9）：第一次调用拿到说明全文（9,355 字）；1. code_run（手册 wake.md、subtasks.md；回 8,690 字）；2. code_run（CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；共 3 次模型调用，见字 65.5 秒，回复 65.5 秒，2,684 字、1 张表。判定：过
+- **w-merge-two-long gpt-6.1-sol full 第 3 遍**（2026-11-04 17:18，提示词 v9）：第一次调用拿到说明全文（9,355 字）；1. code_run（手册 wake.md、subtasks.md，CLI session show --around ×2；session show --tail=40 ×2；回 17,788 字，被截：[omitted long output]）；2. code_run（CLI session show --tail=40 ×2；回 1,065 字）；共 3 次模型调用，见字 64.8 秒，回复 64.8 秒，2,564 字、1 张表。判定：过
+- **w-merge-two-long glm-5.3-flash base 第 1 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（226 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. file_read（手册 subtasks.md；回 2,692 字）；3. file_read（手册 wake.md；回 6,375 字）；4. code_run（code_run；回 424 字）；5. code_run（CLI session show --tail=1 ×2；回 16,201 字）；共 4 次模型调用，见字 112.7 秒，回复 112.7 秒，2,298 字、1 张表。判定：过
+- **w-merge-two-long glm-5.3-flash base 第 2 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（226 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（手册 subtasks.md；回 2,755 字）；3. code_run（CLI session show --tail=1 ×2；回 1,735 字）；4. file_read（file_read（e7_full.txt）；回 8,048 字，被截：... [TRUNCATED]）；5. file_read（file_read（s6_full.txt）；回 7,927 字）；共 5 次模型调用，见字 176.0 秒，回复 176.0 秒，2,525 字、1 张表。判定：过
+- **w-merge-two-long glm-5.3-flash inline 第 1 遍**（2026-11-04 17:01，提示词 v9）：第一次调用拿到说明全文（7,943 字）；没有调工具；共 1 次模型调用，见字 64.5 秒，回复 64.5 秒，1,959 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+- **w-merge-two-long glm-5.3-flash inline 第 2 遍**（2026-11-04 17:01，提示词 v9）：第一次调用拿到说明全文（7,943 字）；没有调工具；共 1 次模型调用，见字 63.1 秒，回复 63.1 秒，1,870 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+- **w-merge-two-long glm-5.3-flash both 第 1 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（8,035 字）；没有调工具；共 1 次模型调用，见字 82.1 秒，回复 82.1 秒，1,958 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+- **w-merge-two-long glm-5.3-flash both 第 2 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（8,035 字）；没有调工具；共 1 次模型调用，见字 76.0 秒，回复 76.0 秒，1,921 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+- **w-merge-two-long glm-5.3-flash full 第 1 遍**（2026-11-04 17:10，提示词 v9）：第一次调用拿到说明全文（9,355 字）；没有调工具；共 1 次模型调用，见字 65.6 秒，回复 65.6 秒，1,835 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+- **w-merge-two-long glm-5.3-flash full 第 2 遍**（2026-11-04 17:10，提示词 v9）：第一次调用拿到说明全文（9,355 字）；没有调工具；共 1 次模型调用，见字 77.8 秒，回复 77.8 秒，2,350 字、1 张表。判定：过
+- **w-merge-two-long deepseek-flash base 第 1 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（225 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（code_run；回 206 字）；3. code_run（手册 目录；回 106 字）；4. file_read（手册 subtasks.md；回 2,692 字）；5. code_run（CLI session show --around；回 5,025 字，被截：[omitted long output]）；6. code_run（切片 [-3000:]；回 0 字）；7. code_run（code_run；回 214 字）；8. code_run（CLI session show --around；回 52 字）；9. code_run（切片 [-1800:]；回 2,112 字）；10. file_read（手册 memo.md；回 4,791 字）；11. code_run（code_run（未执行）；回 0 字）；共 9 次模型调用，见字 None 秒，回复 None 秒，0 字、0 张表。判定：不过：没走到最终回复：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；表少了：0 张，至少 1 张；没有一张表把几块合在一起：澄川 / 朔风 / 24.98 / 25.38；少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn；没写明一块选的版本（口径）：长续航；没写明一块选的版本（口径）：后驱
+- **w-merge-two-long deepseek-flash base 第 2 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（225 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（手册 目录；回 270 字）；3. file_read（手册 subtasks.md；回 2,692 字）；4. code_run（code_run；回 184 字）；5. code_run（CLI session show --tail=1 ×2；回 32 字）；6. file_read（file_read（e7.txt）；回 8,101 字，被截：... [TRUNCATED]）；7. code_run（code_run；回 3,782 字）；8. code_run（CLI session show --around ×2；回 3,093 字）；9. code_run（code_run；回 447 字）；10. code_run（code_run；回 409 字）；11. code_run（code_run（未执行）；回 0 字）；共 10 次模型调用，见字 None 秒，回复 None 秒，0 字、0 张表。判定：不过：没走到最终回复：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；表少了：0 张，至少 1 张；没有一张表把几块合在一起：澄川 / 朔风 / 24.98 / 25.38；少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn；没写明一块选的版本（口径）：长续航；没写明一块选的版本（口径）：后驱
+- **w-merge-two-long deepseek-flash inline 第 1 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（7,943 字）；1. code_run（CLI session show --around ×2；回 2,660 字）；共 2 次模型调用，见字 27.6 秒，回复 27.6 秒，2,098 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+- **w-merge-two-long deepseek-flash inline 第 2 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（7,943 字）；没有调工具；共 1 次模型调用，见字 15.3 秒，回复 15.3 秒，2,155 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+- **w-merge-two-long deepseek-flash both 第 1 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（8,035 字）；1. code_run（code_run；回 580 字）；2. code_run（code_run；回 287 字）；3. code_run（CLI session show --tail=1 ×2；回 181 字）；4. code_run（code_run；回 329 字）；5. code_run（切片 [2800:]；回 2,083 字）；共 6 次模型调用，见字 27.8 秒，回复 27.8 秒，2,355 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+- **w-merge-two-long deepseek-flash both 第 2 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（8,035 字）；1. code_run（手册 目录；回 190 字）；2. file_read（手册 subtasks.md；回 2,692 字）；3. code_run（code_run；回 324 字）；4. code_run（code_run；回 383 字）；5. code_run（CLI session show --tail=1 ×2；回 322 字）；6. code_run（切片 [2400:]；回 2,917 字）；共 6 次模型调用，见字 30.1 秒，回复 30.1 秒，2,281 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+- **w-merge-two-long deepseek-flash full 第 1 遍**（2026-11-04 17:10，提示词 v9）：第一次调用拿到说明全文（9,355 字）；1. code_run（CLI session show --around；回 4,976 字，被截：[omitted long output]）；2. code_run（CLI session show --around；回 5,025 字，被截：[omitted long output]）；3. code_run（CLI session show --tail=6 ×2；回 832 字）；共 3 次模型调用，见字 22.8 秒，回复 22.8 秒，2,478 字、1 张表。判定：过
+- **w-merge-two-long deepseek-flash full 第 2 遍**（2026-11-04 17:10，提示词 v9）：第一次调用拿到说明全文（9,355 字）；没有调工具；共 1 次模型调用，见字 14.4 秒，回复 14.4 秒，2,634 字、3 张表。判定：不过：表多了：3 张，最多 2 张（一块一块贴的）；少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
+
+### `w-merge-two-long` 的叫醒说明（改前的截断行；日期按运行那天填）
+
+```text
+[Galley — not a message from the user] A subtask you started has an update. Act on it, then reply to the user. Do not mention this note.
+
+Subtask `s-mi2p7k4a-3d8f1q6w` "核查澄川 E7" (round 1) finished. Its final answer:
+<<<
+一共打开了 6 个页面：官网配置表、选配页、产品页、售后政策页和两篇发布稿。
+
+## 核查结论
+
+**截至11月4日，澄川官网在售的 E7 共 5 个版本，官方指导价 22.98 万～36.98 万元。** 这是现行指导价，不是首发价，也不是优惠后的成交价。
+
+**建议主表用「澄川 E7 长续航版，24.98 万元」**：与朔风 S6 现行指导价 25.38 万元最接近，差 4,000 元。不要把 Max 的 5C 超充、Pro 的空气悬架或 Ultra 的后排通风按摩写进长续航版。
+
+### 一、全系价格、动力与电池
+
+以下都来自现行官方配置表与选配页［来源 1、2］。
+
+| 项目 | 标准版 | 长续航版 | Pro | Max | Ultra |
+|---|---:|---:|---:|---:|---:|
+| 现行官方指导价 | 22.98 万元 | 24.98 万元 | 27.98 万元 | 31.98 万元 | 36.98 万元 |
+| 驱动 | 单电机后驱 | 单电机后驱 | 双电机四驱 | 双电机四驱 | 双电机四驱 |
+| 最大功率 | 230kW | 230kW | 360kW | 495kW | 680kW |
+| 最大扭矩 | 520N·m | 520N·m | 700N·m | 850N·m | 1,050N·m |
+| 0—100km/h | 6.1 秒 | 6.0 秒 | 4.3 秒 | 3.4 秒 | 2.9 秒 |
+| 电池容量 | 76kWh | 98kWh | 98kWh | 102kWh | 102kWh |
+| 电池类型 | 磷酸铁锂 | 三元锂 | 三元锂 | 三元锂 | 三元锂 |
+| CLTC 续航 | 640km | 815km | 760km | 720km | 680km |
+| 电压平台 | 800V | 800V | 800V | 900V | 900V |
+| 10%—80% 补能 | 22 分钟 | 22 分钟 | 22 分钟 | 13 分钟（5C） | 13 分钟（5C） |
+| 悬架 | 可变阻尼 | 可变阻尼 | 空气悬架＋可变阻尼 | 空气悬架＋可变阻尼 | 空气悬架＋可变阻尼 |
+| 整备质量 | 2,180kg | 2,290kg | 2,420kg | 2,460kg | 2,500kg |
+| 轮胎规格 | 245/55 R19 | 245/55 R19 | 255/45 R20 | 265/40 R21 | 265/40 R21 |
+| 智驾算力 | 254TOPS | 254TOPS | 508TOPS | 508TOPS | 508TOPS |
+
+注：补能时间是官方在指定超充桩、电池温度适宜时的标称值，不是用户实测；Ultra 的 2.9 秒为带一脚踏起步的成绩。
+
+### 二、长续航版可加的选装（官方选配页单价）
+
+| 选装项 | 价格 | 说明 |
+|---|---:|---|
+| 前排按摩 | 6,000 元 | 长续航版起可选，标准版不可选 |
+| 车载冰箱 | 4,000 元 | 标准版不可选 |
+| 电吸门 | 3,000 元 | 全系可选 |
+| 电动前备箱 | 2,000 元 | 全系可选 |
+| 23 扬声器 | 5,000 元 | 长续航版起可选 |
+| 21 英寸轮毂 | 4,000 元 | 选了以后 CLTC 由 815km 降为 790km |
+
+### 三、价格口径
+
+- 24.98 万元是现行官方指导价，全国统一；官网目前没有限时减免，只有 5,000 元置换补贴，要求旧车过户满一年，不能算进人人拿得到的价格。
+- 首发时长续航版是 25.98 万元，10 月 1 日官方调价 1 万元；搜索结果里常见的 25.98 万元是旧价。
+- 配齐价按选配页的单价相加，不含保险、上牌与充电桩安装费。
+
+### 四、长续航版的尺寸、空间与配置
+
+| 项目 | 长续航版 | 依据与适用范围 |
+|---|---|---|
+| 车身尺寸 | 4,960×1,980×1,600mm | 来源 1；全系 |
+| 轴距 | 3,000mm | 来源 1；全系 |
+| 座位 | 5 座，2＋3 布局 | 来源 3；全系 |
+| 后备厢／前备厢 | 660L／120L | 来源 3；测量口径官网未写明，不宜与别家的数字直接比 |
+| 悬架 | 前双叉臂、后五连杆，标配可变阻尼；**空气悬架不可选** | 来源 1；Pro 起标配空悬 |
+| 前排座椅 | 电动调节、加热、通风标配；**按摩需选装 6,000 元** | 来源 2 |
+| 后排座椅 | 电动靠背 105°～130°、加热；无通风、按摩 | 来源 1；Ultra 才有后排通风按摩 |
+| 辅助驾驶 | 1 颗激光雷达、高速与城市领航；**不是自动驾驶，驾驶员须全程监控、随时接管**，城市领航需 OTA 开通 | 来源 1、3；全系 |
+| 座舱 | 15.6 英寸中控屏、HUD、后排 8 英寸控制屏；支持 CarPlay，手机钥匙需兼容机型 | 来源 3；长续航版 |
+| 车机 | 车机芯片算力 30TOPS，32GB 内存；OTA 约两个月一次 | 来源 3；全系 |
+| 车内储物 | 中控下方 8L 储物格、扶手箱 10L、后排地台平整 | 来源 3；全系 |
+| 隔音 | 四门双层玻璃；官方未公布车内噪声数据 | 来源 1；全系 |
+| 家用便利 | 三温区空调、四门双层玻璃、后排隐私玻璃、电动尾门、ISOFIX 标配；**冰箱、电吸门、电动前备箱需选装** | 来源 2；冰箱标准版不可选 |
+| 音响／外放电 | 标配 16 扬声器，可选 23 扬声器；V2L 外放电 3.3kW，需另购放电枪 | 来源 1；长续航版 |
+| 灯光 | 贯穿式日行灯、ADB 矩阵大灯 | 来源 1；全系 |
+| 安全 | 9 个气囊，含前排中央气囊；C-NCAP 暂无成绩 | 来源 1；全系 |
+| 拖挂 | 不支持 | 来源 1；全系 |
+| 质保 | **整车 5 年或 12 万公里；电池、电机与电控 8 年或 16 万公里，以先到为准**；易损件、除外条件以用户手册为准 | 来源 4；官方售后政策 |
+
+### 五、家庭日常使用的优势与短板
+
+**以下是规格层面的判断，不是与朔风 S6 同场实测的结论：**
+
+- **优势**：815km CLTC 续航、800V 平台、120L 前备箱、可变阻尼，前排通风加热标配，适合跑长途多、看重续航的家庭。
+- **停车负担**：车宽 1,980mm，接近两米；老小区、机械车位和孩子上下车的空间，建议实际去试，不能只看轴距。
+- **舒适配置要算选装**：24.98 万元不含空悬、前排按摩、冰箱、电吸门和电动前备箱；比家用配置时应比较**配齐价**（长续航版加上冰箱、电吸门与按摩约 26.3 万元，空悬要上 Pro）。
+- **后排**：有加热和电动靠背，没有通风、按摩，不能拿 Ultra 的配置代表全系。
+- **补能**：长续航版是 22 分钟 10%—80%，不是 Max 的 13 分钟；高速实际
+[… cut for length; all of it: `session show s-mi2p7k4a-3d8f1q6w --tail=1`]
+>>>
+Check it against what you asked for in its instructions (its first message: `session show s-mi2p7k4a-3d8f1q6w --around=msg_s-mi2p7k4a-3d8f1q6w_0_user`; its last steps: `session show s-mi2p7k4a-3d8f1q6w --tail=40`). If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or two with the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mi2p7k4a-3d8f1q6w "<what is missing>" --supervisor=galley-assistant --reason="send back" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else.
+
+Subtask `s-mi2p7k4b-8h5m2x9c` "核查朔风 S6" (round 1) finished. Its final answer:
+<<<
+一共打开了 5 个页面：官网配置表、选配页、产品页、首销权益页和售后政策页。
+
+## 核心结论：用 2026 款，别沿用 2025 款数据
+
+**截至11月4日，朔风官网主推在售的是 2026 款 S6，10 月下旬发布。** 官方配置表是**一个基础版本＋选装四驱**，不是多个 Pro／Max 版本［来源 1、2］。
+
+- **现行全国统一零售价：25.38 万元**，后驱基础配置。
+- **首销权益价：24.38 万元**：限时到 11 月底定购，现金减免 1 万元；部分车色另加 3,000 元。这是限时价，**主表应写现行价 25.38 万元，权益价单列注明**。权益要求在官方 App 下定并在 12 月 31 日前提车，经销商渠道不参与。
+- **选装四驱：加 2 万元**，CLTC 续航由 760km 降为 705km。
+
+**建议主表用「朔风 S6 2026 款后驱，25.38 万元」**：与澄川 E7 中价位接近的版本对比；若对方有多个版本，请选指导价在 25 万元上下的那一个。
+
+### 一、价格、动力与电池
+
+| 项目 | 2026 款后驱（主表） | 选装四驱 |
+|---|---:|---:|
+| 现行官方指导价 | 25.38 万元 | 27.38 万元 |
+| 首销权益价（限时） | 24.38 万元 | 26.38 万元 |
+| 驱动 | 单电机后驱 | 双电机四驱 |
+| 最大功率 | 250kW | 400kW |
+| 最大扭矩 | 450N·m | 720N·m |
+| 0—100km/h | 5.8 秒 | 4.4 秒 |
+| 电池容量 | 92kWh | 92kWh |
+| 电池类型 | 磷酸铁锂 | 磷酸铁锂 |
+| CLTC 续航 | 760km | 705km |
+| 电压平台 | 800V | 800V |
+| 10%—80% 补能 | 19 分钟 | 19 分钟 |
+| 整备质量 | 2,350kg | 2,460kg |
+| 轮胎规格 | 255/50 R20 | 255/50 R20 |
+| 智驾算力 | 508TOPS | 508TOPS |
+
+注：补能时间是官方标称，需对应的超充桩与适宜的电池温度；不是用户实测。四驱的 0—100km/h 为官方标称，未注明是否带一脚踏起步。
+
+### 二、2026 款与 2025 款的差别（别混用）
+
+| 项目 | 2025 款（已停售） | 2026 款 |
+|---|---|---|
+| 版本 | 标准、Pro、Max 三个版本 | 一个基础版本＋选装四驱 |
+| 起售价 | 26.98 万元 | 25.38 万元 |
+| 电池容量 | 88kWh | 92kWh |
+| CLTC 续航 | 720km | 760km |
+| 前排按摩 | Pro 起才有 | 标配 |
+| 车载冰箱 | 选装 | 标配 |
+| 后排通风 | Max 才有 | 标配 |
+| 智驾 | 无激光雷达，只有高速领航 | 1 颗激光雷达，高速与城市领航 |
+| 补能 | 10%—80% 26 分钟 | 10%—80% 19 分钟 |
+
+### 三、选装价格（官方选配页单价）
+
+| 选装项 | 价格 | 说明 |
+|---|---:|---|
+| 四驱 | 20,000 元 | CLTC 降为 705km |
+| 后排吸顶屏 | 8,000 元 | 15.6 英寸 |
+| 21 英寸轮毂 | 5,000 元 | CLTC 降为 740km |
+| 外观特殊色 | 3,000 元 | 两种颜色 |
+
+### 四、尺寸、空间与配置
+
+| 项目 | 2026 款后驱 | 依据与适用范围 |
+|---|---|---|
+| 车身尺寸 | 4,950×1,935×1,670mm | 来源 1 |
+| 轴距 | 3,000mm | 来源 1 |
+| 座位 | 5 座，2＋3 布局 | 来源 3 |
+| 后备厢 | 610L，后排放倒 1,720L；无前备箱 | 来源 3；按官方 VDA 口径 |
+| 悬架 | 前双叉臂、后五连杆，**空气悬架＋可变阻尼标配** | 来源 1；四驱同 |
+| 前排座椅 | 电动调节、加热、通风、**10 点按摩标配**，副驾零重力 | 来源 1 |
+| 后排座椅 | 电动靠背、加热、通风标配；无按摩 | 来源 1 |
+| 辅助驾驶 | 1 颗激光雷达、高速与城市领航；**不是自动驾驶，驾驶员须全程监控、随时接管** | 来源 1、3 |
+| 座舱 | 双 15.7 英寸屏、HUD；后排吸顶屏**需选装 8,000 元**；支持 CarPlay | 来源 2、3 |
+| 车机 | 车机芯片算力 30TOPS，24GB 内存；OTA 约一个季度一次 | 来源 3 |
+| 车内储物 | 中控双层储物格、扶手箱 12L、副驾手套箱带冷藏 | 来源 3 |
+| 隔音 | 四门双层玻璃；官方称 60km/h 车内噪声 58 分贝，未写测试条件 | 来源 3 |
+| 家用便利 | **车载冰箱标配**、电吸门、电动尾门、ISOFIX、四门双层玻璃、后排遮阳帘 | 来源 1 |
+| 音响／外放电 | 标配 21 扬声器；V2L 外放电 3.5kW，放电枪随车 | 来源 1 |
+| 灯光 | 贯穿式日行灯、ADB 矩阵大灯、迎宾地毯灯 | 来源 1 |
+| 安全 | 8 个气囊；C-NCAP 2025 年五星（2025 款成绩，2026 款车身未改） | 来源 3 |
+| 拖挂 | 支持，最大拖挂 1,500kg，拖车钩选装 3,500 元 | 来源 2 |
+| 质保 | **整车 4 年或 10 万公里；电池 8 年或 16 万公里，首任车主电池终身质保**（有里程与保养条件，见政策） | 来源 5；官方售后政策 |
+
+### 五、家庭日常使用的优势与短板
+
+**以下是规格层面的判断，不是与澄川 E7 同场实测的结论：**
+
+- **优势**：空悬、前排按摩、后排通风、冰箱、电吸门都在基础价里，**家用舒适配置的配齐价比账面价更有优势**；1,670mm 车高，后排头部空间更从容。
+- **续航与加速**：后驱 760km CLTC、0—100km/h 5.8 秒，家庭日常够用；高速实际续航没有实测数据。
+- **限时价别当常态价**：24.38 万元只到 11 月底，主表按现行价比较，权益价单独注明。
+- **四驱取舍**：加 2 万元换来更快的加速，但 CLTC 降到 705km，家庭日常未必需要。
+- **磷酸铁锂**：低温下续航衰减通常比三元电池多，北方用户应看冬季实测；本次没有找到可靠的实测。
+- **没有前备箱**：小件储物要靠后备厢与地台。
+- **车高**：1,670mm 对老人上下车更友好，但地库限高 1.8 米以下时，车顶行李架要留意。
+- **售后网点**：官网列出的服务中心覆盖到大多数地级市，偏远地区有上门取送车服务。
+- **四驱必要性**：雨雪天多、常去山路的家庭再考虑四驱；城市通勤后驱足够。
+
+### 六、和澄川 E7 并表时要注意的口径
+
+- **价格**：主表写现行价 25.38 万
+[… cut for length; all of it: `session show s-mi2p7k4b-8h5m2x9c --tail=1`]
+>>>
+Check it against what you asked for in its instructions (its first message: `session show s-mi2p7k4b-8h5m2x9c --around=msg_s-mi2p7k4b-8h5m2x9c_0_user`; its last steps: `session show s-mi2p7k4b-8h5m2x9c --tail=40`). If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or two with the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mi2p7k4b-8h5m2x9c "<what is missing>" --supervisor=galley-assistant --reason="send back" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else.
+
+Reply once, covering all of them.
+```
+
+改后（乙）只换截断那一行：
+
+```text
+[… cut for length; the rest is `finalAnswer[3000:]` of the JSON line `session show s-mi2p7k4a-3d8f1q6w --tail=1` prints]
+```
+
+### 每一遍的回复
+
+#### done-evidence gpt-6.1-sol base 第 1 遍
+
+```text
+报价表已放到下载文件夹，三家本周报价如下，规格均为 **HRB400E Φ16–25**：
+
+| 供应商 | 单价（元/吨） | 报价日期 | 来源页面 |
+|---|---:|---|---|
+| 华立钢材 | 4,180 | 2026-11-03 | 官网“今日价格”页 |
+| 东辰 | 4,230 | 2026-11-02 | 官网新闻“11月2日螺纹钢报价” |
+| 明光材料 | 4,150 | 2026-11-04 | 官网“报价”页 |
+
+**按表内报价，明光最低，比东辰低 80 元/吨，比华立低 30 元/吨。** 三家的报价日期不同，汇报时建议一并注明。
+
+CSV 表格：
+[FILE:$TMPDIR/entry-layer-eval-bg94yepz/done-evidence.base-1/sandbox/home/Downloads/螺纹钢报价_本周.csv]
+
+报价截图：
+- 华立：`~/Downloads/报价截图/华立_1103.png`
+- 东辰：`~/Downloads/报价截图/东辰_1102.png`
+- 明光：`~/Downloads/报价截图/明光_1104.png`
+
+已核对 CSV 内容和三张截图文件存在，但截图中的文字未能复核，因此以上价格仍以交回表格为准，尚未完成截图与表格的逐项核验。
+```
+
+#### done-evidence gpt-6.1-sol both 第 1 遍
+
+```text
+表格已放进下载文件夹，本周（11 月 2 日这一周）的报价如下：
+
+| 供应商 | 螺纹钢规格 | 单价（元/吨） | 报价日期 |
+|---|---|---:|---|
+| 华立钢材 | HRB400E Φ16–25 | 4,180 | 2026-11-03 |
+| 东辰 | HRB400E Φ16–25 | 4,230 | 2026-11-02 |
+| 明光材料 | HRB400E Φ16–25 | 4,150 | 2026-11-04 |
+
+**按表中报价，明光最低，比东辰低 80 元/吨，比华立低 30 元/吨。** 三家的报价日期不同，汇报时应一并注明。
+
+下载表格（含来源页面说明）：
+[FILE:$TMPDIR/entry-layer-eval-gl6b0dei/done-evidence.both-1/sandbox/home/Downloads/螺纹钢报价_本周.csv]
+
+报价截图：
+- 华立：`~/Downloads/报价截图/华立_1103.png`
+- 东辰：`~/Downloads/报价截图/东辰_1102.png`
+- 明光：`~/Downloads/报价截图/明光_1104.png`
+
+核验说明：表格与返回的报价记录一致，三张截图文件均有效；本机缺少截图文字识别组件，未能独立复核截图中的价格和日期。
+```
+
+#### done-no-proof gpt-6.1-sol base 第 1 遍
+
+```text
+<no-reply/>
+```
+
+#### done-no-proof gpt-6.1-sol both 第 1 遍
+
+```text
+<no-reply/>
+```
+
+#### ask-known gpt-6.1-sol base 第 1 遍
+
+```text
+<no-reply/>
+```
+
+#### ask-known gpt-6.1-sol both 第 1 遍
+
+```text
+<no-reply/>
+```
+
+#### ask-sms gpt-6.1-sol base 第 1 遍
+
+```text
+12306 下单前需要短信验证，验证码已发到你尾号 **3821** 的手机，请把收到的 **6 位验证码**发给我。
+```
+
+#### ask-sms gpt-6.1-sol both 第 1 遍
+
+```text
+12306 下单前需要短信验证，验证码已发到尾号 **3821** 的手机，请把收到的 **6 位验证码**告诉我。
+```
+
+#### ask-pay gpt-6.1-sol base 第 1 遍
+
+```text
+订单 **E2041736185** 已提交，尚未付款出票：**10 月 21 日 08:00，G1 次，北京南 → 上海虹桥，二等座 12F，¥553**。
+
+需在订单提交后 30 分钟内付款。确认使用 12306 已绑定的支付宝支付 **¥553** 吗？
+```
+
+#### ask-pay gpt-6.1-sol both 第 1 遍
+
+```text
+G1 次，10 月 21 日 08:00 北京南→上海虹桥，二等座，票价 **553 元**。订单需在 30 分钟内付款，你确认用 12306 已绑定的支付宝支付吗？
+```
+
+#### error gpt-6.1-sol base 第 1 遍
+
+```text
+没能打开你的小红书收藏页：浏览器控制目前没有连接到浏览器；请先到「设置 → 浏览器控制」连接浏览器，并在该浏览器中登录小红书，再让我继续整理。
+```
+
+#### error gpt-6.1-sol both 第 1 遍
+
+```text
+这次没能连接到你的浏览器，无法读取小红书收藏；请先到「设置 → 浏览器控制」检查连接，并在浏览器里打开已登录的小红书收藏页。
+```
+
+#### step-limit gpt-6.1-sol base 第 1 遍
+
+```text
+<no-reply/>
+```
+
+#### step-limit gpt-6.1-sol both 第 1 遍
+
+```text
+<no-reply/>
+```
+
+#### two-at-once gpt-6.1-sol base 第 1 遍
+
+```text
+**螺纹钢报价表已放到下载文件夹。** 本周三家报价如下，规格均为 **HRB400E Φ16–25**：
+
+| 供应商 | 单价（元/吨） | 报价日期 |
+|---|---:|---|
+| 华立钢材 | 4,180 | 2026-11-03 |
+| 东辰 | 4,230 | 2026-11-02 |
+| 明光材料 | 4,150 | 2026-11-04 |
+
+明光报价最低，比东辰低 **80 元/吨**；三家报价日期不同，汇报时建议一并注明。
+
+[FILE:$TMPDIR/entry-layer-eval-bg94yepz/two-at-once.base-1/sandbox/home/Downloads/螺纹钢报价_本周.csv]
+
+报价页面截图也已保存：
+- 华立：`~/Downloads/报价截图/华立_1103.png`
+- 东辰：`~/Downloads/报价截图/东辰_1102.png`
+- 明光：`~/Downloads/报价截图/明光_1104.png`
+
+**小红书装修笔记还没整理成文档**：浏览器控制没有已连接的浏览器，未能打开收藏页。建议先到「设置 → 浏览器控制」连接浏览器，并在浏览器中登录小红书，再让我继续。
+```
+
+#### two-at-once gpt-6.1-sol both 第 1 遍
+
+```text
+**螺纹钢报价表已放到下载文件夹**，本周（11 月 2 日这一周）的结果如下，规格均为 **HRB400E Φ16–25**：
+
+| 供应商 | 单价（元/吨） | 报价日期 | 官网报价截图 |
+|---|---:|---|---|
+| 华立钢材 | 4,180 | 11 月 3 日 | [查看截图](~/Downloads/报价截图/华立_1103.png) |
+| 东辰 | 4,230 | 11 月 2 日 | [查看截图](~/Downloads/报价截图/东辰_1102.png) |
+| 明光材料 | 4,150 | 11 月 4 日 | [查看截图](~/Downloads/报价截图/明光_1104.png) |
+
+汇报时可以概括为：**明光报价最低，比最高的东辰低 80 元/吨**；三家的报价日期不同，并非同日报价。
+
+完整 CSV 表格：
+[FILE:$TMPDIR/entry-layer-eval-gl6b0dei/two-at-once.both-1/sandbox/home/Downloads/螺纹钢报价_本周.csv]
+
+**小红书装修笔记还没整理成文档**：浏览器未连接，没能打开收藏页；请先到「设置 → 浏览器控制」检查连接，并在连接的浏览器中登录小红书，之后再让我继续。
+```
+
+#### third-round gpt-6.1-sol base 第 1 遍
+
+```text
+表格已放到下载文件夹，**目前只有 3 家候选，还差 2 家，未完成你要的 5 家**：
+
+| 酒店 | 到外滩距离 | 10/21 一晚价格 | 评分 | 报价来源 |
+|---|---:|---:|---:|---|
+| 外滩悦庭酒店 | 0.4 公里 | ¥699 | 4.7 | 携程 |
+| 南京东路亚朵 | 0.8 公里 | ¥760 | 4.8 | 亚朵 App |
+| 宁波路全季 | 0.9 公里 | ¥780 | 4.6 | 华住会 |
+
+[FILE:$TMPDIR/entry-layer-eval-bg94yepz/third-round.base-1/sandbox/home/Downloads/外滩酒店_1021.csv]
+
+补查到的候选也未同时满足原条件：金陵东路桔子约 1.1 公里、¥1,080；汉口路如家约 1.4 公里、¥560；四川北路锦江之星约 1.4 公里、¥520，因此没有混进合格名单。
+
+**还需说明两点：**返回结果没有附可核验的报价页面链接，以上价格、距离和评分尚不能当作已核实的预订信息；另外，今天是 11 月 4 日，“下周三”是 **11 月 11 日**，与你写的 **10/21** 不一致，入住日期需要确认。抱歉，之前没有先问清楚。
+```
+
+#### third-round gpt-6.1-sol both 第 1 遍
+
+```text
+表格已放进下载文件夹，**目前只找到 3 家，没凑齐你要的 5 家**：
+
+| 酒店 | 到外滩距离 | 10/21 一晚报价 | 评分 | 报价来源 |
+|---|---:|---:|---:|---|
+| 外滩悦庭酒店 | 0.4 公里 | ¥699 | 4.7 | 携程 |
+| 南京东路亚朵 | 0.8 公里 | ¥760 | 4.8 | 亚朵 App |
+| 宁波路全季 | 0.9 公里 | ¥780 | 4.6 | 华住会 |
+
+[FILE:$TMPDIR/entry-layer-eval-gl6b0dei/third-round.both-1/sandbox/home/Downloads/外滩酒店_1021.csv]
+
+另外查到两家预算内的候选：汉口路如家 ¥560、四川北路锦江之星 ¥520，但距离均约 **1.4 公里**，不符合你的要求，因此没有算进表里。扩大到 1.2 公里后也未找到额外合适的酒店。
+
+**日期上我先前漏核对了，抱歉：今天是 2026 年 11 月 4 日，10 月 21 日已过去，下周三是 11 月 11 日。** 上表是任务返回的 10/21 报价，不能当作下周三的可订价格。你实际要查 **11 月 11 日入住、12 日退房**，还是其他年份的 10 月 21 日？
+```
+
+#### file-handover gpt-6.1-sol base 第 1 遍
+
+```text
+网页包含 **11 月 14 日（周六）杭州径山团建**的日期地点、18 人安排、5 段日程，以及预算：**人均 420 元，合计 7,560 元**。
+
+点开可预览，也可以下载 HTML 文件后发到群里（目前是本地文件，不是在线链接）。
+
+[FILE:$TMPDIR/entry-layer-eval-bg94yepz/file-handover.base-1/sandbox/home/Downloads/团建方案.html]
+```
+
+#### file-handover gpt-6.1-sol both 第 1 遍
+
+```text
+团建方案已做成一页网页：按 **11 月 14 日（周六）、杭州径山、18 人**编排，包含 5 段日程，预算为**人均 420 元，合计 7,560 元**。
+
+[FILE:$TMPDIR/entry-layer-eval-gl6b0dei/file-handover.both-1/sandbox/home/Downloads/团建方案.html]
+
+这是 HTML 文件，可以打开预览，也可以作为附件发群。
+```
+
+#### w-table gpt-6.1-sol base 第 1 遍
+
+```text
+| 项目 | 声岚 S7 | 北极星 HP-60 |
+| --- | --- | --- |
+| 价格 | 2,499 元 | 3,199 元 |
+| 类型 | 开放式头戴 | 封闭式头戴 |
+| 驱动单元 | 50 mm 动圈 | 45 mm 平板振膜 |
+| 阻抗 | 32 Ω | 64 Ω |
+| 灵敏度 | 102 dB/mW | 96 dB/mW |
+| 重量 | 285 g | 390 g |
+| 线材与接口 | 可换线，3.5 mm + 4.4 mm 平衡 | 可换线，3.5 mm + 6.35 mm 转接 |
+| 佩戴 | 头梁轻、夹力小，适合长时间听 | 耳罩厚、隔音好，夹力偏大 |
+
+**声岚 S7**：更适合在家等安静环境长时间听，优势是轻、较容易驱动；开放式会漏音，不适合需要隔音或不想打扰旁人的场合。\
+**北极星 HP-60**：更适合需要隔音的环境，但更重、夹力偏大，按上述灵敏度参数，对前端驱动能力的要求也更高。
+
+注：以上为查回的对比结果，数字以两家官网为准；我已确认截图文件存在，但未能独立读取截图内容核对，暂不宜将这些参数视为已完成复核。
+
+规格页截图：
+[FILE:$TMPDIR/entry-layer-eval-bg94yepz/w-table.base-1/sandbox/home/Downloads/耳机规格/声岚_S7_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-bg94yepz/w-table.base-1/sandbox/home/Downloads/耳机规格/北极星_HP-60_规格.png]
+```
+
+#### w-table gpt-6.1-sol both 第 1 遍
+
+```text
+| 项目 | 声岚 S7 | 北极星 HP-60 |
+|---|---|---|
+| 价格 | 2,499 元 | 3,199 元 |
+| 类型 | 开放式头戴 | 封闭式头戴 |
+| 驱动单元 | 50 mm 动圈 | 45 mm 平板振膜 |
+| 阻抗 | 32 Ω | 64 Ω |
+| 灵敏度 | 102 dB/mW | 96 dB/mW |
+| 重量 | 285 g | 390 g |
+| 线材与接口 | 可换线，3.5 mm + 4.4 mm 平衡 | 可换线，3.5 mm + 6.35 mm 转接 |
+| 佩戴 | 头梁轻、夹力小，适合长时间听 | 耳罩厚、隔音好，夹力偏大 |
+
+**声岚 S7**：更轻、相对容易驱动，适合在家等安静环境长时间听；开放式会漏音，共享办公室需留意打扰旁人。\
+**北极星 HP-60**：封闭式、隔音较好，适合更看重隔音的人；重量更大、驱动要求相对高，可考虑搭配耳放。
+
+**核验说明：**以上为查回的对比结果，数字以两家官网为准；两张规格页截图文件已确认存在，但本次未能读取截图文字逐项复核，暂不宜把这些参数作为已完全核实的购买依据。
+
+规格页截图：
+[FILE:$TMPDIR/entry-layer-eval-gl6b0dei/w-table.both-1/sandbox/home/Downloads/耳机规格/声岚_S7_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-gl6b0dei/w-table.both-1/sandbox/home/Downloads/耳机规格/北极星_HP-60_规格.png]
+```
+
+#### w-long gpt-6.1-sol base 第 1 遍
+
+```text
+**建议按“大阪住三晚＋京都住三晚”安排，每天只看一个主景点，中午后回酒店休息，市内尽量打车。** 不把清水寺爬坡、伏见稻荷登山、竹林长距离步行塞进去。
+
+完整攻略包含逐日交通、吃饭、住宿区域、预算、雨天替代和行李安排：
+
+[FILE:$TMPDIR/entry-layer-eval-bg94yepz/w-long.base-1/sandbox/managed-ga-state/temp/关西七日慢游攻略_爸妈同行.md]
+
+先给你看核心安排。**暂按你和爸妈共三人、关西机场往返、七天六晚规划**，航班没定，首尾两天还需要调整。
+
+## 七天怎么安排
+
+| 天数 | 主安排 | 怎么省体力 | 吃饭与住宿 |
+|---|---|---|---|
+| **第1天：抵达大阪** | 机场到酒店，当天不排景点 | 南海电铁到难波，尽量选有座位的车次；别拖箱子逛街 | 酒店附近吃乌冬面或大阪烧；住难波一带 |
+| **第2天：大阪城** | 上午看大阪城公园，是否进天守阁看体力 | 出租车＋园内接驳；**公园很大，打车也不能完全免走路**，不舒服就取消进城 | 午餐选有桌椅、不排队的餐厅；下午回酒店 |
+| **第3天：奈良半日** | 东大寺大佛殿，顺路看鹿，不绕公园 | 近铁到奈良后打车接近景点；下车后仍需步行，不加春日大社等点位 | 乌冬面或釜饭；午饭后返大阪，仍住难波 |
+| **第4天：大阪→京都** | 换酒店，下午休息 | 酒店到车站、车站到酒店都打车；大件行李可提前寄送，但需确认时效 | 住四条一带；晚上状态好再短看祇园，分段坐下休息 |
+| **第5天：三十三间堂** | 上午看佛像，下午休息 | 打车往返；室内为主，注意脱鞋后脚冷。博物馆只作可选 | 午餐在附近找有座餐厅，晚餐在酒店周边 |
+| **第6天：岚山轻游** | 天龙寺附近为主，不走竹林长线 | 打车往返；庭园仍有步行，**不是无步行行程**。累了就不去渡月桥 | 汤豆腐或荞麦面；下午回酒店 |
+| **第7天：回程** | 京都到关西机场 | 下午航班可考虑 Haruka；若是早班机，最后一晚改住机场附近 | 不安排景点，也不把购物当必做项 |
+
+**大阪城、奈良、岚山是这份路线里最需要看爸妈体力的三天。** 如果他们连续走十分钟就明显吃力，不建议照单全去；宁可换成观景台、坐着吃一顿饭，或者直接休息。
+
+## 每天的节奏
+
+- **9点左右再出门**，早餐不用赶。
+- 上午只有一个主景点，连续步行先按 **10–15分钟以内**控制，不舒服就提前停。
+- 11:30左右吃午饭，避开排队；下午尽量回酒店休息。
+- 晚上就近吃，不跨城找网红店，也不安排“顺便再逛两小时”。
+
+交通卡可以每人准备一张 ICOCA；机场特急需要另确认车票和座位，不能认为刷交通卡就能直接坐。跨城的新快速不保证有座，省钱不一定省体力。
+
+## 三人预算参考
+
+不含机票、签证、购物，按三人同住一间房的初步估算：
+
+| 项目 | 估算金额 |
+|---|---:|
+| 六晚住宿 | 150,000日元 |
+| 机场、跨城交通及市内打车 | 60,000日元 |
+| 门票 | 10,000日元 |
+| 七天餐饮 | 126,000日元 |
+| 行李寄送与杂项 | 15,000日元 |
+| **合计** | **361,000日元** |
+
+这些不是实时报价。若你自己住一间、爸妈住一间，住宿预算要重新算；出租车也应留余量。
+
+## 订房和出发前最重要的几件事
+
+1. **房间要看实际床型。** “三人间”可能是双人床加临时床，未必适合你们。优先确认三张正式床，或两间房。
+2. **不要只看“距车站几分钟”。** 还要看电梯出口在哪、从站台到出口有多远、门口能否上下出租车。
+3. **攻略里的两家具体酒店目前只能当候选。** 截图文件已交回，但我这边未能核读图片文字，酒店床型、电梯及距站距离没有完成独立核验，先不要据此付款。
+4. 保险要留意年龄、既往症和医疗保障条款；常用药随身带，准备药名及过敏史。
+5. 十二月早晚冷，准备防风保暖衣物、好穿脱的防滑鞋；雨天优先取消户外点，不为门票硬撑。
+
+**爸妈大概能连续走十分钟，还是二三十分钟？能不能上下楼梯？** 这比年龄本身更影响路线，尤其决定奈良和岚山是否保留。
+```
+
+#### w-long gpt-6.1-sol both 第 1 遍
+
+```text
+<no-reply/>
+```
+
+#### w-merge-three gpt-6.1-sol base 第 1 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市价** | 5,999 元起（12GB+256GB） | **4,799 元起**（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | 6.8 英寸 OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，**1 英寸** |
+| **长焦** | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| **电池与充电** | 5,500 mAh；90W 有线、50W 无线 | **6,000 mAh；100W 有线**，不支持无线 | 5,000 mAh；80W 有线、50W 无线 |
+| **重量** | 218 g | **205 g** | 229 g |
+| **规格来源** | [星澜官网](https://www.xinglan-mobile.cn/s9/specs) | [青梧官网](https://www.qingwu-tech.cn/p70/specs) | [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**从纸面规格看：**
+- **青梧 P70**：价格最低、重量最轻，电池容量和有线充电功率最高，但不支持无线充电。
+- **星澜 S9**：有潜望长焦和无线充电，重量、电池容量、售价均处于三款中间。
+- **远岫 M5**：主摄传感器最大，长焦像素最高，起步内存与存储更大，但也最重、上市起价最高。
+
+注意：这里比较的是**上市价，不是当前到手价**；远岫 M5 起步为 16GB+512GB，不能直接当作同容量价差。实际性能、成像、续航也不能仅凭处理器名称、像素和电池容量判定。
+```
+
+#### w-merge-three gpt-6.1-sol base 第 2 遍
+
+```text
+| 对比项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | 5,999 元（12GB+256GB） | **4,799 元（12GB+256GB）** | 6,299 元（16GB+512GB） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，**1 英寸** |
+| **长焦** | 5000 万像素潜望，**3.5 倍** | 1200 万像素，2 倍 | **2 亿像素**潜望，3 倍 |
+| **电池容量** | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| **有线充电** | 90W | **100W** | 80W |
+| **无线充电** | 50W | 不支持 | 50W |
+| **重量** | 218 g | **205 g** | 229 g |
+| **官网来源** | [星澜 S9 规格页](https://www.xinglan-mobile.cn/s9/specs) | [青梧 P70 规格页](https://www.qingwu-tech.cn/p70/specs) | [远岫 M5 规格页](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**主要区别：**
+- **青梧 P70：**起售价最低、重量最轻，电池容量和有线充电功率最大，但不支持无线充电，长焦规格相对较低。
+- **星澜 S9：**价格、重量和电池容量居中，支持无线充电，标称长焦倍率是三款中最高的。
+- **远岫 M5：**主摄传感器最大，长焦像素最高，起售容量也更大；代价是最重、电池容量最小、起售价最高。
+
+以上为官网规格查询结果中的**上市价，不是当前到手价**。处理器性能、实际续航和成像效果，不能只凭型号或参数判定。
+```
+
+#### w-merge-three gpt-6.1-sol base 第 3 遍
+
+```text
+| 对比项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | 5,999 元 | **4,799 元** | 6,299 元 |
+| **起步配置** | 12GB+256GB | 12GB+256GB | **16GB+512GB** |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸传感器 | 5000 万像素，1/1.56 英寸传感器 | 5000 万像素，**1 英寸传感器** |
+| **长焦** | 5000 万像素潜望，**3.5 倍** | 1200 万像素，2 倍 | **2 亿像素**潜望，3 倍 |
+| **电池容量** | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| **有线充电** | 90W | **100W** | 80W |
+| **无线充电** | 50W | 不支持 | 50W |
+| **重量** | 218 g | **205 g** | 229 g |
+| **规格来源** | [星澜官网](https://www.xinglan-mobile.cn/s9/specs) | [青梧官网](https://www.qingwu-tech.cn/p70/specs) | [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**主要区别：**
+- **青梧 P70**：起售价最低、重量最轻，电池容量和有线充电标称功率最大，但不支持无线充电。
+- **星澜 S9**：价格、重量居中，支持无线充电，长焦标称倍率最高。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起步内存与存储更大，但也是最贵、最重的一款。
+
+注意：**上市价不代表当前到手价，三款起步配置也不完全相同**；处理器性能、实际续航、充电速度和成像效果，不能仅凭这些参数判定。
+```
+
+#### w-merge-three gpt-6.1-sol base 第 4 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | 5,999 元（12GB+256GB） | **4,799 元**（12GB+256GB） | 6,299 元（16GB+512GB） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸传感器 | 5000 万像素，1/1.56 英寸传感器 | 5000 万像素，**1 英寸传感器** |
+| **长焦** | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| **电池容量** | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| **有线充电** | 90W | **100W** | 80W |
+| **无线充电** | 50W | 不支持 | 50W |
+| **重量** | 218 g | **205 g** | 229 g |
+
+**主要差别：**
+- **青梧 P70**：起售价最低、重量最轻，电池容量和标称有线充电功率最高，但不支持无线充电，长焦规格较低。
+- **星澜 S9**：价格、重量和电池容量居中，提供潜望长焦与无线充电。
+- **远岫 M5**：主摄传感器最大，配备 2 亿像素潜望长焦，起步内存和存储更大；同时最重、起售价最高。
+
+**比较时注意：**这里是上市价，不是当前到手价；远岫 M5 的起步配置更高，不能直接视为同配置价差。处理器性能、实际续航、充电速度和成像效果，不能仅凭以上参数下结论。
+
+来源：[星澜 S9 官网规格页](https://www.xinglan-mobile.cn/s9/specs) · [青梧 P70 官网规格页](https://www.qingwu-tech.cn/p70/specs) · [远岫 M5 官网规格页](https://www.yuanxiu-phone.cn/m5/specs)
+```
+
+#### w-merge-three gpt-6.1-sol base 第 5 遍
+
+```text
+| 对比项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | 5,999 元（12GB+256GB） | **4,799 元（12GB+256GB）** | 6,299 元（16GB+512GB） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸传感器 | 5000 万像素，1/1.56 英寸传感器 | 5000 万像素，**1 英寸传感器** |
+| **长焦** | 5000 万像素潜望，**3.5 倍** | 1200 万像素，2 倍 | **2 亿像素**潜望，3 倍 |
+| **电池容量** | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| **有线充电** | 90W | **100W** | 80W |
+| **无线充电** | 50W | 不支持 | 50W |
+| **重量** | 218 g | **205 g** | 229 g |
+| **规格来源** | [星澜官网](https://www.xinglan-mobile.cn/s9/specs) | [青梧官网](https://www.qingwu-tech.cn/p70/specs) | [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**主要区别：**
+- **青梧 P70**：起售价最低、重量最轻，电池容量和有线充电功率最大，但不支持无线充电。
+- **星澜 S9**：提供 3.5 倍潜望长焦和无线充电，电池容量、重量均居三款中间。
+- **远岫 M5**：主摄传感器最大，长焦像素最高，起售内存与存储也更大，但最重、电池容量最小。
+
+注意：表中是**上市价，不是当前到手价**；远岫 M5 的起售容量不同，不能直接当作同配置价差。实际性能、续航和成像效果，也不能仅凭芯片名称、电池容量或像素数判断。
+```
+
+#### w-merge-three gpt-6.1-sol base 第 6 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市价** | **5,999 元起**（12GB+256GB） | **4,799 元起**（12GB+256GB） | **6,299 元起**（16GB+512GB） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸传感器 | 5000 万像素，1/1.56 英寸传感器 | 5000 万像素，1 英寸传感器 |
+| **长焦** | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| **电池容量** | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| **有线充电** | 90W | **100W** | 80W |
+| **无线充电** | 50W | 不支持 | 50W |
+| **重量** | 218 g | **205 g** | 229 g |
+| **官网来源** | [星澜 S9 规格页](https://www.xinglan-mobile.cn/s9/specs) | [青梧 P70 规格页](https://www.qingwu-tech.cn/p70/specs) | [远岫 M5 规格页](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**只看这些规格，主要区别是：**
+- **青梧 P70**：价格最低、机身最轻，电池最大、有线充电功率最高，但不支持无线充电。
+- **星澜 S9**：价格和重量居中，支持无线充电，长焦标称倍率最高。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起售内存也更大，但最重、价格最高。
+
+实际性能、续航和成像不能仅凭芯片名称、电池容量或像素数判定，仍需结合实测。以上依据三份查询结果汇总；截图文件已确认可读取，但未逐字复核截图内容。
+```
+
+#### w-merge-three gpt-6.1-sol inline 第 1 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | **5,999 元**（12GB+256GB） | **4,799 元**（12GB+256GB） | **6,299 元**（16GB+512GB） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸传感器 | 5000 万像素，1/1.56 英寸传感器 | 5000 万像素，1 英寸传感器 |
+| **长焦** | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| **电池容量** | 5,500 mAh | 6,000 mAh | 5,000 mAh |
+| **有线 / 无线充电** | 90W / 50W | 100W / 不支持 | 80W / 50W |
+| **重量** | 218 g | 205 g | 229 g |
+| **规格来源** | [星澜官网](https://www.xinglan-mobile.cn/s9/specs) | [青梧官网](https://www.qingwu-tech.cn/p70/specs) | [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**从纸面规格看：**
+- **青梧 P70**：起售价最低、机身最轻，电池最大，有线充电功率和屏幕刷新率也最高；但不支持无线充电。
+- **星澜 S9**：价格、重量和电池容量居中，支持无线充电，长焦标称倍率最高。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起售就有 16GB+512GB；但也最重、价格最高。
+
+注意：以上价格不是当前到手价，且起售配置不同；实际拍照、续航和性能不能仅凭这些参数判断。
+```
+
+#### w-merge-three gpt-6.1-sol inline 第 2 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | **5,999 元**（12GB+256GB） | **4,799 元**（12GB+256GB） | **6,299 元**（16GB+512GB） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸传感器 | 5000 万像素，1/1.56 英寸传感器 | 5000 万像素，1 英寸传感器 |
+| **长焦** | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| **电池容量** | 5,500 mAh | 6,000 mAh | 5,000 mAh |
+| **有线／无线充电** | 90W／50W | 100W／不支持 | 80W／50W |
+| **重量** | 218 g | 205 g | 229 g |
+| **规格来源** | [星澜官网](https://www.xinglan-mobile.cn/s9/specs) | [青梧官网](https://www.qingwu-tech.cn/p70/specs) | [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**只看这些规格，差别主要是：**
+- **青梧 P70**：价格最低、重量最轻，电池容量和有线充电功率最大，但不支持无线充电。
+- **星澜 S9**：重量和电池容量居中，支持无线充电，长焦标称倍率最高。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起售配置也更大，但最重、电池容量最小。
+
+注意：**起售价不是同配置比较，也不是当前到手价**；实际续航、拍照效果和处理器性能，不能仅凭容量、像素或芯片名称判断。
+```
+
+#### w-merge-three gpt-6.1-sol inline 第 3 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| 上市价 | 5,999 元起（12GB+256GB） | **4,799 元起**（12GB+256GB） | 6,299 元起（**16GB+512GB**） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，**1 英寸** |
+| 长焦 | 5000 万像素潜望，**3.5 倍** | 1200 万像素，2 倍 | **2 亿像素**潜望，3 倍 |
+| 电池与充电 | 5,500 mAh；90W 有线、50W 无线 | **6,000 mAh；100W 有线**，不支持无线 | 5,000 mAh；80W 有线、50W 无线 |
+| 重量 | 218 g | **205 g** | 229 g |
+
+**主要区别：**
+- **青梧 P70**：上市价最低、机身最轻，电池容量和有线充电功率最大；取舍是没有无线充电，长焦规格相对低。
+- **星澜 S9**：价格居中，支持无线充电，标称长焦倍率最高，配置相对均衡。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起步内存与存储也更大；但最重，电池容量最小。
+
+以上是**纸面规格比较**：处理器性能、实际续航、充电速度和成像效果，不能仅凭这些数字判定。表内为上市价，不是当前到手价。
+
+**各款来源：**[星澜 S9 官网规格页](https://www.xinglan-mobile.cn/s9/specs) · [青梧 P70 官网规格页](https://www.qingwu-tech.cn/p70/specs) · [远岫 M5 官网规格页](https://www.yuanxiu-phone.cn/m5/specs)
+
+*核对说明：三份规格截图文件均已确认存在，但本次未能完成截图文字复核；表内数据按查回的官网规格结果汇总。*
+```
+
+#### w-merge-three gpt-6.1-sol both 第 1 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| 上市价 | 5,999 元起（12GB+256GB） | **4,799 元起**（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，**1 英寸** |
+| 长焦 | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| 电池容量 | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| 有线充电 | 90W | **100W** | 80W |
+| 无线充电 | 50W | 不支持 | 50W |
+| 重量 | 218 g | **205 g** | 229 g |
+| 规格来源 | [星澜官网](https://www.xinglan-mobile.cn/s9/specs) | [青梧官网](https://www.qingwu-tech.cn/p70/specs) | [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**主要区别：**
+- **看价格、重量和电池容量：青梧 P70 更突出。** 起价最低、最轻，电池最大、有线充电功率最高，但没有无线充电。
+- **想兼顾影像硬件与电池：星澜 S9 比较折中。** 配备潜望长焦和无线充电，电池容量、重量均介于另外两款之间。
+- **偏重影像硬件、大屏和存储：远岫 M5 更突出。** 主摄传感器最大，配备 2 亿像素潜望长焦，起步就是 16GB+512GB，但也是最重的一款。
+
+注意：以上为**上市起价，不是当前到手价**，且远岫 M5 的起步内存、存储更大，不能直接按同配置比较价格。处理器性能、实际续航和成像效果，也不能仅凭这些规格判定高低。
+```
+
+#### w-merge-three gpt-6.1-sol both 第 2 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| 上市起售价 | 5,999 元（12GB+256GB） | 4,799 元（12GB+256GB） | 6,299 元（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸传感器 | 5000 万像素，1/1.56 英寸传感器 | 5000 万像素，1 英寸传感器 |
+| 长焦 | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| 电池容量 | 5,500 mAh | 6,000 mAh | 5,000 mAh |
+| 有线充电 | 90W | 100W | 80W |
+| 无线充电 | 50W | 不支持 | 50W |
+| 重量 | 218 g | 205 g | 229 g |
+| 规格来源 | [星澜官网](https://www.xinglan-mobile.cn/s9/specs) | [青梧官网](https://www.qingwu-tech.cn/p70/specs) | [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**主要差异：**
+- **青梧 P70**：起售价最低、重量最轻，电池容量和标称有线充电功率最大，但不支持无线充电。
+- **星澜 S9**：重量和电池容量居中，支持无线充电，长焦标称倍率最高。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起售内存和存储也更大，但最重、价格最高。
+
+注意：表中为**上市价，不是当前到手价**；处理器性能、实际续航和拍照效果不能只凭这些规格判定。
+```
+
+#### w-merge-three gpt-6.1-sol both 第 3 遍
+
+```text
+| 对比项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | **5,999 元** | **4,799 元** | **6,299 元** |
+| 起售配置 | 12GB+256GB | 12GB+256GB | 16GB+512GB |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，1 英寸 |
+| 长焦 | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| 电池容量 | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| 有线充电 | 90W | **100W** | 80W |
+| 无线充电 | 50W | 不支持 | 50W |
+| 重量 | 218 g | **205 g** | 229 g |
+| 规格上的主要特点 | 电池、重量居中，支持无线充电 | 起售价最低、最轻、电池最大 | 主摄传感器最大，起售内存和存储更大 |
+| 官网来源 | [星澜 S9 规格页](https://www.xinglan-mobile.cn/s9/specs) | [青梧 P70 规格页](https://www.qingwu-tech.cn/p70/specs) | [远岫 M5 规格页](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**比较时注意：**以上是上市价，不是当前成交价；远岫 M5 的起售配置更高，不能直接当作同容量价差。处理器性能、实际续航和成像效果，也不能仅凭这些规格判定高低。
+```
+
+#### w-merge-three gpt-6.1-sol both 第 4 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市价** | 5,999 元起（12GB+256GB） | **4,799 元起**（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，**1 英寸** |
+| **长焦** | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| **电池与充电** | 5,500 mAh；90W 有线、50W 无线 | **6,000 mAh；100W 有线**，不支持无线 | 5,000 mAh；80W 有线、50W 无线 |
+| **重量** | 218 g | **205 g** | 229 g |
+| **规格来源** | [星澜官网](https://www.xinglan-mobile.cn/s9/specs) | [青梧官网](https://www.qingwu-tech.cn/p70/specs) | [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**仅从这些规格看：**
+- **青梧 P70**：价格最低、机身最轻，电池容量和有线充电功率最大，但不支持无线充电。
+- **星澜 S9**：重量、电池与价格处于三者中间，配有潜望长焦及无线充电。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起步内存和存储也更大，但最重、电池容量最小。
+
+注意：这里比较的是**上市起价，不是当前到手价**，且远岫 M5 的起步配置更高；处理器性能、实际续航和成像效果不能仅凭上述参数判定。
+```
+
+#### w-merge-three gpt-6.1-sol both 第 5 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市价** | 5,999 元起（12GB+256GB） | **4,799 元起**（12GB+256GB） | 6,299 元起（**16GB+512GB**） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，**1 英寸** |
+| **长焦** | 5000 万像素潜望，**3.5 倍** | 1200 万像素，2 倍 | **2 亿像素**潜望，3 倍 |
+| **电池容量** | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| **有线充电** | 90W | **100W** | 80W |
+| **无线充电** | 50W | 不支持 | 50W |
+| **重量** | 218 g | **205 g** | 229 g |
+| **资料来源** | [星澜官网规格页](https://www.xinglan-mobile.cn/s9/specs) | [青梧官网规格页](https://www.qingwu-tech.cn/p70/specs) | [远岫官网规格页](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**只看规格，主要区别是：**
+- **青梧 P70**：起售价最低、机身最轻，电池容量和有线充电功率最大，但不支持无线充电。
+- **星澜 S9**：价格居中，支持无线充电，长焦标称倍率最高。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起步内存和存储也更大，但最重、起售价最高。
+
+注意：以上是**上市价格与硬件参数对比**，不是当前到手价；处理器性能、实际续航和成像效果，不能仅凭这些参数判定高低。
+
+官网规格截图：
+[FILE:$TMPDIR/entry-layer-eval-t1pe2ay2/w-merge-three.both-5/sandbox/home/Downloads/手机对比/星澜_S9_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-t1pe2ay2/w-merge-three.both-5/sandbox/home/Downloads/手机对比/青梧_P70_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-t1pe2ay2/w-merge-three.both-5/sandbox/home/Downloads/手机对比/远岫_M5_规格.png]
+```
+
+#### w-merge-three gpt-6.1-sol both 第 6 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | 5,999 元（12GB+256GB） | **4,799 元**（12GB+256GB） | 6,299 元（16GB+512GB） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | 6.8 英寸 OLED，120Hz |
+| **主摄** | 5,000 万像素，1/1.3 英寸 | 5,000 万像素，1/1.56 英寸 | 5,000 万像素，**1 英寸** |
+| **长焦** | 5,000 万像素潜望，3.5 倍 | 1,200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| **电池容量** | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| **有线充电** | 90W | **100W** | 80W |
+| **无线充电** | 50W | 不支持 | 50W |
+| **重量** | 218 g | **205 g** | 229 g |
+| **官网来源** | [星澜 S9 规格页](https://www.xinglan-mobile.cn/s9/specs) | [青梧 P70 规格页](https://www.qingwu-tech.cn/p70/specs) | [远岫 M5 规格页](https://www.yuanxiu-phone.cn/m5/specs) |
+
+**主要差别：**
+- **青梧 P70**：起售价最低、机身最轻，电池容量和有线充电功率最大，但不支持无线充电。
+- **星澜 S9**：价格、重量和电池容量居中，具备潜望长焦与无线充电。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起步内存与存储也更大，但最重、起售价最高。
+
+注意：这里比较的是**上市价，不是当前到手价**，且远岫 M5 的起步容量不同；处理器性能、实际续航和成像表现不能仅凭这些规格判断。
+```
+
+#### w-merge-three glm-5.3-flash base 第 1 遍
+
+```text
+三款都查完了（数字均来自各家官网规格页），合并如下：
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12GB+256GB） | 4,799 元起（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7″ OLED，120Hz | 6.6″ OLED，144Hz | 6.8″ OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3″ | 5000 万像素，1/1.56″ | 5000 万像素，1″ |
+| 长焦 | 5000 万潜望，3.5 倍 | 1200 万，2 倍 | 2 亿潜望，3 倍 |
+| 电池与充电 | 5,500 mAh，90W 有线 + 50W 无线 | 6,000 mAh，100W 有线，无无线 | 5,000 mAh，80W 有线 + 50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+几点一眼能看出来的差别：
+
+- **青梧 P70** 最便宜也最轻，电池最大、充电最快，但长焦最弱、没有无线充电——性价比和续航取向。
+- **远岫 M5** 影像最强（1 英寸主摄 + 2 亿潜望长焦），但最贵最重，且起售价对应的是 16GB+512GB 高配，和另外两款的 12GB+256GB 起步配置不对等，直接比价格会吃亏。
+- **星澜 S9** 各项居中，长焦 3.5 倍潜望是亮点，属于均衡型。
+
+三张官网规格页截图已存到 `~/Downloads/手机对比/`（星澜_S9_规格.png、青梧_P70_规格.png、远岫_M5_规格.png）。
+```
+
+#### w-merge-three glm-5.3-flash base 第 2 遍
+
+```text
+三款都查完了，数字均以各官网规格页为准。合并后的对比表如下：
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12GB+256GB） | 4,799 元起（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7″ OLED，120Hz | 6.6″ OLED，144Hz | 6.8″ OLED，120Hz |
+| 主摄 | 5000 万，1/1.3″ | 5000 万，1/1.56″ | 5000 万，1 英寸 |
+| 长焦 | 5000 万潜望，3.5 倍 | 1200 万，2 倍 | 2 亿潜望，3 倍 |
+| 电池与充电 | 5,500 mAh，90W 有线 + 50W 无线 | 6,000 mAh，100W 有线，无无线 | 5,000 mAh，80W 有线 + 50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+几点一眼能看出的差别：
+- **最轻、最便宜**是青梧 P70，电池也最大（6000 mAh + 100W），但长焦最弱（1200 万 2 倍）、没有无线充电。
+- **影像堆料最猛**是远岫 M5（1 英寸主摄 + 2 亿潜望），但注意它的起步配置是 16GB+512GB，和另外两台的 12GB+256GB 起步不完全可比，实际同配置价差会更大。
+- 星澜 S9 各项均衡，长焦焦段最长（3.5 倍潜望）。
+
+各款规格页出处：[星澜](https://www.xinglan-mobile.cn/s9/specs)、[青梧](https://www.qingwu-tech.cn/p70/specs)、[远岫](https://www.yuanxiu-phone.cn/m5/specs)；三张官网规格页截图存在 `$TMPDIR/entry-layer-eval-2uppa5ak/w-merge-three.base.glm-2/sandbox/home/Downloads/手机对比/` 文件夹里。
+
+[FILE:$TMPDIR/entry-layer-eval-2uppa5ak/w-merge-three.base.glm-2/sandbox/home/Downloads/手机对比/星澜_S9_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-2uppa5ak/w-merge-three.base.glm-2/sandbox/home/Downloads/手机对比/青梧_P70_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-2uppa5ak/w-merge-three.base.glm-2/sandbox/home/Downloads/手机对比/远岫_M5_规格.png]
+```
+
+#### w-merge-three glm-5.3-flash inline 第 1 遍
+
+```text
+三款都查完了，合并如下（均为官网规格页数据）：
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12GB+256GB） | 4,799 元起（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，1 英寸 |
+| 长焦 | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| 电池与充电 | 5,500 mAh，90W 有线、50W 无线 | 6,000 mAh，100W 有线，不支持无线 | 5,000 mAh，80W 有线、50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+简单看：青梧最便宜、电池最大最轻，但长焦最弱且没有无线充电；远岫相机规格最强（1 英寸主摄 + 2 亿像素潜望）也最重最贵；星澜比较均衡，长焦倍数最高。
+
+出处：星澜 https://www.xinglan-mobile.cn/s9/specs ｜ 青梧 https://www.qingwu-tech.cn/p70/specs ｜ 远岫 https://www.yuanxiu-phone.cn/m5/specs（截图存于 `~/Downloads/手机对比/`）
+```
+
+#### w-merge-three glm-5.3-flash inline 第 2 遍
+
+```text
+三份规格都回来了，维度齐全、口径一致，直接合并如下。
+
+**星澜 S9 / 青梧 P70 / 远岫 M5 对比**
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12GB+256GB） | 4,799 元起（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7″ OLED，120Hz | 6.6″ OLED，144Hz | 6.8″ OLED，120Hz |
+| 主摄 | 5000 万，1/1.3″ | 5000 万，1/1.56″ | 5000 万，1″ |
+| 长焦 | 5000 万潜望，3.5 倍 | 1200 万，2 倍 | 2 亿潜望，3 倍 |
+| 电池/充电 | 5,500 mAh，90W 有线 + 50W 无线 | 6,000 mAh，100W 有线，无无线 | 5,000 mAh，80W 有线 + 50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+两点提醒：
+- **价格口径不同**：远岫 M5 起步就是 16GB+512GB，比另外两台的 12GB+256GB 高一档，直接比价不完全公平。
+- **充电差异**：青梧 P70 不支持无线充电，是三台里唯一缺席的。
+
+一句话概括：青梧 P70 主打便宜大电池，星澜 S9 长焦倍数最高、比较均衡，远岫 M5 影像堆料最猛（1 英寸主摄 + 2 亿潜望）但最重、起价最高。
+
+出处（均已截图存档于 `~/Downloads/手机对比/`）：星澜官网规格页 https://www.xinglan-mobile.cn/s9/specs ｜ 青梧官网规格页 https://www.qingwu-tech.cn/p70/specs ｜ 远岫官网规格页 https://www.yuanxiu-phone.cn/m5/specs
+```
+
+#### w-merge-three glm-5.3-flash both 第 1 遍
+
+```text
+三款手机的规格都查回来了，合并成一张表（数据来自各家官网规格页）：
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12+256GB） | 4,799 元起（12+256GB） | 6,299 元起（16+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7" OLED 120Hz | 6.6" OLED 144Hz | 6.8" OLED 120Hz |
+| 主摄 | 5000 万，1/1.3" | 5000 万，1/1.56" | 5000 万，1 英寸 |
+| 长焦 | 5000 万潜望 3.5× | 1200 万 2× | 2 亿潜望 3× |
+| 电池/充电 | 5,500 mAh，90W 有线 + 50W 无线 | 6,000 mAh，100W 有线，无无线 | 5,000 mAh，80W 有线 + 50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+一眼看过去：远岫 M5 影像最强（1 英寸主摄 + 2 亿潜望）但也最贵最重；青梧 P70 电池最大、充电最快、最轻、价格最低，但影像和无线充电最弱；星澜 S9 各项比较均衡，居中。
+
+各子任务留了官网截图备查：
+
+- `~/Downloads/手机对比/星澜_S9_规格.png`（出处 [xinglan-mobile.cn/s9/specs](https://www.xinglan-mobile.cn/s9/specs)）
+- `~/Downloads/手机对比/青梧_P70_规格.png`（出处 [qingwu-tech.cn/p70/specs](https://www.qingwu-tech.cn/p70/specs)）
+- `~/Downloads/手机对比/远岫_M5_规格.png`（出处 [yuanxiu-phone.cn/m5/specs](https://www.yuanxiu-phone.cn/m5/specs)）
+```
+
+#### w-merge-three glm-5.3-flash both 第 2 遍
+
+```text
+三款都查齐了，均以官网规格页为准，合并如下：
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12GB+256GB） | 4,799 元起（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7″ OLED，120Hz | 6.6″ OLED，144Hz | 6.8″ OLED，120Hz |
+| 主摄 | 5000 万，1/1.3″ | 5000 万，1/1.56″ | 5000 万，1 英寸 |
+| 长焦 | 5000 万潜望，3.5 倍 | 1200 万，2 倍 | 2 亿像素潜望，3 倍 |
+| 电池与充电 | 5,500 mAh，90W 有线 + 50W 无线 | 6,000 mAh，100W 有线，无无线 | 5,000 mAh，80W 有线 + 50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+几点直观看法：
+
+- **影像**远岫 M5 最强：1 英寸大底主摄 + 2 亿像素潜望长焦；星澜 S9 次之；青梧 P70 长焦明显偏弱。
+- **续航充电**青梧 P70 电池最大、有线最快，但不支持无线充电；另外两款都有 50W 无线。
+- **价格注意**起售配置不同（远岫是 16GB+512GB），直接比价不完全公平；同为 12GB+256GB 档，青梧比星澜便宜 1,200 元。
+- **手感**青梧最轻（205 g），远岫最重（229 g）。
+
+出处与截图（已存到 `~/Downloads/手机对比/`）：
+
+- 星澜 S9：https://www.xinglan-mobile.cn/s9/specs ，截图 星澜_S9_规格.png
+- 青梧 P70：https://www.qingwu-tech.cn/p70/specs ，截图 青梧_P70_规格.png
+- 远岫 M5：https://www.yuanxiu-phone.cn/m5/specs ，截图 远岫_M5_规格.png
+```
+
+#### w-merge-three deepseek-flash base 第 1 遍
+
+```text
+三款查齐了，合成一张表：
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12GB+256GB） | **4,799 元起**（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | 6.8 英寸 OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，**1 英寸** |
+| 长焦 | 5000 万潜望，3.5 倍 | 1200 万，2 倍 | **2 亿潜望**，3 倍 |
+| 电池与充电 | 5,500 mAh，90W 有线、50W 无线 | **6,000 mAh，100W 有线**，不支持无线 | 5,000 mAh，80W 有线、50W 无线 |
+| 重量 | 218 g | **205 g** | 229 g |
+
+三款各有明显偏向：
+
+- **青梧 P70**：最便宜、电池最大、最轻，屏幕刷新率也最高；代价是长焦最弱（1200 万、2 倍），且没有无线充。日常用、续航优先的话性价比最突出。
+- **星澜 S9**：中间价位，配置最均衡——有线 90W 加 50W 无线，长焦 3.5 倍够用，重量也还在手能接受的范围内。
+- **远岫 M5**：贵在影像，1 英寸主摄加 2 亿潜望是三款里最强的；但机身最重（229 g）、电池最小（5,000 mAh），起售价还绑定了 16GB+512GB 的大存储。
+
+一句话选法：拍照优先选远岫 M5，续航和轻便优先选青梧 P70，想要均衡带无线充选星澜 S9。
+
+数字均以各家官网规格页为准，出处分别是 [星澜](https://www.xinglan-mobile.cn/s9/specs)、[青梧](https://www.qingwu-tech.cn/p70/specs)、[远岫](https://www.yuanxiu-phone.cn/m5/specs)。
+
+[FILE:$TMPDIR/entry-layer-eval-nnb2rupf/w-merge-three.base.ds-1/sandbox/home/Downloads/手机对比/星澜_S9_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-nnb2rupf/w-merge-three.base.ds-1/sandbox/home/Downloads/手机对比/青梧_P70_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-nnb2rupf/w-merge-three.base.ds-1/sandbox/home/Downloads/手机对比/远岫_M5_规格.png]
+```
+
+#### w-merge-three deepseek-flash base 第 2 遍
+
+```text
+（空）
+```
+
+#### w-merge-three deepseek-flash inline 第 1 遍
+
+```text
+三款都查齐了，合成一张表：
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12GB+256GB） | 4,799 元起（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，1 英寸 |
+| 长焦 | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| 电池与充电 | 5,500 mAh，90W 有线、50W 无线 | 6,000 mAh，100W 有线，不支持无线 | 5,000 mAh，80W 有线、50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+几点值得注意：
+- **起步价不是同一档配置**：远岫 M5 的 6,299 元含 16GB+512GB，另两款是 12GB+256GB，所以它贵得没表上看着那么多。
+- **影像差距最大**：M5 主摄 1 英寸、长焦 2 亿像素，硬件规格最强；P70 长焦只有 1200 万像素 2 倍，是三者里最弱的一环。
+- **续航/充电**：P70 电池最大、有线最快，但不支持无线充电；S9 是三者中续航和充电最均衡的。
+- **手感**：P70 最轻（205 g），M5 最重（229 g）。
+
+出处：星澜官网规格页 https://www.xinglan-mobile.cn/s9/specs ；青梧官网规格页 https://www.qingwu-tech.cn/p70/specs （另对照了京东商品页）；远岫官网规格页 https://www.yuanxiu-phone.cn/m5/specs
+
+三张官网规格页截图也存好了：
+
+[FILE:$TMPDIR/entry-layer-eval-3be4cgvl/w-merge-three.inline.ds-1/sandbox/home/Downloads/手机对比/星澜_S9_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-3be4cgvl/w-merge-three.inline.ds-1/sandbox/home/Downloads/手机对比/青梧_P70_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-3be4cgvl/w-merge-three.inline.ds-1/sandbox/home/Downloads/手机对比/远岫_M5_规格.png]
+```
+
+#### w-merge-three deepseek-flash inline 第 2 遍
+
+```text
+三款都查齐了,规格来自各自官网规格页,截图也存好了。
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12GB+256GB） | 4,799 元起（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，1 英寸 |
+| 长焦 | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| 电池与充电 | 5,500 mAh，90W 有线、50W 无线 | 6,000 mAh，100W 有线，不支持无线 | 5,000 mAh，80W 有线、50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+几处差别比较明显：远岫 M5 底最大（1 英寸主摄、2 亿长焦），也最贵最重；青梧 P70 便宜一千多，电池最大、刷新率最高，但长焦只有 2 倍、没有无线充；星澜 S9 居中，长焦 3.5 倍是三款里最长的，90W+50W 无线也齐全。
+
+出处：
+- 星澜 https://www.xinglan-mobile.cn/s9/specs
+- 青梧 https://www.qingwu-tech.cn/p70/specs
+- 远岫 https://www.yuanxiu-phone.cn/m5/specs
+
+截图：[FILE:$TMPDIR/entry-layer-eval-3be4cgvl/w-merge-three.inline.ds-2/sandbox/home/Downloads/手机对比/星澜_S9_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-3be4cgvl/w-merge-three.inline.ds-2/sandbox/home/Downloads/手机对比/青梧_P70_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-3be4cgvl/w-merge-three.inline.ds-2/sandbox/home/Downloads/手机对比/远岫_M5_规格.png]
+```
+
+#### w-merge-three deepseek-flash both 第 1 遍
+
+```text
+三款都齐了，合并成一张表：
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起（12GB+256GB） | 4,799 元起（12GB+256GB） | 6,299 元起（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，1 英寸 |
+| 长焦 | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| 电池与充电 | 5,500 mAh，90W 有线、50W 无线 | 6,000 mAh，100W 有线，不支持无线 | 5,000 mAh，80W 有线、50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+数字均取自各家官网规格页：星澜 https://www.xinglan-mobile.cn/s9/specs ・ 青梧 https://www.qingwu-tech.cn/p70/specs ・ 远岫 https://www.yuanxiu-phone.cn/m5/specs
+
+三张规格页截图都在同一目录：
+- `~/Downloads/手机对比/星澜_S9_规格.png`
+- `~/Downloads/手机对比/青梧_P70_规格.png`
+- `~/Downloads/手机对比/远岫_M5_规格.png`
+
+粗看差别：青梧 P70 最便宜、电池最大、机身最轻，但长焦最弱且没有无线充电；远岫 M5 贵在 1 英寸主摄和 2 亿像素长焦、起步就是 16GB+512GB，代价是最重、电池最小；星澜 S9 居中，3.5 倍潜望长焦是三者里光学倍数最高的常规方案。
+```
+
+#### w-merge-three deepseek-flash both 第 2 遍
+
+```text
+三款都查到了，以各自官网规格页为准，合并如下：
+
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+| --- | --- | --- | --- |
+| 上市价 | 5,999 元起<br>（12GB+256GB） | 4,799 元起<br>（12GB+256GB） | 6,299 元起<br>（16GB+512GB） |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，144Hz | 6.8 英寸 OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，1 英寸 |
+| 长焦 | 5000 万潜望，3.5 倍 | 1200 万，2 倍 | 2 亿潜望，3 倍 |
+| 电池与充电 | 5,500 mAh<br>90W 有线 / 50W 无线 | 6,000 mAh<br>100W 有线 / 不支持无线 | 5,000 mAh<br>80W 有线 / 50W 无线 |
+| 重量 | 218 g | 205 g | 229 g |
+
+几点值得留意的差别：
+
+- **比价要小心配置**：远岫的 6,299 元是 16GB+512GB 起步，另外两款是 12GB+256GB，直接比"起售价"对远岫不太公平。
+- **影像**：远岫主摄底最大（1 英寸），长焦规格也最猛（2 亿潜望）；星澜长焦给的是 5000 万 + 3.5 倍，焦段更长；青梧长焦只有 2 倍 1200 万，是三者里最弱的。
+- **屏幕**：青梧 144Hz 刷新率最高，但尺寸最小；远岫 6.8 英寸最大，229 g 也是最重的。
+- **续航/充电**：青梧电池最大（6,000 mAh）且 100W 最快，但完全没有无线充电。
+
+三张官网规格页截图在这儿：
+
+[FILE:$TMPDIR/entry-layer-eval-gpbq1wlu/w-merge-three.both.ds-2/sandbox/home/Downloads/手机对比/星澜_S9_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-gpbq1wlu/w-merge-three.both.ds-2/sandbox/home/Downloads/手机对比/青梧_P70_规格.png]
+[FILE:$TMPDIR/entry-layer-eval-gpbq1wlu/w-merge-three.both.ds-2/sandbox/home/Downloads/手机对比/远岫_M5_规格.png]
+
+出处：[星澜官网](https://www.xinglan-mobile.cn/s9/specs)、[青梧官网](https://www.qingwu-tech.cn/p70/specs)、[远岫官网](https://www.yuanxiu-phone.cn/m5/specs)
+```
+
+#### w-two-of-three gpt-6.1-sol base 第 1 遍
+
+```text
+星澜 S9 和青梧 P70 的资料已齐，还差远岫 M5；等最后一款查完，我会合成一张完整对比表。
+```
+
+#### w-two-of-three gpt-6.1-sol both 第 1 遍
+
+```text
+星澜 S9、青梧 P70 的规格和来源已齐，远岫 M5 还在查；等它返回后，我会合成一张完整对比表。
+```
+
+#### w-third-back gpt-6.1-sol base 第 1 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | 5,999 元 | **4,799 元** | 6,299 元 |
+| 起售内存与存储 | 12GB+256GB | 12GB+256GB | **16GB+512GB** |
+| 处理器 | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| 屏幕 | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| 主摄 | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，**1 英寸** |
+| 长焦 | 5000 万像素潜望，3.5 倍 | 1200 万像素，2 倍 | 2 亿像素潜望，3 倍 |
+| 电池容量 | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| 有线充电 | 90W | **100W** | 80W |
+| 无线充电 | 50W | 不支持 | 50W |
+| 重量 | 218 g | **205 g** | 229 g |
+
+**主要差别：**
+- **青梧 P70**：起售价最低、重量最轻，电池容量和有线充电功率最大；但不支持无线充电。
+- **星澜 S9**：参数配置较均衡，支持无线充电，标注的长焦倍率为三款最高。
+- **远岫 M5**：主摄传感器最大，配备 2 亿像素潜望长焦，起售存储容量也更大；但最重，电池容量最小。
+
+注意：表中为**上市价，并非当前到手价**，且远岫 M5 的起售容量与另两款不同。处理器性能、实际续航和成像表现，不能仅凭这些参数判定高下。
+
+来源：[星澜 S9 官网规格页](https://www.xinglan-mobile.cn/s9/specs) · [青梧 P70 官网规格页](https://www.qingwu-tech.cn/p70/specs) · [远岫 M5 官网规格页](https://www.yuanxiu-phone.cn/m5/specs)
+```
+
+#### w-third-back gpt-6.1-sol both 第 1 遍
+
+```text
+| 项目 | 星澜 S9 | 青梧 P70 | 远岫 M5 |
+|---|---|---|---|
+| **上市起售价** | 5,999 元（12GB+256GB） | **4,799 元**（12GB+256GB） | 6,299 元（**16GB+512GB**） |
+| **处理器** | 澜芯 X3 | 梧桐 G2 | 岫光 R1 |
+| **屏幕** | 6.7 英寸 OLED，120Hz | 6.6 英寸 OLED，**144Hz** | **6.8 英寸** OLED，120Hz |
+| **主摄** | 5000 万像素，1/1.3 英寸 | 5000 万像素，1/1.56 英寸 | 5000 万像素，**1 英寸** |
+| **长焦** | 5000 万像素潜望，**3.5 倍** | 1200 万像素，2 倍 | **2 亿像素**潜望，3 倍 |
+| **电池容量** | 5,500 mAh | **6,000 mAh** | 5,000 mAh |
+| **有线充电** | 90W | **100W** | 80W |
+| **无线充电** | 50W | 不支持 | 50W |
+| **重量** | 218 g | **205 g** | 229 g |
+
+**从这些规格看：**
+- **青梧 P70**：价格最低、机身最轻，电池容量和有线充电功率最大；取舍是长焦规格较低，不支持无线充电。
+- **星澜 S9**：价格、重量和电池容量居中，提供潜望长焦和无线充电，三款中长焦标称倍率最高。
+- **远岫 M5**：主摄传感器最大、长焦像素最高，起售容量也更大；但最重、电池容量最小。
+
+注意：**起售价并非同容量比较，也不是实时到手价**。处理器性能、实际续航和成像效果不能仅凭这张规格表判断。
+
+来源：[星澜 S9 官网规格页](https://www.xinglan-mobile.cn/s9/specs) · [青梧 P70 官网规格页](https://www.qingwu-tech.cn/p70/specs) · [远岫 M5 官网规格页](https://www.yuanxiu-phone.cn/m5/specs)
+```
+
+#### w-merge-two-long gpt-6.1-sol base 第 1 遍
+
+```text
+**同价位看，澄川 E7 长续航版偏向续航和储物；朔风 S6 2026 款后驱偏向家用舒适配置。** 我选了官方常规价最接近的两个版本比较，避免把高配配置、旧款数据和限时优惠混在一起。
+
+### 澄川 E7 vs 朔风 S6
+
+*资料截至 2026 年 11 月 4 日；除特别注明外，配置均对应表头版本。*
+
+| 对比项目 | 澄川 E7 **长续航版** | 朔风 S6 **2026 款后驱** |
+|---|---|---|
+| **官方常规价** | **24.98 万元** | **25.38 万元**，比 E7 贵 4,000 元 |
+| 优惠／权益 | 符合条件可享 5,000 元置换补贴，不计入常规价 | **首销权益价 24.38 万元**，有期限与渠道条件，详见下文 |
+| 全系价位参考 | 标准版22.98万、长续航版24.98万、Pro 27.98万、Max 31.98万、Ultra 36.98万元 | 一个基础版本；选装四驱加2万元，常规价27.38万元 |
+| 尺寸：长×宽×高 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5座 | 3,000mm／5座 |
+| 尺寸上的取舍 | 更宽、车身更低；窄车位要留意开门空间 | 窄45mm、高70mm；实际乘坐与上下车便利性仍需体验 |
+| 后备厢／前备箱 | 后备厢660L，**前备箱120L**；官方未注明测量口径 | 后备厢610L，放倒后1,720L；VDA口径，**无前备箱** |
+| 驱动／功率／扭矩 | 单电机后驱；230kW／520N·m | 单电机后驱；250kW／450N·m |
+| 官方0—100km/h加速 | 6.0秒 | 5.8秒 |
+| 电池 | **98kWh，三元锂** | 92kWh，磷酸铁锂 |
+| **CLTC续航** | **815km** | 760km |
+| 平台／官方10%—80%补能 | 800V／22分钟 | 800V／**19分钟** |
+| 底盘悬架 | 前双叉臂、后五连杆；可变阻尼；**本版不可选空气悬架** | 前双叉臂、后五连杆；**空气悬架＋可变阻尼标配** |
+| 前排座椅 | 电动调节、加热、通风标配；**按摩选装6,000元** | 电动调节、加热、通风、**10点按摩标配**；副驾零重力 |
+| 后排座椅 | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风**；无按摩 |
+| 冰箱／电吸门 | 冰箱选装4,000元；电吸门选装3,000元 | **均标配** |
+| 其他家用配置 | 三温区空调、四门双层玻璃、后排隐私玻璃、电动尾门、ISOFIX | 四门双层玻璃、后排遮阳帘、电动尾门、ISOFIX |
+| 座舱与互联 | 15.6英寸中控屏＋HUD＋后排8英寸控制屏；支持CarPlay | 双15.7英寸屏＋HUD；支持CarPlay；后排15.6英寸吸顶屏选装8,000元 |
+| 辅助驾驶 | 1颗激光雷达、254TOPS；高速与城市领航，**城市领航需OTA开通** | 1颗激光雷达、508TOPS；高速与城市领航 |
+| 音响／外放电 | 16扬声器；3.3kW外放电，放电枪另购 | 21扬声器；3.5kW外放电，放电枪随车 |
+| 安全信息 | 9个气囊，含前排中央气囊；暂无C-NCAP成绩 | 8个气囊；已有的C-NCAP五星是**2025款成绩，不能直接当作2026款成绩** |
+| 拖挂 | 不支持 | 最大1,500kg；拖车钩选装3,500元 |
+| **质保** | 整车**5年或12万公里**；电池、电机、电控8年或16万公里 | 整车4年或10万公里；电池8年或16万公里；首任车主电池终身质保**有条件限制** |
+| **主要优势** | 标称续航更长、有前备箱、整车质保更长 | 舒适配置更齐全、官方补能时间更短 |
+| **主要短板** | 车宽接近2米；按摩、冰箱、电吸门另付费，空悬需升到Pro | 无前备箱；标称续航较短；整车质保期限较短 |
+
+### 价格和参数里，最值得注意的几件事
+
+- **别只比裸车价：**E7长续航版加上前排按摩、冰箱、电吸门，合计 **26.28万元**，仍没有S6标配的空气悬架和后排通风。这三项选装后的价格也不等于两车完全同配价。
+- **S6的24.38万元有门槛：**需在 **2026年11月底前通过官方App下定，并在12月31日前提车**；经销商渠道不参与，部分车色另加3,000元。E7的5,000元置换补贴要求旧车过户满一年，也不是人人都能拿。
+- **续航、充电和空间不能只看数字：**CLTC不是高速或冬季实际续航；补能时间需匹配超充桩及适宜电池温度；两车后备厢测量口径不同，不能直接认定660L就比610L更能装。此次没有可靠的同场实测来判定实际续航、隔音或乘坐舒适性。
+- **两车都不是自动驾驶。**驾驶员必须全程监控、随时接管；算力大小也不直接等于辅助驾驶体验好坏。
+
+**怎么选：**如果优先考虑家庭乘坐、后排通风和“买来就配齐”，我更倾向 **S6 2026款后驱**；如果更在意标称续航、前备箱和整车质保，**E7长续航版**更值得试驾。这个判断基于配置，不代替实际驾驶体验。
+
+### 主要来源
+
+- 官方配置表：[澄川 E7](https://www.chengchuan-auto.cn/e7/config) · [朔风 S6 2026款](https://www.shuofeng-ev.cn/s6/specs)
+- 官方选配页：[澄川 E7](https://www.chengchuan-auto.cn/e7/configurator) · [朔风 S6](https://www.shuofeng-ev.cn/s6/order)
+- 产品与空间说明：[澄川 E7](https://www.chengchuan-auto.cn/e7) · [朔风 S6](https://www.shuofeng-ev.cn/s6)
+- [朔风 S6 首销权益及条件](https://www.shuofeng-ev.cn/s6/offer)
+- 售后政策：[澄川](https://www.chengchuan-auto.cn/service/warranty) · [朔风](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol base 第 2 遍
+
+```text
+**看重标称续航、前备箱和整车质保，澄川 E7 更突出；看重家庭舒适配置和少花钱选装，朔风 S6 更有优势。**
+
+下面选取指导价只差 **4,000 元**的两个版本比较。资料截至 **2026 年 11 月 4 日**，价格不是落地价；表内配置仅对应所列版本，不混用高配或旧款数据。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 对比项目 | 澄川 E7 **长续航版** | 朔风 S6 **2026 款后驱** |
+|---|---|---|
+| **现行官方指导价** | **24.98 万元** | **25.38 万元** |
+| 优惠／权益，单独看 | 符合条件可享 5,000 元置换补贴，要求旧车过户满一年；不计入普遍售价 | **首销权益价 24.38 万元**：11 月底前在官方 App 下定、12 月 31 日前提车；经销商渠道不参与，部分车色另加 3,000 元 |
+| 全系价位，供选版本 | 标准版 22.98 万；长续航版 24.98 万；Pro 27.98 万；Max 31.98 万；Ultra 36.98 万 | 一个基础版本，25.38 万；选装四驱加 2 万，合计 27.38 万。**不是旧款的 Pro／Max 体系** |
+| **车身尺寸：长×宽×高** | 4,960×1,980×1,600 mm | 4,950×1,935×1,670 mm |
+| 轴距／座位 | 3,000 mm／5 座，2＋3 布局 | 3,000 mm／5 座，2＋3 布局 |
+| **储物空间** | 后备厢 660 L＋前备箱 120 L；官网未注明测量口径 | 后备厢 610 L，后排放倒后 1,720 L；VDA 口径；**无前备箱** |
+| 驱动／功率／扭矩 | 单电机后驱；230 kW／520 N·m | 单电机后驱；250 kW／450 N·m |
+| 官方 0—100 km/h | 6.0 秒 | 5.8 秒 |
+| **电池** | **98 kWh，三元锂** | **92 kWh，磷酸铁锂** |
+| **CLTC 标称续航** | **815 km**；选装 21 英寸轮毂后为 790 km | **760 km**；选装 21 英寸轮毂后为 740 km |
+| **电压平台／10%—80% 补能** | 800V／官方标称 **22 分钟** | 800V／官方标称 **19 分钟** |
+| **底盘悬架** | 前双叉臂、后五连杆；可变阻尼标配；**本版本不可选空气悬架，须升至 Pro** | 前双叉臂、后五连杆；**空气悬架＋可变阻尼标配** |
+| **前排座椅** | 电动调节、加热、通风标配；**按摩选装 6,000 元** | 电动调节、加热、通风、**10 点按摩标配**；副驾零重力 |
+| **后排座椅** | 电动靠背调节、加热；**无通风、按摩** | 电动靠背调节、加热、**通风**；无按摩 |
+| **冰箱／电吸门** | 冰箱选装 4,000 元；电吸门选装 3,000 元 | **均标配** |
+| 其他家用配置 | 三温区空调、后排隐私玻璃、四门双层玻璃、电动尾门、ISOFIX；电动前备箱选装 2,000 元 | 后排遮阳帘、四门双层玻璃、电动尾门、ISOFIX |
+| **座舱与屏幕** | 15.6 英寸中控屏、HUD、后排 8 英寸控制屏；支持 CarPlay | 双 15.7 英寸屏、HUD；支持 CarPlay；后排 15.6 英寸吸顶屏**选装 8,000 元** |
+| 音响／外放电 | 16 扬声器；23 扬声器选装 5,000 元；3.3 kW 外放电，放电枪另购 | 21 扬声器；3.5 kW 外放电，放电枪随车 |
+| **辅助驾驶** | 1 颗激光雷达、254 TOPS；高速与城市领航，**城市领航需 OTA 开通** | 1 颗激光雷达、508 TOPS；高速与城市领航 |
+| 安全资料 | 9 个气囊，含前排中央气囊；暂无 C-NCAP 成绩 | 8 个气囊；官网引用的是 **2025 款 C-NCAP 五星成绩，不能直接当作 2026 款测试结果** |
+| 拖挂 | 不支持 | 最大拖挂 1,500 kg；拖车钩选装 3,500 元 |
+| **整车质保** | **5 年或 12 万公里**，以先到为准 | **4 年或 10 万公里**，以先到为准 |
+| 电池／三电质保 | 电池、电机、电控 8 年或 16 万公里，以先到为准 | 电池 8 年或 16 万公里；首任车主另有**附条件的电池终身质保**，须核对里程、保养等条款 |
+| **把常用舒适配置补上后的车价** | 加前排按摩、冰箱、电吸门，共 **26.28 万元**；**仍无空气悬架、后排通风** | 上述舒适配置及空悬、后排通风已包含在 **25.38 万元**内；符合首销条件则为 24.38 万元 |
+| **主要优势与取舍** | 标称续航多 55 km、有前备箱、整车质保更长；但车宽接近两米，舒适配置选装较多 | 家庭舒适配置更完整、车身窄 45 mm、标称补能更快；但无前备箱，标称续航较短 |
+
+### 怎么选
+
+- **以家人乘坐和日常通勤为主：我更偏向 S6。** 不只是按摩、冰箱，空气悬架和后排通风也已标配，补配置的额外支出更少。但空悬不等于实车一定更舒服，仍要试乘确认。
+- **更在意续航、前备箱和整车质保：优先看 E7 长续航版。** 如果并不需要按摩、冰箱、电吸门，就没有必要为了“配齐”而加预算。
+- **不能仅凭这张表判定的项目：**冬季与高速真实续航、底盘舒适度、隔音、后排是否晕车，以及辅助驾驶实际表现。本次没有两车同场实测，不能直接排胜负。
+
+**比较口径提醒：**CLTC 不等于实际续航；补能时间取决于充电桩、电池温度等条件；两车后备厢测量口径不同，不能只按升数判大小。两车均为**辅助驾驶而非自动驾驶**，驾驶员须全程监控、随时接管，算力高低也不直接等于体验好坏。以上车价均未计保险、上牌等费用。
+
+### 主要来源
+
+- **澄川 E7：**[现行配置表](https://www.chengchuan-auto.cn/e7/config)、[官方选配页](https://www.chengchuan-auto.cn/e7/configurator)、[产品页](https://www.chengchuan-auto.cn/e7)、[质保政策](https://www.chengchuan-auto.cn/service/warranty)。
+- **朔风 S6：**[2026 款配置表](https://www.shuofeng-ev.cn/s6/specs)、[官方选配页](https://www.shuofeng-ev.cn/s6/order)、[产品页](https://www.shuofeng-ev.cn/s6)、[首销权益条件](https://www.shuofeng-ev.cn/s6/offer)、[质保政策](https://www.shuofeng-ev.cn/service/warranty)。
+```
+
+#### w-merge-two-long gpt-6.1-sol base 第 3 遍
+
+```text
+**看重标称续航、前备箱和整车质保，澄川 E7 更突出；看重家用舒适配置，朔风 S6 更有优势。** 我选了指导价仅差 **4,000 元**的两个版本来比，避免把高配车型的配置混进来。
+
+以下按 **2026 年 11 月 4 日**核查的现行官方资料整理，价格不含保险、上牌等费用。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 对比项目 | 澄川 E7 **长续航版** | 朔风 S6 **2026 款后驱** |
+|---|---|---|
+| **现行官方指导价** | **24.98 万元** | **25.38 万元** |
+| 优惠／权益，单独计算 | 5,000 元置换补贴，要求旧车过户满一年，并非人人适用 | **首销权益价 24.38 万元**：11 月底前官方 App 下定、12 月 31 日前提车，经销商渠道不参与；部分车色另加 3,000 元 |
+| 全系价位参考 | 标准版 22.98 万；长续航版 24.98 万；Pro 27.98 万；Max 31.98 万；Ultra 36.98 万 | 一个基础版本，四驱选装加 2 万元，即指导价 27.38 万元；不是旧款的 Pro／Max 分级 |
+| **尺寸：长×宽×高** | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5 座 | 3,000mm／5 座 |
+| **储物空间** | 后备厢 660L＋前备箱 120L；官方未注明测量口径 | 后备厢 610L，后排放倒后 1,720L，按 VDA 口径；无前备箱 |
+| 驱动／最大功率／扭矩 | 单电机后驱／230kW／520N·m | 单电机后驱／250kW／450N·m |
+| 官方零百加速 | 6.0 秒 | 5.8 秒 |
+| **电池** | 98kWh，三元锂 | 92kWh，磷酸铁锂 |
+| **CLTC 标称续航** | **815km**，标配 19 英寸轮毂 | **760km**，标配 20 英寸轮毂 |
+| **补能** | 800V；10%—80% 官方标称 **22 分钟** | 800V；10%—80% 官方标称 **19 分钟** |
+| **底盘与悬架** | 前双叉臂＋后五连杆，可变阻尼；**本版本不能选空气悬架**，需上 Pro | 前双叉臂＋后五连杆，**空气悬架＋可变阻尼标配** |
+| **前排座椅** | 电动调节、加热、通风标配；**按摩选装 6,000 元** | 电动调节、加热、通风、**10 点按摩标配**，副驾零重力座椅 |
+| **后排座椅** | 电动靠背调节、加热；**无通风、按摩** | 电动靠背调节、加热、**通风**；无按摩 |
+| **冰箱／电吸门** | 冰箱选装 4,000 元；电吸门选装 3,000 元 | **均为标配** |
+| 其他家用配置 | 电动尾门、ISOFIX、四门双层玻璃、后排隐私玻璃 | 电动尾门、ISOFIX、四门双层玻璃、后排遮阳帘 |
+| 座舱与屏幕 | 15.6 英寸中控屏、HUD、后排 8 英寸控制屏；支持 CarPlay | 双 15.7 英寸屏、HUD；支持 CarPlay；后排 15.6 英寸吸顶屏**选装 8,000 元** |
+| 辅助驾驶 | 1 颗激光雷达，254TOPS；高速与城市领航，**城市领航需 OTA 开通** | 1 颗激光雷达，508TOPS；高速与城市领航 |
+| 音响／外放电 | 16 扬声器；3.3kW 外放电，放电枪另购 | 21 扬声器；3.5kW 外放电，放电枪随车 |
+| 安全资料 | 9 个气囊，含前排中央气囊；暂无 C-NCAP 成绩 | 8 个气囊；官方引用的是 **2025 款 C-NCAP 五星成绩，不能当作 2026 款独立测试成绩** |
+| 拖挂 | 不支持 | 最大拖挂 1,500kg；拖车钩选装 3,500 元 |
+| **整车质保** | **5 年或 12 万公里**，先到为准 | **4 年或 10 万公里**，先到为准 |
+| 电池／三电质保 | 电池、电机、电控 **8 年或 16 万公里** | 电池 **8 年或 16 万公里**；首任车主电池终身质保有里程、保养等条件，不等于无条件整车终身质保 |
+| **主要取舍** | 标称续航长 55km，有前备箱，整车质保更长；但车身更宽，舒适配置需另花钱 | 空悬、按摩、后排通风、冰箱、电吸门一步到位；但无前备箱，标称续航较短 |
+
+### 价格不能只看裸车差 4,000 元
+
+E7 长续航版加上 **前排按摩＋冰箱＋电吸门**，合计为：
+
+**24.98＋0.60＋0.40＋0.30＝26.28 万元。**
+
+这比 S6 的常规指导价高 **9,000 元**，而且仍然**没有空气悬架和后排通风**。所以，若你本来就想要这些舒适配置，S6 的价格优势比裸车价看起来更明显。
+
+### 怎么选更直观
+
+- **经常跑长途、重视续航和储物：偏向 E7 长续航版。** 但 815km 是 CLTC 工况值，不是高速实际续航。
+- **家庭乘坐优先、希望少选装：偏向 S6 2026 款后驱。** 舒适配置更齐全；实际滤振、座椅承托和后排是否容易晕车，仍需要试驾。
+- **车位比较窄：重点试停 E7。** 它比 S6 宽 45mm，狭窄车位开门上下车值得现场确认。
+
+**比较边界：**上述是官方规格对比，不是同场实测。两车后备厢测量口径不同，不能仅凭升数排大小；充电时间受充电桩、电池温度等影响；本次没有可靠的同场高速、冬季续航数据。两车的领航功能都属于**辅助驾驶，驾驶员必须全程监控并随时接管**，算力高也不直接代表实际表现更好。
+
+### 主要来源
+
+- **澄川 E7：**[现行配置表](https://www.chengchuan-auto.cn/e7/config) · [官方选配页](https://www.chengchuan-auto.cn/e7/configurator) · [产品页](https://www.chengchuan-auto.cn/e7) · [质保政策](https://www.chengchuan-auto.cn/service/warranty)
+- **朔风 S6：**[2026 款配置表](https://www.shuofeng-ev.cn/s6/specs) · [官方选配页](https://www.shuofeng-ev.cn/s6/order) · [产品页](https://www.shuofeng-ev.cn/s6) · [首销权益条件](https://www.shuofeng-ev.cn/s6/offer) · [质保政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol inline 第 1 遍
+
+```text
+**同价位看，澄川 E7 长续航版偏重续航和储物，朔风 S6 2026 款后驱偏重舒适配置。** 我选了官方价格最接近的两个版本比较，避免把高配功能算到低配上。
+
+以下为截至 **2026年11月4日** 的官方资料；价格不是落地价，性能与充电数据不是同场实测。
+
+## 澄川 E7 vs 朔风 S6
+
+| 对比项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| **现行官方价** | **24.98万元** | **25.38万元**，贵4,000元 |
+| 限时权益／补贴 | 符合条件可享5,000元置换补贴，不能视为普惠降价 | **首销权益价24.38万元**，有下定渠道及提车期限要求，见下文 |
+| 全系价位 | 标准版22.98万；长续航版24.98万；Pro 27.98万；Max 31.98万；Ultra 36.98万 | 一个基础版本，后驱25.38万；加2万元选四驱，合计27.38万 |
+| **长×宽×高** | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5座 | 3,000mm／5座 |
+| **储物空间** | 后备厢660L＋前备厢120L，官方未注明测量口径 | 后备厢610L，放倒后1,720L，VDA口径；无前备厢 |
+| 驱动／最大功率／扭矩 | 单电机后驱／230kW／520N·m | 单电机后驱／250kW／450N·m |
+| 0—100km/h | 6.0秒 | 5.8秒 |
+| **电池** | **98kWh三元锂** | **92kWh磷酸铁锂** |
+| **CLTC续航** | **815km** | **760km** |
+| 平台／10%—80%补能 | 800V／官方标称22分钟 | 800V／官方标称19分钟 |
+| 底盘结构 | 前双叉臂＋后五连杆 | 前双叉臂＋后五连杆 |
+| **悬架配置** | 可变阻尼标配；**本版不可选空气悬架**，需上Pro | **空气悬架＋可变阻尼标配** |
+| **前排座椅** | 电动调节、加热、通风标配；按摩选装6,000元 | 电动调节、加热、通风、10点按摩标配；副驾零重力 |
+| **后排座椅** | 电动靠背、加热；无通风、按摩 | 电动靠背、加热、通风；无按摩 |
+| **冰箱／电吸门** | 冰箱选装4,000元；电吸门选装3,000元 | **均标配** |
+| 其他家用配置 | 电动尾门、四门双层玻璃、后排隐私玻璃、ISOFIX | 电动尾门、四门双层玻璃、后排遮阳帘、ISOFIX |
+| 座舱屏幕／互联 | 15.6英寸中控屏＋HUD＋后排8英寸控制屏；支持CarPlay | 双15.7英寸屏＋HUD；支持CarPlay；后排15.6英寸吸顶屏选装8,000元 |
+| 辅助驾驶 | 1颗激光雷达，254TOPS；高速与城市领航，**城市领航需OTA开通** | 1颗激光雷达，508TOPS；高速与城市领航 |
+| 音响／外放电 | 16扬声器；3.3kW外放电，放电枪另购 | 21扬声器；3.5kW外放电，放电枪随车 |
+| 安全配置与碰撞成绩 | 9气囊，含前排中央气囊；暂无C-NCAP成绩 | 8气囊；官方引用的五星成绩属于**2025款，不能直接当作2026款成绩** |
+| 拖挂 | 不支持 | 最大1,500kg，拖车钩选装3,500元 |
+| **整车质保** | **5年或12万公里**，以先到为准 | **4年或10万公里**，以先到为准 |
+| 电池等质保 | 电池、电机、电控8年或16万公里，以先到为准 | 电池8年或16万公里；首任车主电池终身质保有里程、保养等条件 |
+| **主要取舍** | 标称续航更长、有前备厢、整车质保更长；车身更宽，舒适配置需加钱 | 舒适配置更齐、车身窄45mm、标称补能更快；无前备厢，整车质保较短 |
+
+### 价格与配置，最容易看错的地方
+
+- **E7加上前排按摩、冰箱、电吸门，合计26.28万元**，仍然没有空气悬架和后排通风。因此，不能只看它比S6便宜4,000元，就认定配置性价比更高。
+- **S6的24.38万元是限时权益价，不是常态官方价**：要求2026年11月底前在官方App下定、12月31日前提车，经销商渠道不参与；部分特殊车色另加3,000元。
+- E7长续航版是 **22分钟补能**，不是Max／Ultra的13分钟；S6这里用的是**2026款**，不是已停售的2025款。
+
+### 怎么选更合适？
+
+- **更在意长途续航、前备厢和整车质保：优先看E7长续航版。** 但1,980mm车宽接近两米，车位窄的话要重点试停车和开门。
+- **更在意家人乘坐配置、希望少选装：优先看S6后驱。** 空悬、按摩、后排通风、冰箱和电吸门都含在基础价里，配置层面的优势更明显。
+
+以上是**规格判断，不是实际舒适性或能耗排名**。两车没有可靠的同场高速／冬季续航数据；CLTC不能直接当实际续航，充电时间也受桩功率和电池温度影响。后备厢测量口径不同，不能仅凭660L和610L判大小。两车的领航功能都属于辅助驾驶，驾驶员须全程监控并随时接管；算力高也不等于实际体验一定更好。
+
+**官方来源：**
+- 澄川：[现行配置表](https://www.chengchuan-auto.cn/e7/config) · [选配及价格](https://www.chengchuan-auto.cn/e7/configurator) · [产品与储物说明](https://www.chengchuan-auto.cn/e7) · [质保政策](https://www.chengchuan-auto.cn/service/warranty)
+- 朔风：[2026款配置表](https://www.shuofeng-ev.cn/s6/specs) · [选配及价格](https://www.shuofeng-ev.cn/s6/order) · [产品与储物说明](https://www.shuofeng-ev.cn/s6) · [首销权益条件](https://www.shuofeng-ev.cn/s6/offer) · [质保政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol inline 第 2 遍
+
+```text
+**同价位看，澄川 E7 长续航版偏重续航和储物，朔风 S6 2026款后驱偏重舒适配置。** 两车现行官方价差4,000元，但把按摩、冰箱、电吸门算进去，S6的配置价格优势会更明显。
+
+以下按 **2026年11月4日** 的在售信息整理，主比 **E7长续航版 vs S6 2026款后驱**，不把高配或旧款配置混进来。价格均非落地成交价。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 对比项 | 澄川 E7 | 朔风 S6 |
+|---|---|---|
+| **本表对比版本** | **长续航版** | **2026款后驱基础版** |
+| **现行官方价** | **24.98万元** | **25.38万元** |
+| 全系价位 | 标准版22.98万；长续航版24.98万；Pro 27.98万；Max 31.98万；Ultra 36.98万 | 一个基础版本＋选装四驱；后驱25.38万，选四驱后27.38万 |
+| 限时权益／补贴 | 符合条件可享5,000元置换补贴，要求旧车过户满一年；不计入普遍售价 | **首销权益价24.38万元**；须11月底前在官方App下定、12月31日前提车，经销商渠道不参与；特殊车色可能另收费 |
+| 座位 | 5座，2＋3布局 | 5座，2＋3布局 |
+| 长×宽×高 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距 | 3,000mm | 3,000mm |
+| 尺寸上的取舍 | 宽45mm、低70mm；窄车位要注意开门空间 | 车身更窄、更高；实际头部空间和上下车便利性仍需试坐 |
+| 后备厢／前备厢 | 后备厢660L、前备厢120L；**官网未注明测量口径** | 后备厢610L，放倒后1,720L；**VDA口径**；无前备箱 |
+| 驱动与动力 | 单电机后驱；230kW、520N·m | 单电机后驱；250kW、450N·m |
+| 官方0—100km/h加速 | 6.0秒 | 5.8秒 |
+| 电池 | **98kWh三元锂** | **92kWh磷酸铁锂** |
+| **CLTC续航** | **815km** | **760km** |
+| 电压平台 | 800V | 800V |
+| 官方10%—80%充电时间 | 22分钟 | 19分钟 |
+| 底盘结构 | 前双叉臂、后五连杆 | 前双叉臂、后五连杆 |
+| **悬架配置** | 可变阻尼标配；**本版本不能选空气悬架，需上Pro** | **空气悬架＋可变阻尼标配** |
+| 前排座椅 | 电动调节、加热、通风标配；**按摩选装6,000元** | 电动调节、加热、通风、**10点按摩标配**；副驾零重力座椅 |
+| 后排座椅 | 电动靠背105°～130°、加热；无通风、按摩 | 电动靠背、加热、**通风**；无按摩 |
+| **冰箱／电吸门** | 冰箱选装4,000元；电吸门选装3,000元 | **均标配** |
+| 家庭便利配置 | 电动尾门、ISOFIX、四门双层玻璃、后排隐私玻璃；电动前备箱选装2,000元 | 电动尾门、ISOFIX、四门双层玻璃、后排遮阳帘 |
+| 座舱与屏幕 | 15.6英寸中控屏、HUD、后排8英寸控制屏；支持CarPlay | 双15.7英寸屏、HUD；支持CarPlay；15.6英寸后排吸顶屏选装8,000元 |
+| 音响 | 16扬声器；23扬声器选装5,000元 | 21扬声器标配 |
+| 辅助驾驶硬件／功能 | 1颗激光雷达、254TOPS；高速与城市领航，**城市领航需OTA开通** | 1颗激光雷达、508TOPS；高速与城市领航 |
+| 外放电 | 3.3kW，放电枪需另购 | 3.5kW，放电枪随车 |
+| 拖挂 | 不支持 | 最大拖挂1,500kg；拖车钩选装3,500元 |
+| 安全信息 | 9个气囊，含前排中央气囊；暂无C-NCAP成绩 | 8个气囊；所列C-NCAP五星为**2025款成绩，不能直接当作2026款测试结果** |
+| 整车质保 | **5年或12万公里**，以先到为准 | **4年或10万公里**，以先到为准 |
+| 电池／三电质保 | 电池、电机、电控8年或16万公里，以先到为准 | 电池8年或16万公里；首任车主电池终身质保**附里程、保养等条件，并非无条件终身** |
+| **加入常见舒适选装后的价格** | 加前排按摩、冰箱、电吸门共1.3万元，合计 **26.28万元**；仍无空悬、后排通风 | 上述舒适配置及空悬、后排通风已在 **25.38万元** 基础价内；符合首销条件为24.38万元 |
+| **主要优势** | 标称续航更长；有独立前备箱；整车质保期限更长 | 舒适配置更齐；标称充电时间稍短；车身更窄 |
+| **主要短板** | 舒适配置需加钱，长续航版无法选空悬；车宽接近2米 | 标称续航少55km；无前备箱；整车质保较短 |
+
+### 怎么选
+
+- **经常跑长途、优先看续航和独立储物：更偏向 E7长续航版。** 不过815km是CLTC工况值，不能据此保证高速实际续航领先多少。
+- **家庭乘坐为主、在意后排通风和舒适配置：更偏向 S6。** 空悬、按摩、冰箱、电吸门都已标配，按这组配置比较，不只是账面上贵4,000元。
+- **不要仅凭算力、空悬或气囊数量判断谁更安全、更好开。** 辅助驾驶效果、底盘舒适性、隔音、冬季与高速续航，本次没有可靠的同场实测，不能据此排胜负。
+
+**口径提醒：** 两车储物容积测量口径不同，不能直接用660L和610L判定装载能力；充电时间均为官方特定条件标称。两车辅助驾驶都不是自动驾驶，驾驶员须全程监控、随时接管。
+
+### 主要来源
+
+- **价格、动力、底盘及配置：** [澄川E7现行配置表](https://www.chengchuan-auto.cn/e7/config) · [朔风S6 2026款配置表](https://www.shuofeng-ev.cn/s6/specs)
+- **选装价格：** [澄川E7选配页](https://www.chengchuan-auto.cn/e7/configurator) · [朔风S6选配页](https://www.shuofeng-ev.cn/s6/order)
+- **空间、座舱及功能说明：** [澄川E7产品页](https://www.chengchuan-auto.cn/e7) · [朔风S6产品页](https://www.shuofeng-ev.cn/s6)
+- **限时价格条件：** [朔风S6首销权益页](https://www.shuofeng-ev.cn/s6/offer)
+- **质保：** [澄川售后政策](https://www.chengchuan-auto.cn/service/warranty) · [朔风售后政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol inline 第 3 遍
+
+```text
+**同样约25万元预算，澄川 E7 长续航版的优势是标称续航、前备箱和整车质保；朔风 S6 2026款后驱版的优势是舒适配置更齐、标称补能更快。**
+
+下面选取指导价最接近的两个版本比较，避免用一款的高配对另一款的低配。数据截至 **2026年11月4日**，价格均非落地成交价。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 对比项目 | 澄川 E7 长续航版 | 朔风 S6 2026款后驱版 |
+|---|---|---|
+| **现行官方指导价** | **24.98万元** | **25.38万元**，贵4,000元 |
+| 优惠／权益 | 有条件的5,000元置换补贴，不计入指导价 | 首销权益价 **24.38万元**；须11月底前在官方App下定、12月31日前提车，经销商渠道不参与；部分车色另收费 |
+| 全系价位参考 | 标准版22.98万、长续航24.98万、Pro 27.98万、Max 31.98万、Ultra 36.98万元 | 一个基础版本；选装四驱加2万元，指导价27.38万元 |
+| **长×宽×高** | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5座 | 3,000mm／5座 |
+| 停车与空间取舍 | 车身宽45mm，窄车位更需注意 | 车身高70mm、略窄；实际头部空间及上下车便利仍需体验 |
+| 储物空间 | 后备厢660L＋**前备箱120L**；官方未注明测量口径 | 后备厢610L，放倒后1,720L；VDA口径，**无前备箱**。两车容积不能直接据数字排大小 |
+| 驱动／功率／扭矩 | 单电机后驱；230kW／520N·m | 单电机后驱；250kW／450N·m |
+| 0—100km/h加速 | 6.0秒 | 5.8秒 |
+| **电池** | **98kWh，三元锂** | **92kWh，磷酸铁锂** |
+| **CLTC续航** | **815km** | **760km** |
+| **补能** | 800V；10%—80%标称22分钟 | 800V；10%—80%标称19分钟 |
+| **底盘悬架** | 前双叉臂、后五连杆＋可变阻尼；**本版本不能选空气悬架，需上Pro** | 前双叉臂、后五连杆；**空气悬架＋可变阻尼标配** |
+| 前排座椅 | 电动调节、加热、通风标配；**按摩选装6,000元** | 电动调节、加热、通风、**10点按摩标配**；副驾零重力座椅 |
+| 后排座椅 | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风标配**；无按摩 |
+| **冰箱／电吸门** | 分别选装4,000元／3,000元 | **均标配** |
+| 座舱与屏幕 | 15.6英寸中控屏、HUD、后排8英寸控制屏；支持CarPlay | 双15.7英寸屏、HUD；支持CarPlay；后排15.6英寸吸顶屏选装8,000元 |
+| 辅助驾驶 | 1颗激光雷达、254TOPS；高速与城市领航，**城市领航需OTA开通** | 1颗激光雷达、508TOPS；高速与城市领航 |
+| 家用便利 | 电动尾门、ISOFIX、四门双层玻璃、后排隐私玻璃 | 电动尾门、ISOFIX、四门双层玻璃、后排遮阳帘 |
+| 音响／外放电 | 16扬声器；3.3kW外放电，放电枪另购 | 21扬声器；3.5kW外放电，放电枪随车 |
+| 安全信息 | 9个气囊，含前排中央气囊；暂无C-NCAP成绩 | 8个气囊；所列C-NCAP五星为**2025款成绩，不能当作2026款独立测试结果** |
+| **质保** | **整车5年或12万公里**；电池、电机、电控8年或16万公里，以先到为准 | **整车4年或10万公里**；电池8年或16万公里，首任车主电池终身质保有里程、保养等条件 |
+| **主要取舍** | 续航数字更长、有前备箱、整车质保更长；舒适配置需额外预算 | 空悬、按摩、后排通风、冰箱等更齐；无前备箱，标称续航较短 |
+
+### 怎么选更直观
+
+- **长途多、重视续航和储物：优先看 E7 长续航版。** CLTC比S6多55km，还有120L前备箱；但不能据此认定高速或冬季实际续航一定领先同样幅度。
+- **家庭乘坐多、重视舒适配置：优先看 S6。** E7长续航版加上前排按摩、冰箱和电吸门后为 **26.28万元**，仍没有S6标配的空气悬架和后排通风。S6这方面的价格优势比指导价差更明显。
+- **别仅凭参数判断舒适性或辅助驾驶水平。** 空悬不等于实际乘坐一定更舒服，算力更高也不等于辅助驾驶一定更好；需要试驾验证。两车的辅助驾驶都不是自动驾驶，驾驶员须全程监控、随时接管。
+
+**数据边界：**续航为CLTC工况值，充电时间为适宜电池温度及对应超充桩条件下的官方标称；本次没有可靠的两车同场高速、冬季续航或舒适性实测，不据此排实测胜负。
+
+**主要来源：**
+- 配置与价格：[澄川E7现行配置表](https://www.chengchuan-auto.cn/e7/config)、[朔风S6 2026款配置表](https://www.shuofeng-ev.cn/s6/specs)
+- 选装价格：[澄川E7选配页](https://www.chengchuan-auto.cn/e7/configurator)、[朔风S6选配页](https://www.shuofeng-ev.cn/s6/order)
+- 空间与座舱：[澄川E7产品页](https://www.chengchuan-auto.cn/e7)、[朔风S6产品页](https://www.shuofeng-ev.cn/s6)
+- 限时优惠：[朔风S6首销权益](https://www.shuofeng-ev.cn/s6/offer)
+- 质保条件：[澄川售后政策](https://www.chengchuan-auto.cn/service/warranty)、[朔风售后政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol rest 第 1 遍
+
+```text
+**同样约25万元预算，澄川 E7 长续航版的优势是标称续航和前备箱；朔风 S6 的优势是舒适配置更齐、标称补能更快。**
+
+下面按**截至2026年11月4日的在售车型**，选择官方价格最接近的两个后驱版本对比，不混用高配或旧款配置。
+
+## 澄川 E7 vs 朔风 S6
+
+| 对比项目 | 澄川 E7 **长续航版** | 朔风 S6 **2026款后驱** |
+|---|---|---|
+| **现行官方价** | **24.98万元** | **25.38万元**，比E7贵4,000元 |
+| 限时优惠／置换权益 | 符合条件可享5,000元置换补贴，不是人人可得 | **首销权益价24.38万元**；须11月底前在官方App下定、12月31日前提车，经销商渠道不参与 |
+| 全系价格与版本 | 标准22.98万／长续航24.98万／Pro 27.98万／Max 31.98万／Ultra 36.98万元 | 后驱25.38万元；加2万元选装四驱，即27.38万元，均未扣限时权益 |
+| 尺寸：长×宽×高 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5座 | 3,000mm／5座 |
+| 动力 | 单电机后驱；230kW、520N·m | 单电机后驱；250kW、450N·m |
+| 官方0—100km/h | 6.0秒 | 5.8秒 |
+| 电池 | **98kWh，三元锂** | **92kWh，磷酸铁锂** |
+| **CLTC续航** | **815km** | **760km** |
+| 电压平台／补能 | 800V；10%—80%标称**22分钟** | 800V；10%—80%标称**19分钟** |
+| 底盘与悬架 | 前双叉臂＋后五连杆；可变阻尼标配；**本版本不可选空气悬架** | 前双叉臂＋后五连杆；**空气悬架＋可变阻尼标配** |
+| 前排座椅 | 电动调节、加热、通风标配；**按摩选装6,000元** | 电动调节、加热、通风、**10点按摩标配**；副驾零重力 |
+| 后排座椅 | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风标配**；无按摩 |
+| 冰箱／电吸门 | 冰箱选装4,000元；电吸门选装3,000元 | **两项均标配** |
+| 行李空间 | 后备厢660L＋**前备箱120L**；官方未说明测量口径 | 后备厢610L，放倒后1,720L，按VDA口径；**无前备箱** |
+| 座舱屏幕与互联 | 15.6英寸中控屏、HUD、后排8英寸控制屏；支持CarPlay | 双15.7英寸屏、HUD；支持CarPlay；后排15.6英寸吸顶屏选装8,000元 |
+| 音响／外放电 | 16扬声器；3.3kW外放电，放电枪另购 | 21扬声器；3.5kW外放电，放电枪随车 |
+| 辅助驾驶 | 1颗激光雷达；高速与城市领航，**城市领航需OTA开通** | 1颗激光雷达；高速与城市领航 |
+| 家用共同配置 | 电动尾门、ISOFIX、四门双层玻璃 | 电动尾门、ISOFIX、四门双层玻璃 |
+| 安全信息 | 9个气囊，含前排中央气囊；暂无C-NCAP成绩 | 8个气囊；所列C-NCAP五星为**2025款成绩，非2026款独立测试** |
+| 整车质保 | **5年或12万公里**，以先到为准 | **4年或10万公里**，以先到为准 |
+| 三电／电池质保 | 电池、电机、电控8年或16万公里，以先到为准 | 电池8年或16万公里；首任车主电池终身质保**另有里程、保养等条件** |
+| **主要取舍** | 标称续航多55km、有前备箱、整车质保更长；但车更宽，舒适配置需加钱 | 空悬、按摩、后排通风、冰箱、电吸门更齐；但标称续航较短、没有前备箱 |
+
+### 怎么选更直观
+
+- **优先续航、希望少充几次电：偏向 E7 长续航版。** 但815km是CLTC工况值，不是高速或冬季实跑里程。
+- **优先家人乘坐配置、希望买来就齐全：偏向 S6。** E7加上前排按摩、冰箱、电吸门后为 **26.28万元**，仍没有空气悬架和后排通风；不能视为完全配齐到S6。
+- **停车位窄：重点试 E7 的宽度。** E7比S6宽45mm，老小区停车、开门抱孩子时值得现场确认。
+
+**比较边界：**以上是官方规格与配置比较，不是同场实测。充电时间受桩功率、电池温度等条件影响；两车后备厢测量口径不同，不能仅凭660L和610L判断谁更能装。空气悬架、车高也不能直接证明实际乘坐更舒服。两车辅助驾驶均**不是自动驾驶，驾驶员须全程监控、随时接管**。价格均非落地价，未含保险、上牌等费用。
+
+### 主要来源
+- **澄川 E7：**[现行配置表](https://www.chengchuan-auto.cn/e7/config) · [官方选配页](https://www.chengchuan-auto.cn/e7/configurator) · [产品页](https://www.chengchuan-auto.cn/e7) · [质保政策](https://www.chengchuan-auto.cn/service/warranty)
+- **朔风 S6：**[2026款配置表](https://www.shuofeng-ev.cn/s6/specs) · [官方选配页](https://www.shuofeng-ev.cn/s6/order) · [产品页](https://www.shuofeng-ev.cn/s6) · [首销权益条件](https://www.shuofeng-ev.cn/s6/offer) · [质保政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol rest 第 2 遍
+
+```text
+**约25万元预算下，澄川 E7 长续航版的主要优势是续航和前备箱；朔风 S6 2026款后驱版的优势是舒适配置更齐、标称充电更快。**
+
+下面以**现行官方指导价接近的版本**对比，信息截至 **2026年11月4日**；限时优惠、选装与高配版配置分开列，不混算。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 对比项 | 澄川 E7 | 朔风 S6 |
+|---|---|---|
+| **本表对比版本** | **长续航版，单电机后驱** | **2026款后驱基础版** |
+| **现行官方指导价** | **24.98万元** | **25.38万元**，比E7贵4,000元 |
+| 全系价位／版本 | 标准版22.98万、长续航版24.98万、Pro 27.98万、Max 31.98万、Ultra 36.98万元 | 后驱25.38万元；加2万元选装四驱，即27.38万元 |
+| 优惠与条件 | 5,000元置换补贴，要求旧车过户满一年，不能视作人人可享的降价 | **首销权益价24.38万元**：11月底前官方App下定、12月31日前提车；经销商渠道不参与，部分车色另收费 |
+| **长×宽×高** | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm；比E7窄45mm、高70mm |
+| 轴距／座位 | 3,000mm／5座，2＋3布局 | 3,000mm／5座，2＋3布局 |
+| 储物空间 | 后备厢660L，**前备厢120L**；官网未注明测量口径 | 后备厢610L，放倒后1,720L，**无前备箱**；VDA口径。不能直接与E7数字判大小 |
+| 动力／零百加速 | 230kW、520N·m／6.0秒 | 250kW、450N·m／5.8秒 |
+| **电池／CLTC续航** | **98kWh三元锂／815km** | **92kWh磷酸铁锂／760km** |
+| **平台／快充** | 800V；10%—80% **22分钟** | 800V；10%—80% **19分钟** |
+| 底盘结构 | 前双叉臂、后五连杆 | 前双叉臂、后五连杆 |
+| **悬架配置** | 可变阻尼标配；**本版不可选空气悬架，需升至Pro** | **空气悬架＋可变阻尼标配** |
+| **前排座椅** | 电动调节、加热、通风标配；**按摩选装6,000元** | 电动调节、加热、通风、**10点按摩标配**；副驾零重力 |
+| **后排座椅** | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风**；无按摩 |
+| **冰箱／电吸门** | 冰箱选装4,000元，电吸门选装3,000元 | **均标配** |
+| 其他家用配置 | 电动尾门、四门双层玻璃、后排隐私玻璃、ISOFIX | 电动尾门、四门双层玻璃、后排遮阳帘、ISOFIX |
+| 辅助驾驶 | 1颗激光雷达、254TOPS；高速与城市领航，**城市领航需OTA开通** | 1颗激光雷达、508TOPS；高速与城市领航 |
+| 座舱／互联 | 15.6英寸中控屏、HUD、后排8英寸控制屏；支持CarPlay | 双15.7英寸屏、HUD；后排15.6英寸吸顶屏选装8,000元；支持CarPlay |
+| 音响／外放电 | 16扬声器；3.3kW外放电，放电枪另购 | 21扬声器；3.5kW外放电，放电枪随车 |
+| 安全配置 | 9个气囊，含前排中央气囊；暂无C-NCAP成绩 | 8个气囊；所列C-NCAP五星为**2025款成绩，不等于2026款单独受测成绩** |
+| **质保** | **整车5年或12万公里**；三电8年或16万公里，以先到为准 | **整车4年或10万公里**；电池8年或16万公里；首任车主电池终身质保有里程、保养等条件 |
+| 拖挂 | 不支持 | 最大1,500kg；拖车钩选装3,500元 |
+| **家用舒适配置配齐价** | 加前排按摩、冰箱、电吸门后 **26.28万元**；仍不含空悬与后排通风 | 上述配置连同空悬、后排通风已含在 **25.38万元**基础价内 |
+| **主要取舍** | 标称续航多55km，有前备箱，整车质保更长；但车更宽，舒适配置选装较多 | 标配舒适配置丰富，标称补能快3分钟；但无前备箱，整车质保较短 |
+
+### 怎么选更直观
+
+- **更看重长途续航、前备箱和整车质保：优先看E7长续航版。** 但不要把Max的13分钟快充、Pro的空悬或Ultra的后排通风按摩算到这款上。
+- **更看重全家乘坐配置、希望少选装：优先看S6 2026款后驱版。** 仅E7补上按摩、冰箱、电吸门，就比S6常规指导价高9,000元，且配置仍未完全对齐。
+- **如果能满足首销权益条件，S6为24.38万元，比E7长续航版指导价低6,000元。** 这是限时条件价，不是长期售价。
+
+**数据边界：**续航均为CLTC工况值，快充均为指定条件下的官方标称，并非同场实测；目前不能据此判断冬季／高速实际续航、滤振、隔音或晕车表现。两车的领航功能都属于**辅助驾驶，不是自动驾驶**，驾驶员须全程监控并随时接管，算力大小也不直接代表体验好坏。
+
+### 主要来源
+- **E7价格与配置：**[现行配置表](https://www.chengchuan-auto.cn/e7/config)、[官方选配页](https://www.chengchuan-auto.cn/e7/configurator)
+- **S6价格与配置：**[2026款配置表](https://www.shuofeng-ev.cn/s6/specs)、[官方选配页](https://www.shuofeng-ev.cn/s6/order)、[首销权益条件](https://www.shuofeng-ev.cn/s6/offer)
+- **空间与座舱：**[E7产品页](https://www.chengchuan-auto.cn/e7)、[S6产品页](https://www.shuofeng-ev.cn/s6)
+- **质保条款：**[澄川售后政策](https://www.chengchuan-auto.cn/service/warranty)、[朔风售后政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol rest 第 3 遍
+
+```text
+**约 25 万元预算下，E7 长续航版偏重续航和前备箱储物，S6 2026 款后驱偏重家用舒适配置。** 两者现行官方价只差 4,000 元，但 S6 标配空悬、按摩、冰箱等，不能只看起售价。
+
+以下按 **2026 年 11 月 4 日在售信息**整理，主表选用价格最接近的两个版本，避免混入高配或旧款数据。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 对比项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| **现行官方价** | **24.98 万元** | **25.38 万元** |
+| 优惠及条件 | 5,000 元置换补贴，要求旧车过户满一年；不是人人可享 | 首销权益价 **24.38 万元**：11 月底前官方 App 下定、12 月 31 日前提车；经销商渠道不参与，部分车色另加 3,000 元 |
+| 全系价位与版本 | 标准版 22.98 万；长续航版 24.98 万；Pro 27.98 万；Max 31.98 万；Ultra 36.98 万 | 一个基础版本，后驱 25.38 万；加 2 万选装四驱，合计 27.38 万 |
+| **尺寸：长×宽×高** | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5 座 | 3,000mm／5 座 |
+| 尺寸带来的取舍 | 更宽、更低；窄车位要注意开门空间 | 窄 45mm、高 70mm；实际头部空间、上下车便利性仍需试坐 |
+| **后备厢与前备箱** | 后备厢 660L＋前备箱 120L；官方未注明测量口径 | 后备厢 610L，后排放倒 1,720L，VDA 口径；无前备箱 |
+| 驱动／最大功率／扭矩 | 单电机后驱／230kW／520N·m | 单电机后驱／250kW／450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| **电池** | **98kWh 三元锂** | **92kWh 磷酸铁锂** |
+| **CLTC 续航** | **815km** | **760km** |
+| 电压平台／补能 | 800V；10%—80% 官方标称 **22 分钟** | 800V；10%—80% 官方标称 **19 分钟** |
+| **底盘悬架** | 前双叉臂、后五连杆；可变阻尼标配；**本版本不能选空悬，Pro 起才有** | 前双叉臂、后五连杆；**空气悬架＋可变阻尼标配** |
+| **前排座椅** | 电动调节、加热、通风标配；**按摩选装 6,000 元** | 电动调节、加热、通风、**10 点按摩标配**；副驾零重力 |
+| **后排座椅** | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风标配**；无按摩 |
+| **冰箱／电吸门** | 冰箱选装 4,000 元；电吸门选装 3,000 元 | **均标配** |
+| 其他家用便利 | 三温区空调、后排隐私玻璃、电动尾门、ISOFIX；电动前备箱选装 2,000 元 | 后排遮阳帘、电动尾门、ISOFIX |
+| 屏幕与互联 | 15.6 英寸中控屏＋HUD＋后排 8 英寸控制屏；支持 CarPlay | 双 15.7 英寸屏＋HUD；支持 CarPlay；15.6 英寸后排吸顶屏选装 8,000 元 |
+| 音响／外放电 | 16 扬声器；23 扬声器选装 5,000 元；3.3kW 外放电，放电枪另购 | 21 扬声器；3.5kW 外放电，放电枪随车 |
+| 隔音配置 | 四门双层玻璃 | 四门双层玻璃；缺少同条件实测，不能据此判定谁更安静 |
+| **辅助驾驶** | 1 颗激光雷达、254TOPS；高速与城市领航，**城市领航需 OTA 开通** | 1 颗激光雷达、508TOPS；高速与城市领航 |
+| 安全信息 | 9 个气囊，含前排中央气囊；暂无 C-NCAP 成绩 | 8 个气囊；所引用的 C-NCAP 五星是 **2025 款成绩，不当作 2026 款独立测试结果** |
+| 拖挂 | 不支持 | 最大拖挂 1,500kg；拖车钩选装 3,500 元 |
+| **整车质保** | **5 年或 12 万公里**，以先到为准 | **4 年或 10 万公里**，以先到为准 |
+| 电池／三电质保 | 电池、电机、电控 8 年或 16 万公里 | 电池 8 年或 16 万公里；首任车主电池终身质保有里程、保养等条件，并非无条件 |
+
+### 真正影响选择的三点
+
+- **看重续航、经常跑长途：优先看 E7 长续航版。** 标称续航多 55km，还有独立前备箱，整车质保也更长。但它的补能是 **22 分钟，不是 Max 的 13 分钟**。
+- **看重家人乘坐、希望少选装：优先看 S6。** 空悬、前排按摩、后排通风、冰箱和电吸门均已标配。E7 长续航版仅加按摩、冰箱、电吸门就到 **26.28 万元**，仍不含空悬和后排通风；这不是完全同配置的对等价格。
+- **暂时不能排胜负的项目：真实续航、冬季补能、隔音和乘坐舒适性。** 目前没有两车同场实测，不能把配置优势直接等同于实际体验更好。
+
+**口径提醒：** CLTC 不是高速或冬季实际续航；充电时间取决于充电桩、电池温度等条件；两车后备厢测量口径不一致，不能直接用 660L 和 610L 判大小。两车的领航功能都属于辅助驾驶，驾驶员须全程监控、随时接管，算力高也不直接代表体验更好。以上价格均非落地价。
+
+### 主要来源
+
+- **澄川 E7：** [现行配置表](https://www.chengchuan-auto.cn/e7/config)、[官方选配页](https://www.chengchuan-auto.cn/e7/configurator)、[产品页](https://www.chengchuan-auto.cn/e7)、[质保政策](https://www.chengchuan-auto.cn/service/warranty)。
+- **朔风 S6：** [2026 款配置表](https://www.shuofeng-ev.cn/s6/specs)、[官方选配页](https://www.shuofeng-ev.cn/s6/order)、[产品页](https://www.shuofeng-ev.cn/s6)、[首销权益及条件](https://www.shuofeng-ev.cn/s6/offer)、[质保政策](https://www.shuofeng-ev.cn/service/warranty)。
+```
+
+#### w-merge-two-long gpt-6.1-sol both 第 1 遍
+
+```text
+**同样在 25 万元左右，澄川 E7 长续航版偏向续航和储物，朔风 S6 偏向家用舒适配置。** 为避免拿高配和低配混比，下面选用 **E7 长续航版**与 **S6 2026 款后驱版**，现行官方价相差 4,000 元。
+
+### 澄川 E7 vs 朔风 S6
+
+*价格与配置截至 2026 年 11 月 4 日；除“全系价格”一行外，均对应上述两个版本。*
+
+| 对比项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱版 |
+|---|---|---|
+| **现行官方价** | **24.98 万元** | **25.38 万元** |
+| 优惠与条件 | 5,000 元置换补贴，要求旧车过户满一年；不属于人人可享的降价 | **首销权益价 24.38 万元**；须在 11 月底前通过官方 App 下定、12 月 31 日前提车，经销商渠道不参与；部分车色加 3,000 元 |
+| 全系价格与版本 | 标准版 22.98 万、长续航版 24.98 万、Pro 27.98 万、Max 31.98 万、Ultra 36.98 万元 | 一个基础版本，25.38 万元；四驱选装加 2 万元，合计 27.38 万元 |
+| 车身尺寸（长×宽×高） | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5 座 | 3,000mm／5 座 |
+| 尺寸上的主要区别 | 更宽 45mm、车身更低；窄车位要留意开门空间 | 更窄、车身高 70mm；实际乘坐空间仍需试坐 |
+| 后备厢／前备厢 | 后备厢 660L、前备厢 120L；**官方未注明测量口径** | 后备厢 610L，放倒后排 1,720L，按 VDA 口径；**无前备厢** |
+| 驱动／功率／扭矩 | 单电机后驱；230kW／520N·m | 单电机后驱；250kW／450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | **98kWh 三元锂** | 92kWh 磷酸铁锂 |
+| **CLTC 续航** | **815km** | **760km** |
+| 电压平台／快充 | 800V；10%—80% **22 分钟** | 800V；10%—80% **19 分钟** |
+| 底盘悬架 | 前双叉臂、后五连杆；可变阻尼标配；**该版本不能选空气悬架，需上 Pro** | 前双叉臂、后五连杆；**空气悬架＋可变阻尼标配** |
+| 前排座椅 | 电动调节、加热、通风标配；**按摩选装 6,000 元** | 电动调节、加热、通风、**10 点按摩标配**；副驾零重力 |
+| 后排座椅 | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风**；无按摩 |
+| 冰箱／电吸门 | 冰箱选装 4,000 元；电吸门选装 3,000 元 | **均标配** |
+| 其他家用配置 | 三温区空调、后排隐私玻璃、电动尾门、ISOFIX | 后排遮阳帘、电动尾门、ISOFIX |
+| 屏幕与互联 | 15.6 英寸中控屏、HUD、后排 8 英寸控制屏；支持 CarPlay | 双 15.7 英寸屏、HUD；支持 CarPlay；后排 15.6 英寸吸顶屏选装 8,000 元 |
+| 辅助驾驶 | 1 颗激光雷达、254TOPS；高速与城市领航，**城市领航需 OTA 开通** | 1 颗激光雷达、508TOPS；高速与城市领航 |
+| 隔音配置 | 四门双层玻璃 | 四门双层玻璃；缺少同条件实测，不能据此判定谁更安静 |
+| 音响／外放电 | 16 扬声器，23 扬声器选装 5,000 元；3.3kW 外放电，放电枪另购 | 21 扬声器；3.5kW 外放电，放电枪随车 |
+| 安全配置 | 9 个气囊，含前排中央气囊；暂无 C-NCAP 成绩 | 8 个气囊；官方引用的 C-NCAP 五星为 **2025 款成绩，非 2026 款独立测试成绩** |
+| 拖挂 | 不支持 | 最大拖挂 1,500kg；拖车钩选装 3,500 元 |
+| 整车质保 | **5 年或 12 万公里**，以先到为准 | 4 年或 10 万公里，以先到为准 |
+| 电池等质保 | 电池、电机、电控 8 年或 16 万公里 | 电池 8 年或 16 万公里；首任车主电池终身质保，**有里程、保养等条件，并非无条件** |
+| **主要优势** | 标称续航长 55km、有前备厢、整车质保更长 | 空悬、按摩、后排通风、冰箱、电吸门标配；官方标称快充稍快 |
+| **主要取舍** | 车宽接近两米；舒适配置需加钱，长续航版无法补选空悬 | 无前备厢；标称续航较短；限时权益不能当作长期价格 |
+
+### 怎么选更直观？
+
+- **更在意续航、前备厢和整车质保：优先看 E7 长续航版。** 但 815km 是 CLTC 工况值，不是高速实际续航。
+- **更在意一家人坐得舒服、少做选装：优先看 S6。** E7 长续航版加上前排按摩、冰箱、电吸门，车价为 **26.28 万元**，仍没有 S6 标配的空气悬架和后排通风。这不是完全同配置比较，但更能体现舒适配置的成本差。
+- **没有同场实测，不给操控、隔音、冬季续航和乘坐舒适性硬排高低。** 空悬和算力都不能单独代表实际体验；两车的辅助驾驶都不是自动驾驶，驾驶员必须全程监控、随时接管。
+
+**口径提醒：**两车后备厢容积测量口径不同，不能直接用 660L 对 610L 判断谁更能装；快充时间均为官方在指定条件下的标称值。上述车价不含保险、上牌等费用，也不是最终成交价。E7 长续航版没有套用 Max 的 13 分钟快充，S6 使用的是现售 2026 款，而非旧款数据。
+
+### 官方来源
+- **澄川 E7：**[现行配置表](https://www.chengchuan-auto.cn/e7/config) · [选配价格](https://www.chengchuan-auto.cn/e7/configurator) · [产品页](https://www.chengchuan-auto.cn/e7) · [质保政策](https://www.chengchuan-auto.cn/service/warranty)
+- **朔风 S6：**[2026 款配置表](https://www.shuofeng-ev.cn/s6/specs) · [选配价格](https://www.shuofeng-ev.cn/s6/order) · [产品页](https://www.shuofeng-ev.cn/s6) · [首销权益与条件](https://www.shuofeng-ev.cn/s6/offer) · [质保政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol both 第 2 遍
+
+```text
+**同价位看，澄川 E7 更突出标称续航和前备箱；朔风 S6 更突出舒适配置，空悬、按摩、冰箱等不用再加钱。**
+
+为了公平比较，主表选 **E7 长续航版（24.98万元）** 对 **S6 2026款后驱版（25.38万元）**，指导价相差4,000元。以下为截至 **2026年11月4日** 的官方规格，不是同场实测结果。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 对比项目 | 澄川 E7 长续航版 | 朔风 S6 2026款后驱版 |
+|---|---|---|
+| **现行官方指导价** | **24.98万元** | **25.38万元** |
+| 全系价位 | 标准版22.98万；长续航版24.98万；Pro 27.98万；Max 31.98万；Ultra 36.98万 | 后驱25.38万；选装四驱加2万，为27.38万 |
+| 限时权益／补贴 | 符合条件可享5,000元置换补贴，不是人人可得 | 首销权益价**24.38万**；须11月底前在官方App下定、12月31日前提车，经销商渠道不参与；特殊色另收费 |
+| **长×宽×高** | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm；5座 | 3,000mm；5座 |
+| 尺寸上的区别 | 宽45mm、低70mm，窄车位需留意开门空间 | 车身更窄、更高；实际头部空间和上下车便利性仍需体验 |
+| **储物空间** | 后备厢660L＋前备厢120L，官方未注明测量口径 | 后备厢610L，放倒后排1,720L；VDA口径；无前备箱 |
+| 驱动／最大功率 | 单电机后驱；230kW | 单电机后驱；250kW |
+| 最大扭矩／零百加速 | 520N·m；6.0秒 | 450N·m；5.8秒 |
+| **电池** | **98kWh，三元锂** | **92kWh，磷酸铁锂** |
+| **CLTC续航** | **815km** | **760km** |
+| **补能** | 800V；10%—80%官方标称22分钟 | 800V；10%—80%官方标称19分钟 |
+| **底盘悬架** | 前双叉臂、后五连杆；标配可变阻尼；**本版本不可选空气悬架** | 前双叉臂、后五连杆；**空气悬架＋可变阻尼标配** |
+| 前排座椅 | 电动调节、加热、通风标配；按摩选装6,000元 | 电动调节、加热、通风、10点按摩标配；副驾零重力 |
+| **后排座椅** | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风**；无按摩 |
+| **冰箱／电吸门** | 冰箱选装4,000元；电吸门选装3,000元 | **均标配** |
+| 其他家用配置 | 三温区空调、四门双层玻璃、后排隐私玻璃、电动尾门、ISOFIX | 四门双层玻璃、后排遮阳帘、电动尾门、ISOFIX |
+| 座舱屏幕／互联 | 15.6英寸中控屏、HUD、后排8英寸控制屏；支持CarPlay | 双15.7英寸屏、HUD；后排15.6英寸吸顶屏选装8,000元；支持CarPlay |
+| 音响 | 标配16扬声器；23扬声器选装5,000元 | 标配21扬声器 |
+| **辅助驾驶** | 1颗激光雷达、254TOPS；高速与城市领航，**城市领航需OTA开通** | 1颗激光雷达、508TOPS；高速与城市领航 |
+| 安全信息 | 9个气囊，含前排中央气囊；暂无C-NCAP成绩 | 8个气囊；公布的C-NCAP五星为**2025款成绩，不是2026款单独测试结果** |
+| 外放电／拖挂 | V2L 3.3kW，放电枪另购；不支持拖挂 | V2L 3.5kW，放电枪随车；支持最大1,500kg拖挂，拖车钩选装3,500元 |
+| **整车质保** | **5年或12万公里**，先到为准 | **4年或10万公里**，先到为准 |
+| 电池等质保 | 电池、电机、电控8年或16万公里，先到为准 | 电池8年或16万公里；首任车主电池终身质保有里程、保养等条件 |
+| **主要取舍** | 标称续航长55km、有前备箱、整车质保更长；但舒适配置需加钱，空悬需升至Pro | 舒适配置更齐，官方补能时间更短；但无前备箱，整车质保较短 |
+
+### 怎么选更直观
+
+- **经常长途、优先考虑续航和储物：偏向 E7 长续航版。** 815km CLTC和120L前备箱是它的主要优势，但目前没有可靠的同场高速、冬季续航数据，不能直接等同于实际多跑55km。
+- **家庭日常、在意后排舒适和配置一步到位：偏向 S6。** 空悬、前排按摩、后排通风、冰箱、电吸门都包含在基础价内，配置上的优势比较明确；实际滤振、座椅承托仍应试驾判断。
+- **别只比裸车价：** E7长续航版加前排按摩、冰箱和电吸门后为 **26.28万元**，仍没有空悬和后排通风；S6这几项已标配，常规指导价25.38万元。这个差别比两车基础指导价相差4,000元更值得关注。
+
+**比较时注意：** 两车后备厢测量口径不同，不能直接用660L与610L判大小；CLTC不是实际续航；补能时间需适宜电池温度及匹配超充桩；辅助驾驶均不是自动驾驶，驾驶员须全程监控并随时接管，算力高低也不等于实际体验优劣。
+
+### 官方来源
+
+- **澄川 E7：** [现行配置表](https://www.chengchuan-auto.cn/e7/config) · [选配及价格](https://www.chengchuan-auto.cn/e7/configurator) · [产品页](https://www.chengchuan-auto.cn/e7) · [质保政策](https://www.chengchuan-auto.cn/service/warranty)
+- **朔风 S6：** [2026款配置表](https://www.shuofeng-ev.cn/s6/specs) · [选配及价格](https://www.shuofeng-ev.cn/s6/order) · [产品页](https://www.shuofeng-ev.cn/s6) · [首销权益条件](https://www.shuofeng-ev.cn/s6/offer) · [质保政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol both 第 3 遍
+
+```text
+**约25万元预算下，澄川 E7 长续航版偏重续航和前备箱储物；朔风 S6 2026款后驱版的舒适配置更齐，补能标称时间更短。** 主表选这两个指导价仅差4,000元的版本，避免拿高配配置与低配价格混比。
+
+### 澄川 E7 vs 朔风 S6
+
+*资料截至2026年11月4日；价格为官方口径，不代表落地价。*
+
+| 对比项目 | 澄川 E7 长续航版 | 朔风 S6 2026款后驱版 |
+|---|---|---|
+| **现行官方指导价** | **24.98万元** | **25.38万元** |
+| 优惠／权益 | 5,000元置换补贴，要求旧车过户满一年，不直接计入车价 | **首销权益价24.38万元**；须11月底前在官方App下定、12月31日前提车，经销商渠道不参与；部分车色另收费 |
+| 全系价格与版本 | 标准版22.98万、长续航版24.98万、Pro 27.98万、Max 31.98万、Ultra 36.98万 | 后驱25.38万；选装四驱加2万，即27.38万 |
+| 长×宽×高 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5座 | 3,000mm／5座 |
+| 后备厢／前备厢 | 后备厢660L、前备厢120L；官方未注明测量口径 | 后备厢610L，放倒后排1,720L，采用VDA口径；**无前备箱** |
+| 驱动／最大功率／扭矩 | 单电机后驱／230kW／520N·m | 单电机后驱／250kW／450N·m |
+| 0—100km/h加速 | 6.0秒 | 5.8秒 |
+| 电池 | **98kWh三元锂** | 92kWh磷酸铁锂 |
+| **CLTC续航** | **815km** | **760km** |
+| 电压平台／10%—80%补能 | 800V／22分钟 | 800V／**19分钟** |
+| 底盘与悬架 | 前双叉臂、后五连杆；标配可变阻尼，**本版本不可选空气悬架** | 前双叉臂、后五连杆；**标配空气悬架＋可变阻尼** |
+| 前排座椅 | 电动调节、加热、通风标配；按摩选装6,000元 | 电动调节、加热、通风、**10点按摩标配**；副驾零重力座椅 |
+| 后排座椅 | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风**；无按摩 |
+| 冰箱／电吸门 | 冰箱选装4,000元；电吸门选装3,000元 | **均标配** |
+| 玻璃与遮阳 | 四门双层玻璃、后排隐私玻璃 | 四门双层玻璃、后排遮阳帘 |
+| 座舱屏幕与互联 | 15.6英寸中控屏、HUD、后排8英寸控制屏；支持CarPlay | 双15.7英寸屏、HUD；后排15.6英寸吸顶屏选装8,000元；支持CarPlay |
+| 辅助驾驶 | 1颗激光雷达、254TOPS；高速与城市领航，**城市领航需OTA开通** | 1颗激光雷达、508TOPS；高速与城市领航 |
+| 音响／外放电 | 16扬声器；3.3kW外放电，放电枪另购 | 21扬声器；3.5kW外放电，放电枪随车 |
+| 安全信息 | 9气囊，含前排中央气囊；暂无C-NCAP成绩 | 8气囊；所引用C-NCAP五星为**2025款成绩，不是2026款独立测试成绩** |
+| 拖挂 | 不支持 | 最大拖挂1,500kg；拖车钩选装3,500元 |
+| 整车质保 | **5年或12万公里**，以先到为准 | 4年或10万公里，以先到为准 |
+| 电池／三电质保 | 电池、电机、电控8年或16万公里 | 电池8年或16万公里；首任车主电池终身质保**有里程、保养等条件**，不是无条件终身 |
+| **舒适配置补齐后的车价** | 加前排按摩、冰箱、电吸门后为**26.28万元**，仍没有空气悬架和后排通风 | 上述配置均包含在**25.38万元**指导价内；符合首销条件则24.38万元 |
+
+### 怎么选更直观
+
+- **重视家庭舒适配置：优先看 S6。** 空悬、前排按摩、后排通风、冰箱、电吸门不用逐项加钱。按指导价比较，E7加上按摩、冰箱和电吸门后，比S6贵9,000元，且配置仍未完全对齐。
+- **重视标称续航、前备箱和整车质保：优先看 E7长续航版。** CLTC多55km，另有120L前备箱，整车质保也更长。
+- **车位较窄：重点试 E7 的停车与上下车。** E7比S6宽45mm；S6高70mm，但车高不等于实际头部空间或上下车便利性，仍要坐进去体验。
+
+**比较时有三点别误读：**
+1. CLTC不是实际高速或冬季续航；补能时间也是特定条件下的官方标称，本次没有同场实测，不能据此断言真实续航、充电或舒适性谁一定更好。
+2. 两车后备厢测量口径不一致，不能直接用660L与610L判定谁更能装。
+3. 两车均为**辅助驾驶，不是自动驾驶**，驾驶员须全程监控、随时接管；算力高低也不直接等于实际表现。
+
+**主要来源：**
+- 澄川：[现行配置表](https://www.chengchuan-auto.cn/e7/config) · [官方选配页](https://www.chengchuan-auto.cn/e7/configurator) · [产品页](https://www.chengchuan-auto.cn/e7) · [质保政策](https://www.chengchuan-auto.cn/service/warranty)
+- 朔风：[2026款配置表](https://www.shuofeng-ev.cn/s6/specs) · [官方选配页](https://www.shuofeng-ev.cn/s6/order) · [产品页](https://www.shuofeng-ev.cn/s6) · [首销权益](https://www.shuofeng-ev.cn/s6/offer) · [质保政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol full 第 1 遍
+
+```text
+**相近预算下，澄川 E7 更偏重续航和前备箱储物，朔风 S6 更偏重舒适配置。** 主表选的是 **E7 长续航版**与 **S6 2026 款后驱版**，官方价格只差 4,000 元，避免拿高配与低配混比。
+
+### 澄川 E7 vs 朔风 S6 对比表
+
+*资料截至 2026 年 11 月 4 日；价格不含保险、上牌等落地费用。*
+
+| 对比项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱版 |
+|---|---|---|
+| **现行官方价格** | **24.98 万元** | **25.38 万元** |
+| 优惠与条件 | 有条件的置换补贴 5,000 元，不计入主表价格 | 首销权益价 **24.38 万元**；须于 11 月底前在官方 App 下定、12 月 31 日前提车，经销商渠道不参与 |
+| 全系价位参考 | 标准版 22.98 万、长续航版 24.98 万、Pro 27.98 万、Max 31.98 万、Ultra 36.98 万元 | 一个基础版本，四驱选装加 2 万元，即 27.38 万元；限时权益价另计 |
+| **车身尺寸：长×宽×高** | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5 座 | 3,000mm／5 座 |
+| 后备厢／前备箱 | 后备厢 660L、前备箱 120L；官方未注明测量口径 | 后备厢 610L，后排放倒 1,720L，VDA 口径；无前备箱 |
+| 驱动／最大功率／扭矩 | 单电机后驱／230kW／520N·m | 单电机后驱／250kW／450N·m |
+| 0—100km/h 加速 | 6.0 秒 | 5.8 秒 |
+| **电池** | **98kWh，三元锂** | **92kWh，磷酸铁锂** |
+| **CLTC 续航** | **815km** | **760km** |
+| 电压平台／10%—80% 补能 | 800V／官方标称 22 分钟 | 800V／官方标称 19 分钟 |
+| **悬架** | 前双叉臂、后五连杆，可变阻尼标配；**本版本不可选空气悬架** | 前双叉臂、后五连杆，**空气悬架＋可变阻尼标配** |
+| **前排座椅** | 电动调节、加热、通风标配；**按摩选装 6,000 元** | 电动调节、加热、通风、**10 点按摩标配**，副驾零重力 |
+| **后排座椅** | 电动靠背、加热；无通风、按摩 | 电动靠背、加热、**通风**；无按摩 |
+| **冰箱／电吸门** | 冰箱选装 4,000 元；电吸门选装 3,000 元 | **均标配** |
+| 其他家用配置 | 三温区空调、四门双层玻璃、后排隐私玻璃、电动尾门、ISOFIX | 四门双层玻璃、后排遮阳帘、电动尾门、ISOFIX |
+| 座舱屏幕／互联 | 15.6 英寸中控屏＋HUD＋后排 8 英寸控制屏；支持 CarPlay | 双 15.7 英寸屏＋HUD；后排 15.6 英寸吸顶屏选装 8,000 元；支持 CarPlay |
+| 音响／外放电 | 16 扬声器，23 扬声器选装 5,000 元；V2L 3.3kW，放电枪另购 | 21 扬声器；V2L 3.5kW，放电枪随车 |
+| 辅助驾驶硬件与功能 | 1 颗激光雷达、254TOPS；高速与城市领航，**城市领航需 OTA 开通** | 1 颗激光雷达、508TOPS；高速与城市领航 |
+| 安全信息 | 9 个气囊，含前排中央气囊；暂无 C-NCAP 成绩 | 8 个气囊；有 2025 款 C-NCAP 五星成绩，**不作为 2026 款独立测试成绩** |
+| 拖挂 | 不支持 | 最大拖挂 1,500kg，拖车钩选装 3,500 元 |
+| **质保** | **整车 5 年或 12 万公里**；电池、电机、电控 8 年或 16 万公里，以先到为准 | **整车 4 年或 10 万公里**；电池 8 年或 16 万公里，首任车主另有附条件的电池终身质保 |
+| **主要取舍** | 标称续航多 55km，有前备箱，整车质保更长；但车身更宽，舒适配置需加钱 | 空悬、按摩、后排通风、冰箱、电吸门更齐；但标称续航较短，无前备箱 |
+
+### 怎么选更直观
+
+- **看重续航、经常长途出行：优先考虑 E7 长续航版。** 它的标称续航更长，但高速、冬季实际能跑多远，本次没有可靠的同场实测，不能直接按 CLTC 推算。
+- **看重全家乘坐和配置性价比：优先考虑 S6。** E7 加上前排按摩、冰箱、电吸门后是 **26.28 万元**，比 S6 常规价格高 9,000 元，且仍没有空悬和后排通风。E7 要空气悬架，需上到 **27.98 万元的 Pro**。
+- **停车位较窄：重点试 E7 的进出和开门。** 它比 S6 宽 45mm；两车轴距虽然相同，但不能据此认定乘坐空间相同。
+
+**注意比较口径：** 两车后备厢测量标准不同，不能直接用 660L 与 610L 判定谁更能装；充电时间均为官方指定条件下的标称值。两车辅助驾驶都不是自动驾驶，驾驶员须全程监控、随时接管，算力大小也不等于实际体验优劣。
+
+### 官方资料来源
+
+- **澄川 E7：**[现行配置表](https://www.chengchuan-auto.cn/e7/config) · [选配及价格](https://www.chengchuan-auto.cn/e7/configurator) · [产品与空间说明](https://www.chengchuan-auto.cn/e7) · [质保政策](https://www.chengchuan-auto.cn/service/warranty)
+- **朔风 S6：**[2026 款配置表](https://www.shuofeng-ev.cn/s6/specs) · [选配及价格](https://www.shuofeng-ev.cn/s6/order) · [产品与空间说明](https://www.shuofeng-ev.cn/s6) · [首销权益条件](https://www.shuofeng-ev.cn/s6/offer) · [质保政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol full 第 2 遍
+
+```text
+**同价位看，澄川 E7 长续航版偏向续航和储物；朔风 S6 2026 款后驱偏向舒适配置，少花选装钱。** 我选了现行官方价仅差 4,000 元的两个版本比较，避免拿低配价格对高配配置。
+
+### 澄川 E7 vs 朔风 S6 对比表
+*资料截至 2026 年 11 月 4 日；除“全系价位”一行外，配置均对应表头版本。*
+
+| 对比项 | 澄川 E7 **长续航版** | 朔风 S6 **2026 款后驱** |
+|---|---|---|
+| **现行官方价** | **24.98 万元** | **25.38 万元** |
+| 全系价位 | 标准版 22.98 万；长续航版 24.98 万；Pro 27.98 万；Max 31.98 万；Ultra 36.98 万 | 后驱 25.38 万；加 2 万选装四驱后为 27.38 万 |
+| 优惠／权益，单独计算 | 5,000 元置换补贴，有旧车持有条件，不计入普遍购车价 | 首销权益价 **24.38 万元**；须 11 月底前官方 App 下定、12 月 31 日前提车，经销商渠道不参与 |
+| **车身长×宽×高** | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5 座 | 3,000mm／5 座 |
+| 后备厢／前备厢 | 后备厢 660L；**前备厢 120L**，官方未注明测量口径 | 后备厢 610L，放倒后排 1,720L，VDA 口径；**无前备厢** |
+| 驱动／最大功率／扭矩 | 单电机后驱／230kW／520N·m | 单电机后驱／250kW／450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| **电池** | **98kWh 三元锂** | **92kWh 磷酸铁锂** |
+| **CLTC 续航** | **815km** | **760km** |
+| 电压平台／10%—80% 补能 | 800V／官方标称 22 分钟 | 800V／官方标称 19 分钟 |
+| **底盘悬架** | 前双叉臂、后五连杆；可变阻尼标配；**本版本不可选空气悬架** | 前双叉臂、后五连杆；**空气悬架＋可变阻尼标配** |
+| 前排座椅 | 电动调节、加热、通风标配；**按摩选装 6,000 元** | 电动调节、加热、通风、**10 点按摩标配**；副驾零重力 |
+| **后排座椅** | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风**；无按摩 |
+| 冰箱／电吸门 | 分别选装 **4,000／3,000 元** | **均标配** |
+| 家用便利 | 电动尾门、ISOFIX、四门双层玻璃、后排隐私玻璃 | 电动尾门、ISOFIX、四门双层玻璃、后排遮阳帘 |
+| 辅助驾驶 | 1 颗激光雷达、254TOPS；高速与城市领航，**城市领航需 OTA 开通** | 1 颗激光雷达、508TOPS；高速与城市领航 |
+| 屏幕／互联 | 15.6 英寸中控屏、HUD、后排 8 英寸控制屏；支持 CarPlay | 双 15.7 英寸屏、HUD；支持 CarPlay；后排 15.6 英寸吸顶屏选装 8,000 元 |
+| 音响 | 16 扬声器；23 扬声器选装 5,000 元 | 21 扬声器标配 |
+| 外放电／拖挂 | 3.3kW，放电枪另购；不支持拖挂 | 3.5kW，放电枪随车；支持最大 1,500kg 拖挂，拖车钩另选 3,500 元 |
+| 安全信息 | 9 个气囊，含前排中央气囊；暂无 C-NCAP 成绩 | 8 个气囊；官网引用的 C-NCAP 五星为 **2025 款成绩，并非本次 2026 款单独测试成绩** |
+| **质保** | 整车 **5 年或 12 万公里**；电池、电机、电控 8 年或 16 万公里 | 整车 **4 年或 10 万公里**；电池 8 年或 16 万公里，首任车主电池终身质保另有里程、保养等条件 |
+| **主要取舍** | 标称续航多 55km、有前备厢、整车质保更长；但车宽接近 2 米，舒适配置要另算钱 | 空悬、按摩、后排通风、冰箱、电吸门标配更齐；但没有前备厢，标称续航较短 |
+
+### 怎么选更直观
+
+- **更在意家人乘坐配置、希望买来就齐全：优先看 S6。** E7 长续航版加前排按摩、冰箱和电吸门后是 **26.28 万元**，仍没有空气悬架和后排通风；S6 上述配置已包含在基础价里。
+- **更在意标称续航、前备厢和整车质保：优先看 E7 长续航版。** 不过 1,980mm 的车宽，要结合自家车位和上下车空间实测。
+- **不能仅凭参数判胜负的部分：** 实际高速／冬季续航、底盘舒适性、隔音、座椅承托和辅助驾驶表现，目前没有两车同场实测依据。空悬、算力或电池类型本身都不直接等于体验更好。
+
+**口径提醒：** CLTC 不等于实际续航；充电时间是适宜温度与对应超充桩条件下的官方标称；两车后备厢测量口径不同，不能直接以 660L 和 610L 判大小。两车辅助驾驶均**不是自动驾驶，驾驶员须全程监控、随时接管**。价格不含保险、上牌等费用，质保以官方政策的限制及除外条款为准。
+
+**官方来源**
+- 澄川 E7：[现行配置表](https://www.chengchuan-auto.cn/e7/config) · [选配与价格](https://www.chengchuan-auto.cn/e7/configurator) · [产品页](https://www.chengchuan-auto.cn/e7) · [质保政策](https://www.chengchuan-auto.cn/service/warranty)
+- 朔风 S6：[2026 款配置表](https://www.shuofeng-ev.cn/s6/specs) · [选配与价格](https://www.shuofeng-ev.cn/s6/order) · [产品页](https://www.shuofeng-ev.cn/s6) · [首销权益](https://www.shuofeng-ev.cn/s6/offer) · [质保政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long gpt-6.1-sol full 第 3 遍
+
+```text
+**看重续航和前备箱，优先看澄川 E7；看重家用舒适配置，朔风 S6 更有优势。** 我选了指导价最接近的两个版本作主对比，避免拿一款的高配去比另一款的低配。
+
+以下为截至 **2026 年 11 月 4 日**的官方资料，价格不含保险、上牌等费用；性能与续航为官方标称，非同场实测。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 对比项目 | 澄川 E7 | 朔风 S6 |
+|---|---|---|
+| **本表对比版本** | **长续航版，后驱** | **2026 款基础版，后驱** |
+| **现行官方价** | **24.98 万元** | **25.38 万元**，比 E7 贵 4,000 元 |
+| 全系价格与版本 | 标准版 22.98 万；长续航版 24.98 万；Pro 27.98 万；Max 31.98 万；Ultra 36.98 万 | 后驱 25.38 万；加 2 万选装四驱后为 27.38 万 |
+| 优惠另计 | 5,000 元置换补贴，旧车需过户满一年；不是人人可享 | 首销限时减 1 万，后驱 **24.38 万元**；须 11 月底前在官方 App 下定、12 月 31 日前提车，经销商渠道不参与 |
+| **尺寸：长×宽×高** | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距／座位 | 3,000mm／5 座 | 3,000mm／5 座 |
+| 停车与空间提示 | 车身宽 45mm，窄车位更需留意 | 车身窄 45mm、高 70mm；实际头部空间和上下车便利性仍需试坐 |
+| 储物空间 | 后备厢 660L＋**前备箱 120L**；官网未注明测量口径 | 后备厢 610L，放倒后 1,720L，按 VDA 口径；**无前备箱**。两车容积不能直接比大小 |
+| 动力 | 单电机后驱，230kW、520N·m | 单电机后驱，250kW、450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| **电池／CLTC 续航** | **98kWh 三元锂／815km** | **92kWh 磷酸铁锂／760km** |
+| **充电平台／10%—80%** | 800V／22 分钟 | 800V／19 分钟 |
+| **底盘悬架** | 前双叉臂＋后五连杆，可变阻尼标配；**本版本不能选空气悬架** | 前双叉臂＋后五连杆，**空气悬架＋可变阻尼标配** |
+| **前排座椅** | 电动调节、加热、通风标配；**按摩选装 6,000 元** | 电动调节、加热、通风、**10 点按摩标配**；副驾零重力 |
+| **后排座椅** | 电动靠背、加热；**无通风、按摩** | 电动靠背、加热、**通风**；无按摩 |
+| **冰箱／电吸门** | 冰箱选装 4,000 元；电吸门选装 3,000 元 | **均标配** |
+| 其他家用配置 | 三温区空调、四门双层玻璃、后排隐私玻璃、电动尾门、ISOFIX | 四门双层玻璃、后排遮阳帘、电动尾门、ISOFIX |
+| 座舱与屏幕 | 15.6 英寸中控屏、HUD、后排 8 英寸控制屏；支持 CarPlay | 双 15.7 英寸屏、HUD；支持 CarPlay；后排吸顶屏需加 8,000 元 |
+| 辅助驾驶 | 1 颗激光雷达、254TOPS；高速与城市领航，**城市领航需 OTA 开通** | 1 颗激光雷达、508TOPS；高速与城市领航 |
+| 音响／外放电 | 16 扬声器；3.3kW 外放电，放电枪另购 | 21 扬声器；3.5kW 外放电，放电枪随车 |
+| 整车质保 | **5 年或 12 万公里**，先到为准 | **4 年或 10 万公里**，先到为准 |
+| 电池等质保 | 电池、电机、电控 8 年或 16 万公里 | 电池 8 年或 16 万公里；首任车主电池终身质保**有里程、保养等条件，并非无条件** |
+
+### 怎么选更直观？
+
+- **更看重长途续航、独立储物空间：E7 长续航版更值得优先试。** CLTC 比 S6 多 55km，还有 120L 前备箱，整车质保也更长。不过它接近两米宽，老小区和窄车位要实际试停。
+- **更看重家人乘坐舒适、少花钱选装：S6 更有吸引力。** 空悬、前排按摩、后排通风、冰箱、电吸门都已包含在基础价中。
+- **别只比裸车价：**E7 加上前排按摩、冰箱、电吸门，合计 **26.28 万元**，此时仍没有 S6 的空气悬架和后排通风，不能视为完全同配。
+
+**有三点别混淆：**E7 长续航版不是 Max 的“13 分钟快充”；S6 本表用的是 2026 款，不是旧款的 720km 续航数据；两车领航功能都只是辅助驾驶，驾驶员必须全程监控、随时接管。CLTC 和标称充电时间也不代表冬季、高速或所有充电桩下的实际表现，目前没有可靠的同场实测可据此判定谁实际更省电、更安静或更舒适。
+
+### 官方来源
+- **E7：**[现行配置表](https://www.chengchuan-auto.cn/e7/config) · [选配价格](https://www.chengchuan-auto.cn/e7/configurator) · [产品页](https://www.chengchuan-auto.cn/e7) · [质保政策](https://www.chengchuan-auto.cn/service/warranty)
+- **S6：**[2026 款配置表](https://www.shuofeng-ev.cn/s6/specs) · [选配价格](https://www.shuofeng-ev.cn/s6/order) · [产品页](https://www.shuofeng-ev.cn/s6) · [首销权益](https://www.shuofeng-ev.cn/s6/offer) · [质保政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long glm-5.3-flash base 第 1 遍
+
+```text
+两路核查都回来了，均以官方现行配置表为准：E7 在售 5 个版本（22.98～36.98 万），S6 是 2026 款单版本＋选装四驱（网上常见的 2025 款三版本数据已过时）。按价差最近原则，主表用 **E7 长续航版（24.98 万）对 S6 2026 款后驱（25.38 万）**，相差 4,000 元。
+
+## 澄川 E7 vs 朔风 S6 对比表（截至 11 月 4 日现行官方指导价）
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款 后驱 |
+|---|---|---|
+| 现行官方指导价 | 24.98 万元 | 25.38 万元 |
+| 限时权益 | 无限时减免；置换补贴 5,000 元（旧车过户满一年） | 首销权益价 24.38 万（11 月底前 App 下定、12/31 前提车） |
+| 车身尺寸（长×宽×高） | 4,960×1,980×1,600 mm | 4,950×1,935×1,670 mm |
+| 轴距 | 3,000 mm | 3,000 mm |
+| 驱动 | 单电机后驱 | 单电机后驱（选四驱 +2 万） |
+| 最大功率 / 扭矩 | 230 kW / 520 N·m | 250 kW / 450 N·m |
+| 0—100 km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98 kWh 三元锂 | 92 kWh 磷酸铁锂 |
+| CLTC 续航 | **815 km**（选 21 寸轮毂降至 790 km） | 760 km（选 21 寸轮毂 740 km；四驱 705 km） |
+| 电压平台 / 10%–80% 补能 | 800V / 22 分钟 | 800V / 19 分钟 |
+| 悬架 | 前双叉臂后五连杆，可变阻尼（**空悬不可选**） | 同结构，**空气悬架＋可变阻尼标配** |
+| 前排座椅 | 加热、通风标配；按摩选装 6,000 元 | 加热、通风、10 点按摩标配，副驾零重力 |
+| 后排座椅 | 电动靠背、加热；无通风 | 电动靠背、加热、**通风标配** |
+| 车载冰箱 | 选装 4,000 元 | **标配** |
+| 电吸门 | 选装 3,000 元 | 标配 |
+| 前备厢 / 后备厢 | 120 L / 660 L（官网未注明测量口径） | 无前备厢 / 610 L（VDA 口径），放倒 1,720 L |
+| 辅助驾驶 | 1 颗激光雷达，高速＋城市领航（城市需 OTA）；算力 254 TOPS | 1 颗激光雷达，高速＋城市领航；算力 508 TOPS |
+| 座舱 | 15.6 寸中控＋HUD＋后排 8 寸控制屏 | 双 15.7 寸屏＋HUD；后排吸顶屏选装 8,000 元 |
+| 车机 | 30 TOPS / 32 GB；OTA 约两个月一次 | 30 TOPS / 24 GB；OTA 约一季度一次 |
+| 音响 | 16 扬声器标配（23 扬声器 +5,000 元） | 21 扬声器标配 |
+| 外放电 V2L | 3.3 kW，放电枪需另购 | 3.5 kW，放电枪随车 |
+| 气囊 | 9 个（含前排中央气囊） | 8 个 |
+| 拖挂 | 不支持 | 支持 1,500 kg（拖车钩选装 3,500 元） |
+| 整车质保 | **5 年 / 12 万公里** | 4 年 / 10 万公里 |
+| 电池质保 | 8 年 / 16 万公里 | 8 年 / 16 万公里，首任车主电池终身质保（有条件） |
+
+**看表前后的几个口径提醒：**
+- 两边都是 CLTC 工况，高速实际续航通常只有标称的六到七成；补能时间为官方标称（指定超充桩、电池适宜温度），均非实测。
+- 后备厢数字测量口径不同（S6 注明 VDA，E7 未注明），不能直接比大小。
+- S6 的 24.38 万是限时首销价，11 月底截止；E7 若把按摩＋冰箱＋电吸门配齐约 26.3 万，空悬则要上 Pro（27.98 万）——比家用舒适配置时应看配齐价。
+- 两车辅助驾驶都不是自动驾驶，须全程监控、随时接管。
+
+**一句话结论**：看重长途续航、三元锂低温表现、前备箱和更长整车质保，选 E7；看重舒适配置一步到位（空悬、按摩、冰箱、后排通风全标配）和更高智驾算力，S6 在这 4,000 元差价里给的更多。E7 若想配齐舒适件，价格会反超。
+
+**来源**（均为官网现行页面）：
+- 澄川：[E7 配置表](https://www.chengchuan-auto.cn/e7/config)、[选配页](https://www.chengchuan-auto.cn/e7/configurator)、[产品页](https://www.chengchuan-auto.cn/e7)、[售后政策](https://www.chengchuan-auto.cn/service/warranty)
+- 朔风：[S6 配置表](https://www.shuofeng-ev.cn/s6/specs)、[选配页](https://www.shuofeng-ev.cn/s6/order)、[首销权益页](https://www.shuofeng-ev.cn/s6/offer)、[产品页](https://www.shuofeng-ev.cn/s6)、[售后政策](https://www.shuofeng-ev.cn/service/warranty)
+```
+
+#### w-merge-two-long glm-5.3-flash base 第 2 遍
+
+```text
+两路核查都完成了、口径一致，合并如下。
+
+# 澄川 E7 vs 朔风 S6 对比表
+
+对比版本选了两款车里指导价最接近的：**E7 长续航版（24.98 万）vs S6 2026 款后驱（25.38 万）**，价差 4,000 元。均为 2026 年 11 月 4 日官网现行指导价。
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| **— 价格 —** | | |
+| 现行官方指导价 | 24.98 万元 | 25.38 万元 |
+| 限时优惠 | 无限时减免（仅 5,000 元置换补贴，需旧车过户满一年） | 首销权益价 **24.38 万**，11 月底前 App 下定、12/31 前提车 |
+| 更高配置 | Pro 四驱+空悬 27.98 万起（共 5 版本至 36.98 万） | 选装四驱 +2 万 = 27.38 万（续航降为 705km） |
+| **— 动力与电池 —** | | |
+| 驱动 | 单电机后驱 | 单电机后驱 |
+| 最大功率 / 扭矩 | 230kW / 520N·m | 250kW / 450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98kWh **三元锂** | 92kWh **磷酸铁锂** |
+| CLTC 续航 | **815km** | 760km |
+| 补能（10%—80%，标称） | 800V 平台，22 分钟 | 800V 平台，**19 分钟** |
+| 智驾算力 | 254TOPS | **508TOPS** |
+| **— 尺寸与底盘 —** | | |
+| 车身尺寸（长×宽×高） | 4,960×**1,980**×1,600mm | 4,950×1,935×**1,670mm** |
+| 轴距 | 3,000mm | 3,000mm |
+| 悬架 | 前双叉臂后五连杆＋可变阻尼；**空悬不可选**（Pro 起标配） | 同结构，**空气悬架标配** |
+| 储物 | 后备厢 660L＋**前备箱 120L**（口径未写明） | 后备厢 610L（VDA 口径），放倒 1,720L，**无前备箱** |
+| 整备质量 / 轮胎 | 2,290kg，245/55 R19 | 2,350kg，255/50 R20 |
+| **— 家用舒适配置 —** | | |
+| 前排座椅 | 加热、通风标配；按摩**选装 6,000 元** | 加热、通风、**10 点按摩标配**，副驾零重力 |
+| 后排座椅 | 电动靠背＋加热，无通风 | 电动靠背＋加热＋**通风标配** |
+| 车载冰箱 / 电吸门 | 均需选装（4,000／3,000 元） | **均标配** |
+| 音响 / 外放电 | 16 扬声器（23 扬声器选装 5,000 元）；V2L 3.3kW，枪另购 | 21 扬声器标配；V2L 3.5kW，**枪随车** |
+| **— 座舱与智驾 —** | | |
+| 屏幕 | 15.6 英寸中控＋HUD＋后排 8 英寸屏 | 双 15.7 英寸＋HUD；吸顶屏选装 8,000 元 |
+| 车机 | 30TOPS／32GB 内存，OTA 约两月一次 | 30TOPS／24GB 内存，OTA 约一季度一次 |
+| 辅助驾驶 | 1 颗激光雷达，高速＋城市领航（城市领航需 OTA 开通） | 1 颗激光雷达，高速＋城市领航 |
+| **— 安全与售后 —** | | |
+| 气囊 / 碰撞成绩 | **9 气囊**（含中央气囊）；C-NCAP 暂无成绩 | 8 气囊；C-NCAP 五星（2025 款成绩） |
+| 拖挂 | 不支持 | 支持 1,500kg（拖车钩选装 3,500 元） |
+| 质保 | **整车 5 年/12 万公里**；三电 8 年/16 万公里 | 整车 4 年/10 万公里；电池 8 年/16 万公里＋**首任车主电池终身质保**（有条件） |
+
+## 怎么选（规格层面，非同场实测）
+
+- **按配齐价比，S6 更划算**：E7 长续航版加上按摩、冰箱、电吸门约 26.3 万，空悬还得升到 Pro（27.98 万）；S6 的 25.38 万已把这些全含了。
+- **E7 换来的是**：多 55km 续航、三元锂（北方冬季衰减通常更小）、120L 前备箱、多一个气囊、更长整车质保。
+- **S6 的限时价是变量**：24.38 万只到 11 月底，若月底前能下定，差价从 4 千变 1.6 万（倒挂）。
+- 两边都是 CLTC 工况，高速实际续航一般只有标称的六到七成；储物容积口径不同（660L 未注明 vs 610L VDA），不能直接比大小。
+- 停车/地库：E7 宽 1,980mm 接近两米；S6 高 1,670mm，装车顶架时留意 1.8m 限高地库。
+
+**来源**：澄川官网[配置表](https://www.chengchuan-auto.cn/e7/config)、[选配页](https://www.chengchuan-auto.cn/e7/configurator)、[产品页](https://www.chengchuan-auto.cn/e7)、[售后政策](https://www.chengchuan-auto.cn/service/warranty)；朔风官网[配置表](https://www.shuofeng-ev.cn/s6/specs)、[选配页](https://www.shuofeng-ev.cn/s6/order)、[首销权益页](https://www.shuofeng-ev.cn/s6/offer)、[售后政策](https://www.shuofeng-ev.cn/service/warranty)。注意：E7 首发价 25.98 万已是旧价（10/1 降 1 万）；网上常见的 2025 款 S6 数据（三版本、720km）已过时，勿混用。
+```
+
+#### w-merge-two-long glm-5.3-flash inline 第 1 遍
+
+```text
+两路核查都回来了（数据来自两家官网的配置表、选配页和售后政策，截至今天 11 月 4 日）。两款车各版本价位拉得很开，我按最相近的两个版本做主表：**澄川 E7 长续航版（24.98 万）vs 朔风 S6 2026 款后驱（25.38 万）**，差 4,000 元。
+
+一句话结论：**E7 赢在续航、充电和质保年限；S6 赢在舒适配置「给得齐」**——空悬、按摩、通风、冰箱全是标配，E7 同配置要靠选装。
+
+## 主对比表
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| 现行官方指导价 | **24.98 万元** | **25.38 万元** |
+| 限时权益价 | 无（仅 5,000 元置换补贴，旧车过户满一年） | 24.38 万元（11 月底前下定、12/31 前提车，App 渠道） |
+| 驱动 | 单电机后驱 | 单电机后驱 |
+| 最大功率 / 扭矩 | 230kW / 520N·m | 250kW / 450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98kWh 三元锂 | 92kWh 磷酸铁锂 |
+| CLTC 续航 | **815km** | 760km |
+| 电压平台 | 800V | 800V |
+| 10%—80% 补能 | 22 分钟 | 19 分钟 |
+| 悬架 | 前双叉臂后五连杆＋可变阻尼（**空悬不可选**） | 空气悬架＋可变阻尼**标配** |
+| 车身尺寸（长×宽×高） | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距 | 3,000mm | 3,000mm |
+| 整备质量 | 2,290kg | 2,350kg |
+| 轮胎 | 245/55 R19 | 255/50 R20 |
+| 后备厢 / 前备厢 | 660L ＋ 前备箱 120L | 610L（放倒 1,720L），**无前备箱** |
+| 前排座椅 | 加热、通风标配；按摩**选装 6,000 元** | 加热、通风、10 点按摩**标配**，副驾零重力 |
+| 后排座椅 | 电动靠背＋加热，无通风 | 电动靠背＋加热＋通风**标配** |
+| 座舱 | 15.6 英寸中控＋HUD＋后排 8 英寸屏 | 双 15.7 英寸屏＋HUD（吸顶屏选装 8,000 元） |
+| 车机 | 30TOPS / 32GB，OTA 约两月一次 | 30TOPS / 24GB，OTA 约一季度一次 |
+| 辅助驾驶 | 1 颗激光雷达，高速＋城市领航（城市领航需 OTA 开通） | 1 颗激光雷达，高速＋城市领航 |
+| 智驾算力 | 254TOPS | 508TOPS |
+| 音响 | 16 扬标配，23 扬选装 5,000 元 | 21 扬**标配** |
+| 车载冰箱 | 选装 4,000 元 | **标配** |
+| 电吸门 | 选装 3,000 元 | 标配 |
+| 对外放电 | 3.3kW，放电枪需另购 | 3.5kW，放电枪随车 |
+| 隔音 | 四门双层玻璃 | 四门双层玻璃，官方称 60km/h 车内 58dB |
+| 气囊 | 9 个（含中央气囊） | 8 个 |
+| C-NCAP | 暂无成绩 | 2025 年五星（2025 款成绩，2026 款车身未改） |
+| 拖挂 | 不支持 | 支持最大 1,500kg（拖车钩选装 3,500 元） |
+| 质保 | 整车 5 年/12 万公里；三电 8 年/16 万公里 | 整车 4 年/10 万公里；三电 8 年/16 万公里＋**首任车主电池终身质保** |
+
+## 几个关键取舍
+
+- **配置对齐后 S6 更划算**：E7 长续航版要把按摩、冰箱、电吸门补齐约再加 1.3 万（≈26.3 万），空悬得上 27.98 万的 Pro；S6 这些全在 25.38 万里。
+- **E7 换来的是硬指标**：多 55km 续航、三元锂（低温表现通常好于磷酸铁锂）、更长的整车质保、前备箱。
+- **家用场景 S6 多两张牌**：可拖挂 1.5 吨、后排通风标配；E7 不支持拖挂。
+- **口径提醒**：补能、加速均为官方标称值；E7 后备厢官网未注明测量口径，与 S6 的 VDA 口径数字不宜直接硬比；S6 的 C-NCAP 五星是 2025 款成绩。
+
+另外如果你想看其他版本：E7 全系 22.98 万—36.98 万共 5 个版本（Pro 起双电机四驱、Max 起 5C 超充）；S6 是单一版本＋选装四驱（加 2 万，续航降到 705km）。
+```
+
+#### w-merge-two-long glm-5.3-flash inline 第 2 遍
+
+```text
+两路核查都回来了，数据来自两家官网现行配置表、选配页和售后政策（11 月 4 日为准）。价格最接近的组合是 **澄川 E7 长续航版（24.98 万）** 和 **朔风 S6 2026 款后驱（25.38 万）**，差 4,000 元，对比表如下：
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款 后驱 |
+|---|---|---|
+| **现行官方指导价** | 24.98 万元 | 25.38 万元（限时权益价 24.38 万，11 月底前定购） |
+| 驱动 | 单电机后驱 | 单电机后驱 |
+| 最大功率 / 扭矩 | 230kW / 520N·m | 250kW / 450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98kWh 三元锂 | 92kWh 磷酸铁锂 |
+| CLTC 续航 | **815km** | 760km |
+| 电压平台 / 10%—80% 补能 | 800V / 22 分钟 | 800V / 19 分钟 |
+| 车身尺寸（长×宽×高） | 4,960×1,980×1,600mm | 4,950×1,935×**1,670mm** |
+| 轴距 | 3,000mm | 3,000mm |
+| 整备质量 | 2,290kg | 2,350kg |
+| 储物 | 后备厢 660L ＋ **前备厢 120L** | 后备厢 610L（放倒 1,720L），**无前备箱** |
+| 悬架 | 可变阻尼（空气悬架要上 27.98 万的 Pro） | **空气悬架＋可变阻尼标配** |
+| 前排座椅 | 加热、通风标配；**按摩选装 6,000 元** | 加热、通风、**10 点按摩标配**，副驾零重力 |
+| 后排座椅 | 电动靠背＋加热，无通风 | 电动靠背＋加热＋**通风标配** |
+| 车载冰箱 / 电吸门 | 均需选装（4,000 / 3,000 元） | **均标配** |
+| 座舱 | 15.6 英寸中控＋HUD＋后排 8 英寸屏 | 双 15.7 英寸屏＋HUD（吸顶屏选装 8,000 元） |
+| 音响 | 16 扬声器（可选 23 扬声器，5,000 元） | 21 扬声器标配 |
+| 外放电 | V2L 3.3kW，放电枪另购 | V2L 3.5kW，放电枪随车 |
+| 车机 | 30TOPS / 32GB 内存，OTA 约两月一次 | 30TOPS / 24GB 内存，OTA 约一季度一次 |
+| 智驾 | 激光雷达＋高速/城市领航，算力 254TOPS | 激光雷达＋高速/城市领航，算力 **508TOPS** |
+| 气囊 | **9 个**（含前排中央气囊） | 8 个 |
+| C-NCAP | 暂无成绩 | 五星（2025 款成绩，2026 款车身未改） |
+| 拖挂 | 不支持 | 支持 1,500kg（拖车钩选装 3,500 元） |
+| 质保 | **整车 5 年/12 万公里**；三电 8 年/16 万公里 | 整车 4 年/10 万公里；三电 8 年/16 万公里＋**首任车主电池终身质保** |
+
+## 怎么选，一句话版
+
+- **算“配齐价”的话 S6 反而更便宜**：E7 要补齐按摩＋冰箱＋电吸门得加 1.3 万（约 26.3 万，空悬还得再上 Pro），这些 S6 在 25.38 万里全都有——家用舒适配置 S6 的账面优势比价格差大得多。
+- **E7 赢在底层参数**：多 55km 续航、三元锂低温表现更好、9 气囊、整车多 1 年质保、还有 120L 前备箱。
+- **S6 赢在舒适和灵活**：空悬、按摩、后排通风全标配，车高 1,670mm 老人孩子上下车更从容，能拖挂，电池终身质保。
+
+## 几个口径提醒
+
+1. 两车后备厢测量口径不同（S6 标 VDA），数字不宜直接硬比，建议实车感受。
+2. 补能时间都是官方标称值（指定超充桩＋适宜温度），非实测。
+3. E7 搜到的 25.98 万是首发旧价，10 月 1 日起已降 1 万；S6 的 24.38 万是限时价，要 App 下定、12 月 31 日前提车，别当常态价。
+4. E7 长续航版的智驾算力（254TOPS）只有 S6 的一半，两家软件能力也不同源，建议都去实际试驾领航功能再定。
+5. 辅助驾驶都只是辅助，须全程监控、随时接管。
+```
+
+#### w-merge-two-long glm-5.3-flash both 第 1 遍
+
+```text
+两路核查都回来了，数据口径一致（均为 11 月 4 日现行官网在售信息），直接给你对比表。
+
+**对比口径**：E7 全系 5 个版本（22.98–36.98 万），S6 是单版本＋选装四驱。主表取两家价位最接近的版本——**E7 长续航版（24.98 万）vs S6 2026 款后驱（25.38 万）**，只差 4,000 元。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| **价格** | | |
+| 现行官方指导价 | 24.98 万 | 25.38 万 |
+| 限时权益 | 无限时减免；置换补贴 5,000 元（旧车过户满一年） | 权益价 **24.38 万**（11 月底前订购、12/31 前提车，限官方 App 下单；特殊色 +3,000） |
+| **动力** | | |
+| 驱动形式 | 单电机后驱 | 单电机后驱 |
+| 最大功率 / 扭矩 | 230kW / 520N·m | 250kW / 450N·m |
+| 0–100km/h | 6.0 秒 | 5.8 秒 |
+| **电池与补能** | | |
+| 电池 | 98kWh 三元锂 | 92kWh 磷酸铁锂 |
+| CLTC 续航 | **815km** | 760km |
+| 电压平台 | 800V | 800V |
+| 10%–80% 补能 | 22 分钟 | **19 分钟** |
+| **车身与底盘** | | |
+| 长×宽×高 | 4960×**1980**×1600mm | 4950×1935×**1670**mm |
+| 轴距 | 3000mm | 3000mm |
+| 整备质量 | 2290kg | 2350kg |
+| 轮胎 | 245/55 R19 | 255/50 R20 |
+| 悬架 | 双叉臂＋五连杆，可变阻尼；**空悬不可选** | 双叉臂＋五连杆，**空悬＋可变阻尼标配** |
+| **智能驾驶** | | |
+| 激光雷达 / 领航 | 1 颗；高速＋城市领航（城市需 OTA 开通） | 1 颗；高速＋城市领航 |
+| 智驾算力 | 254TOPS | **508TOPS** |
+| **座舱与舒适** | | |
+| 屏幕 | 15.6″ 中控＋HUD＋后排 8″ 控制屏 | 双 15.7″＋HUD；后排吸顶屏选装 8,000 元 |
+| 车机 | 30TOPS / 32GB，OTA 约两月一次 | 30TOPS / 24GB，OTA 约一季度一次 |
+| 前排座椅 | 电动＋加热＋通风标配；**按摩选装 6,000** | 电动＋加热＋通风＋**10 点按摩标配**，副驾零重力 |
+| 后排座椅 | 电动靠背＋加热；无通风按摩 | 电动靠背＋加热＋**通风标配** |
+| 冰箱 / 电吸门 | 均需选装（4,000 / 3,000 元） | **均标配** |
+| 音响 | 16 扬声器（可选 23，+5,000） | 21 扬声器标配 |
+| **空间与实用** | | |
+| 后备厢 / 前备箱 | 660L / **120L 前备箱** | 610L（放倒 1720L）/ 无前备箱 |
+| 外放电 | V2L 3.3kW，放电枪另购 | V2L 3.5kW，放电枪随车 |
+| 拖挂 | 不支持 | **支持 1,500kg**（拖车钩选装 3,500 元） |
+| **安全与质保** | | |
+| 气囊 | **9 个**（含前排中央气囊） | 8 个 |
+| C-NCAP | 暂无成绩 | 2025 五星（2025 款成绩，车身未改） |
+| 质保 | 整车 **5 年/12 万km**；三电 8 年/16 万km | 整车 4 年/10 万km；电池 8 年/16 万km ＋ **首任车主电池终身质保**（有条件） |
+
+**几点口径提醒**
+- 表内均为现行官方指导价，不是优惠后成交价；S6 的 24.38 万是限时权益价，11 月底截止。
+- 后备厢两家测量口径不同（S6 为 VDA，E7 官网未写明），数字不宜硬碰硬比。
+- 补能时间为官方标称值，需对应超充桩和适宜电池温度。
+- E7 若把按摩、冰箱、电吸门配齐约 +1.3 万（≈26.3 万），空悬要上 27.98 万的 Pro；S6 出厂即含这些。
+
+**一句话选车**：跑长途多、看重续航和前备箱、想整车质保更长 → E7；城市家用、想要空悬/按摩/冰箱/通风全自带、考虑拖挂和电池终身质保 → S6。北方用户注意 S6 是磷酸铁锂，冬季衰减建议看实测。
+```
+
+#### w-merge-two-long glm-5.3-flash both 第 2 遍
+
+```text
+两路核查都回来了，数据完整、口径一致，无需打回。按相近价位取**澄川 E7 长续航版（24.98 万）** 对 **朔风 S6 2026 款后驱（25.38 万）**，以下为合并后的对比表（均为 11 月 4 日官网现行在售数据）：
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| 现行官方指导价 | **24.98 万元** | **25.38 万元** |
+| 限时／其他价格 | 无限时减免；置换补贴 5,000 元（旧车过户满一年） | 首销权益价 24.38 万（11 月底前 App 下定、12/31 前提车）；特殊色 +3,000 |
+| 驱动 | 单电机后驱 | 单电机后驱（选装四驱 +2 万，续航降至 705km） |
+| 最大功率 / 扭矩 | 230kW / 520N·m | 250kW / 450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98kWh 三元锂 | 92kWh 磷酸铁锂 |
+| CLTC 续航 | **815km** | 760km |
+| 电压平台 / 10%—80% 补能 | 800V / 22 分钟 | 800V / 19 分钟 |
+| 悬架 | 双叉臂＋五连杆＋可变阻尼；**空悬要上 Pro（27.98 万）** | 双叉臂＋五连杆＋**空气悬架标配** |
+| 整备质量 / 轮胎 | 2,290kg / 245/55 R19 | 2,350kg / 255/50 R20 |
+| 智驾 | 1 颗激光雷达，高速＋城市领航，254TOPS | 1 颗激光雷达，高速＋城市领航，508TOPS |
+| 车身尺寸 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距 / 座位 | 3,000mm / 5 座 2＋3 | 3,000mm / 5 座 2＋3 |
+| 后备厢 | 660L ＋ 前备厢 120L（官网未注明口径） | 610L（VDA 口径），放倒 1,720L，无前备箱 |
+| 前排座椅 | 电动、加热、通风标配；**按摩选装 6,000 元** | 电动、加热、通风、10 点按摩标配；副驾零重力 |
+| 后排座椅 | 电动靠背 105°—130°、加热；无通风 | 电动靠背、加热、**通风标配**；无按摩 |
+| 座舱 | 15.6 英寸中控＋HUD＋后排 8 英寸屏，CarPlay | 双 15.7 英寸＋HUD，CarPlay；吸顶屏选装 8,000 元 |
+| 车机 | 30TOPS 芯片 / 32GB 内存，OTA 约两月一次 | 30TOPS / 24GB，OTA 约一季度一次 |
+| 冰箱 / 电吸门 | 均需选装（4,000 / 3,000 元） | **冰箱、电吸门标配**（手套箱带冷藏） |
+| 音响 / 外放电 | 16 扬声器标配（23 扬 +5,000）；V2L 3.3kW，放电枪另购 | 21 扬声器标配；V2L 3.5kW，放电枪随车 |
+| 隔音 | 四门双层玻璃；未公布噪声数据 | 四门双层玻璃；官方称 60km/h 车内 58dB |
+| 气囊 / 碰撞成绩 | 9 个（含中央气囊）；C-NCAP 暂无 | 8 个；C-NCAP 2025 五星（2025 款成绩） |
+| 拖挂 | 不支持 | 支持 1,500kg（拖车钩选装 3,500 元） |
+| 质保 | **整车 5 年/12 万 km**；三电 8 年/16 万 km | 整车 4 年/10 万 km；电池 8 年/16 万 km＋**首任车主电池终身质保** |
+
+## 三句话看差异
+
+- **E7 赢在续航和账面价**：815km 续航、便宜 4,000 元、整车质保多 1 年、气囊多 1 个；但空悬、按摩、冰箱、电吸门都要选装或上高配，配齐约 26.3 万，且车宽近 2 米。
+- **S6 赢在舒适配置全给齐**：空悬、前后排通风加热、按摩、冰箱、电吸门全在 25.38 万里，还能拖挂、有电池终身质保；代价是续航短 55km，磷酸铁锂北方冬季衰减更明显。
+- **价格口径别混**：S6 的 24.38 万是限时权益价（11 月底止）；E7 搜索结果里常见的 25.98 万是调价前的旧价。两车后备厢数字口径不同，不宜直接比大小；补能时间均为官方标称值。
+
+数据来源为两家官网现行配置表、选配页与售后政策页；以上是规格层面对比，非同场实测。
+```
+
+#### w-merge-two-long glm-5.3-flash full 第 1 遍
+
+```text
+两款车的官方数据都核查完了：E7 在售 5 个版本（22.98–36.98 万），S6 是 2026 款单一版本＋选装四驱。按价位最接近的口径，主表取 **E7 长续航版（24.98 万）vs S6 2026 款后驱（25.38 万）**，差 4,000 元。
+
+## 澄川 E7 vs 朔风 S6 对比表（现行官方指导价口径）
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| **官方指导价** | **24.98 万** | **25.38 万** |
+| 限时权益 | 无限时减免；置换补贴 5,000 元（旧车过户满一年） | 首销权益价 24.38 万，11 月底前 App 下定、12/31 前提车；部分车色 +3,000 |
+| 车身尺寸（mm） | 4960×1980×1600 | 4950×1935×1670 |
+| 轴距 | 3000 | 3000 |
+| 整备质量 | 2290 kg | 2350 kg |
+| 驱动 | 单电机后驱 | 单电机后驱 |
+| 最大功率 / 扭矩 | 230 kW / 520 N·m | 250 kW / 450 N·m |
+| 0–100 km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98 kWh 三元锂 | 92 kWh 磷酸铁锂 |
+| CLTC 续航 | **815 km** | 760 km |
+| 电压平台 | 800V | 800V |
+| 10%–80% 补能 | 22 分钟 | 19 分钟 |
+| 悬架 | 前双叉臂＋可变阻尼；**空悬不可选**（Pro 起标配） | **空气悬架＋可变阻尼标配** |
+| 轮胎 | 245/55 R19 | 255/50 R20 |
+| 智驾 | 1 激光雷达，高速＋城市领航（需驾驶员监控），254 TOPS | 同级配置，508 TOPS |
+| 座舱 | 15.6″ 中控＋HUD＋8″ 后排屏，CarPlay | 双 15.7″ 屏＋HUD，CarPlay；吸顶屏选装 8,000 元 |
+| 前排座椅 | 加热＋通风标配；**按摩选装 6,000 元** | 加热＋通风＋10 点按摩标配，副驾零重力 |
+| 后排座椅 | 电动靠背 105°–130°＋加热，无通风 | 加热＋**通风标配**，无按摩 |
+| 车载冰箱 / 电吸门 | 均需选装（4,000 / 3,000 元） | **均标配** |
+| 前备箱 | 120 L（电动开启选装 2,000 元） | 无 |
+| 后备厢 | 660 L（口径未注明） | 610 L（VDA 口径），放倒 1720 L |
+| 音响 | 16 扬声器标 / 23 扬 +5,000 | 21 扬声器标配 |
+| 外放电 | V2L 3.3 kW，放电枪另购 | V2L 3.5 kW，放电枪随车 |
+| 拖挂 | 不支持 | 最大 1,500 kg（拖车钩选装 3,500 元） |
+| 气囊 | 9 个（含中央气囊） | 8 个 |
+| 质保 | 整车 5 年/12 万 km；三电 8 年/16 万 km | 整车 4 年/10 万 km；电池 8 年/16 万 km＋**首任车主终身质保**（有条件） |
+
+## 怎么看这张表
+
+- **账面价接近，配置内涵差不少**：S6 的空悬、前排按摩、后排通风、冰箱、电吸门都是标配；E7 要配齐这几样（空悬除外）需加约 1.3 万到 26.3 万左右，且空悬要上 27.98 万的 Pro。比家用配置应看“配齐价”，S6 更有优势。
+- **E7 的强项**：续航多 55 km、98 kWh 三元锂（冬季衰减通常更小）、120 L 前备箱、多一个气囊、整车质保多 1 年/2 万 km。
+- **S6 的强项**：舒适配置全标配、19 分钟补能、可拖挂、首任电池终身质保；车高 1,670 mm 对老人孩子上下车更友好。
+
+**口径提醒**：两边续航都是 CLTC，高速实际一般只有六七成；后备厢一个是未注明口径、一个是 VDA，不能直接比大小；补能时间是官方标称。数据源为两家官网现行配置表、选配页与售后政策页（chengchuan-auto.cn / shuofeng-ev.cn），E7 首发价 25.98 万和 S6 2025 款数据均已过时，未采用。
+```
+
+#### w-merge-two-long glm-5.3-flash full 第 2 遍
+
+```text
+两边的核查都回来了，信息对得上（一个说「对面是 25.38 万」，另一个正好报 25.38 万）。截至今天（11 月 4 日），两家官网在售的是：**E7 全系 5 个版本（22.98–36.98 万）**、**S6 是 2026 款单版本＋选装四驱**。价位最接近、也最适合放主表对比的是 **E7 长续航版 24.98 万** 和 **S6 2026 款后驱 25.38 万**，只差 4,000 元。
+
+## 澄川 E7 长续航版 vs 朔风 S6（2026 款后驱）对比表
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| **现行指导价** | **24.98 万** | **25.38 万** |
+| 限时价／权益 | 无限时减免（置换补贴 5,000 元，需旧车过户满一年） | 首销权益价 **24.38 万**（11 月底前下定、12/31 前提车，官方 App 渠道） |
+| 版本情况 | 全系 5 版：标准 22.98 / 长续航 24.98 / Pro 27.98 / Max 31.98 / Ultra 36.98 万 | 单版本＋选装四驱 +2 万（27.38 万） |
+| 驱动 | 单电机后驱 | 单电机后驱（可选双电机四驱） |
+| 最大功率 / 扭矩 | 230 kW / 520 N·m | 250 kW / 450 N·m |
+| 0–100 km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98 kWh **三元锂** | 92 kWh 磷酸铁锂 |
+| CLTC 续航 | **815 km** | 760 km |
+| 电压平台 | 800V | 800V |
+| 10%–80% 补能 | 22 分钟 | **19 分钟** |
+| 悬架 | 前双叉臂后五连杆＋可变阻尼（**空气悬架不可选**，Pro 起标配） | 同结构＋**空气悬架标配** |
+| 车身尺寸（mm） | 4960×1980×1600 | 4950×1935×1670 |
+| 轴距 | 3000 mm | 3000 mm |
+| 整备质量 | 2290 kg | 2350 kg |
+| 轮胎 | 245/55 R19 | 255/50 R20 |
+| 后备厢／前备箱 | 660 L／**120 L 前备箱**（官网未注明测量口径） | 610 L（官方 VDA 口径），放倒 1720 L，**无前备箱** |
+| 前排座椅 | 电动＋加热＋通风标配；**按摩选装 6,000 元** | 电动＋加热＋通风＋10 点按摩**标配**，副驾零重力 |
+| 后排座椅 | 电动靠背＋加热；无通风 | 电动靠背＋加热＋**通风标配** |
+| 车载冰箱 | 选装 4,000 元 | **标配** |
+| 电吸门 | 选装 3,000 元 | **标配** |
+| 辅助驾驶 | 1 颗激光雷达，高速＋城市领航（需驾驶员全程监控），算力 254 TOPS | 同为 1 激光雷达＋高速＋城市领航，算力 **508 TOPS** |
+| 座舱 | 15.6 吋中控＋HUD＋后排 8 吋屏，支持 CarPlay | 双 15.7 吋屏＋HUD；后排吸顶屏选装 8,000 元，CarPlay |
+| 音响 | 16 扬声器标配（23 扬选装 5,000 元） | **21 扬声器标配** |
+| 外放电 | V2L 3.3 kW，放电枪另购 | V2L 3.5 kW，放电枪随车 |
+| 拖挂 | 不支持 | 最大 1,500 kg（拖车钩选装 3,500 元） |
+| 气囊 | **9 个**（含前排中央气囊） | 8 个 |
+| 质保 | **整车 5 年/12 万 km**；三电 8 年/16 万 km | 整车 4 年/10 万 km；电池 8 年/16 万 km＋**首任车主电池终身质保** |
+
+## 一句话怎么看
+
+- **E7 长续航赢在**：续航多 55 km、三元锂（低温表现通常略好）、便宜 4,000 元、整车多一年质保、有前备箱。
+- **S6 赢在舒适配置的「含金量」**：空悬、前排按摩、后排通风、冰箱、电吸门全是标配——E7 光把按摩＋冰箱＋电吸门补齐就要加 1.3 万（约 26.3 万），还依然没有空悬（空悬要上 27.98 万的 Pro）。补能也更快，还能拖挂。
+- **口径提醒**：E7 的 660 L 后备厢官网没写测量标准，S6 的 610 L 是 VDA 口径，两个数字不能直接比大小；两边续航都是 CLTC 工况（高速实际通常只有六七成，S6 的磷酸铁锂冬季衰减更明显）；S6 的 24.38 万是限时权益价，不是常态价。
+
+主要来源：澄川官网 [配置表](https://www.chengchuan-auto.cn/e7/config)／[选配页](https://www.chengchuan-auto.cn/e7/configurator)／[质保政策](https://www.chengchuan-auto.cn/service/warranty)；朔风官网 [2026 款配置表](https://www.shuofeng-ev.cn/s6/specs)／[选配页](https://www.shuofeng-ev.cn/s6/order)／[首销权益页](https://www.shuofeng-ev.cn/s6/offer)／[质保政策](https://www.shuofeng-ev.cn/service/warranty)。
+```
+
+#### w-merge-two-long deepseek-flash base 第 1 遍
+
+```text
+（空）
+```
+
+#### w-merge-two-long deepseek-flash base 第 2 遍
+
+```text
+（空）
+```
+
+#### w-merge-two-long deepseek-flash inline 第 1 遍
+
+```text
+两款车都核到官网现行配置了，主表用相近价位的版本配对：**澄川 E7 长续航版 24.98 万元** 对 **朔风 S6 2026 款后驱 25.38 万元**（差 4,000 元）。
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| 现行官方指导价 | 24.98 万元 | 25.38 万元 |
+| 限时／权益价 | 无，仅 5,000 元置换补贴（旧车过户满一年） | 首销权益价 24.38 万元，限 11 月底前定购、12/31 前提车，需官方 App 下定 |
+| 驱动 | 单电机后驱 | 单电机后驱（可选装四驱 +2 万元） |
+| 功率／扭矩 | 230kW／520N·m | 250kW／450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98kWh 三元锂 | 92kWh 磷酸铁锂 |
+| CLTC 续航 | 815km | 760km（四驱 705km） |
+| 电压平台 | 800V | 800V |
+| 10%—80% 补能 | 22 分钟 | 19 分钟 |
+| 悬架 | 前双叉臂后五连杆，可变阻尼标配；**空悬不可选** | 前双叉臂后五连杆，**空悬＋可变阻尼标配** |
+| 车身尺寸 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距 | 3,000mm | 3,000mm |
+| 整备质量 | 2,290kg | 2,350kg |
+| 轮胎 | 245/55 R19 | 255/50 R20 |
+| 座位 | 5 座 2＋3 | 5 座 2＋3 |
+| 后备厢／前备厢 | 660L／120L | 610L（放倒 1,720L）／无前备箱 |
+| 前排座椅 | 加热、通风标配；**按摩选装 6,000 元** | 加热、通风、10 点按摩标配；副驾零重力 |
+| 后排座椅 | 电动靠背 105°—130°、加热；无通风按摩 | 电动靠背、加热、通风标配；无按摩 |
+| 车载冰箱 | 选装 4,000 元 | 标配 |
+| 电吸门 | 选装 3,000 元 | 标配 |
+| 音响／外放电 | 16 扬声器（可选 23 个 5,000 元）；V2L 3.3kW，放电枪另购 | 21 扬声器标配；V2L 3.5kW，放电枪随车 |
+| 座舱 | 15.6 英寸中控＋HUD＋后排 8 英寸屏 | 双 15.7 英寸＋HUD；后排吸顶屏选装 8,000 元 |
+| 车机 | 30TOPS／32GB，OTA 约两月一次 | 30TOPS／24GB，OTA 约一季度一次 |
+| 智驾 | 254TOPS，1 颗激光雷达，高速＋城市领航（城市需 OTA） | 508TOPS，1 颗激光雷达，高速＋城市领航 |
+| 气囊／安全评级 | 9 个（含前排中央）；C-NCAP 暂无成绩 | 8 个；C-NCAP 五星（2025 款成绩，车身未改） |
+| 拖挂 | 不支持 | 支持，最大 1,500kg，拖车钩选装 3,500 元 |
+| 质保 | 整车 5 年/12 万公里；三电 8 年/16 万公里 | 整车 4 年/10 万公里；电池 8 年/16 万公里，首任车主电池终身质保（有条件） |
+
+**选装**：E7 长续航版——前排按摩 6,000、冰箱 4,000、电吸门 3,000、电动前备箱 2,000、23 扬声器 5,000、21 英寸轮毂 4,000（续航降至 790km）。S6——四驱 20,000（降至 705km）、后排吸顶屏 8,000、21 英寸轮毂 5,000（降至 740km）、特殊色 3,000。
+
+**三点值得注意**
+- **别拿旧价旧款比**：E7 网上常见的 25.98 万元是 10 月 1 日调价前的价；S6 出现 26.98 万元起的是已停售的 2025 款（88kWh、720km、无激光雷达），现行是 2026 款。
+- **舒适配置要在配齐口径上比**：S6 的 25.38 万元已含空悬、前排按摩、后排通风、冰箱、电吸门；E7 加同类选装约 26.3 万元，且空悬要上 Pro（27.98 万元）。账面价 E7 便宜 4 千，配齐后反过来贵约 9 千。
+- **取舍很清楚**：E7 强在续航多 55km、三元锂低温更稳、有 120L 前备箱、整车质保长一年；S6 强在补能快 3 分钟、加速略快、车高 1,670mm 上下车省力、可拖挂、舒适配置直接配齐。续航和补能数字都是官方标称，两车没有同场实测，冬季实际差距目前查不到可靠数据。
+
+完整表格也存了一份：`~/Downloads/澄川E7-朔风S6对比.md`
+
+[FILE:$TMPDIR/entry-layer-eval-3be4cgvl/w-merge-two-long.inline.ds-1/sandbox/home/Downloads/澄川E7-朔风S6对比.md]
+```
+
+#### w-merge-two-long deepseek-flash inline 第 2 遍
+
+```text
+两边的核查结果都已返回，做法一致：都取官方现行的指导价，主表用价格相仿的那一个配置（澄川 E7 长续航版 24.98 万元/朔风 S6 2026 款后驱 25.38 万元，差 4,000 元）。
+
+## 澄川 E7 长续航版 与 朔风 S6 2026 款后驱 的对比
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| 现行官方指导价 | **24.98 万元** | **25.38 万元** |
+| 限时/权益价 | 无（仅 5,000 元置换补贴，需旧车过户满一年） | 首销权益价 24.38 万元，限 11 月底前定购、12 月 31 日前提车 |
+| 驱动 | 单电机后驱 | 单电机后驱 |
+| 最大功率/扭矩 | 230kW / 520N·m | 250kW / 450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| 电池容量/类型 | 98kWh 三元锂 | 92kWh 磷酸铁锂 |
+| 电压平台 | 800V | 800V |
+| CLTC 续航 | **815km** | 760km |
+| 10%—80% 补能（官方标称） | 22 分钟 | **19 分钟** |
+| 悬架 | 前双叉臂、后五连杆，可变阻尼；**空悬不可选** | 前双叉臂、后五连杆，**空气悬架＋可变阻尼标配** |
+| 车身尺寸 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距 / 座位 | 3,000mm / 5 座 | 3,000mm / 5 座 |
+| 后备厢 | 660L ＋ 前备厢 120L | 610L，放倒 1,720L，无前备箱 |
+| 整备质量 / 轮胎 | 2,290kg / 245/55 R19 | 2,350kg / 255/50 R20 |
+| 前排座椅 | 电动、加热、通风标配；**按摩选装 6,000 元** | 电动、加热、通风、**10 点按摩标配**，副驾零重力 |
+| 后排座椅 | 电动靠背 105°—130°、加热；无通风、按摩 | 电动靠背、加热、**通风标配**；无按摩 |
+| 冰箱 / 电吸门 | 均需选装（4,000 / 3,000 元） | **均标配** |
+| 智驾硬件与算力 | 1 颗激光雷达，高速＋城市领航，254TOPS | 1 颗激光雷达，高速＋城市领航，508TOPS |
+| 座舱 | 15.6 英寸中控＋HUD＋后排 8 英寸屏，支持 CarPlay | 双 15.7 英寸屏＋HUD，后排吸顶屏选装 8,000 元，支持 CarPlay |
+| 音响 / 外放电 | 16 扬声器（23 扬声器选装 5,000 元）；V2L 3.3kW，放电枪另购 | 21 扬声器标配；V2L 3.5kW，放电枪随车 |
+| 安全 | 9 气囊（含前排中央气囊）；C-NCAP 暂无成绩 | 8 气囊；C-NCAP 2025 五星（2025 款成绩，车身未改） |
+| 拖挂 | 不支持 | 支持，最大 1,500kg（拖车钩 3,500 元选装） |
+| 质保 | 整车 **5 年/12 万公里**；三电 8 年/16 万公里 | 整车 4 年/10 万公里；电池 8 年/16 万公里，**首任车主电池终身质保**（有条件） |
+| 家用配置配齐价 | 约 26.28 万元（加冰箱、电吸门、前排按摩；要空悬需上 Pro，27.98 万元） | 25.38 万元已含上述项，无需再加 |
+| 车身选装 | 前排按摩 6,000、冰箱 4,000、电吸门 3,000、电动前备箱 2,000、23 扬声器 5,000、21 英寸轮毂 4,000（CLTC 降至 790km） | 四驱 20,000（CLTC 降至 705km）、后排吸顶屏 8,000、21 英寸轮毂 5,000（CLTC 降至 740km）、特殊车色 3,000 |
+
+几点要注意的地方：
+
+- **只看指导价，E7 便宜 4,000 元；但 S6 的 24.38 万元权益价到 11 月底，实际到手反而低 1 万元左右。** 权益价只有通过官方 App 下定才有，经销商渠道不参与，所以不能当作长期可用的价格。
+- **比家用配置，更要看配齐价**：E7 长续航版不含空悬、按摩、冰箱、电吸门，配齐约 26.28 万元，仍没有空悬；S6 这些项都在 25.38 万元里。
+- **续航没法直接对比**：E7 是 98kWh 三元锂、815km，S6 是 92kWh 磷酸铁锂、760km。磷酸铁锂在低温下衰减通常更多，北方用户最好看冬季实测，这次两边都没找到可靠数据。
+- **空间方向不同**：E7 更宽更低（1,980mm 宽、1,600mm 高），有 120L 前备厢；S6 车高 1,670mm，后排头部和老人上下车更轻松，但地库限高 1.8 米以下要留意行李架。车宽近两米的车，老小区和机械车位建议实地试。
+- 表中续航、补能、加速全部是官方标称值，不是实测；两车智驾均需驾驶员全程监控，城市领航需 OTA 开通。
+```
+
+#### w-merge-two-long deepseek-flash both 第 1 遍
+
+```text
+两款车的报告都核完了，两边都建议按**价位最接近的两款**来比：澄川 E7 长续航版（24.98 万）对朔风 S6 2026 款后驱（25.38 万），差 4,000 元。
+
+## 澄川 E7 长续航版 vs 朔风 S6 2026 款后驱
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| 官方指导价 | **24.98 万元** | **25.38 万元** |
+| 限时价／权益 | 无（仅 5,000 元置换补贴，需旧车过户满一年） | 首销权益价 **24.38 万元**，限时到 11 月底，需官方 App 下定、12 月 31 日前提车 |
+| 驱动 | 单电机后驱 | 单电机后驱 |
+| 最大功率／扭矩 | 230kW／520N·m | 250kW／450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98kWh 三元锂 | 92kWh 磷酸铁锂 |
+| CLTC 续航 | **815km** | 760km |
+| 电压平台 | 800V | 800V |
+| 10%—80% 补能 | 22 分钟 | **19 分钟** |
+| 车身尺寸 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距 | 3,000mm | 3,000mm |
+| 整备质量 | 2,290kg | 2,350kg |
+| 轮胎 | 245/55 R19 | 255/50 R20 |
+| 悬架 | 前双叉臂＋后五连杆，**可变阻尼标配；空气悬架不可选**（要上 Pro 27.98 万才有） | 前双叉臂＋后五连杆，**空气悬架＋可变阻尼标配** |
+| 前排座椅 | 加热、通风标配；**按摩选装 6,000 元** | 加热、通风、**10 点按摩标配**；副驾零重力 |
+| 后排座椅 | 电动靠背 105°～130°、加热；**无通风、无按摩** | 电动靠背、加热、**通风标配**；无按摩 |
+| 车载冰箱 | 选装 4,000 元（标准版不可选） | **标配** |
+| 电吸门 | 选装 3,000 元 | **标配** |
+| 尾门／前备箱 | 电动尾门标配；**前备厢 120L**；电动前备箱选装 2,000 元 | 电动尾门标配；**无前备箱** |
+| 后备厢 | 660L（官网未写测量口径） | 610L，后排放倒 1,720L（官方 VDA 口径） |
+| 智驾 | 1 颗激光雷达，高速＋城市领航；算力 254TOPS；城市领航需 OTA | 1 颗激光雷达，高速＋城市领航；算力 **508TOPS** |
+| 座舱 | 15.6 吋中控＋HUD＋后排 8 吋屏；支持 CarPlay | 双 15.7 吋屏＋HUD；后排吸顶屏选装 8,000 元；支持 CarPlay |
+| 车机 | 芯片算力 30TOPS／32GB，OTA 约两个月一次 | 芯片算力 30TOPS／24GB，OTA 约一季度一次 |
+| 音响／外放电 | 16 扬声器标配，23 扬声器选装 5,000 元；V2L 3.3kW，**放电枪需另购** | 21 扬声器标配；V2L 3.5kW，**放电枪随车** |
+| 气囊／碰撞 | 9 个（含前排中央气囊）；**C-NCAP 暂无成绩** | 8 个；C-NCAP 五星（2025 款成绩，2026 款车身未改） |
+| 拖挂 | 不支持 | 支持，最大 1,500kg（拖车钩选装 3,500 元） |
+| 质保 | 整车 5 年／12 万公里；三电 8 年／16 万公里 | 整车 4 年／10 万公里；电池 8 年／16 万公里，首任车主电池终身质保（有条件） |
+
+## 把配置补齐后的价差，是这张表里最要紧的一行
+
+- **S6 的 25.38 万已经含着空悬、前排按摩、后排通风、冰箱、电吸门。**
+- **E7 的 24.98 万不含这些**：加冰箱、电吸门、前排按摩后约 26.3 万元，仍然没有空悬和后排通风——空悬要上 Pro，27.98 万元。
+- 所以账面 E7 便宜 4,000 元，按"家用舒适配齐"比，反而是 S6 便宜一万到三万。
+
+## 简短的选法
+
+- **跑长途多、看重续航和补能余量**：E7。815km CLTC、98kWh 三元锂、前备厢 120L，冬季衰减通常比磷酸铁锂小；整车质保 5 年也更长。
+- **家用舒适配置要一次到位、预算卡在 25 万上下**：S6。空悬、按摩、后排通风、冰箱、电吸门全在基础价里，车身也更高（1,670mm），老人上下车、后排头部更从容。
+- **便利性上各有一处**：E7 有前备厢和更长质保，S6 有对外放电枪随车、支持 1,500kg 拖挂、C-NCAP 有成绩可查。
+
+## 三处口径提醒
+
+1. **续航都是 CLTC 工况值**，高速实际通常只有六到七成；S6 是磷酸铁锂，北方冬季衰减会更明显，这一行不能只看 815 对 760。
+2. **两个后备厢数字不能直接比大小**：S6 是 VDA 口径，E7 官网没写口径。
+3. **朔风别用 2025 款数据**：网上常见的"三个版本、720km、26.98 万起"是上一代，2026 款已改为一个基础版＋选装四驱（四驱加 2 万，续航降到 705km）。澄川别用 25.98 万的首发价，10 月 1 日已官降 1 万。
+
+两份核查的原始依据都在官网配置表、选配页和售后政策页上，需要我把这张表存成文件、或把两边的完整五档／选装清单也附上来，说一声。
+```
+
+#### w-merge-two-long deepseek-flash both 第 2 遍
+
+```text
+两路都回来了，核到的都是现行官方配置表（澄川 E7 五个版本、朔风 S6 2026 款），下面是按相近价位对齐的一张表：**澄川 E7 长续航版 24.98 万** 对 **朔风 S6 2026 款后驱 25.38 万**（差 4,000 元）。
+
+## 澄川 E7 vs 朔风 S6 对比表
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| 现行官方指导价 | **24.98 万元** | **25.38 万元** |
+| 限时权益（单列，不进上表） | 5,000 元置换补贴（旧车过户满一年） | 首销权益价 24.38 万元（11 月底前 App 下定、12/31 前提车，经销商不参与）；特殊色 +3,000 元 |
+| 在售版本 | 5 个：标准 22.98 / 长续航 24.98 / Pro 27.98 / Max 31.98 / Ultra 36.98 万 | 1 个基础版 + 选装四驱（四驱 27.38 万；权益价 26.38 万） |
+| 驱动 | 单电机后驱 | 单电机后驱 |
+| 最大功率 / 扭矩 | 230kW / 520N·m | 250kW / 450N·m |
+| 0—100km/h（官方） | 6.0 秒 | 5.8 秒 |
+| 电池容量 / 类型 | 98kWh / 三元锂 | 92kWh / 磷酸铁锂 |
+| CLTC 续航 | **815km** | 760km |
+| 电压平台 | 800V | 800V |
+| 10%—80% 补能（官方标称） | 22 分钟 | 19 分钟 |
+| 尺寸（长×宽×高） | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距 | 3,000mm | 3,000mm |
+| 整备质量 | 2,290kg | 2,350kg |
+| 轮胎 | 245/55 R19 | 255/50 R20 |
+| 悬架 | 前双叉臂、后五连杆，可变阻尼；**空悬不可选（要上 Pro）** | 前双叉臂、后五连杆，**空悬＋可变阻尼标配** |
+| 前排座椅 | 电动、加热、通风标配；**按摩选装 6,000 元** | 电动、加热、通风、**10 点按摩标配**，副驾零重力 |
+| 后排座椅 | 电动靠背 105°—130°、加热；无通风按摩 | 电动靠背、加热、**通风标配**；无按摩 |
+| 辅助驾驶 | 1 颗激光雷达，254TOPS，高速＋城市领航（城市领航需 OTA 开通） | 1 颗激光雷达，508TOPS，高速＋城市领航 |
+| 座舱屏幕 | 15.6 英寸中控＋HUD＋后排 8 英寸屏；支持 CarPlay | 双 15.7 英寸＋HUD；后排吸顶屏选装 8,000 元；支持 CarPlay |
+| 车机 | 30TOPS / 32GB，OTA 约两个月一次 | 30TOPS / 24GB，OTA 约一个季度一次 |
+| 隔音 | 四门双层玻璃；官方未公布车内噪声 | 四门双层玻璃；官方称 60km/h 58 分贝（未标测试条件） |
+| 冰箱 / 电吸门 | 均需选装（冰箱 4,000、电吸门 3,000、电动前备箱 2,000） | **均标配** |
+| 其他家用便利 | 三温区空调、后排隐私玻璃、电动尾门、ISOFIX | 电动尾门、后排遮阳帘、手套箱冷藏、ISOFIX |
+| 音响 / 外放电 | 16 扬（可选 23 扬 5,000 元）；V2L 3.3kW，放电枪另购 | 21 扬标配；V2L 3.5kW，放电枪随车 |
+| 气囊 / 碰撞 | 9 个（含前排中央气囊）；C-NCAP 暂无成绩 | 8 个；C-NCAP 2025 年五星（2025 款成绩，车身未改） |
+| 储物 | 660L 后备厢 + 120L 前备厢（**官网未写测量口径**） | 610L 后备厢（VDA 口径），放倒 1,720L；**无前备箱** |
+| 拖挂 | 不支持 | 支持，最大 1,500kg（拖车钩选装 3,500 元） |
+| 质保 | 整车 5 年/12 万公里；三电 8 年/16 万公里，以先到为准 | 整车 4 年/10 万公里；电池 8 年/16 万公里，首任车主电池终身质保（有条件） |
+| 服务网点 | 集中在一二线城市，三四线需先查最近网点 | 覆盖多数地级市，偏远地区有上门取送车 |
+
+**两条口径提醒**
+
+- **配齐价才是公平比价**：E7 长续航加上冰箱、电吸门、前排按摩约 26.3 万元，仍无空悬（空悬要 27.98 万的 Pro）；S6 的空悬、按摩、后排通风、冰箱、电吸门已含在 25.38 万里。按家用舒适配置算，S6 的账面优势更大。
+- **两个续航不是一个性质**：都是 CLTC 工况，高速实际通常只有六到七成；S6 用磷酸铁锂，北方冬季衰减更明显——本次没找到可靠冬测，不建议只看 815 对 760 这一行定胜负。后备厢 660L 与 610L 口径不同，也不能直接比大小。
+
+**来源**：澄川 E7 现行配置表 / 选配页 / 产品页 / 售后政策页 / 上市发布稿（首发价 25.98 万已被 10 月 1 日调价取代）；朔风 S6 2026 款配置表 / 选配页 / 产品页 / 首销权益页 / 售后政策页（2025 款三版本、720km 数据已过时，未混入）。
+```
+
+#### w-merge-two-long deepseek-flash full 第 1 遍
+
+```text
+两款车都核到官网现行配置表了。取价位最接近的两个版本做主线：**澄川 E7 长续航版 24.98 万** 对 **朔风 S6 2026 款后驱 25.38 万**，差 4,000 元。
+
+## 主对比表
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| 现行官方指导价 | 24.98 万元 | 25.38 万元 |
+| 限时价／权益 | 无现金优惠；置换补贴 5,000 元（旧车过户满一年） | 首销权益价 24.38 万元（11 月底前官方 App 下定、12 月 31 日前提车） |
+| 全系价位 | 22.98 万–36.98 万，5 个版本 | 25.38 万起，＋2 万选装四驱＝27.38 万 |
+| 车身尺寸 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距 | 3,000mm | 3,000mm |
+| 座位 | 5 座 2＋3 | 5 座 2＋3 |
+| 驱动形式 | 单电机后驱 | 单电机后驱 |
+| 最大功率／扭矩 | 230kW／520N·m | 250kW／450N·m |
+| 0–100km/h（官方） | 6.0 秒 | 5.8 秒 |
+| 电池 | 98kWh 三元锂 | 92kWh 磷酸铁锂 |
+| CLTC 续航 | 815km | 760km |
+| 电压平台 | 800V | 800V |
+| 10%–80% 补能（标称） | 22 分钟 | 19 分钟 |
+| 悬架 | 前双叉臂＋后五连杆，可变阻尼；**空悬不可选** | 前双叉臂＋后五连杆，**空气悬架＋可变阻尼标配** |
+| 整备质量 | 2,290kg | 2,350kg |
+| 轮胎 | 245/55 R19 | 255/50 R20 |
+| 后备厢 | 660L（官网未标口径） | 610L，放倒 1,720L（官方 VDA 口径） |
+| 前备厢 | 120L | 无 |
+| 前排座椅 | 加热、通风标配；按摩选装 6,000 元 | 加热、通风、10 点按摩标配，副驾零重力 |
+| 后排座椅 | 电动靠背 105°–130°、加热；无通风按摩 | 电动靠背、加热、通风标配；无按摩 |
+| 车载冰箱 | 选装 4,000 元 | 标配 |
+| 电吸门 | 选装 3,000 元 | 标配 |
+| 辅助驾驶 | 1 颗激光雷达，高速＋城市领航，254TOPS | 1 颗激光雷达，高速＋城市领航，508TOPS |
+| 座舱 | 15.6 英寸中控＋HUD＋后排 8 英寸屏 | 双 15.7 英寸屏＋HUD；后排吸顶屏选装 8,000 元 |
+| 车机 | 30TOPS／32GB，OTA 约两月一次 | 30TOPS／24GB，OTA 约一季一次 |
+| 音响／外放电 | 16 扬声器（23 扬声器选装 5,000 元）／3.3kW，放电枪另购 | 21 扬声器标配／3.5kW，放电枪随车 |
+| 隔音 | 四门双层玻璃，未公布噪声值 | 四门双层玻璃，称 60km/h 58 分贝（未写条件） |
+| 安全气囊 | 9 个（含前排中央） | 8 个 |
+| 碰撞成绩 | C-NCAP 暂无 | C-NCAP 2025 五星（2025 款成绩，车身未改） |
+| 拖挂 | 不支持 | 支持，最大 1,500kg（拖车钩选装 3,500 元） |
+| 质保 | 整车 5 年/12 万公里；三电 8 年/16 万公里 | 整车 4 年/10 万公里；电池 8 年/16 万公里，首任车主电池终身（有条件） |
+
+## 配上家用舒适配置后的实际价差
+
+这点比账面价更能说明问题：E7 长续航版把冰箱、电吸门、前排按摩、23 扬声器都加上约 26.3 万元，而空气悬架要到 Pro（27.98 万）才有；S6 的空悬、按摩、后排通风、冰箱、电吸门全在 25.38 万里。
+
+- **只比裸车价**：两车差 4,000 元，几乎持平。
+- **比“家用配齐”**：E7 约 26.3 万仍是钢弹簧，S6 25.38 万带空悬——差 3 万元左右且悬架不同级。
+- **反过来看续航**：E7 多 55km CLTC、前备厢 120L、三元锂冬季衰减小、车身质保长一年。
+
+## 选车结论（基于规格，非同一路段实测）
+
+- **看重续航、跑长途、北方冬天**：选 E7 长续航版。815km + 三元锂 + 800V，22 分钟补能也够用。
+- **看重乘坐舒适与配置完整度、停车条件一般**：选 S6。空悬标配、车窄 4.5cm、车高多 7cm 好上下车，孩子和老人受益。
+- **两个共同点**：城市领航都要 OTA 或按条件开通，都**不是自动驾驶**，须全程监控接管；CLTC 高速实际通常只有六到七成。
+- **没做的事**：两车没有同场实测，高速续航、冬季充电、后排晕眩与座椅承托都无数据，不据此分胜负。
+
+**来源**：[澄川 E7 配置表](https://www.chengchuan-auto.cn/e7/config)｜[E7 选配页](https://www.chengchuan-auto.cn/e7/configurator)｜[澄川售后政策](https://www.chengchuan-auto.cn/service/warranty)｜[朔风 S6 2026 款配置表](https://www.shuofeng-ev.cn/s6/specs)｜[S6 选配页](https://www.shuofeng-ev.cn/s6/order)｜[S6 首销权益页](https://www.shuofeng-ev.cn/s6/offer)
+
+两处别踩的坑：E7 官网旧入口 `/e7/spec` 默认是上一代车型；网上常见的 S6「三个版本、720km」是 2025 款，已停售。
+```
+
+#### w-merge-two-long deepseek-flash full 第 2 遍
+
+```text
+两款车都按「现价最接近」的版本配对：**澄川 E7 长续航版 24.98 万** 对 **朔风 S6 2026 款后驱 25.38 万**，差价 4,000 元。以下全部是**现行官方指导价**，限时权益单独列。
+
+## 一、核心对比表
+
+| 项目 | 澄川 E7 长续航版 | 朔风 S6 2026 款后驱 |
+|---|---|---|
+| 现行指导价 | **24.98 万元** | **25.38 万元** |
+| 限时权益 | 5,000 元置换补贴（旧车过户满一年） | 首销权益价 24.38 万（11 月底前下定、12/31 前提车，仅官方 App） |
+| 驱动 | 单电机后驱 | 单电机后驱 |
+| 最大功率／扭矩 | 230kW／520N·m | 250kW／450N·m |
+| 0—100km/h | 6.0 秒 | 5.8 秒 |
+| 电池 | 98kWh 三元锂 | 92kWh 磷酸铁锂 |
+| CLTC 续航 | 815km | 760km |
+| 电压平台 | 800V | 800V |
+| 10%—80% 补能 | 22 分钟 | 19 分钟 |
+| 整备质量 | 2,290kg | 2,350kg |
+| 长×宽×高 | 4,960×1,980×1,600mm | 4,950×1,935×1,670mm |
+| 轴距 | 3,000mm | 3,000mm |
+| 座位 | 5 座 | 5 座 |
+| 后备厢／前备厢 | 660L／120L（口径官网未写） | 610L，放倒 1,720L／无前备厢（VDA 口径） |
+| 悬架 | 前双叉臂＋后五连杆，可变阻尼；**空悬不可选** | 前双叉臂＋后五连杆，**空悬＋可变阻尼标配** |
+| 前排座椅 | 加热、通风标配；**按摩选装 6,000 元** | 加热、通风、**10 点按摩标配**，副驾零重力 |
+| 后排座椅 | 电动靠背 105°–130°、加热；**无通风按摩** | 电动靠背、加热、**通风标配**；无按摩 |
+| 智驾 | 1 颗激光雷达，高速＋城市领航，254TOPS（城市领航需 OTA） | 1 颗激光雷达，高速＋城市领航，508TOPS |
+| 座舱屏 | 15.6 英寸中控＋HUD＋8 英寸后排控制屏 | 双 15.7 英寸＋HUD；后排吸顶屏选装 8,000 元 |
+| 音响／外放电 | 16 扬声器（可选 23）／3.3kW，放电枪另购 | 21 扬声器／3.5kW，放电枪随车 |
+| 冰箱／电吸门 | 均需选装（4,000／3,000 元） | **均标配** |
+| 气囊 | 9 个（含前排中央） | 8 个 |
+| 拖挂 | 不支持 | 支持，最大 1,500kg（拖车钩 3,500 元） |
+| C-NCAP | 暂无成绩 | 五星（2025 款成绩，2026 款车身未改） |
+| 质保 | 整车 5 年/12 万公里；三电 8 年/16 万公里 | 整车 4 年/10 万公里；电池 8 年/16 万公里＋首任车主终身（有条件） |
+| OTA 节奏 | 约两个月一次 | 约一个季度一次 |
+
+两款车的辅助驾驶都**不是自动驾驶**，需驾驶员全程监控、随时接管。
+
+## 二、把家用配置补齐后的价差（关键）
+
+E7「看起来便宜 4,000 元」，但空悬、按摩、冰箱、电吸门在长续航版上要么选装、要么上到 Pro：
+
+| | 澄川 E7 长续航版 | 朔风 S6 后驱 |
+|---|---:|---:|
+| 车价 | 249,800 | 253,800 |
+| 前排按摩 | +6,000 | 0 |
+| 车载冰箱 | +4,000 | 0 |
+| 电吸门 | +3,000 | 0 |
+| 电动前备箱 | +2,000 | —（无此配置） |
+| 23 扬声器 | +5,000 | 0（21 扬声器标配） |
+| **配齐价** | **约 26.98 万元** | **25.38 万元**（不含吸顶屏） |
+| 想要空气悬架 | 需上 Pro，**27.98 万元** | 已含 |
+
+**结论：同价位下 S6 的舒适配置明显更满，E7 的钱主要花在 815km 续航和更大的车身/前备厢上。** 如果在意空悬，E7 要直接跳到 27.98 万的 Pro（那时动力也变成 360kW 四驱、4.3 秒）。
+
+## 三、选装单价（官方）
+
+| 澄川 E7 长续航版 | 价格 | 朔风 S6 后驱 | 价格 |
+|---|---:|---|---:|
+| 前排按摩 | 6,000 | 四驱（续航降至 705km） | 20,000 |
+| 23 扬声器 | 5,000 | 后排 15.6 英寸吸顶屏 | 8,000 |
+| 车载冰箱 | 4,000 | 21 英寸轮毂（续航降至 740km） | 5,000 |
+| 21 英寸轮毂（续航降至 790km） | 4,000 | 拖车钩 | 3,500 |
+| 电吸门 | 3,000 | 特殊车色 | 3,000 |
+| 电动前备箱 | 2,000 | | |
+
+## 四、怎么选
+
+- **跑长途多、常满载、看重续航数字** → E7 长续航：815km CLTC、大前备厢、车身更宽（1,980mm，老小区和机械车位建议实车试停）。
+- **城市家用、要舒适配置一次到位、预算卡在 25 万** → S6：空悬、按摩、冰箱、电吸门、后排通风全在车价里，车高 1,670mm 老人小孩上下车更省力。
+- **北方用户**：S6 是磷酸铁锂，冬季衰减通常更大；E7 长续航是三元锂。这一条没有双方实测数据，建议看你所在城市的冬季实测再定。
+- **价格别踩坑**：E7 网上常见的 25.98 万是 10 月 1 日调价前的旧价；S6 网上常见的 26.98 万起、三版本布局是 2025 款，已被 2026 款取代；24.38 万是限时权益价。储物 660L 与 610L 口径不同，不能直接比大小；加速的 6.0／5.8 秒都是官方标称，不是同场实测。
+
+来源：澄川官网 E7 参数配置表、选配页、产品页、售后政策；朔风官网 S6 2026 款配置表、选配页、产品页、首销权益页、售后政策。补能时间均为官方指定超充桩条件下的标称值。
+```
+
 ## 一览
 
 | # | 用例 | 期望 | 措辞 | 遍 | 调了什么命令 | 回复原文 | `<no-reply/>` | 字数 | 读手册 | 判定 |

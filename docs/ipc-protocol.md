@@ -561,7 +561,7 @@ desktop 用两者驱动 Composer 推理强度 pill 的当前档与「跟随 / �
 
 `images` 是本地文件绝对路径数组（V0.1 可空）。
 
-`wake`（2026-11-03 加，主对话票 142）：Core 叫醒主对话的那条（子任务汇报、到点提醒、巡看，`core/src/subtask_report.rs` 的 `deliver`）写 `"wake": true`；别的都不写（缺省 `false`）。runner 据此记下这一轮是不是用户发起的：叫醒的一轮可能以 `<no-reply/>` 收尾，中途不发步骤里的字（§4.21 `stepText`）。
+`wake`（2026-11-03 加，主对话票 142）：Core 叫醒主对话的那条（子任务汇报、到点提醒、巡看，`core/src/subtask_report.rs` 的 `deliver`）写 `"wake": true`；别的都不写（缺省 `false`）。runner 据此记下这一轮是不是用户发起的：叫醒的一轮可能以 `<no-reply/>` 收尾，中途不发步骤里的字（§4.21 `stepText`）。主对话票 147 起，内置主对话的 runner 还据此把超过 2,000 字的叫醒说明整份交给模型，不走上游「存成文件、只给一句路径」那条（`GaSession.arm_inline_prompt`，`docs/ga-baseline.md` 第 24 条）；用户自己打的长消息照旧。
 
 **运行中拒绝（galley#19/#20，v0.4.6-dev 起）**：`run_in_progress`
 期间收到主 agent `user_message` / `ask_user_response`，bridge 以

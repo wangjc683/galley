@@ -659,7 +659,7 @@ fn scheduled_session_paragraph(report: &SubtaskReport, id: &str) -> String {
             "{subject} and finished. Its final answer:\n<<<\n{}\n>>>\n\
              Tell the user the result in a sentence or two. The session stays in their \
              sidebar (`session show {id}`).",
-            cut(answer, id)
+            cut_answer(answer, id)
         ),
         ReportOutcome::Asking {
             question,
@@ -745,7 +745,7 @@ fn report_paragraph(report: &SubtaskReport) -> String {
                  a table, a list, a comparison or an account of something; otherwise the \
                  result in a sentence or two with the evidence (a confirmation number, a \
                  file path, a link). {next}",
-                cut(answer, id)
+                cut_answer(answer, id)
             )
         }
         ReportOutcome::Asking {
@@ -821,6 +821,27 @@ fn not_started_paragraph(title: &str, why: &str) -> String {
 /// `text` within [`REPORT_TEXT_MAX_CHARS`]: its start, and where to read
 /// all of it.
 fn cut(text: &str, id: &str) -> String {
+    cut_then(text, || {
+        format!("[… cut for length; all of it: `session show {id} --tail=1`]")
+    })
+}
+
+/// A final answer within [`REPORT_TEXT_MAX_CHARS`]: its start, and where
+/// just the rest is (main chat ticket 147). `session show --tail=1` prints
+/// the whole message row, its `content` and its `finalAnswer` both, about
+/// twice the answer; two such rows read in one step overran the engine's
+/// tool output (GA cuts the middle of a long one), and the merge round
+/// spent three more steps looking for the end (v0.7.6 smoke S3).
+fn cut_answer(text: &str, id: &str) -> String {
+    cut_then(text, || {
+        format!(
+            "[… cut for length; the rest is `finalAnswer[{REPORT_TEXT_MAX_CHARS}:]` of the JSON \
+             line `session show {id} --tail=1` prints]"
+        )
+    })
+}
+
+fn cut_then(text: &str, rest: impl FnOnce() -> String) -> String {
     let text = text.trim();
     if text.is_empty() {
         return "(nothing)".into();
@@ -829,7 +850,7 @@ fn cut(text: &str, id: &str) -> String {
         return text.to_string();
     }
     let kept: String = text.chars().take(REPORT_TEXT_MAX_CHARS).collect();
-    format!("{kept}\n[… cut for length; all of it: `session show {id} --tail=1`]")
+    format!("{kept}\n{}", rest())
 }
 
 fn one_line(text: &str) -> String {
@@ -2733,9 +2754,23 @@ mod tests {
         let text = report_text(&[report(Some("s-1"), 0, done(&answer))]);
         assert!(text.contains(&"长".repeat(REPORT_TEXT_MAX_CHARS)));
         assert!(!text.contains("尾巴"));
-        assert!(text.contains("[… cut for length; all of it: `session show s-1 --tail=1`]"));
+        // Ticket 147: just the rest, a slice of the field that holds it.
+        assert!(text.contains(
+            "[… cut for length; the rest is `finalAnswer[3000:]` of the JSON line \
+             `session show s-1 --tail=1` prints]"
+        ));
         let exact = "短".repeat(REPORT_TEXT_MAX_CHARS);
         assert!(!report_text(&[report(Some("s-1"), 0, done(&exact))]).contains("cut for length"));
+        // A run stopped at the step limit says its last words in a step's
+        // row, not in `finalAnswer`: there all of it is the row.
+        let step = report_text(&[report(
+            Some("s-1"),
+            0,
+            ReportOutcome::StepLimit {
+                last_words: answer.clone(),
+            },
+        )]);
+        assert!(step.contains("[… cut for length; all of it: `session show s-1 --tail=1`]"));
     }
 
     #[test]

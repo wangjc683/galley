@@ -39,6 +39,13 @@ upgrade can silently move:
                                     ``run()`` hands each task's loop gains
                                     ``tell_user``, which the handler
                                     subclass answers)
+- ``plugins.hooks`` ``agent_before`` → arm_inline_prompt (managed main
+                                    chat only, main chat ticket 147: a
+                                    wake note over 2,000 characters
+                                    reaches the model in full, not as
+                                    upstream's "Long user prompt saved
+                                    to …"; the round's user message and
+                                    its working-memory line)
 
 GA's *public* API (``next_llm``, ``verbose``, ``inc_out``, ``put_task``,
 ``list_llms``) stays direct on ``bridge.agent`` — the constitution
@@ -57,6 +64,8 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import re
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -136,6 +145,66 @@ def message_to_content_blocks(content: Any, images: Any = None) -> list[Any]:
     return blocks
 
 
+# What upstream `GenericAgent.run()` hands the loop in place of a task over
+# 2,000 characters, which it saved to a file (agentmain.py).
+_LONG_PROMPT_POINTER = re.compile(
+    r"Long user prompt saved to .+\. Read and execute\.", re.DOTALL
+)
+_inline_hook_registered = False
+
+
+def _inline_prompt(ctx: dict[str, Any]) -> None:
+    """GA's `agent_before` hook (see GaSession.arm_inline_prompt): the
+    armed task in place of upstream's pointer to the file it saved it to,
+    and the working-memory line upstream writes for a task it keeps.
+    Inert unless this run's agent was armed; disarms it."""
+    handler = ctx.get("handler")
+    agent = getattr(handler, "parent", None)
+    text = getattr(agent, "_galley_inline_prompt", None)
+    if agent is None or not isinstance(text, str):
+        return
+    agent._galley_inline_prompt = None
+    pointer = ctx.get("user_input")
+    if not isinstance(pointer, str) or not _LONG_PROMPT_POINTER.fullmatch(pointer):
+        return
+    user = next(
+        (
+            m
+            for m in reversed(ctx.get("messages") or [])
+            if isinstance(m, dict) and m.get("role") == "user"
+        ),
+        None,
+    )
+    content = user.get("content") if user else None
+    if user is None or not isinstance(content, str) or not content.startswith(pointer):
+        return
+    # A plugin may have added to the message after the pointer
+    # (upstream's project mode does); that stays.
+    user["content"] = text + content[len(pointer) :]
+    smart_format = getattr(sys.modules.get("ga"), "smart_format", None)
+    history = getattr(handler, "history_info", None)
+    if not callable(smart_format) or not isinstance(history, list) or not history:
+        return
+    if history[-1] == "[USER]: " + smart_format(pointer.replace("\n", " "), max_str_len=200):
+        history[-1] = "[USER]: " + smart_format(text.replace("\n", " "), max_str_len=200)
+
+
+def _register_inline_hook() -> bool:
+    """Register `_inline_prompt` once per process with the hooks module
+    GA's loop triggers (`agent_loop.py` imports its `trigger`). False when
+    GA has no hooks module."""
+    global _inline_hook_registered
+    if _inline_hook_registered:
+        return True
+    hooks = sys.modules.get("plugins.hooks")
+    register = getattr(hooks, "register", None)
+    if not callable(register):
+        return False
+    register("agent_before")(_inline_prompt)
+    _inline_hook_registered = True
+    return True
+
+
 class GaSession:
     """Adapter over one live GA agent's upgrade-fragile internals.
 
@@ -210,6 +279,35 @@ class GaSession:
         ):
             tools.append(wanted)
         return True
+
+    # ---------------- a wake note in full (main chat ticket 147) ----------------
+    # Upstream `GenericAgent.run()` saves a task over 2,000 characters to
+    # `temp/user_prompt_<pid>_<ns>.md` and starts the loop on one line, "Long
+    # user prompt saved to <path>. Read and execute." A note Core wakes the
+    # main chat with (subtask reports, a reminder, the morning review) often
+    # runs longer: a batch of reports, each answer up to 3,000 characters
+    # (core/src/subtask_report.rs), and the model's first step was reading
+    # that file back (v0.7.6 smoke S3, PRD ruling 198). For such a run the
+    # bridge arms the note; GA's own `agent_before` hook (`plugins.hooks`, the
+    # seam upstream's `plugins/project_mode.py` uses to add to a round's user
+    # message) puts it back where the pointer stands before the first model
+    # call, and turns the working-memory line upstream wrote for the pointer
+    # into the one it writes for a task it keeps. One run: the hook disarms
+    # the agent on its first call, and the bridge arms or clears it before
+    # every task. Managed main chat only (CLAUDE.md Rule 1); the user's own
+    # long messages keep upstream's path. Coupling points, re-audit at GA
+    # baseline upgrades: the pointer's wording; `agent_runner_loop`
+    # triggering `agent_before` with its locals (`messages`, `user_input`,
+    # `handler`) before its first model call; the `[USER]:` line `run()`
+    # appends to the history the handler holds (`smart_format(task, 200)`).
+
+    def arm_inline_prompt(self, text: str | None) -> bool:
+        """The next task's text, to reach the model in full even when
+        upstream saves it to a file; None leaves the next task to upstream.
+        False when GA has no hooks module to do it with (the task then
+        goes upstream's way)."""
+        self.agent._galley_inline_prompt = text
+        return text is None or _register_inline_hook()
 
     # ---------------- backend history ----------------
 
