@@ -380,7 +380,8 @@ look it up with the Galley CLI (search, then
 /// model does the work itself or hands it off, by its own judgment, with
 /// two guidelines (a fact is looked up and sourced; changes go by
 /// `authority.md`). Ticket 145 (ruling 194, below) gives that judgment
-/// the costs of each path and one starting point instead of a line.
+/// the costs of each path instead of a line, and its second round
+/// (ruling 195) puts ruling 193's default back beside them.
 ///
 /// Ticket 30 (assistant PRD rulings 2, 3, 8) closed the loop: the
 /// instructions also name the evidence to hand back, Galley wakes the
@@ -689,6 +690,36 @@ look it up with the Galley CLI (search, then
 /// instructions carry, the parts that need the same tab or files in one
 /// tag, not calling this chat the main chat, no waiting or watching, and
 /// the subagent sentence.
+///
+/// Ticket 145's second round (main chat PRD ruling 195), the clause's
+/// eighth: the standing and the costs stay, ruling 193's default comes
+/// back after them, and the line on how it will go about it goes. Given
+/// only what each path costs (the eval's v7), the models took the quick
+/// one: gpt-6.1-sol handed off 10 runs of 90 where ruling 193 had 25, the
+/// comparisons all looked up here instead of split by product;
+/// glm-5.3-flash 6 of 67, deepseek-flash 2 of 61 (8 of 60 under ruling
+/// 193, the model's own leaning). The line on how it will go about it
+/// showed no effect in the totals (47 of 84 runs said one, 47 of 83 under
+/// ruling 193; most went straight to the browser with their plan only in
+/// `<summary>`). Split by path, the second round's eval found it had
+/// worked where the model did the work itself (gpt-6.1-sol looking up
+/// online 9 of 38 → 20 of 50, doing it here 13 of 20 → 17 of 24), and
+/// fewer hand-offs, whose replies always say something, evened the
+/// totals out; without it (v8) those fell to 2 of 37 and 8 of 24.
+/// Facts stayed sourced (54 of 60, 55 under ruling 193). What the user
+/// said plainly the models followed (a memo for speed, every run); what
+/// was left to their judgment they took the quick way. JC wants both,
+/// depth and parts side by side for what is complex (ruling 193) and the
+/// model's own judgment (ruling 194), so the product gives a clear
+/// default and a memo overrides it: after the costs, ruling 193's
+/// sentence (merged "when they are back": Core wakes the main chat once
+/// for a batch, ticket 144) and a question, a remark or a single fact
+/// answered here; the user's memos first; what the user says to do here
+/// or hand off, done so (ruling 193's sentence back); otherwise their
+/// way, noted as a memo. Ruling 193's spill-over comes back with it (a
+/// prediction, a recommendation, a folder of invoices handed off),
+/// accepted (ruling 195 point 5). Gone with the line: "worth a subtask's
+/// wait for depth", the starting point the first round had.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
@@ -699,12 +730,15 @@ reaches you at your next step, and `tell_user` answers them in a line
 without stopping. A subtask starts fresh with this conversation's last
 turns as background, looks into one thing in depth and runs alongside any
 others; each takes a few minutes, and Galley wakes you once they are all
-back, for you to check and put together. As a starting point, what the
-user will decide on or keep is worth a subtask's wait for depth, and a question
-in passing wants an answer now; their memos on how they like things done
-come first. When something will take more than a moment, say in a line
-how you will go about it; when the user says otherwise, do it their way,
-and note it as a memo when it is how they want such things done.
+back, for you to check and put together. Something the user will use to
+decide, pass on or keep, and that takes looking into (a comparison, a
+plan, a report, a survey), goes to subtasks to be done in depth: one tag
+per part when it splits (a product, a place, a source each), all at once,
+and you merge them when they are back. A question, a remark or a single
+fact you answer yourself. Their memos on how they like things done come
+first. When the user says to do it here or to hand it off, do that; when
+they say otherwise, do it their way, and note it as a memo when it is how
+they want such things done.
 A fact in the world (a person, an event, a game, the news, a figure, a
 price, how someone is doing lately): look it up before you answer,
 yourself or by a subtask, and give your sources. An idea, a reason, how
@@ -1675,10 +1709,14 @@ mod tests {
     /// change goes by `authority.md`; the instructions need not copy this
     /// conversation, which the subtask carries (ticket 138); it does not
     /// call this chat the main chat (ruling 173). Ticket 145 (ruling 194,
-    /// in place of ruling 186's neutral sentence and ruling 193's by
-    /// kind): no line of what goes where; what each path costs, one
-    /// starting point, the user's memos first, a line on how it will go
-    /// about it, the user's way when they say otherwise, noted as a memo.
+    /// in place of ruling 186's neutral sentence): what each path costs,
+    /// the user's memos first, the user's way when they say otherwise,
+    /// noted as a memo; its second round (ruling 195) puts ruling 193's
+    /// default back after the costs (what the user will decide by and
+    /// that takes looking into goes out in depth, split and merged; a
+    /// question, a remark or a single fact stays) with the user's word on
+    /// here or handed off, and takes out the line on how it will go about
+    /// it.
     #[test]
     fn main_chat_entry_layer_leaves_the_hand_off_to_judgment() {
         let main =
@@ -1698,15 +1736,22 @@ mod tests {
             "without stopping. A subtask starts fresh with this conversation's last",
             "turns as background, looks into one thing in depth and runs alongside any",
             "others; each takes a few minutes, and Galley wakes you once they are all",
-            "back, for you to check and put together. As a starting point, what the",
-            // One starting point; the user's memos come first (point 2, 甲).
-            "user will decide on or keep is worth a subtask's wait for depth, and a question",
-            "in passing wants an answer now; their memos on how they like things done",
-            "come first. When something will take more than a moment, say in a line",
-            // A line on how it will go about it; the user's way, kept as a
-            // memo when it is how they want such things done.
-            "how you will go about it; when the user says otherwise, do it their way,",
-            "and note it as a memo when it is how they want such things done.",
+            // Ruling 195: ruling 193's default back beside the costs. What
+            // the user will decide by and that takes looking into goes out
+            // in depth, split and merged; a question, a remark or a single
+            // fact is answered here.
+            "back, for you to check and put together. Something the user will use to",
+            "decide, pass on or keep, and that takes looking into (a comparison, a",
+            "plan, a report, a survey), goes to subtasks to be done in depth: one tag",
+            "per part when it splits (a product, a place, a source each), all at once,",
+            "and you merge them when they are back. A question, a remark or a single",
+            // The user's memos first (ruling 194 point 2, 甲); the user's word
+            // goes (back from ruling 193); their way, kept as a memo when it
+            // is how they want such things done.
+            "fact you answer yourself. Their memos on how they like things done come",
+            "first. When the user says to do it here or to hand it off, do that; when",
+            "they say otherwise, do it their way, and note it as a memo when it is how",
+            "they want such things done.",
         ] {
             assert!(main.contains(line), "entry layer lost: {line}");
         }
@@ -1770,17 +1815,16 @@ mod tests {
         assert!(main
             .contains("Use this, not the file-based subagent in your memory (subagent.md), which"));
         assert!(main.contains("the user cannot see."));
-        // Ticket 145: what went. Ruling 186's neutral sentence and ruling
-        // 193's by kind; "the user can talk to you" with its hand-off
-        // (folded into the costs); the condition before one tag per part;
-        // "on its way" (the line on how it will go about it says more).
+        // Ticket 145: what went. Ruling 186's neutral sentence; "the user
+        // can talk to you" with its hand-off (folded into the costs); the
+        // condition before one tag per part; "on its way"; the write-up of
+        // this conversation (a subtask carries it now, ticket 138). Its
+        // second round (ruling 195): the line on how it will go about it
+        // (no effect in the eval: 47 of 84 runs against 47 of 83 under
+        // ruling 193) and the starting point it had in place of ruling
+        // 193's default ("worth a subtask's wait for depth").
         for gone in [
             "You can do the work yourself",
-            "Something the user will use to decide",
-            "to be done in depth",
-            "merge them",
-            "A question, a remark or a single fact",
-            "When the user says to do it here or to hand it off",
             "A write-up of what this conversation already holds",
             "The user can talk to you at any time",
             "hand it off and answer them first",
@@ -1788,6 +1832,10 @@ mod tests {
             "one piece of work splits into parts done apart",
             "Tell the user in a sentence that it is on its way",
             "on its way",
+            "say in a line",
+            "how you will go about it",
+            "As a starting point",
+            "wait for depth",
         ] {
             assert!(!main.contains(gone), "entry layer still has: {gone}");
         }
@@ -1832,13 +1880,13 @@ mod tests {
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("<subtask"));
             assert!(!prompt.contains("tell_user"));
-            // Ticket 145: the costs and the starting point are the main
-            // chat's only.
+            // Ticket 145: the costs, ruling 193's default and the memos
+            // are the main chat's only.
             assert!(!prompt.contains("How to go about a thing is yours to weigh"));
             assert!(!prompt.contains("A subtask starts fresh"));
-            assert!(!prompt.contains("wait for depth"));
+            assert!(!prompt.contains("Something the user will use to decide"));
+            assert!(!prompt.contains("to be done in depth"));
             assert!(!prompt.contains("how they like things done"));
-            assert!(!prompt.contains("say in a line"));
             assert!(!prompt.contains("Write one tag per part"));
             assert!(!prompt.contains("Do not call this chat the main chat"));
         }
@@ -2240,7 +2288,16 @@ mod tests {
     /// this chat the main chat" and the wake for them all: a line on how it
     /// goes about it is already asked for above. Measured on macOS, no
     /// headroom.
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 5008;
+    /// Raised 5008 → 5183 by ticket 145's second round (main chat PRD
+    /// ruling 195): +175, all in the paragraph (865 → 1040). Ruling 193's
+    /// default after the costs (287; "when the last part is back you merge
+    /// them into one" now "you merge them when they are back") and a
+    /// question, a remark or a single fact answered here (59), in place of
+    /// the starting point (142); the user's word on here or handed off (61)
+    /// and their way (107; "when the user says otherwise" now "when they
+    /// say otherwise"), in place of the line on how it will go about it
+    /// (85) and the user's way (112). The memos first (53) stays.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 5183;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {

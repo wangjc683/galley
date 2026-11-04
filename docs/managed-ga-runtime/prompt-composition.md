@@ -544,30 +544,39 @@ that finishes a task and restates the result. The layer says three things:
   the core prompt's reply shape as the IM layer).
 - **Pick up what a break left open** (ticket 11's carried turns) when the
   user comes back to it, without recapping it unasked.
-- **How to go about it is the model's to weigh, given the costs**
-  (ticket 06a, PRD rulings 52, 53; since ticket 145, main chat PRD ruling
-  194): no line of what goes where. Doing it here is quicker and lighter,
+- **How to go about it is the model's to weigh, given the costs, with a
+  default** (ticket 06a, PRD rulings 52, 53; since ticket 145, main chat
+  PRD rulings 194 and 195). Doing it here is quicker and lighter,
   and the user can talk to the model while it works: what they say
   reaches it at its next step (ticket 136), and `tell_user` answers them
   in a line without stopping (ticket 137). A subtask starts fresh with
   this conversation's last turns as background (ticket 138), looks into
   one thing in depth and runs alongside any others; each takes a few
   minutes, and Galley wakes the model once they are all back (ticket 144),
-  for it to check and put together. One starting point: what the user
-  will decide on or keep is worth a subtask's wait for depth, a question
-  in passing wants an answer now, and the user's memos on how they like
-  things done come first (ruling 194 point 2, option 甲; `memo.md`'s
-  "What they prefer or avoid" has the example 「对比类不用派，直接查就行」).
-  The draft read "worth the wait for depth"; "a subtask's" is the one
-  rewording ticket 145 allowed after its eval, where under a memo asking
-  for depth on what the user decides by, glm-5.3-flash and deepseek-flash
-  researched a report for a purchase themselves (0 of 4 handed off) and
-  handed it off 3 of 4 with it; comparisons, a prediction and a
-  recommendation stayed here under both wordings, on all three models.
-  Whatever takes more than a moment gets a line on how the model will go
-  about it; when the user says otherwise it does it their way, and notes
-  that as a memo when it is how they want such things done. The standing
-  that frames the decision is in the static rules (above). Two
+  for it to check and put together. Then the default (ruling 193's
+  sentence, back since ruling 195): something the user will use to
+  decide, pass on or keep, and that takes looking into (a comparison, a
+  plan, a report, a survey), goes to subtasks to be done in depth, one tag
+  per part when it splits (a product, a place, a source each), all at
+  once, merged when they are back; a question, a remark or a single fact
+  is answered here. The user's memos on how they like things done come
+  first (ruling 194 point 2, option 甲; `memo.md`'s "What they prefer or
+  avoid" has the example 「对比类不用派，直接查就行」); what the user says
+  to do here or to hand off is done so; otherwise their way, noted as a
+  memo when it is how they want such things done. The standing that
+  frames the decision is in the static rules (above). Ticket 145's first
+  round (ruling 194) had the costs without a default: a starting point
+  ("what the user will decide on or keep is worth the wait for depth",
+  reworded after its eval to "worth a subtask's wait") and a line on how
+  it will go about whatever takes more than a moment. Its eval (v7) had
+  the models take the quick path (gpt-6.1-sol handed off 10 runs of 90
+  where ruling 193 had 25, the comparisons all looked up here) and the
+  line no effect in the totals (47 of 84 runs against 47 of 83; split by
+  path it had raised the runs done here that said a plan, and the second
+  round's eval saw them fall without it); a memo the user wrote
+  plainly was followed every time. Ruling 195 keeps the standing and the
+  costs, puts ruling 193's default back for a memo to override, and takes
+  the line out. Two
   guidelines: a fact in the world (a person, an event, a
   game, the news, a figure, a price, how someone is doing lately) is
   looked up before it is told, by the model or a subtask, with its
@@ -792,8 +801,10 @@ that finishes a task and restates the result. The layer says three things:
   memo; what only one to-do needs is its notes, what is of use beyond it
   a memo; a routine to be reminded of is a repeating reminder, knowing it
   a memo; one sentence of two lifetimes is split, 「订上海的酒店」 and
-  「下周三起在上海出差」 until that Friday); what the user is (memo) apart
-  from how to do things (GA memory); the commands, the 100 and 2,000
+  「下周三起在上海出差」 until that Friday); what the user is (memo, how
+  they want things done for them included since ticket 145: quick or in
+  depth, here or handed off) apart from how to do a task itself (GA
+  memory); the commands, the 100 and 2,000
   character limits and `overLimit`; the card under the reply. Noting a
   memo is all it does for it then: what it could get done for one waits
   for the next morning review, whose wake note names the new memos, and
@@ -915,7 +926,7 @@ that finishes a task and restates the result. The layer says three things:
   after writing memory. Ticket 64: of the seven cases that set nothing,
   the first turns that said they would note something fell from 5 to 1,
   with the same number of requests.
-- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 5008, no headroom,
+- **Bounded**: `MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES` = 5183, no headroom,
   `\r` not counted, measured with an empty manual directory (the user's state
   root does not count, as for the IM layer). 827 for the 03d layer;
   ticket 06a added 619 for the dispatch clause (the `T` text 522, the
@@ -980,7 +991,11 @@ that finishes a task and restates the result. The layer says three things:
   the eval) with the user's memos first 53, a line on how it will go
   about it 85, the user's way noted as a memo 112; the parallel sentence
   without its condition, 340 → 150, −190; "on its way" and the wake,
-  217 → 133, −84): 5008.
+  217 → 133, −84): 5008; its second round added 175 (ruling 195, all in
+  the paragraph, 865 → 1040: ruling 193's default 287 with a question, a
+  remark or a single fact 59 in place of the starting point 142; the
+  user's word on here or handed off 61 and their way 107 in place of the
+  line on how it will go about it 85 and the user's way 112): 5183.
   Behavior, but main chat only, so it stays out of the static budget and
   the prompt hash.
 
@@ -1088,6 +1103,7 @@ row.
 | IM entry layer, first paragraph: "their Galley here"; shares long-term memory with the desktop app, not its conversations (never act as if it knew what was said there); reminders, to-dos and scheduled tasks are not set from here; to the user it is their assistant (助理), inner workings out of replies | IM polish PRD ruling 4, ticket 02 (2026-10-21): the channels keep their own agent, and the paragraph's "the same assistant as in Galley's desktop app" promised what it could not keep (the main chat is not in its context and it has no hands for reminders). Compared with and without on the IM channels' model (`.scratch/im-polish/entry-layer-eval/`); JC took the shorter of two drafts, since the longer one's lookup clause and "on their computer, in the Galley conversation" repeated what the shared rules already made the model do. IM cap raised 1376 → 1630 with it (+264; the layer had been 10 bytes under the cap) |
 | Redirect sentence outside the main chat: "To-dos, reminders and scheduled tasks are the assistant's: ask the user to tell it in the Galley conversation atop the sidebar (a top bar's to-do only lists them; its ＋ goes there), and never say one is noted or set." | JC ruling, 2026-10-22, v0.7.0 pre-flight item 40: on the checklist's first live run of item 40 (gpt-6.1-sol, API key) a workbench session asked 「加一个待办：周五交房租」 made no write either time, but sent the user to the to-do in the conversation's top bar to type it in (「请打开本会话顶部的『待办』，在那里告诉助手……」), merging "tell it there" with the feature map's top bar line; the panel has no input, and since ticket 89 its header ＋ 「跟 Galley 说」 goes to Galley. Compared old and new on that model with the prompts the Rust code writes (`.scratch/release-v0.7.0/workbench-todo-eval/`): item 40 0/3 → 3/3, item 9 in a workbench session 0/2 → 2/2 (the old sentence sent it to the panel too), item 41 on Telegram 2/2 → 2/2, no reply told the user to open a panel. Static cap 6826 → 6869 (+43, Windows; POSIX 6851) in the same diff; the feature map is unchanged, and the main chat's static rules are byte for byte as before (it swaps the whole paragraph for its own) |
 | Main chat static rules: the standing in place of the opening line (「In this conversation you are the user's personal assistant, with a team behind you …」), `MAIN_CHAT_STATIC_PROMPT_BUDGET_BYTES`; the entry layer's dispatch paragraph as the costs of each path, one starting point, the user's memos first, a line on how it will go about it, the user's way noted as a memo | main chat PRD ruling 194, ticket 145 (2026-11-04): the dispatch paragraph had eight versions in a month, each a line drawn finer; JC asked for the standing and the abilities instead, and the model to judge. The model's prompt opened with GA's executor role, and the team behind it was only in `subtasks.md`. Run on three models with an outcome eval (plan line, time to first words, sourced facts, following a preference memo; `.scratch/main-chat/entry-layer-eval/`). Main chat cap 7092 (Windows; POSIX 7074); entry layer cap 5268 → 5008 |
+| Main chat entry layer: ruling 193's default back after the costs (something to decide by that takes looking into to subtasks, split and merged; a question, a remark or a single fact here), the user's word on here or handed off; the line on how it will go about it removed | main chat PRD ruling 195, ticket 145's second round (2026-11-04): given the costs alone the models took the quick path (v7: gpt-6.1-sol 10 of 90 handed off, 25 under ruling 193) and the line had no effect (47 of 84 runs against 47 of 83), while a plain memo was followed every time; JC wants both a default and the model's judgment, a memo overriding the default. Run on three models (v8, `.scratch/main-chat/entry-layer-eval/`). Entry layer cap 5008 → 5183 |
 | Removed 2026-10-13: Goal in the feature map's message-box line, `goal` in the IM entry layer's CLI write list | Goal was removed (devlog [2026-10-13 remove Goal](../devlog/2026-10-13-remove-goal.md)). Both caps lowered in the same diff to stay at no headroom: static 6855 → 6775 bytes (Windows; POSIX 6757), IM 1383 → 1376 (Telegram) |
 
 ## Dogfood Regression Checklist

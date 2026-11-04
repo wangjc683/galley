@@ -71,8 +71,10 @@ decides when its reminder goes off. A to-do done that changes a fact
 then: what you could get done for it waits for the morning review (see
 `wake.md`).
 
-What is about the user goes here; how to do things (their setup, paths,
-what went wrong before) stays in your own memory, as before.
+What is about the user goes here, how they want you to do things for
+them included (quick or in depth, here or handed off); how to do a task
+itself (their setup, paths, what went wrong before) stays in your own
+memory, as before.
 
 ### The commands
 

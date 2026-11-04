@@ -1150,7 +1150,9 @@ mod tests {
     /// noticed saying where it comes from (ruling 140 point 6); the four
     /// overlaps by how long a thing lasts, and how memos and to-dos work
     /// together (ruling 142 points 1, 3); what waits for the morning
-    /// review; GA's memory keeps how to do things (ruling 140 point 2); the
+    /// review; GA's memory keeps how to do a task itself (ruling 140 point
+    /// 2), while how the user wants things done for them is a memo (ticket
+    /// 145: quick or in depth, here or handed off); the
     /// commands, the limits and `overLimit` (ruling 141 points 4–6), named
     /// as Core names them; the card, and 「记下了」 only after a write. The
     /// review's question for each new memo is `wake.md`'s (ruling 143
@@ -1212,8 +1214,12 @@ mod tests {
             // Together; what waits for the review; GA's memory.
             "A memo shapes how you note a to-do: 「提醒提前一天」 or 「早上 9 点前别吵我」",
             "(「搬去 702」) changes that memo too. Noting a memo is all you do for it",
-            "What is about the user goes here; how to do things (their setup, paths,",
-            "what went wrong before) stays in your own memory, as before.",
+            // Ticket 145's second round: how they want things done for
+            // them is about them; how to do a task itself is GA's memory.
+            "What is about the user goes here, how they want you to do things for",
+            "them included (quick or in depth, here or handed off); how to do a task",
+            "itself (their setup, paths, what went wrong before) stays in your own",
+            "memory, as before.",
             // The commands, the total, saying it.
             "day, for something that will stop holding (a trip, a stay); leave it",
             "- The memos come to at most 2,000 characters at the start of a segment.",

@@ -294,7 +294,8 @@ CRIT_PROMPT_DIR = CRIT_DIR / "galley-prompt"
 CRIT_JSON = CRIT_DIR / "results.json"
 CRIT_MD = CRIT_DIR / "results.md"
 CRIT_COMPOSED_DIR = CRIT_DIR / "composed"
-CRIT_VARIANTS = ("old", "new", "v2", "v3", "v4", "v5", "v6", "v7", "v7glm", "v7ds", "v6glm", "v6ds")
+CRIT_VARIANTS = ("old", "new", "v2", "v3", "v4", "v5", "v6", "v7", "v7glm", "v7ds", "v6glm", "v6ds", "v8", "v8glm",
+                 "v8ds")
 CRIT_DUMP_CASES = ("e-invoices", "q-east")
 CRIT_REPEATS = 1
 # Ticket 127 (main chat PRD ruling 174): several errands that do not
@@ -314,7 +315,7 @@ PAR_PROMPT_DIR = PAR_DIR / "galley-prompt"
 PAR_JSON = PAR_DIR / "results.json"
 PAR_MD = PAR_DIR / "results.md"
 PAR_COMPOSED_DIR = PAR_DIR / "composed"
-PAR_VARIANTS = ("new", "v2", "v3", "v4", "v5", "v6", "v7", "v7glm", "v7ds")
+PAR_VARIANTS = ("new", "v2", "v3", "v4", "v5", "v6", "v7", "v7glm", "v7ds", "v6glm", "v6ds", "v8", "v8glm", "v8ds")
 PAR_DUMP_CASES = ("p-three-errands", "p-errand-and-question")
 PAR_TITLE_MAX = 20
 # Ticket 137 (main chat PRD ruling 186 point 2): the main chat's own tool,
@@ -446,10 +447,13 @@ CRIT_PROMPTS = {"old": CRIT_PROMPT_DIR / "main_chat.old.txt", "new": PAR_PROMPT_
                 "v7glm": CRIT_PROMPT_DIR / "main_chat.v7-r1.txt", "v7ds": CRIT_PROMPT_DIR / "main_chat.v7-r1.txt",
                 "v7r2": CRIT_PROMPT_DIR / "main_chat.v7.txt", "v7glmr2": CRIT_PROMPT_DIR / "main_chat.v7.txt",
                 "v7dsr2": CRIT_PROMPT_DIR / "main_chat.v7.txt", "v6glm": CRIT_PROMPT_DIR / "main_chat.v6.txt",
-                "v6ds": CRIT_PROMPT_DIR / "main_chat.v6.txt"}
+                "v6ds": CRIT_PROMPT_DIR / "main_chat.v6.txt", "v8": CRIT_PROMPT_DIR / "main_chat.v8.txt",
+                "v8glm": CRIT_PROMPT_DIR / "main_chat.v8.txt", "v8ds": CRIT_PROMPT_DIR / "main_chat.v8.txt"}
 PAR_PROMPTS = {"new": PAR_PROMPT_DIR / "main_chat.new.txt", "v2": CRIT_PROMPTS["v2"], "v3": CRIT_PROMPTS["v3"],
                "v4": CRIT_PROMPTS["v4"], "v5": CRIT_PROMPTS["v5"], "v6": CRIT_PROMPTS["v6"],
-               "v7": CRIT_PROMPTS["v7"], "v7glm": CRIT_PROMPTS["v7glm"], "v7ds": CRIT_PROMPTS["v7ds"]}
+               "v7": CRIT_PROMPTS["v7"], "v7glm": CRIT_PROMPTS["v7glm"], "v7ds": CRIT_PROMPTS["v7ds"],
+               "v6glm": CRIT_PROMPTS["v6glm"], "v6ds": CRIT_PROMPTS["v6ds"], "v8": CRIT_PROMPTS["v8"],
+               "v8glm": CRIT_PROMPTS["v8glm"], "v8ds": CRIT_PROMPTS["v8ds"]}
 # Ticket 145 (main chat PRD ruling 194): `v7` gives the model its standing
 # (in the main chat the static rules open with the user's personal
 # assistant, a team behind it, GA's role above being how its engine works
@@ -472,22 +476,26 @@ V7_MODELS = {"v7": ("mm_1792576875658", "gpt-6.1-sol"), "v7glm": ("mm_1787796272
              "v7ds": ("mm_1789025687188", "deepseek-flash"),
              "v7r2": ("mm_1792576875658", "gpt-6.1-sol"), "v7glmr2": ("mm_1787796272610", "glm-5.3-flash"),
              "v7dsr2": ("mm_1789025687188", "deepseek-flash"),
-             "v6glm": ("mm_1787796272610", "glm-5.3-flash"), "v6ds": ("mm_1789025687188", "deepseek-flash")}
+             "v6glm": ("mm_1787796272610", "glm-5.3-flash"), "v6ds": ("mm_1789025687188", "deepseek-flash"),
+             "v8": ("mm_1792576875658", "gpt-6.1-sol"), "v8glm": ("mm_1787796272610", "glm-5.3-flash"),
+             "v8ds": ("mm_1789025687188", "deepseek-flash")}
 # What each of them is beside its model: v7 (main_chat.v7-r1.txt, the
 # ticket's first wording, every suite); v7's second wording (main_chat.v7.txt,
 # the one round the ticket allows, rerun on the cases that did not pass);
 # a v6 control on another model (main_chat.v6.txt, tell_user offered as in
 # its v7 runs, read by v7's measures), run when a model does clearly worse
 # under v7, to tell the clause from the model.
+# Ticket 145's second round (ruling 195): v8 (main_chat.v8.txt, the Rust
+# one now): the standing and the costs, ruling 193's default back after
+# them, the user's word on here or handed off, the plan line gone.
 V7_LABELS = {"v7": "v7", "v7glm": "v7", "v7ds": "v7", "v7r2": "v7 第二轮措辞", "v7glmr2": "v7 第二轮措辞",
-             "v7dsr2": "v7 第二轮措辞", "v6glm": "v6 对照", "v6ds": "v6 对照"}
+             "v7dsr2": "v7 第二轮措辞", "v6glm": "v6", "v6ds": "v6", "v8": "v8", "v8glm": "v8", "v8ds": "v8"}
 
 
 def v7_col(variant: str) -> str:
     """Ticket 145: a v7 column's header: the model, and what it is beside
     the first wording."""
-    label = V7_LABELS.get(variant, "v7")
-    return V7_MODELS[variant][1] + ("" if label == "v7" else f"（{label}）")
+    return f"{V7_MODELS[variant][1]}（{V7_LABELS.get(variant, 'v7')}）"
 # The par suite's variants that run its own cases only (ticket 115's ran in
 # dispatch-criterion).
 PAR_OWN_ONLY = ("v2", "v3", "v4", "v5", "v6") + tuple(V7_MODELS)
@@ -501,7 +509,7 @@ PREF_CASES = PREF_DIR / "cases.json"
 PREF_JSON = PREF_DIR / "results.json"
 PREF_MD = PREF_DIR / "results.md"
 PREF_COMPOSED_DIR = PREF_DIR / "composed"
-PREF_VARIANTS = ("v7", "v7glm", "v7ds", "v7r2", "v7glmr2", "v7dsr2")
+PREF_VARIANTS = ("v7", "v7glm", "v7ds", "v7r2", "v7glmr2", "v7dsr2", "v8", "v8glm", "v8ds")
 PREF_DUMP_CASES = ("fast-q-headphones", "deep-q-headphones")
 # Ticket 134's fourth round: the runner's guard (ticket 135,
 # runner/handlers.py MAIN_CHAT_BROWSER_REFUSAL) answers a browser tool in
@@ -9013,9 +9021,10 @@ def v7_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: Any)
            "与 Rust 生成的一字不差，只差出发点那半句「worth the wait for depth」改成「worth a subtask's wait for depth」。主对话的静态规则开头写明"
            "「你是这个用户的私人助理，身后有一个团队」；派活一段是两条路各自的代价、一个出发点、备忘优先、先说一句打算、听用户改、"
            "偏好记成备忘），三个模型各跑（变体名就是模型：" + "、".join(f"`{v}` {m[1]}" for v, m in V7_MODELS.items())
-           + "，都是 API key 接入；第一轮措辞 `main_chat.v7-r1.txt`。名字后面括号里写「第二轮措辞」的是票面允许的那一轮措辞（"
-           "`main_chat.v7.txt`，与 Rust 一字不差），只重跑第一轮没过的用例；写「v6 对照」的是同一个模型在 v6 提示词下、同样提供 "
-           "`tell_user` 跑的对照）；同主对话一样提供 `tell_user`，调工具那一步写在 `<summary>` 外的字算送到（票 142，读法同 "
+           + "，都是 API key 接入；第一轮措辞 `main_chat.v7-r1.txt`。名字后面括号里写「v7 第二轮措辞」的是票面允许的那一轮措辞（"
+           "`main_chat.v7.txt`），只重跑第一轮没过的用例；写「v6」的是 v6 提示词（裁决 193）在同一个模型上、同样提供 `tell_user` "
+           "跑的对照；写「v8」的是票 145 第二轮（裁决 195，`main_chat.v8.txt`，与 Rust 一字不差：定位与代价照留，裁决 193 "
+           "那句默认放回、用户明说在这里做或派出去照办，删了先说一句打算）。所有模型名后的括号是提示词）；同主对话一样提供 `tell_user`，调工具那一步写在 `<summary>` 外的字算送到（票 142，读法同 "
            "`runner/step_text.py`）。**不判该派不该派**：派没派、几个标签、没派时自己上没上网，照记。量四样："
            "①**先说打算**：不止一步（调了工具）或派出去的那些遍，用户最先看到的字（步骤里的字、`tell_user`、派活那条回复）"
            "里有没有说它打算怎么做（`PLAN_CUE_RE`，下面「最先看到的字」原文可核）；做完才给的答案、停下前没有字，都算没说；"
@@ -9023,7 +9032,8 @@ def v7_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: Any)
            "`tell_user` 在调用时、问用户在问时、回复在那一步结束时）；沙盒里浏览器工具不执行、运行停在那里，停下前没字的另记。"
            "③**事实带出处**（计分，`cases.json` 的 `v7`）：" + "；".join(f"{k} 是{w}" for k, w in V7_KINDS.items())
            + "。④**照备忘**（计分，只在 `preference` 套件）：" + "；".join(f"{k} 下{w}算照了" for k, w in PREF_FOLLOW.items())
-           + "；停在问用户、中间回复里写标签的单列。", "",
+           + "；停在问用户、中间回复里写标签的单列。v8 起「要细」换成与「要快」对称的「对比、调研这类宁可多等，派出去分头查细」"
+           "（用例 `handoff-…`），v7 的「要细」（`deep-…`）只在 v7 下跑过。", "",
            "| # | 用例 | 组 | v7 判法 | " + " | ".join(v7_col(v) for v in variants) + " |",
            "| --- | --- | --- | --- | " + " | ".join("---" for _ in variants) + " |"]
     per_model: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = {v: [] for v in variants}
@@ -10260,7 +10270,8 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
     v7_scripts = {"v7-plan": (CRIT_SUITE, "c-phones-three", "v7", "v7-plan-tags"),
                   "v7-concept": (CRIT_SUITE, "q-concept", "v7glm", "final"),
                   "v7-tell": (PREF_SUITE, "fast-q-headphones", "v7ds", "v7-tell-web"),
-                  "v7-par": (PAR_SUITE, "p-three-errands", "v7", "par-three-tags")}
+                  "v7-par": (PAR_SUITE, "p-three-errands", "v7", "par-three-tags"),
+                  "v7-v8-handoff": (PREF_SUITE, "handoff-c-phones-three", "v8ds", "v7-plan-tags")}
     for run_id, (suite, case_id, variant, script) in v7_scripts.items():
         pool = prcases if suite == PREF_SUITE else pcases if suite == PAR_SUITE else crcases
         for job in make_crit_jobs([pool[case_id]], [variant], snow, mykeys, ga_lang, set(), 1, script, suite=suite):
@@ -12700,13 +12711,13 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     v6_t = CRIT_PROMPTS["v6"].read_text(encoding="utf-8")
     check(CRIT_PROMPTS["v6"] == PAR_PROMPTS["v6"] and CRIT_PROMPTS["v6"].parent == CRIT_PROMPT_DIR,
           "ticket 143: both suites read one v6")
-    # Ticket 145: since then that is v7 (dry_test_v7 checks it against the
-    # Rust source); v6 is v7 with ticket 143's clause and the bare opening.
-    v7_t = CRIT_PROMPTS["v7r2"].read_text(encoding="utf-8")
-    check(bool(m_head and m_rest) and v7_t.endswith(m_head.group(1) + m_rest.group(1).replace("{manual_dir}",
-                                                                                            "__MANUAL_DIR__"))
-          and not v6_t.endswith(m_head.group(1) + m_rest.group(1).replace("{manual_dir}", "__MANUAL_DIR__")),
-          "v7: the entry layer as core/src/managed_prompt.rs has it, word for word (v6 no longer)")
+    # Ticket 145: since then that is v8 (its second round; dry_test_v7
+    # checks it against the Rust source); v6 and v7 no longer.
+    v8_t = CRIT_PROMPTS["v8"].read_text(encoding="utf-8")
+    layer = m_head.group(1) + m_rest.group(1).replace("{manual_dir}", "__MANUAL_DIR__") if m_head and m_rest else "<none>"
+    check(v8_t.endswith(layer) and not v6_t.endswith(layer)
+          and not CRIT_PROMPTS["v7r2"].read_text(encoding="utf-8").endswith(layer),
+          "v8: the entry layer as core/src/managed_prompt.rs has it, word for word (v6 and v7 no longer)")
     v5_c = clause(v5_t, "You can do the work yourself,")
     v6_c = clause(v6_t, "You can do the work yourself,")
     check(v5_t.replace(v5_c, "<clause>") == v6_t.replace(v6_c, "<clause>") and v5_t.index(v5_c) == v6_t.index(v6_c)
@@ -13283,6 +13294,28 @@ def dry_test_v7(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str
 
     v6_c = para(v6_t, "You can do the work yourself,")
     v7_c = para(v7_t, "How to go about a thing is yours to weigh.")
+    # Ticket 145's second round: v8 is the Rust one; it differs from v7's
+    # second wording in the dispatch paragraph only.
+    v8_t = CRIT_PROMPTS["v8"].read_text(encoding="utf-8")
+    v8_c = para(v8_t, "How to go about a thing is yours to weigh.") if "How to go about" in v8_t else ""
+    flat8 = re.sub(r"\s+", " ", v8_c)
+    check(all(CRIT_PROMPTS[v] == CRIT_PROMPTS["v8"] and CRIT_PROMPTS[v] == PAR_PROMPTS[v]
+              for v in ("v8", "v8glm", "v8ds"))
+          and CRIT_PROMPTS["v8"].name == "main_chat.v8.txt"
+          and v7_t.replace(v7_c, "<clause>") == v8_t.replace(v8_c, "<clause>")
+          and v8_t.startswith("## Galley Runtime Layer\n\n" + standing + "\n\n## About Galley")
+          and all(w in flat8 for w in (
+              "How to go about a thing is yours to weigh. Doing it yourself is quicker and lighter,",
+              "for you to check and put together. Something the user will use to decide, pass on or keep, and that takes "
+              "looking into (a comparison, a plan, a report, a survey), goes to subtasks to be done in depth: one tag "
+              "per part when it splits (a product, a place, a source each), all at once, and you merge them when they "
+              "are back. A question, a remark or a single fact you answer yourself. Their memos on how they like things "
+              "done come first. When the user says to do it here or to hand it off, do that; when they say otherwise, "
+              "do it their way, and note it as a memo when it is how they want such things done.",
+              "Write one tag per part, in the same reply", "Do not call this chat the main chat.", "subagent.md"))
+          and not any(w in flat8 for w in ("say in a line", "As a starting point", "wait for depth",
+                                           "how you will go about it")),
+          "v8: ruling 193's default back after the costs, the user's word, the plan line gone; the rest kept")
     check(v6_t.replace(v6_c, "<clause>").replace(opening, "<open>", 1)
           == v7_t.replace(v7_c, "<clause>").replace(standing, "<open>", 1),
           "v6 differs from v7 in the opening and the dispatch paragraph only")
@@ -13312,14 +13345,16 @@ def dry_test_v7(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str
           "gone; the floor and the tag's contracts kept")
     # The preference suite.
     spec = json.loads(PREF_CASES.read_text(encoding="utf-8"))
-    check(len(prcases) == 10 and [c for c in prcases] == [f"{k}-{c}" for k in ("fast", "deep") for c in (
+    check(len(prcases) == 15 and [c for c in prcases] == [f"{k}-{c}" for k in ("fast", "deep", "handoff") for c in (
         "q-headphones", "c-phones-three", "c-research-report", "q-east", "q-notes-apps")]
           and all(c["message"] == crcases[c["base"]]["message"] and c["history"] == crcases[c["base"]]["history"]
                   and len(c["memos"]) == 1 for c in prcases.values())
           and {m["key"]: (m["follow"], m["text"]) for m in spec["memos"]} == {
               "fast": ("self", "对比、调研这类要快，直接查就行，不用派出去"),
-              "deep": ("handoff", "要拿来做决定的东西宁可多等，也要查细")},
-          "preference: five cases under each of two memos, their messages and context as dispatch-criterion has them")
+              "deep": ("handoff", "要拿来做决定的东西宁可多等，也要查细"),
+              "handoff": ("handoff", "对比、调研这类宁可多等，派出去分头查细")},
+          "preference: five cases under each of three memos (the second v7's only, the third its symmetric v8 one), "
+          "their messages and context as dispatch-criterion has them")
     now = datetime.now().astimezone()
     p = crit_prompt(prcases["deep-q-east"], "v7", now, PREF_SUITE)
     memo_at = p.find("### Memo")
@@ -13950,6 +13985,14 @@ def main() -> int:
     print(f"{len(jobs)} runs, model {describe_mykeys(mykeys)['name']}, parallel {args.parallel}")
     results = run_jobs(jobs, args.python, args.parallel, args.keep_temp)
 
+    # Ticket 145: several runs (one per model) may share a suite; the
+    # results file is read, merged and written under an exclusive lock,
+    # held until this process exits.
+    import fcntl
+
+    lock_path = Path(tempfile.gettempdir()) / f"entry-layer-eval-{results_json.parent.name}-{results_json.stem}.lock"
+    lock_file = lock_path.open("a")
+    fcntl.flock(lock_file, fcntl.LOCK_EX)
     # Belt and braces: no copy of the key may reach a written file.
     secret = str(next(iter(mykeys.values())).get("apikey") or "")
     if len(secret) >= 8:

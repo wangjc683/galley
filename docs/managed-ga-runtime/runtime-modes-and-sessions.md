@@ -620,7 +620,8 @@ every write is refused with `assistant_unavailable:` otherwise.
   a memo (update it, do not add it again; delete one out of date), written
   for the user, and where a thing goes beside the to-dos (a date with
   nothing to do then, what is of use beyond one to-do, a routine, a
-  sentence of two lifetimes); what the user is goes here, how to do things
+  sentence of two lifetimes); what the user is goes here (how they want
+  things done for them included, since ticket 145), how to do a task itself
   stays in GA's memory. The entry layer carries one sentence for it, as a
   remark like 「我不吃香菜」 has no CLI write in sight; the morning review's
   question for each new memo is `wake.md`'s.
