@@ -17,9 +17,11 @@
 - `dispatch-parallel/`：票 127 的并行派活套件（见「并行派活（票 127）」一节）。
 - `tell-user/`：票 137 的「先说一句」套件（见「先说一句（票 137）」一节）。
 - `write-steps/`：票 139 的「写之前读几步」（见「写之前读几步（票 139）」一节）：待办、定时两套里几条记待办、改待办、加提醒的用例换成 v4、v5 两份提示词跑，数从开工到第一次写用了几步。
+- `preference/`：票 145 的偏好套件：派活判据的五条用例各放进两种备忘之一（`cases.json`），v7 下三个模型各跑，看照不照备忘（见「量结果（票 145）」一节）。
 - 票 134 在这两套里加了 v2（本票的派活条款，`dispatch-criterion/galley-prompt/main_chat.v2.txt`，第一轮措辞留在 `main_chat.v2-r1.txt`），在 `wake/` 里加了成品贴回的两条用例和 `core` 措辞（见「派活判据（票 115）」「并行派活（票 127）」「叫醒措辞评测（票 30）」三节里票 134 的部分）。第三轮加了 v3（裁决 184），第四轮加了 v4（裁决 185，`main_chat.v4.txt`，与 `core/src/managed_prompt.rs` 的入口层一字不差，第一轮措辞留在 `main_chat.v4-r1.txt`）；第四轮起 v3、v4 的运行带上票 135 的硬闸（浏览器工具回硬闸那句话，运行接着走），见「派活判据（票 115）」里第四轮那一节。
 - 票 139 加了 v5（裁决 186：派活条款收成几句判断，`main_chat.v5.txt`，与 Rust 生成的一字不差，手册那段多一句写之前同一步要读的东西）。v5 没有硬闸（票 139 从 runner 里拆了），浏览器工具在沙盒里不执行、运行停在那里，算它自己在查；v4 那句硬闸的话冻在 `run.py` 的 `GUARD_TEXT_V4`，不再从 `runner/handlers.py` 读。v5 **判结果**，不判第一个工具，按每条用例的 `v5` 标注（`run.py` 的 `V5_KINDS`）。
 - 票 143 加了 v6（裁决 193：要拿去做决定或留着用、得查一查的成品交给子任务深做，能拆就一块一个标签，问一句、一个事实自己答；删了「要合成一份的放一个标签」。`main_chat.v6.txt`，与 Rust 生成的一字不差，与 v5 只差派活那一段）。v6 同样判结果，按每条的 `v6` 标注（`run.py` 的 `V6_KINDS`）；成品派出去的标签数另记。`wake/` 加了三条拆开的几块回来的用例（手册 `subtasks.md` 新补的一条），并跑了一组手册改之前的对照（`wake/results.json` 的 `meta.ticket143_control`）。
+- 票 145 加了 v7（裁决 194：主对话的静态规则开头写明「你是这个用户的私人助理，身后有一个团队」；派活一段不再列哪类派、哪类自己做，改成两条路各自的代价、一个出发点、备忘优先、先说一句打算、听用户改、偏好记成备忘。`main_chat.v7.txt`，与 Rust 生成的一字不差，与 v6 只差开头那段和派活那一段；大多数运行跑在第一轮措辞 `main_chat.v7-r1.txt` 下，两轮只差出发点那半句）。v7 **不判该派不该派**，量结果（`run.py` 的 `crit_judge_v7`、`v7_section`）：先说打算、第一次见字的秒数、事实带出处（计分）、照不照备忘（计分）；三个模型各一个变体（`v7` gpt-6.1-sol、`v7glm` glm-5.3-flash、`v7ds` deepseek-flash，`V7_MODELS`，变体名定模型，换了 `--model-id` 不对会拒跑），都提供主对话的 `tell_user`，调工具那一步 `<summary>` 外的字算送到。新套件 `preference/`（见「量结果（票 145）」一节）。
 
 ## 怎么跑
 
@@ -1280,3 +1282,29 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite tell-user --variant r3 --
 - **用 `tell_user` 的**：r2 说明、142 之前那一遍 12 遍里用了 5 遍（票 137 的 v4 下 36 遍 2 遍）；改回 r1、142 之后 12 遍用了 0 遍，回音全从调工具那一步写的字来（9 遍，都在读到插话的下一步，8.7–15.6 秒）。`i-correction` 一两步就完，两遍都没先说，做完才回（约 15 秒）。
 - **不插话的**：12 遍都没用 `tell_user`（不滥用）。`n-long`、`n-wait` 6 遍里有 5 遍在调工具那一步写了一两句开场（「我先查看下载文件夹里的 PDF……」），142 之后会送到你面前；`n-short`、`n-chat` 没有。
 - **用量**：v5 24 次运行、83 次模型调用（输入 674,756 token，缓存 397,568，输出 35,489）；被替换的第一遍 24 次运行、88 次调用（输入 704,601 token，缓存 421,504，输出 37,383）。
+
+## 量结果（票 145）
+
+主对话 PRD 裁决 194：主对话里 Galley 层开头写明「你是这个用户的私人助理，身后有一个团队」（`managed_prompt.rs` 的 `MAIN_CHAT_STANDING`，换掉共享静态规则开头那一行，只在主对话）；派活一段不再列哪类派、哪类自己做，改成两条路各自的代价（自己做快而轻、用户随时说得上话，`tell_user` 一句不停；子任务带着最近几轮从头开始、深查一件、几件同时跑、要几分钟、齐了叫醒一次）、一个出发点（拿去做决定或留着用的值得为深度多等，顺口一问要马上答）、备忘优先、先说一句打算、用户说别的就照他的办、是一贯的做法就记成备忘。评测不再标「该派不该派」，改量结果，三个模型各跑。
+
+- **提示词**：照「怎么跑」的办法由 `compose_main_chat_runtime_prompt` 现生成（临时测试，跑完删掉）。`dispatch-criterion/galley-prompt/main_chat.v7-r1.txt` 是第一轮措辞（票面初稿），v7、v7glm、v7ds 都跑在它下面；`main_chat.v7.txt` 是第二轮（票面允许的那一轮：出发点那半句「worth the wait for depth」改成「worth a subtask's wait for depth」），与 Rust 一字不差，只重跑了第一轮没照备忘的用例（`v7r2`、`v7glmr2`、`v7dsr2`）与叫醒里没过的那条。两份都与 v6 只差开头那段和派活那一段（`--dry-test` 读 Rust 源码核对 `MAIN_CHAT_STANDING`、入口层，核对与 v6 的差别、两轮之间只差那半句）。
+- **变体就是模型**（`run.py` 的 `V7_MODELS`）：`v7` gpt-6.1-sol（`mm_1792576875658`）、`v7glm` glm-5.3-flash（`mm_1787796272610`）、`v7ds` deepseek-flash（`mm_1789025687188`），都是 API key 接入；`--variant` 与 `--model-id` 对不上就拒跑（`v7_model_problem`）。`v7r2`、`v7glmr2`、`v7dsr2` 是第二轮措辞，`v6ds` 是 deepseek-flash 在 v6 提示词下的对照（同样提供 `tell_user`，只差条款；`v6glm` 备好了，没跑，见下）。各变体的模型写在各套件 `results.json` 的 `meta.v7_models`。
+- **和主对话一样**：v7 的运行都提供 `tell_user`（runner 自己的那一条，`GaSession.offer_tool`），调工具那一步写在 `<summary>` 之外的字算送到用户面前（票 142，读法同 `runner/step_text.py`）。沙盒、假 `galley`、手册、工具上限同票 115；浏览器工具不执行、运行停在那里。
+- **四样量**（`crit_judge_v7`，每遍记在 `results.md` 的「v7：量结果（票 145）」一节，表里每格一遍）：①先说打算：不止一步（调了工具）或派出去的那些遍，用户最先看到的字（步骤里的字、`tell_user`、派活那条回复）里有没有说怎么做（`PLAN_CUE_RE`，「最先看到的字」一节列了原文，可逐条核）；最先看到的是做完的答案、或停下之前一个字也没有，都算没说；最先看到的是问用户的单列。②第一次见字：开跑到最先看到的字的秒数（步骤里的字取那一步第一次派工具的时刻，`tell_user` 取调用时，回复取那一步结束时）；停下之前没字的另记停下的时刻。③事实带出处（计分）：每条的 `v7` 标注（fact、direct、none，见 `dispatch-criterion/cases.json` 的说明），fact 与 direct 照 v5 的判法。④照不照备忘（计分，只在 `preference/`）：「要快」下没派、「要细」下派出去算照了；停在问用户或中间回复写标签的单列。派没派、几个标签、没派时自己上没上网，都照记、不计分。并行套件里留着的契约照判：标题、同一个标签页或同一批文件只放一个标签（`v7_together`）。
+- **偏好套件**（`preference/`）：派活判据的 `q-headphones`、`c-phones-three`、`c-research-report`、`q-east`、`q-notes-apps`，各放进两种备忘之一：「对比、调研这类要快，直接查就行，不用派出去」（`fast`）与「要拿来做决定的东西宁可多等，也要查细」（`deep`）。备忘照 Core 的格式写进提示词的「Memo」一节（`memo_block`），也在假 `galley` 的 `memo list` 里。
+- **叫醒**：票 143 加的三条（`w-merge-three`、`w-two-of-three`、`w-third-back`）换成 v7 提示词，只跑 gpt-6.1-sol，`run.py --suite wake --variant core --wake-prompt v7 --cases … --repeats 3`；结果在 `wake/results.json` 的 `meta.prompt_v7_runs`，`wake/results.md` 的「换成 v7 主对话提示词（票 145）」一节。
+- **跑法**：`run.py --suite dispatch-criterion --variant v7 --model-id mm_1792576875658 --repeats 3`（另两个 `--variant v7glm --model-id mm_1787796272610 --repeats 2`、`--variant v7ds --model-id mm_1789025687188 --repeats 2`），`--suite dispatch-parallel` 加 `--cases` 本票 7 条，`--suite preference`。gpt-6.1-sol 每条 3 遍，另两个各 2 遍，两遍分歧的用例补第 3 遍（`--first-repeat 3 --repeats 1`）。三个模型同时跑，同一个结果文件同一时间只有一个进程在写。
+- **用量记法**：glm-5.3-flash、deepseek-flash 走 Anthropic 格式，GA 只把输入那一侧交给 `_record_usage`，输出 token 只打印、写进 `STATS`（对兼容服务商，GA 的补记又把它清零）。评测脚本在流交给 GA 的解析器之前读 `message_delta` 里的 `output_tokens`（不改流），记成 `stream_output_tokens`；`summarize_usage` 按 Anthropic 的字段算输入（输入、写缓存、读缓存，读缓存算缓存）。
+- **第二轮措辞**：第一轮在「要细」备忘下三个模型几乎都没派（gpt-6.1-sol 只派调研报告），票面允许改一轮、只重跑没过的。出发点那半句「worth the wait for depth」改成「worth a subtask's wait for depth」（+8 字节），重跑「要细」下没照的用例：gpt-6.1-sol 0/12（第一轮同样 0/12）；glm-5.3-flash 2/8（调研报告 2/2，第一轮 0/2；对比、预测、推荐 0/6）；deepseek-flash 1/10（调研报告 1/2，第一轮 0/2）。叫醒里没过的 `w-two-of-three` 也换成第二轮重跑：2/3（第一轮 1/3）。第二轮留在 Rust 里（`main_chat.v7.txt`）。
+- **v6 对照**：deepseek-flash 的先说打算明显少（派活判据 13/52），用 v6 跑了同一套（`v6ds`，同样提供 `tell_user`）：12/50，事实带出处 34/40（v7 35/41），派出去 8 遍（v7 2 遍）；先说得少是模型本身，条款只让它派得更少。glm-5.3-flash 在计分的两样上不比 gpt-6.1-sol 差（事实 40/45，先说打算 36/53），只是慢（模型本身），没跑 v6 对照（`v6glm` 备好了）。
+
+| 每个模型（v7 第一轮） | 派活判据：派出去 / 自己上网 | 先说打算 | 第一次见字（中位 / 最长，秒） | 事实带出处 | 并行：派出去 | 偏好：照备忘（要快 / 要细） |
+| --- | --- | --- | --- | --- | --- | --- |
+| gpt-6.1-sol（v6，按同样的量读） | 25 / 38（90 遍） | 47/83 | 10.7 / 254.4 | 55/60 | 15/21 | — |
+| gpt-6.1-sol | 10 / 50（90 遍） | 47/84 | 9.9 / 54.9 | 54/60 | 3/21 | 15/15、3/15 |
+| glm-5.3-flash | 6 / 31（67 遍） | 36/53 | 28.0 / 223.4 | 40/45 | 0/14 | 11/11、4/13 |
+| deepseek-flash | 2 / 33（61 遍） | 13/52 | 7.5 / 128.9 | 35/41 | 0/14 | 11/11、0/11 |
+
+- 先说打算与第一次见字只算派活判据那一套；停在浏览器之前一个字也没有的另记（gpt-6.1-sol v7 30 遍、glm 14 遍、deepseek 26 遍），真机上那几遍要等到查完才见字。gpt-6.1-sol 的 v6 那几遍没有提供 `tell_user`，步骤里的字照 v7 的读法算。
+- **叫醒**（gpt-6.1-sol，v7 第一轮）：`w-merge-three` 3/3、`w-third-back` 3/3、`w-two-of-three` 1/3（另两遍那句进度只写在 `<summary>` 里，回复正文是空的）；票 143 的 v6 九遍全过。两轮都在合表之前先 `session show` 读各子任务的记录。
+- **用量**（本票真模型运行，留在结果里的）：gpt-6.1-sol 165 次运行、417 次模型调用（输入 3,179,483 token，缓存 1,620,480，输出 147,906）；glm-5.3-flash 113 次、238 次（输入 2,041,896，缓存 1,146,304，输出 284,215）；deepseek-flash 167 次、401 次（输入 3,516,597，缓存 2,294,656，输出 290,754）。另有 glm-5.3-flash 被替换的 18 次、53 次调用（撞到速率限制的 4 次，没记到输出 token 的并行 14 次），在各自 `meta.superseded_runs`；冒烟 6 次没留。

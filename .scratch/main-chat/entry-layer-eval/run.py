@@ -294,7 +294,7 @@ CRIT_PROMPT_DIR = CRIT_DIR / "galley-prompt"
 CRIT_JSON = CRIT_DIR / "results.json"
 CRIT_MD = CRIT_DIR / "results.md"
 CRIT_COMPOSED_DIR = CRIT_DIR / "composed"
-CRIT_VARIANTS = ("old", "new", "v2", "v3", "v4", "v5", "v6")
+CRIT_VARIANTS = ("old", "new", "v2", "v3", "v4", "v5", "v6", "v7", "v7glm", "v7ds", "v6glm", "v6ds")
 CRIT_DUMP_CASES = ("e-invoices", "q-east")
 CRIT_REPEATS = 1
 # Ticket 127 (main chat PRD ruling 174): several errands that do not
@@ -314,7 +314,7 @@ PAR_PROMPT_DIR = PAR_DIR / "galley-prompt"
 PAR_JSON = PAR_DIR / "results.json"
 PAR_MD = PAR_DIR / "results.md"
 PAR_COMPOSED_DIR = PAR_DIR / "composed"
-PAR_VARIANTS = ("new", "v2", "v3", "v4", "v5", "v6")
+PAR_VARIANTS = ("new", "v2", "v3", "v4", "v5", "v6", "v7", "v7glm", "v7ds")
 PAR_DUMP_CASES = ("p-three-errands", "p-errand-and-question")
 PAR_TITLE_MAX = 20
 # Ticket 137 (main chat PRD ruling 186 point 2): the main chat's own tool,
@@ -442,9 +442,67 @@ INTERJECT_RS = REPO / "core" / "src" / "interject.rs"
 CRIT_PROMPTS = {"old": CRIT_PROMPT_DIR / "main_chat.old.txt", "new": PAR_PROMPT_DIR / "main_chat.new.txt",
                 "v2": CRIT_PROMPT_DIR / "main_chat.v2.txt", "v3": CRIT_PROMPT_DIR / "main_chat.v3.txt",
                 "v4": CRIT_PROMPT_DIR / "main_chat.v4.txt", "v5": CRIT_PROMPT_DIR / "main_chat.v5.txt",
-                "v6": CRIT_PROMPT_DIR / "main_chat.v6.txt"}
+                "v6": CRIT_PROMPT_DIR / "main_chat.v6.txt", "v7": CRIT_PROMPT_DIR / "main_chat.v7-r1.txt",
+                "v7glm": CRIT_PROMPT_DIR / "main_chat.v7-r1.txt", "v7ds": CRIT_PROMPT_DIR / "main_chat.v7-r1.txt",
+                "v7r2": CRIT_PROMPT_DIR / "main_chat.v7.txt", "v7glmr2": CRIT_PROMPT_DIR / "main_chat.v7.txt",
+                "v7dsr2": CRIT_PROMPT_DIR / "main_chat.v7.txt", "v6glm": CRIT_PROMPT_DIR / "main_chat.v6.txt",
+                "v6ds": CRIT_PROMPT_DIR / "main_chat.v6.txt"}
 PAR_PROMPTS = {"new": PAR_PROMPT_DIR / "main_chat.new.txt", "v2": CRIT_PROMPTS["v2"], "v3": CRIT_PROMPTS["v3"],
-               "v4": CRIT_PROMPTS["v4"], "v5": CRIT_PROMPTS["v5"], "v6": CRIT_PROMPTS["v6"]}
+               "v4": CRIT_PROMPTS["v4"], "v5": CRIT_PROMPTS["v5"], "v6": CRIT_PROMPTS["v6"],
+               "v7": CRIT_PROMPTS["v7"], "v7glm": CRIT_PROMPTS["v7glm"], "v7ds": CRIT_PROMPTS["v7ds"]}
+# Ticket 145 (main chat PRD ruling 194): `v7` gives the model its standing
+# (in the main chat the static rules open with the user's personal
+# assistant, a team behind it, GA's role above being how its engine works
+# with its own hands) and, in place of a line of what goes where, what each
+# path costs, one starting point, the user's memos first, a line on how it
+# will go about it, the user's way, noted as a memo. main_chat.v7.txt is the
+# main chat prompt as core/src/managed_prompt.rs composes it now, word for
+# word (the dry test reads the Rust source); v6 differs from it in the
+# standing and the dispatch paragraph only. v7 runs on three models, one
+# variant each (V7_MODELS: the variant names the model, and a run of it
+# under another --model-id is refused), with the main chat's tell_user
+# offered and a step's words outside <summary> read as sent (ticket 142),
+# as the main chat has them. Whether it handed off is no longer judged:
+# handed off or not, how many parts, online itself, recorded. Measured
+# (v7_measures): a line on how it will go about it in the first words the
+# user sees, the seconds to those words, facts looked up and sourced (a
+# case's `v7`, scored), and whether it followed a memo (the preference
+# suite, scored).
+V7_MODELS = {"v7": ("mm_1792576875658", "gpt-6.1-sol"), "v7glm": ("mm_1787796272610", "glm-5.3-flash"),
+             "v7ds": ("mm_1789025687188", "deepseek-flash"),
+             "v7r2": ("mm_1792576875658", "gpt-6.1-sol"), "v7glmr2": ("mm_1787796272610", "glm-5.3-flash"),
+             "v7dsr2": ("mm_1789025687188", "deepseek-flash"),
+             "v6glm": ("mm_1787796272610", "glm-5.3-flash"), "v6ds": ("mm_1789025687188", "deepseek-flash")}
+# What each of them is beside its model: v7 (main_chat.v7-r1.txt, the
+# ticket's first wording, every suite); v7's second wording (main_chat.v7.txt,
+# the one round the ticket allows, rerun on the cases that did not pass);
+# a v6 control on another model (main_chat.v6.txt, tell_user offered as in
+# its v7 runs, read by v7's measures), run when a model does clearly worse
+# under v7, to tell the clause from the model.
+V7_LABELS = {"v7": "v7", "v7glm": "v7", "v7ds": "v7", "v7r2": "v7 第二轮措辞", "v7glmr2": "v7 第二轮措辞",
+             "v7dsr2": "v7 第二轮措辞", "v6glm": "v6 对照", "v6ds": "v6 对照"}
+
+
+def v7_col(variant: str) -> str:
+    """Ticket 145: a v7 column's header: the model, and what it is beside
+    the first wording."""
+    label = V7_LABELS.get(variant, "v7")
+    return V7_MODELS[variant][1] + ("" if label == "v7" else f"（{label}）")
+# The par suite's variants that run its own cases only (ticket 115's ran in
+# dispatch-criterion).
+PAR_OWN_ONLY = ("v2", "v3", "v4", "v5", "v6") + tuple(V7_MODELS)
+# Ticket 145: the preference suite. Five cases of dispatch-criterion, each
+# under one of two memos in the "Memo" lines (Core's format, memo_block)
+# and the fake galley: speed on comparisons and research, or depth on what
+# the user decides by. v7 only; scored on whether it followed the memo.
+PREF_SUITE = "preference"
+PREF_DIR = HERE / PREF_SUITE
+PREF_CASES = PREF_DIR / "cases.json"
+PREF_JSON = PREF_DIR / "results.json"
+PREF_MD = PREF_DIR / "results.md"
+PREF_COMPOSED_DIR = PREF_DIR / "composed"
+PREF_VARIANTS = ("v7", "v7glm", "v7ds", "v7r2", "v7glmr2", "v7dsr2")
+PREF_DUMP_CASES = ("fast-q-headphones", "deep-q-headphones")
 # Ticket 134's fourth round: the runner's guard (ticket 135,
 # runner/handlers.py MAIN_CHAT_BROWSER_REFUSAL) answers a browser tool in
 # the main chat with a hand-off instead of running it. Runs under v3 and
@@ -474,7 +532,7 @@ GUARD_OUTCOME = "refused: the main chat's browser guard"
 RULE_TALK_WORDS = ("主对话", "主聊", "main chat", "规则", "rule")
 # Ticket 139: under v5 the column is listed too (the inner name stays out
 # of what the user hears, ruling 173), not part of the verdict; under v6 too.
-RULE_TALK_VARIANTS = ("v3", "v4", "v5", "v6")
+RULE_TALK_VARIANTS = ("v3", "v4", "v5", "v6") + tuple(V7_MODELS)
 
 
 def guard_text(variant: str | None) -> str | None:
@@ -3011,6 +3069,10 @@ def scrub(text: str) -> str:
     for root in sorted(roots, key=len, reverse=True):
         if root.count("/") >= 3:
             text = text.replace(root + "/", "$PYTHON_ROOT/")
+    # Ticket 145: the login name, which a run's code printed (USER=…).
+    user = os.environ.get("USER") or ""
+    if len(user) >= 4:
+        text = re.sub(rf"(?<![A-Za-z0-9_.-]){re.escape(user)}(?![A-Za-z0-9_])", "$USER", text)
     return text
 
 
@@ -3629,6 +3691,19 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" todo add "把酒店项目的资料清单发给业主" '
                  '--supervisor=galley-assistant --reason="user asked"'})),
             call("<summary>Noted</summary>\n记下了：周五前把酒店项目的资料清单发给业主。")],
+        # Ticket 145: v7. A plan line in the step's words, then three
+        # titled tags asking for sources; a line told beside a browser
+        # lookup (the run stops there).
+        "v7-plan-tags": [
+            call("<summary>Plan</summary>\n我分三路同时查三款手机，回来合成一张表。",
+                 ("code_run", {"script": "print('ok')"})),
+            call("<summary>Hand off</summary>\n三款各交给一个子任务，回来合成一张表。\n"
+                 "<subtask title=\"查 iPhone 17 Pro\">查 iPhone 17 Pro 的规格与上市价，交回官网出处链接</subtask>\n"
+                 "<subtask title=\"查 Pixel 10 Pro\">查 Pixel 10 Pro 的规格与上市价，交回官网出处链接</subtask>\n"
+                 "<subtask title=\"查 S25 Ultra\">查三星 Galaxy S25 Ultra 的规格与上市价，交回官网出处链接</subtask>")],
+        "v7-tell-web": [
+            call("<summary>Tell, then look</summary>",
+                 ("tell_user", {"message": "我先查两家官网的规格，再整理成表。"}), ("web_scan", {"tabs_only": True}))],
         "sbx-inline": [
             call("<summary>Inline</summary>\n直接算。",
                  ("code_run", {"script": f"open({canary + '-inline'!r}, 'w').write('x')", "inline_eval": True}))],
@@ -3710,7 +3785,38 @@ def worker() -> int:
         rec["requests"].append(json.loads(json.dumps(payload, ensure_ascii=False, default=str)))
         if fake is not None:
             return (yield from fake(sess, url, headers, payload, parse_fn))
-        return (yield from real_stream(sess, url, headers, payload, parse_fn))
+        # Ticket 145: an Anthropic-format stream (glm-5.3-flash,
+        # deepseek-flash; its URL is `…/messages?beta=true`) reports its
+        # output tokens in its message_delta events, which GA prints but
+        # does not pass to _record_usage (and its compat fallback zeroes
+        # STATS["out"] again). Read them off the stream's lines on their
+        # way to GA's parser, unchanged, under a key of the eval's own.
+        if not str(url).split("?")[0].rstrip("/").endswith("/messages"):
+            return (yield from real_stream(sess, url, headers, payload, parse_fn))
+        seen = {"out": 0}
+
+        class Sniffed:
+            def __init__(self, resp: Any) -> None:
+                self._resp = resp
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(self._resp, name)
+
+            def iter_lines(self, *a: Any, **k: Any) -> Any:
+                for line in self._resp.iter_lines(*a, **k):
+                    text = line.decode("utf-8", "replace") if isinstance(line, bytes) else str(line or "")
+                    if text.startswith("data:") and '"message_delta"' in text:
+                        try:
+                            evt = json.loads(text[5:].strip())
+                            seen["out"] = max(seen["out"], int((evt.get("usage") or {}).get("output_tokens") or 0))
+                        except (ValueError, TypeError):
+                            pass
+                    yield line
+
+        out = yield from real_stream(sess, url, headers, payload, lambda resp: parse_fn(Sniffed(resp)))
+        if seen["out"]:
+            rec["usage"].append({"stream_output_tokens": seen["out"]})
+        return out
 
     llmcore._stream_with_retry = stream
     real_usage = llmcore._record_usage
@@ -4138,12 +4244,18 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             "stop_reason": stop,
             "final_reply": reply,
         })
-        if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE, TELL_SUITE):
+        if job.get("wake_prompt"):
+            # Ticket 145: the prompt a wake case ran under (its own, or
+            # --wake-prompt's).
+            result["wake_prompt"] = job["wake_prompt"]
+        if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE, TELL_SUITE, PREF_SUITE):
             result.update({"suite": job["suite"], "now": job["now"], "started_at": rec.get("started_at")})
-        if job.get("suite") == TELL_SUITE:
+        # Ticket 145: v7 runs are offered tell_user too, and read the step
+        # text as the main chat sends it.
+        if job.get("suite") == TELL_SUITE or job.get("tell_user"):
             result.update({"told": rec["told"], "interject": job.get("interject"),
                            "interjected_at": rec["interjected_at"], "step_text": bool(job.get("step_text"))})
-        if job.get("suite") in (CRIT_SUITE, PAR_SUITE, TELL_SUITE):
+        if job.get("suite") in (CRIT_SUITE, PAR_SUITE, TELL_SUITE, PREF_SUITE):
             # Ticket 115: a dispatch is what Core starts: the `<subtask>`
             # tags of the run's final answer (a reply with no tool call,
             # subtask::pending_reply), each one a subtask. A tag in a reply
@@ -4165,6 +4277,8 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
                              "lookups_before": len(rec["calls"]) if briefs else None,
                              "count": len(briefs), "in_final": bool(briefs), "mid_tags": mid},
                 "first_reply": responses[0]["content"] if responses else "",
+                # Ticket 145: which model ran it (V7_MODELS's name).
+                "model_tag": job.get("model_tag"),
             })
     elif variant:
         call = rec["dispatch_call"]
@@ -4460,7 +4574,7 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         # What the manual's directory held when the run ended (a part the
         # model wrote or removed would show here).
         result["manual_files"] = sorted(os.listdir(job["manual_dir"]))
-    if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE, TELL_SUITE):
+    if job.get("suite") in ("schedule", "todo", "chat", "memo", CRIT_SUITE, PAR_SUITE, TELL_SUITE, PREF_SUITE):
         # What the fake galley ended with (tasks and to-dos made, changed,
         # cancelled; since ticket 96 memos and their writes), and what it
         # started with.
@@ -4550,14 +4664,18 @@ def make_dispatch_jobs(cases: list[dict[str, Any]], variants: list[str], now: da
 
 def make_wake_jobs(cases: list[dict[str, Any]], wordings: list[str], now: datetime,
                    mykeys: dict[str, Any], ga_lang: str, allowed_hosts: set[str], repeats: int,
-                   dry: str | None = None) -> list[dict[str, Any]]:
+                   dry: str | None = None, prompt_override: str | None = None) -> list[dict[str, Any]]:
     """Ticket 30: each case under each wording, `repeats` times. Sandbox
     mode: the model's tool calls run in the run's sandbox, its CLI calls
-    reach only the fixture-driven fake galley."""
+    reach only the fixture-driven fake galley. Ticket 145: `prompt_override`
+    (a key of CRIT_PROMPTS) in place of the prompt a case names, for the
+    cases that name one."""
     words = load_wording()
     jobs = []
     for case in cases:
-        prompt = wake_prompt(now, case)
+        if prompt_override and not case.get("prompt"):
+            fail(f"{case['id']}: --wake-prompt is for the cases that name a prompt")
+        prompt = wake_prompt(now, dict(case, prompt=prompt_override) if prompt_override else case)
         case = wake_dated(case, now)
         for wording in wordings:
             if wording not in words:
@@ -4582,6 +4700,7 @@ def make_wake_jobs(cases: list[dict[str, Any]], wordings: list[str], now: dateti
                     "sandbox": True,
                     "tool_cap": WAKE_TOOL_CAP,
                     "wake": {"fixture": wake_fixture(filled, now), "files": case.get("files") or {}},
+                    "wake_prompt": prompt_override or case.get("prompt"),
                 })
     return jobs
 
@@ -4678,6 +4797,32 @@ def par_cases() -> list[dict[str, Any]]:
     return [dict(c, no=n) for n, c in enumerate(out, 1)]
 
 
+def pref_cases() -> list[dict[str, Any]]:
+    """Ticket 145: preference/cases.json, each of its `cases` (ids of
+    dispatch-criterion/cases.json, as crit_cases reads them, history and
+    labels included) under each of its `memos`, numbered: id `<memo
+    key>-<case id>`, the memo as the case's one memo (the "Memo" lines and
+    the fake galley's `memo list`), `pref` the memo's key, `follow` what
+    following it is (self: not handed off; handoff: handed off), `base` the
+    case it comes from."""
+    spec = json.loads(PREF_CASES.read_text(encoding="utf-8"))
+    if spec.get("reuse") != f"{CRIT_SUITE}/{CRIT_CASES.name}":
+        fail(f"{PREF_CASES.name}: reuse should name {CRIT_SUITE}/{CRIT_CASES.name}")
+    crit = {c["id"]: c for c in crit_cases()}
+    out = []
+    for m in spec.get("memos") or []:
+        if (m.get("follow") not in ("self", "handoff") or not m.get("key") or not m.get("text")
+                or not str(m.get("id", "")).startswith("memo_") or len(m["text"]) > MEMO_TEXT_MAX_CHARS):
+            fail(f"{PREF_CASES.name}: a memo has a key, a memo_ id, its text and what following it is (self, handoff)")
+        for cid in spec.get("cases") or []:
+            if cid not in crit or crit[cid].get("memos"):
+                fail(f"{PREF_CASES.name}: {cid} is no case of {CRIT_CASES.name} without memos")
+            out.append(dict(crit[cid], id=f"{m['key']}-{cid}", base=cid, group=m["group"], pref=m["key"],
+                            follow=m["follow"],
+                            memos=[{"id": m["id"], "text": m["text"], "days_ago": m.get("days_ago", 5)}]))
+    return [dict(c, no=n) for n, c in enumerate(out, 1)]
+
+
 def crit_prompt(case: dict[str, Any], variant: str, now: datetime, suite: str = CRIT_SUITE) -> str:
     """Ticket 115: the main chat prompt of `variant` (old: main's before
     the ticket; new: the ticket's), as the schedule suites fill theirs.
@@ -4699,11 +4844,14 @@ def make_crit_jobs(cases: list[dict[str, Any]], variants: list[str], now: dateti
     the dispatch suite's ~/Downloads, at most 8 tool calls; a browser
     tool or ask_user ends the run. `now` is local and aware. Ticket 127's
     suite (`suite`) the same, with a case's `home_files` in the fake HOME."""
-    dump = PAR_DUMP_CASES if suite == PAR_SUITE else CRIT_DUMP_CASES
+    dump = PAR_DUMP_CASES if suite == PAR_SUITE else PREF_DUMP_CASES if suite == PREF_SUITE else CRIT_DUMP_CASES
     jobs = []
     for case in cases:
         for variant in variants:
             prompt = crit_prompt(case, variant, now, suite)
+            # Ticket 145: v7 as the main chat has it, tell_user offered and
+            # the step text read; the model named.
+            v7 = variant in V7_MODELS
             for n in range(first, first + repeats):
                 jobs.append({
                     "case_id": case["id"],
@@ -4729,6 +4877,9 @@ def make_crit_jobs(cases: list[dict[str, Any]], variants: list[str], now: dateti
                     "wake": {"fixture": sched_fixture(case, now), "files": {}, "help": str(SCHED_CLI_HELP),
                              "extra_exec": list(SCHED_EXTRA_EXEC), "dispatch_fixtures": True,
                              "home_files": case.get("home_files") or {}},
+                    "tell_user": v7,
+                    "step_text": v7,
+                    "model_tag": V7_MODELS[variant][1] if v7 else None,
                 })
     return jobs
 
@@ -5731,6 +5882,37 @@ def one_line(text: str) -> str:
     return re.sub(r"\s*\n\s*", " ⏎ ", text.strip()).replace("|", "\\|")
 
 
+def wake_prompt_section(data: dict[str, Any], cases: list[dict[str, Any]]) -> list[str]:
+    """Ticket 145: the runs kept under `meta.prompt_<name>_runs` (wake
+    cases run under another main chat prompt, --wake-prompt): each with
+    its commands, its reply and its verdict."""
+    by_id = {c["id"]: c for c in cases}
+    out: list[str] = []
+    meta = data["meta"]
+    for key in sorted(k for k in meta if k.startswith("prompt_") and k.endswith("_runs")):
+        name = key[len("prompt_"):-len("_runs")]
+        runs = sorted(meta[key], key=lambda r: (by_id.get(r["id"], {}).get("no", 99), r.get("wording", ""),
+                                                r.get("repeat", 0)))
+        out += [f"## 换成 {name} 主对话提示词（票 145）", "",
+                f"下面几条用例原本跑在它们 `cases.json` 写的提示词下，这里换成 `{name}`（`dispatch-criterion/galley-prompt/"
+                f"{CRIT_PROMPTS[name].name if name in CRIT_PROMPTS else name}`）再跑，措辞、手册、上文与叫醒消息不变；"
+                f"运行于 {meta.get(key + '_at', '')}，"
+                f"原样存在 results.json 的 `meta.{key}`。", "",
+                "| 用例 | 措辞 | 遍 | 调了什么命令 | 回复原文 | 字数 | 判定 |",
+                "| --- | --- | --- | --- | --- | --- | --- |"]
+        for r in runs:
+            case = by_id.get(r["id"])
+            if not case:
+                continue
+            f = wake_facts(r, case)
+            cmds = "；".join(short_cmd(c) for c in f["commands"] if cli_name(c.split()) != "help") or "—"
+            verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+            out.append(f"| {r['id']} | {r['wording']} | {r['repeat']} | {cmds.replace('|', '/')} | "
+                       f"{(one_line(f['body']) or '（空）').replace('|', '/')} | {f['chars']} | {verdict.replace('|', '/')} |")
+        out.append("")
+    return out
+
+
 def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     meta = data["meta"]
     by_case: dict[str, list[dict[str, Any]]] = {}
@@ -5769,6 +5951,7 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
     out += (rerun_section(data, cases, wake_facts, "73") + rerun_section(data, cases, wake_facts, "63")
             + rerun_section(data, cases, wake_facts, "59"))
+    out += wake_prompt_section(data, cases)
     out += [
         "## 一览",
         "",
@@ -8289,13 +8472,16 @@ def crit_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     column, not part of the verdict) is whether what the user sees keeps
     off the rule and the inner name; None elsewhere or for a failed run."""
     variant = r.get("crit_variant") or str(r.get("variant", "")).split("-")[0]
-    f = (crit_judge_v6(r, case) if variant == "v6" else crit_judge_v5(r, case) if variant == "v5"
-         else crit_judge(r, case))
+    f = (crit_judge_v7(r, case) if variant in V7_MODELS else crit_judge_v6(r, case) if variant == "v6"
+         else crit_judge_v5(r, case) if variant == "v5" else crit_judge(r, case))
     if variant in RULE_TALK_VARIANTS and r.get("status") == "ok":
         hits = rule_talk(r)
         f = dict(f, rule_talk=hits, rule_ok=not hits)
     else:
         f = dict(f, rule_talk=[], rule_ok=None)
+    # Ticket 145: v7 scores by its own measures (crit_judge_v7).
+    if variant in V7_MODELS:
+        return f
     # Ticket 139: v5 scores by its own flag (q-browser-insist is scored
     # there: the user asked it to open the page itself). Ticket 143: v6 by
     # its own too.
@@ -8595,10 +8781,386 @@ def crit_should_v6(case: dict[str, Any]) -> str:
     return words + (f"（能拆成 {case['split']} 块）" if case.get("split") else "")
 
 
+# Ticket 145 (main chat PRD ruling 194): how a v7 run is read. Not whether
+# it should have handed off: handed off or not, the parts, online itself,
+# recorded. The four measures:
+# 1. plan: in a run of more than one step (a tool call) or handed off, the
+#    first words the user sees say how it will go about it (PLAN_CUE_RE): a
+#    step's words outside <summary> (runner/step_text.py's reading), a
+#    tell_user line, a hand-off reply; the answer itself after the tools,
+#    or nothing before the run stopped, does not. A run whose first words
+#    are a question to the user is listed apart.
+# 2. first_s: seconds from the start to those first words (a step's words
+#    go out at its first tool dispatch, a tell_user line when it is called,
+#    a question when it is asked, the reply when its step ends); None when
+#    the run stopped before any, `stop_s` then saying when.
+# 3. facts (scored, a case's `v7`): as v5's fact and direct.
+# 4. preference (scored, the preference suite): under the memo for speed,
+#    not handed off; under the memo for depth, handed off; a question to
+#    the user, or a tag in a reply that also called a tool, listed apart.
+V7_KINDS = {
+    "fact": "事实（世上的事实，或要查一查才答得上的成品）：查了才合格（自己上网，或派出去且派活说明里要出处）；凭记忆答不合格",
+    "direct": "概念、怎么做、凭这段对话：直接答、不调工具合格（调了工具再答单列；上网或派出去不合格）",
+    "none": "照记，不计分",
+}
+PREF_FOLLOW = {"self": "自己做（不派）", "handoff": "派出去"}
+# Words that say how it will go about it (looking up, opening, splitting,
+# handing off, coming back), in Chinese or English.
+PLAN_CUE_RE = re.compile(
+    r"先|再|然后|接着|随后|分(成|别|头|两|三|四|五|六|几)|拆(成|开|分)|派|交给|子任务|并行|同时|一起|几路|两路|三路|"
+    r"(去|来|要|会|准备|打算|正在|开始|马上|这就|我)(查|看|找|搜|核|对比|比较|整理|打开|翻|确认|读|列|算|归|记|拉|抓)|"
+    r"查|搜|找|看(一下|一眼|看)|直接|上网|浏览器|打开|整理|汇总|合成|核对|比对|"
+    r"稍等|回来(后|再|就|了|时)|我会|会把|我(重点|主要|按|以|把|从)|重点(看|比|查|核)|放在一(张|起)|一张表|"
+    r"分开(看|比)|区分|默认按|按照|\b(I'll|I will|let me|first|then|going to)\b", re.IGNORECASE)
+
+
+def v7_first_words(r: dict[str, Any]) -> dict[str, Any] | None:
+    """Ticket 145: the first words the user sees in a v7 run, {kind, s,
+    turn, text}, or None: a step's words outside <summary> (step_lines:
+    sent at the step's first tool dispatch), a tell_user line (when it was
+    called), an ask_user question (when it was asked), the final reply as
+    the main chat shows it (runner/step_text.py's clean; when its step
+    ended; a hand-off reply when it carries tags)."""
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from runner import step_text as step_text_mod
+
+    cands: list[tuple[Any, Any, int, str, str]] = []
+    for x in step_lines(r):
+        cands.append((x.get("at_s"), x.get("turn"), 0, "步骤里的字", x["text"]))
+    for t in r.get("told") or []:
+        if str(t.get("message") or "").strip():
+            cands.append((t.get("after_s"), t.get("turn"), 1, "tell_user", str(t["message"]).strip()))
+    for c in r.get("calls") or []:
+        if c.get("name") == "ask_user":
+            args = c.get("args") or {}
+            q = args.get("question") if isinstance(args, dict) else None
+            cands.append((c.get("at_s"), c.get("turn"), 2, "问用户", str(q or json.dumps(args, ensure_ascii=False))))
+    if r.get("stop_reason") == "final_reply" and r.get("turns"):
+        last = r["turns"][-1]
+        body = step_text_mod.clean(r.get("final_reply") or "")
+        if body:
+            kind = "派活回复" if (r.get("dispatch") or {}).get("dispatched") else "回复"
+            cands.append((last.get("after_s"), last.get("turn"), 3, kind, body))
+    cands = [c for c in cands if isinstance(c[0], (int, float))]
+    if not cands:
+        return None
+    at, turn, _, kind, text = min(cands, key=lambda c: (c[0], c[2]))
+    return {"kind": kind, "s": at, "turn": turn, "text": text}
+
+
+def v7_stop_s(r: dict[str, Any]) -> float | None:
+    """Ticket 145: when a run ended, seconds in: its last call's dispatch
+    or its last step's end, whichever is later."""
+    marks = [c.get("at_s") for c in r.get("calls") or []] + [t.get("after_s") for t in r.get("turns") or []]
+    marks = [m for m in marks if isinstance(m, (int, float))]
+    return max(marks) if marks else None
+
+
+def crit_judge_v7(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+    """Ticket 145: a v7 run. What it did (crit_judge_v5 by the case's `v5`
+    label, `max_tags` dropped, its verdict not used): handed off or not
+    (`dispatched`, `tags`), online itself (`online_self`), how. Then the
+    measures (see V7_KINDS above): `plan`, `first` / `first_s` / `stop_s`,
+    `fact_pass` (a case's `v7`: fact or direct, unless `v7_scored` is
+    false), `pref_pass` (a preference case: `follow`). The verdict scores
+    the facts and the preference only: either failed, 不合格; either listed
+    apart, 单列; neither applies, 不计分."""
+    kind7 = case.get("v7", "none")
+    if kind7 not in V7_KINDS:
+        fail(f"{case['id']}: v7 label {kind7!r} ({', '.join(V7_KINDS)})")
+    variant = r.get("crit_variant") or str(r.get("variant", "")).split("-")[0]
+    base = crit_judge_v5(r, dict(case, max_tags=None))
+    d = r.get("dispatch") or {}
+    calls = r.get("calls") or []
+    tool_calls = len([c for c in calls if c.get("name") != "tell_user"])
+    dispatched = base["category"] == "dispatched"
+    out = dict(base, v7=True, v7_kind=kind7, model=V7_MODELS.get(variant, ("", variant))[1],
+               dispatched=dispatched, tags=d.get("count", 1) if dispatched else 0,
+               online_self=bool(base.get("any_web") or base.get("web_code")), tool_calls=tool_calls,
+               told=[t.get("message") for t in r.get("told") or []], plan=None, multi=None, first=None,
+               first_s=None, stop_s=v7_stop_s(r), fact_pass=None, fact_label=None, pref_pass=None,
+               pref=case.get("pref"), follow=case.get("follow"))
+    if base["category"] == "failed":
+        return out
+    first = v7_first_words(r)
+    multi = tool_calls >= 1 or dispatched
+    if not multi:
+        plan = None
+    elif first is None or first["kind"] == "回复":
+        plan = False
+    elif first["kind"] == "问用户":
+        plan = None
+    else:
+        plan = bool(PLAN_CUE_RE.search(first["text"]))
+    out.update(plan=plan, multi=multi, first=first, first_s=first["s"] if first else None)
+    fact_on = kind7 != "none" and case.get("v7_scored", True)
+    if fact_on:
+        fj = crit_judge_v5(r, dict(case, v5=kind7, max_tags=None))
+        out.update(fact_pass=fj["pass"], fact_label=fj["label"])
+    pref_on = bool(case.get("pref"))
+    if pref_on:
+        if dispatched:
+            out["pref_pass"] = case["follow"] == "handoff"
+        elif base["category"] in ("ask", "mid_tag"):
+            out["pref_pass"] = None
+        else:
+            out["pref_pass"] = case["follow"] == "self"
+    how = f"派 {out['tags']} 个" if dispatched else {"别的": "停在问用户" if base["category"] == "ask" else "别的"}.get(
+        base["how"], base["how"])
+    if out["online_self"] and not dispatched:
+        how += "（上网）"
+    out["how7"] = how
+    vals = [v for on, v in ((fact_on, out["fact_pass"]), (pref_on, out["pref_pass"])) if on]
+    if not vals:
+        return dict(out, **{"pass": None}, verdict="不计分")
+    if any(v is False for v in vals):
+        return dict(out, **{"pass": False}, verdict="不合格")
+    if any(v is None for v in vals):
+        return dict(out, **{"pass": None}, verdict="单列")
+    return dict(out, **{"pass": True}, verdict="合格")
+
+
+def v7_mark(v: bool | None) -> str:
+    return "✓" if v is True else "✗" if v is False else "单列"
+
+
+def v7_cell(f: dict[str, Any]) -> str:
+    """Ticket 145: one v7 run in a table cell: what it did, the plan line,
+    when the first words came, the facts and the memo."""
+    if f.get("category") == "failed":
+        return f["label"]
+    bits = [f.get("how7") or f.get("how") or "别的"]
+    if f.get("multi"):
+        bits.append("先说打算 " + v7_mark(f.get("plan")))
+    first = f.get("first")
+    if first:
+        bits.append(f"{first['s']} 秒见字（{first['kind']}）")
+    else:
+        bits.append(f"停下前没字（{f.get('stop_s')} 秒）")
+    if f.get("v7_kind") != "none" and f.get("fact_label") is not None:
+        bits.append("出处 " + v7_mark(f.get("fact_pass")))
+    if f.get("pref"):
+        bits.append("照备忘 " + v7_mark(f.get("pref_pass")))
+    return "｜".join(bits)
+
+
+def v7_stats(runs: list[tuple[dict[str, Any], dict[str, Any]]]) -> dict[str, Any]:
+    """Ticket 145: one model's v7 runs, (run, facts) each, counted."""
+    import statistics
+
+    ok = [(r, f) for r, f in runs if f.get("category") != "failed"]
+    secs = [f["first_s"] for _, f in ok if isinstance(f.get("first_s"), (int, float))]
+    multi = [f for _, f in ok if f.get("multi")]
+    usage = summarize_usage([r for r, _ in runs])
+    return {
+        "runs": len(runs), "failed": len(runs) - len(ok),
+        "dispatched": sum(1 for _, f in ok if f.get("dispatched")),
+        "tags": sorted(f["tags"] for _, f in ok if f.get("dispatched")),
+        "online_self": sum(1 for _, f in ok if f.get("online_self") and not f.get("dispatched")),
+        "multi": len(multi),
+        "plan_yes": sum(1 for f in multi if f.get("plan") is True),
+        "plan_no": sum(1 for f in multi if f.get("plan") is False),
+        "plan_apart": sum(1 for f in multi if f.get("plan") is None),
+        "first_n": len(secs), "first_median": round(statistics.median(secs), 1) if secs else None,
+        "first_max": max(secs) if secs else None,
+        "no_words": sum(1 for _, f in ok if not f.get("first")),
+        "fact_on": sum(1 for _, f in ok if f.get("fact_label") is not None),
+        "fact_pass": sum(1 for _, f in ok if f.get("fact_label") is not None and f.get("fact_pass") is True),
+        "fact_fail": sum(1 for _, f in ok if f.get("fact_label") is not None and f.get("fact_pass") is False),
+        "pref_on": sum(1 for _, f in ok if f.get("pref")),
+        "pref_pass": sum(1 for _, f in ok if f.get("pref") and f.get("pref_pass") is True),
+        "pref_fail": sum(1 for _, f in ok if f.get("pref") and f.get("pref_pass") is False),
+        "llm_calls": sum(int(r.get("llm_calls") or 0) for r, _ in runs),
+        "usage": usage,
+    }
+
+
+def v7_stats_line(name: str, st: dict[str, Any]) -> str:
+    u = st["usage"]
+    parts = [f"**{name}**：{st['runs']} 遍" + (f"（运行失败 {st['failed']}）" if st["failed"] else ""),
+             f"派出去 {st['dispatched']} 遍" + (f"（标签数 {'、'.join(str(n) for n in st['tags'])}）" if st["tags"] else ""),
+             f"没派、自己上网 {st['online_self']} 遍",
+             f"先说打算 {st['plan_yes']}/{st['multi']}（不止一步或派出去的那些遍；没说 {st['plan_no']}，"
+             f"先问用户单列 {st['plan_apart']}）",
+             f"第一次见字的秒数中位 {st['first_median']}、最长 {st['first_max']}（{st['first_n']} 遍；"
+             f"停下前没字 {st['no_words']} 遍）"]
+    if st["fact_on"]:
+        parts.append(f"事实带出处合格 {st['fact_pass']}/{st['fact_on']}（不合格 {st['fact_fail']}，"
+                     f"单列 {st['fact_on'] - st['fact_pass'] - st['fact_fail']}）")
+    if st["pref_on"]:
+        parts.append(f"照备忘 {st['pref_pass']}/{st['pref_on']}（没照 {st['pref_fail']}，"
+                     f"单列 {st['pref_on'] - st['pref_pass'] - st['pref_fail']}）")
+    parts.append(f"模型调用 {st['llm_calls']} 次，输入 {u['prompt_tokens']:,} token（缓存 {u['cached_tokens']:,}），"
+                 f"输出 {u['completion_tokens']:,}")
+    return "- " + "；".join(parts) + "。"
+
+
+def v7_section(data: dict[str, Any], cases: list[dict[str, Any]], facts_fn: Any) -> list[str]:
+    """Ticket 145: v7's measures, a column per model: each run's cell
+    (v7_cell), each model's counts (v7_stats), then the first words of
+    every run of more than one step, for reading the plan line by eye."""
+    results = data["results"]
+    variants = [v for v in V7_MODELS if any(r.get("crit_variant") == v for r in results)]
+    if not variants:
+        return []
+    by_case: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for r in results:
+        if r.get("crit_variant") in V7_MODELS:
+            by_case.setdefault((r["id"], r["crit_variant"]), []).append(r)
+    out = ["## v7：量结果（票 145）", "",
+           "裁决 194 的提示词（第一轮措辞 `dispatch-criterion/galley-prompt/main_chat.v7-r1.txt`；第二轮 `main_chat.v7.txt` "
+           "与 Rust 生成的一字不差，只差出发点那半句「worth the wait for depth」改成「worth a subtask's wait for depth」。主对话的静态规则开头写明"
+           "「你是这个用户的私人助理，身后有一个团队」；派活一段是两条路各自的代价、一个出发点、备忘优先、先说一句打算、听用户改、"
+           "偏好记成备忘），三个模型各跑（变体名就是模型：" + "、".join(f"`{v}` {m[1]}" for v, m in V7_MODELS.items())
+           + "，都是 API key 接入；第一轮措辞 `main_chat.v7-r1.txt`。名字后面括号里写「第二轮措辞」的是票面允许的那一轮措辞（"
+           "`main_chat.v7.txt`，与 Rust 一字不差），只重跑第一轮没过的用例；写「v6 对照」的是同一个模型在 v6 提示词下、同样提供 "
+           "`tell_user` 跑的对照）；同主对话一样提供 `tell_user`，调工具那一步写在 `<summary>` 外的字算送到（票 142，读法同 "
+           "`runner/step_text.py`）。**不判该派不该派**：派没派、几个标签、没派时自己上没上网，照记。量四样："
+           "①**先说打算**：不止一步（调了工具）或派出去的那些遍，用户最先看到的字（步骤里的字、`tell_user`、派活那条回复）"
+           "里有没有说它打算怎么做（`PLAN_CUE_RE`，下面「最先看到的字」原文可核）；做完才给的答案、停下前没有字，都算没说；"
+           "最先看到的是问用户的，单列。②**第一次见字**：从开始到最先看到的字的秒数（步骤里的字在那一步第一次派工具时、"
+           "`tell_user` 在调用时、问用户在问时、回复在那一步结束时）；沙盒里浏览器工具不执行、运行停在那里，停下前没字的另记。"
+           "③**事实带出处**（计分，`cases.json` 的 `v7`）：" + "；".join(f"{k} 是{w}" for k, w in V7_KINDS.items())
+           + "。④**照备忘**（计分，只在 `preference` 套件）：" + "；".join(f"{k} 下{w}算照了" for k, w in PREF_FOLLOW.items())
+           + "；停在问用户、中间回复里写标签的单列。", "",
+           "| # | 用例 | 组 | v7 判法 | " + " | ".join(v7_col(v) for v in variants) + " |",
+           "| --- | --- | --- | --- | " + " | ".join("---" for _ in variants) + " |"]
+    per_model: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = {v: [] for v in variants}
+    firsts: list[str] = []
+    for case in cases:
+        cells, seen = [], False
+        for v in variants:
+            runs = sorted(by_case.get((case["id"], v)) or [], key=lambda r: r.get("repeat", 0))
+            shown = []
+            for r in runs:
+                f = facts_fn(r, case)
+                seen = True
+                per_model[v].append((r, f))
+                shown.append(f"{r.get('repeat', 1)}：{v7_cell(f)}" + ("" if f["verdict"] in ("合格", "不计分")
+                                                                       else f"：{f['verdict']}"))
+                if f.get("multi"):
+                    fw = f.get("first")
+                    firsts.append(f"- {case['id']} / {v7_col(v)} / 第 {r.get('repeat', 1)} 遍："
+                                  + (f"{fw['kind']}，{fw['s']} 秒，先说打算 {v7_mark(f.get('plan'))}："
+                                     + one_line(trunc(scrub(fw["text"]), 140)) if fw else
+                                     f"停下前没字（{f.get('stop_s')} 秒，{f.get('how7')}）"))
+            cells.append("<br>".join(shown).replace("|", "\\|") or "未运行")
+        if seen:
+            label = V7_KINDS.get(case.get("v7", "none"), "—").split("：")[0]
+            if case.get("pref"):
+                label += f"；照备忘是{PREF_FOLLOW[case['follow']]}"
+            if not case.get("v7_scored", True):
+                label += "（不计分）"
+            out.append(f"| {case['no']} | {case['id']} | {case.get('group', '')} | {label} | " + " | ".join(cells) + " |")
+    out += ["", "### 各模型合计", ""]
+    for v in variants:
+        out.append(v7_stats_line(v7_col(v), v7_stats(per_model[v])))
+    out += ["", "### 最先看到的字（不止一步或派出去的那些遍）", ""] + [x.rstrip() for x in firsts] + [""]
+    return out
+
+
+def v7_detail(f: dict[str, Any]) -> list[str]:
+    """Ticket 145: a v7 run's measures under its result: the cell, the
+    first words in full, the tell_user lines, the facts' verdict."""
+    if not f.get("v7") or f.get("category") == "failed":
+        return []
+    lines = ["**v7 量**：" + v7_cell(f) + "。", ""]
+    fw = f.get("first")
+    if fw:
+        lines += [f"用户最先看到的字（{fw['kind']}，第 {fw['turn']} 步，开跑后 {fw['s']} 秒）：", ""]
+        lines += fenced(trunc(scrub(fw["text"]), 600))
+    if f.get("told"):
+        lines += ["tell_user：" + "；".join(f"「{trunc(one_line(scrub(str(m))), 160)}」" for m in f["told"]), ""]
+    if f.get("fact_label"):
+        lines += [f"事实带出处：{f['fact_label']}（{v7_mark(f['fact_pass'])}）。", ""]
+    return lines
+
+
+def render_pref_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
+    """Ticket 145: the preference suite: the memos and the cases, v7's
+    measures by model (v7_section), then each case with its message, memo
+    and context, and every run: its result and measures, the tags in full,
+    the calls in a line each, the final reply."""
+    meta = data["meta"]
+    spec = json.loads(PREF_CASES.read_text(encoding="utf-8"))
+    out = [
+        "# 偏好评测结果（票 145）",
+        "",
+        f"首次运行于 {meta.get('ran_at')}" + (f"，补跑 {len(meta['partial_reruns'])} 次" if meta.get("partial_reruns") else "")
+        + "。三个模型都是 API key 接入，各一列（下表）。",
+        "",
+        "- **备忘**：" + "；".join(f"`{m['key']}`「{m['text']}」（照了是{PREF_FOLLOW[m['follow']]}）" for m in spec["memos"])
+        + "。写进提示词的「Memo」一节（照 Core 的格式，`memo_block`），也在假 `galley` 的 `memo list` 里；每条用例只带一种。",
+        "- **用例**：`dispatch-criterion` 的 " + "、".join(f"`{c}`" for c in spec["cases"])
+        + "，消息、上下文与标注原样带进来；用例 id 是「备忘的 key-原用例 id」。沙盒、假 `galley`、工具上限同 `dispatch-criterion`。",
+        "- **提示词**：v7（第一轮措辞 `dispatch-criterion/galley-prompt/main_chat.v7-r1.txt`；第二轮 `main_chat.v7.txt`，"
+        "只重跑第一轮没照备忘的用例），见下一节。",
+        "",
+        "回复正文去掉了 `<summary>`、`<next-suggestion>` 与 `<subtask>` 标签（派活说明单列全文），工具参数与返回见 results.json。",
+        "",
+    ]
+    out += v7_section(data, cases, crit_facts)
+    by_case: dict[str, list[dict[str, Any]]] = {}
+    for r in data["results"]:
+        by_case.setdefault(r["id"], []).append(r)
+    order = {v: i for i, v in enumerate(PREF_VARIANTS)}
+    for case in cases:
+        runs = sorted(by_case.get(case["id"]) or [], key=lambda r: (order.get(r.get("crit_variant"), 99),
+                                                                    r.get("repeat", 0)))
+        if not runs:
+            continue
+        out += [f"## {case['no']}. {case['id']}（{case['group']}；照了是{PREF_FOLLOW[case['follow']]}）", "",
+                f"**消息**：{case['message']}", "", f"**备忘**：{case['memos'][0]['text']}", ""]
+        if case["history"]:
+            out += ["**上下文**（同一段里前面的轮次）：", ""]
+            for m in case["history"]:
+                who = "用户" if m["role"] == "user" else "助理"
+                quoted = f"> **{who}**：" + m["content"].replace("\n", "\n> ")
+                out += [re.sub(r"[ \t]+$", "", quoted, flags=re.MULTILINE), ">"]
+            out[-1] = ""
+        for r in runs:
+            f = crit_facts(r, case)
+            name = v7_col(r["crit_variant"]) if r.get("crit_variant") in V7_MODELS else r.get("crit_variant")
+            out += [f"### {name} 第 {r.get('repeat', 1)} 遍：{f['verdict']}", ""]
+            out += [f"**结果**：{f['label']}。工具调用 {f.get('tool_calls', 0)} 次。结束："
+                    f"{STOP_LABELS.get(r.get('stop_reason') or '', r.get('stop_reason'))}。", ""]
+            if r.get("status") != "ok":
+                out += [f"（{trunc(scrub(r.get('error') or ''), 600)}）", ""]
+                continue
+            out += v7_detail(f)
+            d = r.get("dispatch") or {}
+            titles = d.get("titles") or [None] * len(d.get("briefs") or [])
+            for k, (title, brief) in enumerate(zip(titles, d.get("briefs") or []), 1):
+                out += [f"标签 {k}：title " + (f"「{title}」" if title else "（没写）") + "，派活说明：", ""]
+                out += fenced(trunc(scrub(brief or "（空）"), 1500))
+            calls = r.get("calls") or []
+            if calls:
+                out += ["工具调用：" + "；".join(f"{c.get('n') or '·'}. {call_gist(c)}" for c in calls), ""]
+            out += ["最终回复：" if r.get("stop_reason") == "final_reply" else "最后一条回复：", ""]
+            out += reply_lines(r.get("final_reply")) or ["（空）", ""]
+    return "\n".join(line.rstrip() for line in "\n".join(out).split("\n")).rstrip() + "\n"
+
+
+def v7_model_problem(variants: list[str], model_id: str, mykey: Any) -> str | None:
+    """Ticket 145: a v7 variant names its model (V7_MODELS); it runs alone,
+    on that model's id, from the Galley database. None when that holds."""
+    wanted = [v for v in variants if v in V7_MODELS]
+    if not wanted:
+        return None
+    if len(wanted) != len(variants) or len(wanted) != 1 or mykey or V7_MODELS[wanted[0]][0] != model_id:
+        return ("a v7 variant runs alone on its own model: "
+                + "; ".join(f"--variant {v} --model-id {m}" for v, (m, _) in V7_MODELS.items()))
+    return None
+
+
 def crit_cell(r: dict[str, Any] | None, case: dict[str, Any]) -> str:
     if r is None:
         return "未运行"
     f = crit_facts(r, case)
+    if f.get("v7"):
+        # Ticket 145: v7's own cell, the measures.
+        return v7_cell(f) + f"：{f['verdict']}"
     titles = "；标题 " + "、".join(f"「{t}」" if t else "（没写）" for t in f["titles"]) if f["titles"] else ""
     web = "；第一个工具是浏览器" if f.get("first_web") else ""
     if f.get("guarded"):
@@ -8773,6 +9335,8 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
             if tags6:
                 out.append("  - v6 成品派出去的标签数（每遍，0 是没派）：" + "；".join(tags6) + "。")
     out += [""]
+    # Ticket 145: v7's measures, a column per model.
+    out += v7_section(data, cases, crit_facts)
     # Ticket 134's fourth round (ruling 185 point 4): the column of its own.
     talk_variants = [v for v in variants if v in RULE_TALK_VARIANTS]
     if talk_variants:
@@ -8830,6 +9394,7 @@ def render_crit_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                 f = crit_facts(r, case)
                 out += [f"**结果**：{f['label']}；{f['verdict']}。工具调用 {f['tool_calls']} 次。结束："
                         f"{STOP_LABELS.get(r.get('stop_reason') or '', r.get('stop_reason'))}。", ""]
+                out += v7_detail(f)
                 if f.get("rule_ok") is not None:
                     out += ["**不讲规则**：" + ("没讲。" if f["rule_ok"] else "讲了，" + "；".join(f["rule_talk"]) + "。"), ""]
                 if r.get("status") != "ok":
@@ -8881,6 +9446,19 @@ def summarize_usage(results: list[dict[str, Any]]) -> dict[str, int]:
     total = {"prompt_tokens": 0, "completion_tokens": 0, "cached_tokens": 0, "reasoning_tokens": 0}
     for r in results:
         for u in r.get("usage") or []:
+            # Ticket 145: Anthropic-format usage. The input side as GA's
+            # _record_usage counts it (input, cache writes and reads; reads
+            # are the cached part); the output side from the eval's own
+            # stream_output_tokens (the stream reports it to GA's STATS).
+            if "stream_output_tokens" in u:
+                total["completion_tokens"] += int(u.get("stream_output_tokens") or 0)
+                continue
+            if "prompt_tokens" not in u and any(k in u for k in ("input_tokens", "cache_read_input_tokens",
+                                                                 "cache_creation_input_tokens")):
+                total["prompt_tokens"] += sum(int(u.get(k) or 0) for k in (
+                    "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+                total["cached_tokens"] += int(u.get("cache_read_input_tokens") or 0)
+                continue
             total["prompt_tokens"] += int(u.get("prompt_tokens") or 0)
             total["completion_tokens"] += int(u.get("completion_tokens") or 0)
             total["cached_tokens"] += int((u.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
@@ -9293,6 +9871,18 @@ def par_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     f = dict(f, titles=[t for t, _ in tags], title_problems=problems,
              titles_ok=(not problems) if tags else None, new_case=bool(case.get("tags")))
     variant = r.get("crit_variant") or str(r.get("variant", "")).split("-")[0]
+    if variant in V7_MODELS:
+        # Ticket 145: v7 does not judge the count. The contracts stay: each
+        # tag's title, and the parts that need the same browser tab or the
+        # same files in one tag (`v7_together`).
+        n = d.get("count", len(tags)) if f.get("dispatched") else 0
+        broken = list(problems) if f.get("dispatched") else []
+        if case.get("v7_together") and n > 1:
+            broken.append(f"同一个标签页或同一批文件拆成了 {n} 个标签")
+        if broken and f["category"] != "failed":
+            return dict(f, how7=f["how7"] + "；" + "；".join(broken), **{"pass": False}, verdict="不合格",
+                        regressed=False)
+        return dict(f, regressed=False)
     want = par_want(case, variant)
     if not want:
         return dict(f, regressed=f["pass"] is False)
@@ -9392,7 +9982,7 @@ def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         for v in variants:
             runs = by_case.get((case["id"], v)) or []
             if not runs:
-                if v in ("v2", "v3", "v4", "v5", "v6") and key == "old":
+                if v in PAR_OWN_ONLY and key == "old":
                     cells.append("（见 dispatch-criterion）")
                 else:
                     tally[(v, key)]["未运行"] += 1
@@ -9419,13 +10009,15 @@ def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for v in variants:
         for key, name in (("new", "本票的用例"), ("old", "票 115 的用例")):
             t = tally[(v, key)]
-            if v in ("v2", "v3", "v4", "v5", "v6") and key == "old" and not any(t.values()):
+            if v in PAR_OWN_ONLY and key == "old" and not any(t.values()):
                 continue
             shown_k = [k for k in CRIT_VERDICTS + ("未运行",) if t[k] or k in ("合格", "不合格")]
             out.append(f"- **{v}，{name}**：" + "，".join(f"{k} {t[k]}" for k in shown_k) + "。")
         out.append(f"- **{v}，按现在的标注判不合格的**：" + ("、".join(sorted(set(failed[v]))) if failed[v] else "没有") + "。")
         out.append(f"- **{v}，标题不合规的**：" + ("、".join(sorted(set(bad_titles[v]))) if bad_titles[v] else "没有") + "。")
     out += [""]
+    # Ticket 145: v7's measures, a column per model.
+    out += v7_section(data, cases, par_facts)
     if meta.get("superseded_runs"):
         out += ["被替换的运行原样留在 results.json 的 `meta.superseded_runs`："]
         for g in meta["superseded_runs"]:
@@ -9447,7 +10039,7 @@ def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
             out[-1] = ""
         for v in variants:
             runs = by_case.get((case["id"], v)) or []
-            if not runs and v in ("v2", "v3", "v4", "v5", "v6") and not case.get("tags"):
+            if not runs and v in PAR_OWN_ONLY and not case.get("tags"):
                 continue
             for r in runs or [None]:
                 out += [f"### {v}" + (f"（第 {r['repeat']} 遍）" if r and r.get("repeat", 1) != 1 else ""), ""]
@@ -9457,6 +10049,7 @@ def render_par_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                 f = par_facts(r, case)
                 out += [f"**结果**：{f['label']}；{f['verdict']}。工具调用 {f['tool_calls']} 次。结束："
                         f"{STOP_LABELS.get(r.get('stop_reason') or '', r.get('stop_reason'))}。", ""]
+                out += v7_detail(f)
                 if r.get("status") != "ok":
                     out += [f"（{trunc(scrub(r.get('error') or ''), 600)}）", ""]
                     continue
@@ -9661,6 +10254,18 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                                   suite=PAR_SUITE):
             job["case_id"] = run_id
             jobs.append(job)
+    # Ticket 145: v7 on each model's variant, in the crit, par and
+    # preference suites.
+    prcases = {c["id"]: c for c in pref_cases()}
+    v7_scripts = {"v7-plan": (CRIT_SUITE, "c-phones-three", "v7", "v7-plan-tags"),
+                  "v7-concept": (CRIT_SUITE, "q-concept", "v7glm", "final"),
+                  "v7-tell": (PREF_SUITE, "fast-q-headphones", "v7ds", "v7-tell-web"),
+                  "v7-par": (PAR_SUITE, "p-three-errands", "v7", "par-three-tags")}
+    for run_id, (suite, case_id, variant, script) in v7_scripts.items():
+        pool = prcases if suite == PREF_SUITE else pcases if suite == PAR_SUITE else crcases
+        for job in make_crit_jobs([pool[case_id]], [variant], snow, mykeys, ga_lang, set(), 1, script, suite=suite):
+            job["case_id"] = run_id
+            jobs.append(job)
     # Ticket 137.
     tlcases = {c["id"]: c for c in tell_cases()}
     tell_scripts = {"tell-question": ("i-question", "tell-run"), "tell-empty": ("n-short", "tell-empty")}
@@ -9690,6 +10295,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
     dry_test_crit([r for r in results if r["id"].startswith("crit-")], crit_scripts, crcases, check)
     dry_test_par([r for r in results if r["id"].startswith("par-")], par_scripts, pcases, crcases, check)
     dry_test_tell([r for r in results if r["id"].startswith("tell-")], tlcases, check)
+    dry_test_v7([r for r in results if r["id"].startswith("v7-")], v7_scripts, crcases, pcases, prcases, check)
     sbx_results = [r for r in results if r["id"].startswith("sbx-")]
     entry_results = [r for r in results if r["variant"] in VARIANTS]
     dispatch_results = [r for r in results if r["variant"] in DISPATCH_VARIANTS
@@ -12094,9 +12700,13 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     v6_t = CRIT_PROMPTS["v6"].read_text(encoding="utf-8")
     check(CRIT_PROMPTS["v6"] == PAR_PROMPTS["v6"] and CRIT_PROMPTS["v6"].parent == CRIT_PROMPT_DIR,
           "ticket 143: both suites read one v6")
-    check(bool(m_head and m_rest) and v6_t.endswith(m_head.group(1) + m_rest.group(1).replace("{manual_dir}",
-                                                                                            "__MANUAL_DIR__")),
-          "v6: the entry layer as core/src/managed_prompt.rs has it, word for word")
+    # Ticket 145: since then that is v7 (dry_test_v7 checks it against the
+    # Rust source); v6 is v7 with ticket 143's clause and the bare opening.
+    v7_t = CRIT_PROMPTS["v7r2"].read_text(encoding="utf-8")
+    check(bool(m_head and m_rest) and v7_t.endswith(m_head.group(1) + m_rest.group(1).replace("{manual_dir}",
+                                                                                            "__MANUAL_DIR__"))
+          and not v6_t.endswith(m_head.group(1) + m_rest.group(1).replace("{manual_dir}", "__MANUAL_DIR__")),
+          "v7: the entry layer as core/src/managed_prompt.rs has it, word for word (v6 no longer)")
     v5_c = clause(v5_t, "You can do the work yourself,")
     v6_c = clause(v6_t, "You can do the work yourself,")
     check(v5_t.replace(v5_c, "<clause>") == v6_t.replace(v6_c, "<clause>") and v5_t.index(v5_c) == v6_t.index(v6_c)
@@ -12635,6 +13245,264 @@ def dry_test_crit(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                        f"the rule-talk column; missing: {missing})")
 
 
+def dry_test_v7(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str, str, str]],
+                crcases: dict[str, dict[str, Any]], pcases: dict[str, dict[str, Any]],
+                prcases: dict[str, dict[str, Any]], check: Any) -> None:
+    """Ticket 145: v7. The prompt against the Rust source (the standing,
+    the dispatch paragraph) and against v6; the preference suite's cases;
+    the model guard; the judge and the measures on synthetic runs; then
+    four dry runs through the worker: tell_user offered, the step's words
+    and a told line read, the memo in the prompt, each variant's model."""
+    print("v7 (ticket 145)")
+    rust = (REPO / "core" / "src" / "managed_prompt.rs").read_text(encoding="utf-8").replace("\r\n", "\n")
+    m_stand = re.search(r'const MAIN_CHAT_STANDING: &str = r#"(.*?)"#;', rust, re.S)
+    m_open = re.search(r'const GALLEY_OPENING: &str = "(.*?)";', rust)
+    v6_t = CRIT_PROMPTS["v6"].read_text(encoding="utf-8")
+    # The second wording is the Rust one (main_chat.v7.txt); the first,
+    # which most v7 runs ran under, differs from it in one phrase.
+    v7_t = CRIT_PROMPTS["v7r2"].read_text(encoding="utf-8")
+    r1_t = CRIT_PROMPTS["v7"].read_text(encoding="utf-8")
+    check(CRIT_PROMPTS["v7r2"].name == "main_chat.v7.txt" and CRIT_PROMPTS["v7"].name == "main_chat.v7-r1.txt"
+          and all(CRIT_PROMPTS[v] == CRIT_PROMPTS["v7"] for v in ("v7glm", "v7ds"))
+          and all(CRIT_PROMPTS[v] == CRIT_PROMPTS["v7r2"] for v in ("v7glmr2", "v7dsr2"))
+          and all(CRIT_PROMPTS[v] == CRIT_PROMPTS["v6"] for v in ("v6glm", "v6ds"))
+          and r1_t.replace("worth the wait for depth", "worth a subtask's wait for depth", 1) == v7_t
+          and r1_t != v7_t,
+          "v7's first wording differs from the second (the Rust one) in one phrase; each variant's prompt")
+    standing = m_stand.group(1) if m_stand else "<none>"
+    opening = m_open.group(1) if m_open else "<none>"
+    check(opening == "You are running inside Galley." and standing.startswith(opening + " In this conversation")
+          and v7_t.startswith("## Galley Runtime Layer\n\n" + standing + "\n\n## About Galley")
+          and v6_t.startswith("## Galley Runtime Layer\n\n" + opening + "\n\n## About Galley")
+          and v7_t.count(opening) == 1,
+          "v7 opens with the standing as core/src/managed_prompt.rs has it; v6 with the bare line")
+
+    def para(text: str, first: str) -> str:
+        a = text.index(first)
+        return text[a:text.index("cannot see.", a) + len("cannot see.")]
+
+    v6_c = para(v6_t, "You can do the work yourself,")
+    v7_c = para(v7_t, "How to go about a thing is yours to weigh.")
+    check(v6_t.replace(v6_c, "<clause>").replace(opening, "<open>", 1)
+          == v7_t.replace(v7_c, "<clause>").replace(standing, "<open>", 1),
+          "v6 differs from v7 in the opening and the dispatch paragraph only")
+    flat7 = re.sub(r"\s+", " ", v7_c)
+    check(all(w in flat7 for w in (
+        "How to go about a thing is yours to weigh. Doing it yourself is quicker and lighter, and the user can talk "
+        "to you while you work: what they say reaches you at your next step, and `tell_user` answers them in a line "
+        "without stopping.",
+        "A subtask starts fresh with this conversation's last turns as background, looks into one thing in depth and "
+        "runs alongside any others; each takes a few minutes, and Galley wakes you once they are all back, for you to "
+        "check and put together.",
+        "As a starting point, what the user will decide on or keep is worth a subtask's wait for depth, and a question in "
+        "passing wants an answer now; their memos on how they like things done come first.",
+        "When something will take more than a moment, say in a line how you will go about it; when the user says "
+        "otherwise, do it their way, and note it as a memo when it is how they want such things done.",
+        "A fact in the world", "look it up before you answer, yourself or by a subtask, and give your sources.",
+        "go by the three levels of authority in `authority.md`.", '<subtask title="a few words">what to do</subtask>',
+        "Write one tag per part, in the same reply, and they run at the same time; keep in one tag the parts that "
+        "need the same browser tab or the same files.",
+        "so write the goal, what you have found so far, and what to hand back",
+        "Do not call this chat the main chat. Galley wakes you when they finish, ask something or fail, so do not "
+        "wait on them or watch them.", "subagent.md"))
+          and not any(w in flat7 for w in ("You can do the work yourself", "Something the user will use to decide",
+                                           "The user can talk to you at any time", "When the user hands you several",
+                                           "on its way", "merge them")),
+          "v7: the costs, the starting point, the plan line, the user's way; ruling 193's sentence and \"on its way\" "
+          "gone; the floor and the tag's contracts kept")
+    # The preference suite.
+    spec = json.loads(PREF_CASES.read_text(encoding="utf-8"))
+    check(len(prcases) == 10 and [c for c in prcases] == [f"{k}-{c}" for k in ("fast", "deep") for c in (
+        "q-headphones", "c-phones-three", "c-research-report", "q-east", "q-notes-apps")]
+          and all(c["message"] == crcases[c["base"]]["message"] and c["history"] == crcases[c["base"]]["history"]
+                  and len(c["memos"]) == 1 for c in prcases.values())
+          and {m["key"]: (m["follow"], m["text"]) for m in spec["memos"]} == {
+              "fast": ("self", "对比、调研这类要快，直接查就行，不用派出去"),
+              "deep": ("handoff", "要拿来做决定的东西宁可多等，也要查细")},
+          "preference: five cases under each of two memos, their messages and context as dispatch-criterion has them")
+    now = datetime.now().astimezone()
+    p = crit_prompt(prcases["deep-q-east"], "v7", now, PREF_SUITE)
+    memo_at = p.find("### Memo")
+    check(memo_at > p.find("## Main Chat") > 0 and memo_at < p.find("## Galley Main Chat Entry Layer")
+          and "- `memo_d2e3f4a5b6c70819` " in p and ": 要拿来做决定的东西宁可多等，也要查细" in p
+          and "对比、调研" not in p and "__MEMO__" not in p and "__IN_HAND__" not in p,
+          "preference: the memo in the Memo lines, Core's format, the other memo absent")
+    check({c["id"]: c["v7"] for c in crcases.values() if c["v7"] != "none"} == {
+        "q-injuries": "fact", "q-story": "fact", "q-weather": "fact", "q-notes-apps": "fact", "quick-usd": "fact",
+        "big-quotes": "fact", "big-research": "fact", "ask-dispatch": "fact", "q-headphones": "fact",
+        "q-fact-injury": "fact", "q-followup-quick": "direct", "q-followup-sourced": "direct",
+        "q-followup-shown": "direct", "q-recent-fact": "fact", "q-concept": "direct", "q-howto": "direct",
+        "c-headphones-pair": "fact", "c-phones-three": "fact", "c-research-report": "fact", "c-weather-sh": "fact",
+        "c-story-finals": "fact"}
+          and [c["id"] for c in crcases.values() if not c.get("v7_scored", True)] == ["q-followup-quick"]
+          and {c["id"] for c in pcases.values() if c.get("v7_together")} == {"p-same-tab", "p-same-files"},
+          "v7 labels: sixteen facts, five to answer directly (q-followup-quick not scored), the rest recorded; "
+          "the same tab and the same files kept together")
+    # The model guard.
+    check(v7_model_problem(["v7"], "mm_1792576875658", None) is None
+          and v7_model_problem(["v7glm"], "mm_1787796272610", None) is None
+          and v7_model_problem(["v7ds"], "mm_1789025687188", None) is None
+          and v7_model_problem(["v7glm"], "mm_1792576875658", None)
+          and v7_model_problem(["v7", "v7glm"], "mm_1792576875658", None)
+          and v7_model_problem(["v6", "v7"], "mm_1792576875658", None)
+          and v7_model_problem(["v7"], "mm_1792576875658", "mykey.py")
+          and v7_model_problem(["v6"], "mm_1787796272610", None) is None,
+          "a v7 variant runs alone on its own model")
+    check(summarize_usage([{"usage": [{"input_tokens": 0, "output_tokens": 0},
+                                      {"input_tokens": 1000, "cache_read_input_tokens": 600, "output_tokens": 0},
+                                      {"stream_output_tokens": 120},
+                                      {"prompt_tokens": 50, "completion_tokens": 7,
+                                       "prompt_tokens_details": {"cached_tokens": 10}}]}])
+          == {"prompt_tokens": 1650, "completion_tokens": 127, "cached_tokens": 610, "reasoning_tokens": 0},
+          "usage: Anthropic-format input and the stream's output tokens counted beside OpenAI's")
+    for words, ok in (("我分三路同时查三款手机，回来合成一张表。", True), ("交给三个子任务了，好了告诉你。", True),
+                      ("我先查两家官网的规格。", True), ("查一下。", True), ("Let me check both spec pages first.", True),
+                      ("我会把佩戴、声音取向和适合用途放在一张表里。", True),
+                      ("我重点看离线使用和文件在不在自己手里。", True),
+                      ("默认按通用酒店设计，标好必填项、负责人和截止时间。", True),
+                      ("[!!! Response truncated: max_tokens !!!]", False),
+                      ("好的。", False), ("挡拆是持球人借队友的掩护摆脱防守。", False), ("今天上海多云。", False)):
+        check(bool(PLAN_CUE_RE.search(words)) is ok, f"plan cue in 「{words}」: {ok}")
+
+    # Synthetic runs: steps of (words, tool, seconds at its dispatch), a
+    # told line (turn, words, seconds), a final reply (words, seconds).
+    def synth7(case_id: str, steps: tuple = (), final: tuple | None = None, tags: tuple = (), told: tuple = (),
+               stop: str = "final_reply", variant: str = "v7", ask: str | None = None) -> dict[str, Any]:
+        turns, calls = [], []
+        for k, (words, name, at) in enumerate(steps, 1):
+            args = {"question": ask} if name == "ask_user" and ask else {}
+            calls.append({"n": k, "turn": k, "name": name, "args": args, "at_s": at})
+            turns.append({"turn": k, "content": words, "tool_calls": [{"name": name, "args": args}], "after_s": at + 1})
+        for turn, words, at in told:
+            calls.append({"n": None, "turn": turn, "name": "tell_user", "args": {"message": words}})
+        body = ""
+        if final is not None:
+            body = final[0] + "".join(f'\n<subtask title="第 {i} 块">{b}</subtask>' for i, b in enumerate(tags, 1))
+            turns.append({"turn": len(steps) + 1, "content": body, "tool_calls": [], "after_s": final[1]})
+        return {"id": case_id, "variant": f"{variant}-1", "crit_variant": variant, "status": "ok", "stop_reason": stop,
+                "calls": calls, "turns": turns, "step_text": True, "final_reply": body,
+                "told": [{"turn": t, "message": w, "after_s": a} for t, w, a in told],
+                "dispatch": {"dispatched": bool(tags), "brief": tags[0] if tags else None, "briefs": list(tags),
+                             "titles": [f"第 {i} 块" for i in range(1, len(tags) + 1)], "count": len(tags),
+                             "in_final": bool(tags), "mid_tags": []}}
+
+    def j7(r: dict[str, Any], pool: dict[str, dict[str, Any]], cid: str) -> dict[str, Any]:
+        f = crit_facts(r, pool[cid])
+        print(f"    {cid}: {crit_cell(r, pool[cid])}")
+        return f
+
+    three = ("查 iPhone 17 Pro，交回官网出处", "查 Pixel 10 Pro，交回官网出处", "查 S25 Ultra，交回官网出处")
+    for r, pool, cid, want, why in (
+            (synth7("c-phones-three", (("我分三路同时查，回来合成一张表。", "code_run", 4.0),),
+                    ("三款各交给一个子任务。", 9.0), three), crcases, "c-phones-three",
+             dict(dispatched=True, tags=3, plan=True, kind="步骤里的字", first_s=4.0, fact_pass=True, verdict="合格"),
+             "handed off in three after a plan line: the plan, 4 s, sources asked for"),
+            (synth7("c-phones-three", (("", "code_run", 3.0), ("", "code_run", 6.0)),
+                    ("| 型号 | 价格 |\n| --- | --- |\n| A | 1 |\n出处：https://example.com", 20.0)), crcases, "c-phones-three",
+             dict(dispatched=False, tags=0, plan=False, kind="回复", first_s=20.0, fact_pass=False, verdict="不合格"),
+             "a table after two silent steps, never online: no plan line, 20 s, told from memory"),
+            (synth7("q-weather", (("我查一下厦门明天的天气。", "web_scan", 2.5),), stop="web_tool"), crcases, "q-weather",
+             dict(dispatched=False, plan=True, kind="步骤里的字", first_s=2.5, online_self=True, fact_pass=True,
+                  verdict="合格"), "online itself after a line: the plan, 2.5 s, looked up"),
+            (synth7("q-weather", (("", "web_scan", 2.5),), stop="web_tool"), crcases, "q-weather",
+             dict(plan=False, kind=None, first_s=None, stop_s=3.5, fact_pass=True, verdict="合格"),
+             "online itself without a word: no plan line, no words before the stop"),
+            (synth7("q-concept", (), ("挡拆是持球人借队友的掩护摆脱防守。", 5.0)), crcases, "q-concept",
+             dict(multi=False, plan=None, kind="回复", first_s=5.0, fact_pass=True, verdict="合格"),
+             "a concept told directly: one step, no plan line asked, 5 s"),
+            (synth7("q-headphones", (("", "code_run", 3.0), ("", "web_scan", 9.0)),
+                    told=((1, "我先查两家官网，再整理成表。", 2.0),), stop="web_tool"), crcases, "q-headphones",
+             dict(plan=True, kind="tell_user", first_s=2.0, fact_pass=True), "a told line first: the plan, 2 s"),
+            (synth7("c-research-report", (("", "ask_user", 4.0),), stop="ask_user", ask="预算大概多少？"), crcases,
+             "c-research-report", dict(plan=None, kind="问用户", first_s=4.0, fact_pass=None, verdict="单列"),
+             "a question to the user first: listed apart"),
+            (synth7("ask-dispatch", (), ("派出去了。", 3.0), ("整理昨天 NBA 的主要新闻",)), crcases, "ask-dispatch",
+             dict(dispatched=True, plan=True, kind="派活回复", fact_pass=False, verdict="不合格"),
+             "news handed off without asking for sources: fails the sources"),
+            (synth7("q-followup-quick", (), ("大概六周。", 4.0)), crcases, "q-followup-quick",
+             dict(fact_pass=None, verdict="不计分"), "q-followup-quick: recorded, not scored"),
+            (synth7("e-invoices", (("我先看看下载文件夹里有哪些发票。", "code_run", 3.0),), ("整理好了。", 12.0)), crcases,
+             "e-invoices", dict(plan=True, fact_pass=None, verdict="不计分"), "an errand: recorded, not scored"),
+            (synth7("fast-q-headphones", (("我直接查两家官网。", "web_scan", 3.0),), stop="web_tool", variant="v7ds"),
+             prcases, "fast-q-headphones", dict(pref_pass=True, fact_pass=True, verdict="合格"),
+             "fast memo, looked up here: followed"),
+            (synth7("fast-q-headphones", (), ("两款各派一个子任务。", 6.0), three[:2], variant="v7ds"), prcases,
+             "fast-q-headphones", dict(pref_pass=False, verdict="不合格"), "fast memo, handed off: not followed"),
+            (synth7("deep-c-phones-three", (), ("三款各派一个子任务，回来合成一张表。", 6.0), three, variant="v7glm"),
+             prcases, "deep-c-phones-three", dict(pref_pass=True, fact_pass=True, verdict="合格"),
+             "deep memo, handed off: followed"),
+            (synth7("deep-c-phones-three", (("", "web_scan", 3.0),), stop="web_tool", variant="v7glm"), prcases,
+             "deep-c-phones-three", dict(pref_pass=False, fact_pass=True, verdict="不合格"),
+             "deep memo, looked up here: not followed"),
+            (synth7("deep-q-east", (("", "ask_user", 2.0),), stop="ask_user", ask="要按什么口径？"), prcases, "deep-q-east",
+             dict(pref_pass=None, verdict="单列"), "deep memo, asked first: listed apart")):
+        f = j7(r, pool, cid)
+        got = {"dispatched": f["dispatched"], "tags": f["tags"], "plan": f["plan"], "multi": f["multi"],
+               "kind": (f["first"] or {}).get("kind"), "first_s": f["first_s"], "stop_s": f["stop_s"],
+               "online_self": f["online_self"], "fact_pass": f["fact_pass"], "pref_pass": f["pref_pass"],
+               "verdict": f["verdict"]}
+        check(all(got[k] == v for k, v in want.items()), f"v7: {why} ({ {k: got[k] for k in want} })")
+
+    def par7(cid: str, tags: list[tuple[str | None, str]]) -> dict[str, Any]:
+        r = synth7(cid, (), ("交给子任务。", 3.0), tuple(b for _, b in tags))
+        r["dispatch"]["titles"] = [t for t, _ in tags]
+        f = par_facts(r, pcases[cid])
+        print(f"    {cid}: {f['label']}：{f['verdict']}；{par_titles_cell(f)}")
+        return f
+
+    f = par7("p-same-tab", [("下单一", "把第一样下单"), ("下单二", "把后两样下单")])
+    check(f["pass"] is False and "同一个标签页或同一批文件拆成了 2 个标签" in f["how7"],
+          "v7: the same tab split in two fails (a contract that stays)")
+    f = par7("p-three-errands", [("发票归档", "归档发票"), ("截图整理", "整理截图")])
+    check(f["pass"] is None and f["verdict"] == "不计分", "v7: two tags for three errands, the count not judged")
+    f = par7("p-split-one", [(None, "整理 A 的文件清单")])
+    check(f["pass"] is False and f["verdict"] == "不合格", "v7: a tag without a title fails (a contract that stays)")
+
+    # The dry runs through the worker.
+    by_run = {r["id"]: r for r in results}
+    for run_id, (suite, case_id, variant, script) in sorted(scripts.items()):
+        r = by_run.get(run_id)
+        print(f"{suite} {run_id} ({case_id} / {variant}, {script})")
+        check(r is not None and r["status"] == "ok",
+              f"run completed (status {r and r['status']} {(r or {}).get('error', '')[:300]})")
+        if r is None or r["status"] != "ok":
+            continue
+        pool = prcases if suite == PREF_SUITE else pcases if suite == PAR_SUITE else crcases
+        case = pool[case_id]
+        system = r["requests"][0]["messages"][0]["content"]
+        check(("## Galley Runtime Layer\n\n" + standing + "\n\n## About Galley") in system
+              and system.count("You are running inside Galley.") == 1 and "How to go about a thing is yours" in system
+              and "You can do the work yourself" not in system and "__MANUAL_DIR__" not in system
+              and r.get("crit_variant") == variant and r.get("model_tag") == V7_MODELS[variant][1]
+              and r.get("suite") == suite and r.get("step_text") is True
+              and "tell_user" in r["request_shape"]["tools"],
+              f"the v7 prompt, {V7_MODELS[variant][1]} named, tell_user offered, the step's words read")
+        check(not r["do_calls"] and not r["blocked"] and not r["canaries"] and not r["sandbox"]["refused"],
+              f"nothing ran outside the sandbox ({r['do_calls']}, {r['blocked']}, {r['canaries']})")
+        f = (par_facts if suite == PAR_SUITE else crit_facts)(r, case)
+        print(f"    {v7_cell(f)}：{f['verdict']}")
+        fw = f.get("first") or {}
+        if script == "v7-plan-tags":
+            check(f["dispatched"] and f["tags"] == 3 and fw.get("kind") == "步骤里的字" and fw.get("turn") == 1
+                  and fw.get("text") == "我分三路同时查三款手机，回来合成一张表。" and f["plan"] is True
+                  and isinstance(f["first_s"], (int, float)) and f["fact_pass"] is True and f["verdict"] == "合格",
+                  "v7: the step's words seen first, three tags asking for sources")
+        elif script == "final":
+            check(not f["dispatched"] and f["multi"] is False and f["plan"] is None and fw.get("kind") == "回复"
+                  and f["fact_pass"] is True and f["verdict"] == "合格", "v7: a concept answered directly")
+        elif script == "v7-tell-web":
+            memos = [m["text"] for m in r.get("fixture_memos") or []]
+            check(r["stop_reason"] == "web_tool" and [t["message"] for t in r.get("told") or []]
+                  == ["我先查两家官网的规格，再整理成表。"] and fw.get("kind") == "tell_user" and f["plan"] is True
+                  and f["online_self"] and f["pref_pass"] is True and f["fact_pass"] is True and f["verdict"] == "合格"
+                  and "### Memo" in system and "对比、调研这类要快，直接查就行，不用派出去" in system
+                  and memos == ["对比、调研这类要快，直接查就行，不用派出去"],
+                  "v7: a told line seen first, online itself under the memo for speed (in the prompt and memo list)")
+        elif script == "par-three-tags":
+            check(f["dispatched"] and f["tags"] == 3 and f["titles_ok"] and f["verdict"] == "不计分",
+                  "v7 (par): three titled tags, recorded")
+
+
 def dry_test_par(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str, str]],
                  cases: dict[str, dict[str, Any]], crit: dict[str, dict[str, Any]], check: Any) -> None:
     """Ticket 127: the cases (the ticket's six word for word, ticket 115's
@@ -12899,7 +13767,7 @@ def main() -> int:
     ap.add_argument("--dry-test", action="store_true", help="verify interception, no model")
     ap.add_argument("--render-only", action="store_true", help="rebuild the .md from the .json")
     ap.add_argument("--suite", choices=("entry", "dispatch", "wake", "schedule", "todo", "chat", "memo", CRIT_SUITE,
-                                        PAR_SUITE, TELL_SUITE),
+                                        PAR_SUITE, TELL_SUITE, PREF_SUITE),
                     default="entry",
                     help="entry: cases.json WITHOUT / WITH; dispatch: dispatch-cases.json T / C / P; "
                          "wake: wake/cases.json under the wordings of wake/wording.md; "
@@ -12908,7 +13776,8 @@ def main() -> int:
                          "memo: memo/cases.json (ticket 96); "
                          "dispatch-criterion: dispatch-criterion/cases.json under the old and new prompts (ticket 115); "
                          "dispatch-parallel: dispatch-parallel/cases.json and ticket 115's cases under the new prompt "
-                         "(ticket 127); tell-user: tell-user/cases.json, the main chat's tell_user (ticket 137)")
+                         "(ticket 127); tell-user: tell-user/cases.json, the main chat's tell_user (ticket 137); "
+                         "preference: preference/cases.json, v7 under a memo (ticket 145)")
     ap.add_argument("--variant", default="all",
                     help="entry: without | with | both; dispatch: comma list of T,C,P; "
                          "wake: comma list of wording names; dispatch-criterion: old,new; or all")
@@ -12933,6 +13802,9 @@ def main() -> int:
     ap.add_argument("--prompt",
                     help="todo / schedule: comma list of CRIT_PROMPTS keys (v4,v5); runs the cases under those main "
                          "chat prompts into write-steps/ (ticket 139: steps to the first write)")
+    ap.add_argument("--wake-prompt",
+                    help="wake: run the cases that name a prompt under this CRIT_PROMPTS key instead (v7), kept in "
+                         "meta.prompt_<key>_runs beside the results (ticket 145)")
     ap.add_argument("--galley-db", default=str(DEFAULT_GALLEY_DB))
     ap.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     ap.add_argument("--mykey", help="fallback: a GA mykey.py (read-only)")
@@ -12950,12 +13822,13 @@ def main() -> int:
         return dry_test(args.python, args.ga_lang, args.keep_temp)
 
     if args.repeats is None:
-        args.repeats = (CRIT_REPEATS if args.suite in (CRIT_SUITE, PAR_SUITE)
+        args.repeats = (CRIT_REPEATS if args.suite in (CRIT_SUITE, PAR_SUITE, PREF_SUITE)
                         else TELL_REPEATS if args.suite == TELL_SUITE else WAKE_REPEATS)
     tell = args.suite == TELL_SUITE
     dispatch = args.suite == "dispatch"
     par = args.suite == PAR_SUITE
-    crit = args.suite == CRIT_SUITE or par
+    pref = args.suite == PREF_SUITE
+    crit = args.suite == CRIT_SUITE or par or pref
     wake = args.suite == "wake"
     todo = args.suite == "todo"
     chat = args.suite == "chat"
@@ -12964,6 +13837,8 @@ def main() -> int:
     sandbox_mode = dispatch and args.mode == "sandbox"
     if tell:
         suite_files = (TELL_CASES, TELL_JSON, TELL_MD, TELL_VARIANTS, render_tell_md)
+    elif pref:
+        suite_files = (PREF_CASES, PREF_JSON, PREF_MD, PREF_VARIANTS, render_pref_md)
     elif par:
         suite_files = (PAR_CASES, PAR_JSON, PAR_MD, PAR_VARIANTS, render_par_md)
     elif crit:
@@ -12994,7 +13869,7 @@ def main() -> int:
             fail(f"--prompt is for the todo and schedule suites, with {', '.join(CRIT_PROMPTS)}")
         results_json, results_md, render = WRITE_JSON, WRITE_MD, render_write_md
         WRITE_DIR.mkdir(exist_ok=True)
-    all_cases = (chat_cases() if chat else par_cases() if par else crit_cases() if crit
+    all_cases = (chat_cases() if chat else pref_cases() if pref else par_cases() if par else crit_cases() if crit
                  else tell_cases() if tell
                  else json.loads(cases_path.read_text(encoding="utf-8"))["cases"])
     if args.render_only:
@@ -13018,6 +13893,12 @@ def main() -> int:
         variants = [v.strip() for v in args.variant.split(",")]
         if not variants or any(v not in all_variants for v in variants):
             fail(f"--variant for the {args.suite} suite: {', '.join(all_variants)} or all")
+    # Ticket 145: a v7 variant names its model.
+    problem = v7_model_problem(variants, args.model_id, args.mykey) if crit else None
+    if problem:
+        fail(problem)
+    if args.wake_prompt and (not wake or args.wake_prompt not in CRIT_PROMPTS or args.control):
+        fail(f"--wake-prompt is for the wake suite, a key of {', '.join(CRIT_PROMPTS)}, without --control")
 
     if args.mykey:
         if not args.mykey_entry:
@@ -13059,7 +13940,8 @@ def main() -> int:
         jobs = make_tell_jobs(cases, now.astimezone(), mykeys, args.ga_lang, allowed, args.repeats,
                               first=args.first_repeat, variants=variants)
     elif wake:
-        jobs = make_wake_jobs(cases, variants, now, mykeys, args.ga_lang, allowed, args.repeats)
+        jobs = make_wake_jobs(cases, variants, now, mykeys, args.ga_lang, allowed, args.repeats,
+                              prompt_override=args.wake_prompt)
     elif dispatch:
         jobs = make_dispatch_jobs(cases, variants, now, draft, mykeys, args.ga_lang, allowed,
                                   sandbox=sandbox_mode)
@@ -13072,7 +13954,11 @@ def main() -> int:
     secret = str(next(iter(mykeys.values())).get("apikey") or "")
     if len(secret) >= 8:
         results = json.loads(json.dumps(results, ensure_ascii=False).replace(secret, "<redacted>"))
-    if args.control:
+    # Ticket 145: --wake-prompt's runs are kept the same way, under their
+    # own key.
+    control_key = (f"ticket{args.control}_control" if args.control
+                   else f"prompt_{args.wake_prompt}_runs" if args.wake_prompt else None)
+    if control_key:
         # Ticket 64: a same-day control (the prompt before the ticket, run
         # in the same hour as the rerun), kept beside the results; merged
         # by run, the composed requests left as they are.
@@ -13081,7 +13967,7 @@ def main() -> int:
         for r in results:
             r.pop("request", None)
         previous = json.loads(results_json.read_text(encoding="utf-8"))
-        key = f"ticket{args.control}_control"
+        key = control_key
         fresh = {(r["id"], r["variant"]) for r in results}
         kept = [r for r in previous["meta"].get(key) or [] if (r["id"], r["variant"]) not in fresh]
         order = {c["id"]: i for i, c in enumerate(all_cases)}
@@ -13099,7 +13985,7 @@ def main() -> int:
             elif wake:
                 write_composed(r, "", WAKE_COMPOSED_DIR)
             elif crit:
-                write_composed(r, "", PAR_COMPOSED_DIR if par else CRIT_COMPOSED_DIR)
+                write_composed(r, "", PAR_COMPOSED_DIR if par else PREF_COMPOSED_DIR if pref else CRIT_COMPOSED_DIR)
             elif tell:
                 write_composed(r, "", TELL_COMPOSED_DIR)
             else:
@@ -13315,6 +14201,35 @@ def main() -> int:
                            "anything else: unknown_command (exit 1)",
             "start_subtask_fake_result": FAKE_DISPATCH_RESULTS["P"],
         }
+    # Ticket 145: what a later run's meta would drop (a control or a note
+    # of a ticket not in the list above, --wake-prompt's runs) is carried.
+    for key, val in previous_meta.items():
+        if key not in data["meta"] and (key.endswith(("_control", "_control_at", "_note"))
+                                        or (key.startswith("prompt_") and key.endswith(("_runs", "_runs_at")))):
+            data["meta"][key] = val
+    # Ticket 145: each v7 variant's model; a v7 run on a model other than
+    # the default leaves the file's model (the earlier variants') as it was.
+    v7_models = dict(previous_meta.get("v7_models") or {})
+    if crit:
+        desc = describe_mykeys(mykeys)
+        for v in variants:
+            if v in V7_MODELS:
+                v7_models[v] = {"model_id": args.model_id, "name": V7_MODELS[v][1], "model": desc.get("model"),
+                                "reasoning_effort": (desc.get("options") or {}).get("reasoning_effort"),
+                                "access": "API key 接入"}
+        if any(v in V7_MODELS for v in variants) and args.model_id != DEFAULT_MODEL_ID and previous_meta.get("model"):
+            for k in ("model", "model_source", "model_access"):
+                if previous_meta.get(k) is not None:
+                    data["meta"][k] = previous_meta[k]
+        if pref:
+            data["meta"]["suite"] = ("preference (ticket 145, main chat PRD ruling 194): five cases of "
+                                     "dispatch-criterion/cases.json, each under one of preference/cases.json's two "
+                                     "memos (the Memo lines and the fake galley's memo list), under the v7 main chat "
+                                     "prompt (dispatch-criterion/galley-prompt/main_chat.v7.txt) with tell_user "
+                                     "offered, ticket 115's sandbox; judged on whether it followed the memo, the "
+                                     "facts' sources and the v7 measures")
+    if v7_models:
+        data["meta"]["v7_models"] = v7_models
     results_json.write_text(scrub(json.dumps(data, ensure_ascii=False, indent=2) + "\n"),
                             encoding="utf-8")
     results_md.write_text(scrub(render(data, all_cases)), encoding="utf-8")

@@ -379,7 +379,8 @@ look it up with the Galley CLI (search, then
 /// world goes too. Ticket 139 (ruling 186, below) took the line out: the
 /// model does the work itself or hands it off, by its own judgment, with
 /// two guidelines (a fact is looked up and sourced; changes go by
-/// `authority.md`).
+/// `authority.md`). Ticket 145 (ruling 194, below) gives that judgment
+/// the costs of each path and one starting point instead of a line.
 ///
 /// Ticket 30 (assistant PRD rulings 2, 3, 8) closed the loop: the
 /// instructions also name the evidence to hand back, Galley wakes the
@@ -639,23 +640,71 @@ look it up with the Galley CLI (search, then
 /// done apart, standing on their own or merged when they are back.
 /// `subtasks.md` says how to merge them when they come back, and Core
 /// wakes the main chat once for a batch (ticket 144).
+///
+/// Ticket 145 (main chat PRD ruling 194), the clause's seventh round,
+/// stops listing what goes where and gives what each path costs. The
+/// paragraph had eight versions in a month (10-06, rulings 160, 174, 183,
+/// 184, 185, 186, 193), each a line drawn finer for a case the dev machine
+/// or the eval turned up. Ruling 186's neutral sentence (what the model
+/// can do, nothing more) handed off 6 runs of 72 in ticket 139's eval;
+/// ruling 193's sentence by kind split comparisons the right way and sent
+/// a prediction question, a recommendation of note apps and a folder of
+/// invoices out with them (ticket 143's Open risks 1, 3 and 4). JC
+/// (11-04): tell the model its standing and what it can do, and let it
+/// judge how to arrange things for the user. What ruling 186 lacked was
+/// the costs and the user's preferences, and since ticket 136 a wrong
+/// call is one sentence of the user's from changed. The standing is in
+/// the static rules ([`MAIN_CHAT_STANDING`]), ahead of GA's executor
+/// role. The paragraph weighs the two paths: doing it here is quicker and
+/// lighter, and the user reaches the model at its next step, `tell_user`
+/// answering in a line without stopping (tickets 136, 137); a subtask
+/// starts fresh with this conversation's last turns (ticket 138), looks
+/// into one thing in depth, runs alongside the others, takes a few
+/// minutes, and Galley wakes the model once they are all back (ticket
+/// 144). One starting point: what the user will decide on or keep is
+/// worth a subtask's wait for depth, a question in passing wants an
+/// answer now, and the user's memos on how they like things done come
+/// first (ruling 194 point 2, option 甲). The draft read "worth the wait
+/// for depth"; "a subtask's" is the one rewording the ticket allowed,
+/// after its eval: under a memo asking for depth on what the user
+/// decides by, the three models researched comparisons themselves and
+/// the report too, apart from gpt-6.1-sol, which handed the report off.
+/// With "a subtask's" glm-5.3-flash handed the report off 2 runs of 2
+/// (0 of 2 before) and deepseek-flash 1 of 2 (0 of 2); comparisons,
+/// a prediction and a recommendation stayed here under both wordings.
+/// Then: say in a line how it will go about
+/// whatever takes more than a moment, which takes the place of "Tell the
+/// user in a sentence that it is on its way" (said only of a hand-off);
+/// when the user says otherwise, do it their way, and note that as a
+/// memo when it is how they want such things done (`memo.md`'s "What
+/// they prefer or avoid" carries the example). Gone: "You can do the work
+/// yourself, on the web too, or hand it to subtasks, several at once"
+/// with ruling 193's sentence by kind; "The user can talk to you at any
+/// time …", folded into the costs; the condition before one tag per part
+/// ("When the user hands you several errands that do not depend on each
+/// other, or one piece of work splits into parts done apart …"); "on its
+/// way". Kept word for word: a fact in the world looked up and sourced,
+/// an idea or what this conversation answers told directly, the three
+/// levels of `authority.md`, the tag with its title, what the
+/// instructions carry, the parts that need the same tab or files in one
+/// tag, not calling this chat the main chat, no waiting or watching, and
+/// the subagent sentence.
 fn main_chat_entry_layer(manual_dir: &str) -> String {
     format!(
         r#"{MAIN_CHAT_ENTRY_LAYER_HEAD}
 
-You can do the work yourself, on the web too, or hand it to subtasks,
-several at once. Something the user will use to decide, pass on or keep,
-and that takes looking into (a comparison, a plan, a report, a survey),
-goes to subtasks to be done in depth: one tag per part when it splits (a
-product, a place, a source each), all at once, and when the last part is
-back you merge them into one. A question, a remark or a single fact you
-answer yourself. When the user says to do it here or to hand it off, do
-that. A write-up of what this conversation already holds, with nothing
-to look up, you do yourself.
-The user can talk to you at any time: what they say reaches you at your
-next step. When they bring up something else and what you have in hand
-will take long, hand it off and answer them first, or tell them a line
-now (`tell_user`) and carry on.
+How to go about a thing is yours to weigh. Doing it yourself is quicker
+and lighter, and the user can talk to you while you work: what they say
+reaches you at your next step, and `tell_user` answers them in a line
+without stopping. A subtask starts fresh with this conversation's last
+turns as background, looks into one thing in depth and runs alongside any
+others; each takes a few minutes, and Galley wakes you once they are all
+back, for you to check and put together. As a starting point, what the
+user will decide on or keep is worth a subtask's wait for depth, and a question
+in passing wants an answer now; their memos on how they like things done
+come first. When something will take more than a moment, say in a line
+how you will go about it; when the user says otherwise, do it their way,
+and note it as a memo when it is how they want such things done.
 A fact in the world (a person, an event, a game, the news, a figure, a
 price, how someone is doing lately): look it up before you answer,
 yourself or by a subtask, and give your sources. An idea, a reason, how
@@ -667,18 +716,14 @@ levels of authority in `authority.md`.
 To hand something off, end your reply with
 <subtask title="a few words">what to do</subtask>. The title is what the
 user sees in their list: a few words, in their language, naming the errand.
-When the user hands you several errands that do not depend on each other,
-or one piece of work splits into parts done apart, whether they stand on
-their own or you merge them when they are back, write one tag per part in
-the same reply: they run at the same time. Keep in one tag the parts that
-need the same browser tab or the same files.
+Write one tag per part, in the same reply, and they run at the same time;
+keep in one tag the parts that need the same browser tab or the same files.
 Galley starts each after this reply, with this conversation's last turns
 as background, so write the goal, what you have found so far, and what to
 hand back, with the evidence for it (a confirmation number, a file path, a
 link, a screenshot path).
-Tell the user in a sentence that it is on its way, without calling this
-chat the main chat. When it finishes, asks something or fails, Galley
-wakes you to check it and tell the user, so do not wait on it or watch it.
+Do not call this chat the main chat. Galley wakes you when they finish,
+ask something or fail, so do not wait on them or watch them.
 Use this, not the file-based subagent in your memory (subagent.md), which
 the user cannot see.
 
@@ -791,18 +836,48 @@ fn workbench_static_prompt() -> String {
     format!("{RUNTIME_PROMPT_STATIC}\n\n{WORKBENCH_SUGGESTION_PROMPT}")
 }
 
+/// The line that opens the Galley layer in [`RUNTIME_PROMPT_STATIC`]:
+/// what the main chat's static rules swap for [`MAIN_CHAT_STANDING`].
+const GALLEY_OPENING: &str = "You are running inside Galley.";
+
+/// The main chat's standing (main chat PRD ruling 194, ticket 145): the
+/// Galley layer opens, in the main chat only, by telling the model whose
+/// assistant it is here and that a team stands behind it. The prompt a
+/// model receives opens with GA's core prompt, "Role: Physical-Level
+/// Omnipotent Executor" (`managed-ga/code/assets/sys_prompt_en.txt`):
+/// one agent with its own hands, finishing a task. "Behind you is a
+/// team" was written only in the manual's `subtasks.md`, which the model
+/// reads when Galley wakes it, after it has decided how to go about a
+/// thing. GA's role is not patched (Rule 1, and nothing upstream to
+/// carry): the paragraph says that role is how the engine works with its
+/// own hands, which it still uses, and that here it also decides, as a
+/// good chief of staff would for this user, what it does itself and what
+/// it hands to the team, and keeps them told. The entry layer's dispatch
+/// paragraph gives the costs that decision weighs; what goes where is no
+/// longer listed (see [`main_chat_entry_layer`]). Workbench sessions,
+/// subtasks and IM keep the bare opening line: they are not the
+/// assistant with the team.
+const MAIN_CHAT_STANDING: &str = r#"You are running inside Galley. In this conversation you are the user's
+personal assistant, with a team behind you. The role above is how your
+engine works with its own hands, and you still use them; here you also
+decide, as a good chief of staff would for this user, what you do
+yourself and what you hand to the team, and you keep them told."#;
+
 /// The main chat's static rules: the workbench's, with the configuration
 /// paragraph of "What Only The User Changes In Galley" swapped for
-/// [`MAIN_CHAT_USER_ONLY_CONFIGURATION`] (ticket 36). Like everything
-/// only the main chat reads, outside `prompt_hash()`. Both paragraphs are
-/// raw strings of this file, so a CRLF checkout changes them alike and
-/// the swap still matches.
+/// [`MAIN_CHAT_USER_ONLY_CONFIGURATION`] (ticket 36), and (ticket 145)
+/// the layer's opening line for [`MAIN_CHAT_STANDING`]. Like everything
+/// only the main chat reads, outside `prompt_hash()`. The paragraphs are
+/// raw strings of this file and the opening line is one line, so a CRLF
+/// checkout changes them alike and both swaps still match.
 fn main_chat_static_prompt() -> String {
-    workbench_static_prompt().replacen(
-        USER_ONLY_CONFIGURATION,
-        MAIN_CHAT_USER_ONLY_CONFIGURATION,
-        1,
-    )
+    workbench_static_prompt()
+        .replacen(
+            USER_ONLY_CONFIGURATION,
+            MAIN_CHAT_USER_ONLY_CONFIGURATION,
+            1,
+        )
+        .replacen(GALLEY_OPENING, MAIN_CHAT_STANDING, 1)
 }
 
 /// At most this many lines per group in the main chat's "In Hand" block
@@ -1423,9 +1498,9 @@ mod tests {
     /// this is and where the model's context of it begins, and sends the
     /// model to the CLI for anything earlier. The section is appended to
     /// the state block, and besides it the main chat's prompt differs from
-    /// the workbench's only in its configuration paragraph (ticket 36):
-    /// every other workbench session gets the prompt it always had, and IM
-    /// never carries it.
+    /// the workbench's only in its configuration paragraph (ticket 36) and
+    /// its opening line, the standing (ticket 145): every other workbench
+    /// session gets the prompt it always had, and IM never carries it.
     #[test]
     fn main_chat_section_names_the_conversation_and_its_segment() {
         let state = main_chat_state();
@@ -1435,11 +1510,13 @@ mod tests {
             main,
             format!(
                 "{}\n\n{}\n\n{}",
-                ordinary.replacen(
-                    USER_ONLY_CONFIGURATION,
-                    MAIN_CHAT_USER_ONLY_CONFIGURATION,
-                    1
-                ),
+                ordinary
+                    .replacen(
+                        USER_ONLY_CONFIGURATION,
+                        MAIN_CHAT_USER_ONLY_CONFIGURATION,
+                        1
+                    )
+                    .replacen(GALLEY_OPENING, MAIN_CHAT_STANDING, 1),
                 main_chat_section(&state),
                 main_chat_entry_layer(MANUAL_DIR)
             ),
@@ -1589,69 +1666,50 @@ mod tests {
     /// the instructions name the evidence to hand back, and Galley wakes
     /// the model instead of it looking the subtask up when asked. Ticket
     /// 126 (ruling 175): the tag carries a short title in the user's
-    /// language. Ticket 127 (ruling 174): independent errands, or
-    /// independent parts of one, one tag each in the same reply; parts
-    /// that share a browser tab or files are not split; no cap on the
-    /// count. Ticket 134 (ruling 183 point 5): what has to come back as
-    /// one thing stays in one tag. Ticket 139 (ruling 186, in place of
-    /// the lines of tickets 115 and 134): the model does the work itself,
-    /// the web included, or hands it off, by its judgment; the user can
-    /// reach it at its next step, and it can hand off what is in hand and
-    /// answer, or tell them a line and go on; a fact in the world is
-    /// looked up and sourced (ruling 185's half that stays), an idea, how
-    /// to do something, a view or what this conversation answers is
-    /// answered directly; a change goes by `authority.md`; the
-    /// instructions need not copy this conversation, which the subtask
-    /// carries (ticket 138); handing off, it does not call this chat the
-    /// main chat (ruling 173). Ticket 143 (ruling 193, in place of ruling
-    /// 183 point 5): what the user will use to decide, pass on or keep and
-    /// that takes looking into goes to subtasks, one tag per part when it
-    /// splits, merged when the last is back; a question, a remark or a
-    /// single fact is answered here; what the user says goes; a write-up
-    /// of this conversation stays. What comes back as one thing is no
-    /// longer kept in one tag; the same tab or files still are.
+    /// language. Ticket 127 (ruling 174): one tag per part in the same
+    /// reply; parts that share a browser tab or files are not split; no
+    /// cap on the count. Ticket 139 (ruling 186, in place of the lines of
+    /// tickets 115 and 134): a fact in the world is looked up and sourced
+    /// (ruling 185's half that stays), an idea, how to do something, a
+    /// view or what this conversation answers is answered directly; a
+    /// change goes by `authority.md`; the instructions need not copy this
+    /// conversation, which the subtask carries (ticket 138); it does not
+    /// call this chat the main chat (ruling 173). Ticket 145 (ruling 194,
+    /// in place of ruling 186's neutral sentence and ruling 193's by
+    /// kind): no line of what goes where; what each path costs, one
+    /// starting point, the user's memos first, a line on how it will go
+    /// about it, the user's way when they say otherwise, noted as a memo.
     #[test]
     fn main_chat_entry_layer_leaves_the_hand_off_to_judgment() {
         let main =
             compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
         // Single-line fragments only (a Windows checkout makes the raw
         // string CRLF).
-        // Ruling 186: itself or a subtask, several at once; the user can
-        // reach it (ticket 136), and it can answer first or say a line
-        // (ticket 137).
-        assert!(
-            main.contains("You can do the work yourself, on the web too, or hand it to subtasks,")
-        );
-        // Ruling 193: by what the work is for. A deliverable that takes
-        // looking into goes out in depth, split one tag per part and
-        // merged when the last is back; a question, a remark or a single
-        // fact stays; the user's word goes; a write-up of this
-        // conversation stays.
-        assert!(main
-            .contains("several at once. Something the user will use to decide, pass on or keep,"));
-        assert!(main
-            .contains("and that takes looking into (a comparison, a plan, a report, a survey),"));
-        assert!(main
-            .contains("goes to subtasks to be done in depth: one tag per part when it splits (a"));
-        assert!(main
-            .contains("product, a place, a source each), all at once, and when the last part is"));
-        assert!(main
-            .contains("back you merge them into one. A question, a remark or a single fact you"));
-        assert!(main
-            .contains("answer yourself. When the user says to do it here or to hand it off, do"));
-        assert!(
-            main.contains("that. A write-up of what this conversation already holds, with nothing")
-        );
-        assert!(main.contains("to look up, you do yourself."));
-        assert!(main
-            .contains("The user can talk to you at any time: what they say reaches you at your"));
-        assert!(
-            main.contains("next step. When they bring up something else and what you have in hand")
-        );
-        assert!(
-            main.contains("will take long, hand it off and answer them first, or tell them a line")
-        );
-        assert!(main.contains("now (`tell_user`) and carry on."));
+        // Ruling 194: how to go about it is the model's to weigh, given
+        // what each path costs. Here: quicker and lighter, and the user
+        // reaches it at its next step (ticket 136), `tell_user` answering
+        // in a line (ticket 137). A subtask: fresh with this
+        // conversation's last turns (ticket 138), one thing in depth, side
+        // by side, minutes, one wake for the batch (ticket 144).
+        for line in [
+            "How to go about a thing is yours to weigh. Doing it yourself is quicker",
+            "and lighter, and the user can talk to you while you work: what they say",
+            "reaches you at your next step, and `tell_user` answers them in a line",
+            "without stopping. A subtask starts fresh with this conversation's last",
+            "turns as background, looks into one thing in depth and runs alongside any",
+            "others; each takes a few minutes, and Galley wakes you once they are all",
+            "back, for you to check and put together. As a starting point, what the",
+            // One starting point; the user's memos come first (point 2, 甲).
+            "user will decide on or keep is worth a subtask's wait for depth, and a question",
+            "in passing wants an answer now; their memos on how they like things done",
+            "come first. When something will take more than a moment, say in a line",
+            // A line on how it will go about it; the user's way, kept as a
+            // memo when it is how they want such things done.
+            "how you will go about it; when the user says otherwise, do it their way,",
+            "and note it as a memo when it is how they want such things done.",
+        ] {
+            assert!(main.contains(line), "entry layer lost: {line}");
+        }
         // Ruling 185's half that stays: a fact is looked up, by it or a
         // subtask, and sourced; the rest is answered directly, this
         // conversation taken as it stands (the fourth round's eval).
@@ -1684,24 +1742,15 @@ mod tests {
         assert!(main.contains(
             "user sees in their list: a few words, in their language, naming the errand."
         ));
-        // Ticket 127: several independent errands, or independent parts
-        // of one, as one tag each in the same reply; no cap on the count.
-        // Ticket 143 (ruling 193): parts done apart split whether they
-        // stand on their own or are merged when back; only the same
-        // browser tab or the same files keep parts in one tag (ticket
-        // 134's "what has to come back as one thing" is gone).
+        // Ticket 127: one tag per part, in the same reply, at the same
+        // time; no cap on the count. The same browser tab or the same
+        // files keep parts in one tag (ticket 145: the condition before
+        // it, several errands or a piece of work split, is gone).
         assert!(main
-            .contains("When the user hands you several errands that do not depend on each other,"));
-        assert!(main
-            .contains("or one piece of work splits into parts done apart, whether they stand on"));
-        assert!(main
-            .contains("their own or you merge them when they are back, write one tag per part in"));
-        assert!(main
-            .contains("the same reply: they run at the same time. Keep in one tag the parts that"));
-        assert!(main.contains("need the same browser tab or the same files."));
-        assert!(!main.contains("Keep in one tag what has to come back as one thing"));
-        assert!(!main.contains("what has to come back as one thing"));
-        assert!(!main.contains("whose results each stand on their own"));
+            .contains("Write one tag per part, in the same reply, and they run at the same time;"));
+        assert!(main.contains(
+            "keep in one tag the parts that need the same browser tab or the same files."
+        ));
         // Ticket 138: the subtask carries this conversation's last turns,
         // so the instructions carry the goal, what was found so far (not in
         // the background) and what to hand back with its evidence.
@@ -1713,18 +1762,35 @@ mod tests {
             "hand back, with the evidence for it (a confirmation number, a file path, a"
         ));
         assert!(main.contains("link, a screenshot path)."));
-        // Ruling 173: no inner name to the user.
+        // Ruling 173: no inner name to the user; Galley wakes it, so no
+        // waiting or watching.
         assert!(main
-            .contains("Tell the user in a sentence that it is on its way, without calling this"));
-        assert!(
-            main.contains("chat the main chat. When it finishes, asks something or fails, Galley")
-        );
-        assert!(main.contains(
-            "wakes you to check it and tell the user, so do not wait on it or watch it."
-        ));
+            .contains("Do not call this chat the main chat. Galley wakes you when they finish,"));
+        assert!(main.contains("ask something or fail, so do not wait on them or watch them."));
         assert!(main
             .contains("Use this, not the file-based subagent in your memory (subagent.md), which"));
         assert!(main.contains("the user cannot see."));
+        // Ticket 145: what went. Ruling 186's neutral sentence and ruling
+        // 193's by kind; "the user can talk to you" with its hand-off
+        // (folded into the costs); the condition before one tag per part;
+        // "on its way" (the line on how it will go about it says more).
+        for gone in [
+            "You can do the work yourself",
+            "Something the user will use to decide",
+            "to be done in depth",
+            "merge them",
+            "A question, a remark or a single fact",
+            "When the user says to do it here or to hand it off",
+            "A write-up of what this conversation already holds",
+            "The user can talk to you at any time",
+            "hand it off and answer them first",
+            "When the user hands you several errands",
+            "one piece of work splits into parts done apart",
+            "Tell the user in a sentence that it is on its way",
+            "on its way",
+        ] {
+            assert!(!main.contains(gone), "entry layer still has: {gone}");
+        }
         assert!(!main.contains("look it up when they ask"));
         // The lines it replaced: how long the work would keep the chat busy
         // (ticket 06a), whether the user is waiting (ticket 115), a step or
@@ -1747,22 +1813,83 @@ mod tests {
         assert!(!main.contains("cannot see this one"));
         assert!(!main.contains("write everything it needs"));
         assert!(!main.contains("cite a rule"));
+        assert!(!main.contains("what has to come back as one thing"));
         let layer = main.find("Main Chat Entry Layer").unwrap();
         assert!(!main[layer..].contains("websites"));
         // Ticket 127: no cap on how many subtasks go out at once.
         assert!(!main[layer..].contains("at most"));
-        let clause = main.find("You can do the work yourself,").unwrap();
+        // The order: how to weigh it, then the floor (facts, authority),
+        // then how to write the tag and the instructions.
+        let clause = main
+            .find("How to go about a thing is yours to weigh.")
+            .unwrap();
+        let fact = main.find("A fact in the world").unwrap();
+        let authority = main.find("levels of authority in `authority.md`.").unwrap();
         let tag = main.find("To hand something off").unwrap();
         let note = main.find("Note what the user has to do").unwrap();
-        assert!(layer < clause && clause < tag && tag < note);
+        assert!(layer < clause && clause < fact && fact < authority);
+        assert!(authority < tag && tag < note);
         for prompt in [compose_runtime_prompt("t"), compose_im_runtime_prompt("t")] {
             assert!(!prompt.contains("<subtask"));
-            assert!(!prompt.contains("You can do the work yourself"));
             assert!(!prompt.contains("tell_user"));
-            // Ticket 143: the judgment is the main chat's only.
-            assert!(!prompt.contains("Something the user will use to decide"));
-            assert!(!prompt.contains("to be done in depth"));
-            assert!(!prompt.contains("merge them"));
+            // Ticket 145: the costs and the starting point are the main
+            // chat's only.
+            assert!(!prompt.contains("How to go about a thing is yours to weigh"));
+            assert!(!prompt.contains("A subtask starts fresh"));
+            assert!(!prompt.contains("wait for depth"));
+            assert!(!prompt.contains("how they like things done"));
+            assert!(!prompt.contains("say in a line"));
+            assert!(!prompt.contains("Write one tag per part"));
+            assert!(!prompt.contains("Do not call this chat the main chat"));
+        }
+    }
+
+    /// Ticket 145 (main chat PRD ruling 194): in the main chat, and only
+    /// there, the Galley layer opens with the standing — the user's
+    /// personal assistant with a team behind it, GA's role above being
+    /// how its engine works with its own hands, and it deciding, as a
+    /// good chief of staff would, what it does itself and what it hands to
+    /// the team. Workbench sessions, subtasks (the workbench prompt), IM
+    /// and the shared rules keep the bare opening line.
+    #[test]
+    fn only_the_main_chat_opens_with_its_standing() {
+        let main =
+            compose_main_chat_runtime_prompt("t", &main_chat_state(), None, None, MANUAL_DIR);
+        // Single-line fragments only (CRLF on Windows).
+        let standing = [
+            "You are running inside Galley. In this conversation you are the user's",
+            "personal assistant, with a team behind you. The role above is how your",
+            "engine works with its own hands, and you still use them; here you also",
+            "decide, as a good chief of staff would for this user, what you do",
+            "yourself and what you hand to the team, and you keep them told.",
+        ];
+        for line in standing {
+            assert!(main.contains(line), "main chat lost: {line}");
+        }
+        // It opens the Galley layer, where the bare line was.
+        assert!(main.starts_with("## Galley Runtime Layer"));
+        let opening = main.find(standing[0]).unwrap();
+        let about = main.find("## About Galley").unwrap();
+        assert!(opening < about);
+        // The bare line is gone: the only opening line is the standing's.
+        assert_eq!(main.matches(GALLEY_OPENING).count(), 1);
+        // The shared rules carry the opening line once, the suggestion
+        // section not at all, so the swap hits that line.
+        assert_eq!(RUNTIME_PROMPT_STATIC.matches(GALLEY_OPENING).count(), 1);
+        assert!(!WORKBENCH_SUGGESTION_PROMPT.contains(GALLEY_OPENING));
+        for prompt in [
+            RUNTIME_PROMPT_STATIC.to_string(),
+            workbench_static_prompt(),
+            compose_runtime_prompt("t"),
+            compose_im_runtime_prompt("t"),
+            compose_subtask_runtime_prompt("t", "## Background\n\nthe last turns"),
+        ] {
+            assert!(prompt.contains(GALLEY_OPENING));
+            for line in &standing[1..] {
+                assert!(!prompt.contains(line), "not the main chat, yet has: {line}");
+            }
+            assert!(!prompt.contains("with a team behind you"));
+            assert!(!prompt.contains("chief of staff"));
         }
     }
 
@@ -2097,7 +2224,23 @@ mod tests {
     /// browser tab or files: "what has to come back as one thing (a
     /// comparison, one table, one report, the answer to one question)" is
     /// gone (−105).
-    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 5268;
+    /// Lowered 5268 → 5008 by ticket 145 (main chat PRD ruling 194): −260
+    /// bytes. The opening, ruling 186's sentence with ruling 193's by kind
+    /// (605) and "The user can talk to you at any time …" (246), became one
+    /// paragraph of what each path costs (865, +14): yours to weigh (43);
+    /// here quicker and lighter, the user reaching it at its next step,
+    /// `tell_user` in a line (189); a subtask fresh with the last turns, in
+    /// depth, side by side, minutes, one wake for the batch (241); the
+    /// starting point (142, of which "a subtask's" in place of "the" +8
+    /// came from the ticket's eval) with the user's memos first (53); a
+    /// line on how it will go about it (85); the user's way, noted as a
+    /// memo (112). The parallel sentence keeps only one tag per part and
+    /// the same tab or files (340 → 150, −190): the condition before it
+    /// went. "On its way" and the wake (217 → 133, −84) became "Do not call
+    /// this chat the main chat" and the wake for them all: a line on how it
+    /// goes about it is already asked for above. Measured on macOS, no
+    /// headroom.
+    const MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES: usize = 5008;
 
     #[test]
     fn main_chat_entry_layer_stays_within_budget() {
@@ -2201,8 +2344,9 @@ mod tests {
             assert!(!prompt.contains("your manual"));
         }
 
-        // The swap is the only difference, and it happened: the paragraph
-        // is in the shared rules exactly once.
+        // The swaps are the only differences, and they happened: the
+        // paragraph is in the shared rules exactly once (ticket 145: and
+        // the opening line, swapped for the standing).
         assert_eq!(
             RUNTIME_PROMPT_STATIC
                 .matches(USER_ONLY_CONFIGURATION)
@@ -2211,11 +2355,13 @@ mod tests {
         );
         assert_ne!(main_chat_static_prompt(), workbench_static_prompt());
         assert_eq!(
-            main_chat_static_prompt().replacen(
-                MAIN_CHAT_USER_ONLY_CONFIGURATION,
-                USER_ONLY_CONFIGURATION,
-                1
-            ),
+            main_chat_static_prompt()
+                .replacen(
+                    MAIN_CHAT_USER_ONLY_CONFIGURATION,
+                    USER_ONLY_CONFIGURATION,
+                    1
+                )
+                .replacen(MAIN_CHAT_STANDING, GALLEY_OPENING, 1),
             workbench_static_prompt()
         );
         // IM is the shared rules plus the state block, as before.
@@ -2229,21 +2375,38 @@ mod tests {
         );
     }
 
-    /// Ticket 36: the main chat's static rules are the shared ones with
-    /// one paragraph swapped, and the swap may not make them longer than
-    /// everyone's: they stay inside the static budget.
+    /// Byte cap on the main chat's static rules: the shared ones with
+    /// ticket 36's paragraph swapped and, since ticket 145 (main chat PRD
+    /// ruling 194), the standing in place of the opening line. Until
+    /// ticket 145 they had to stay inside `STATIC_PROMPT_BUDGET_BYTES` and
+    /// no longer than everyone's (the swap alone made them 89 bytes
+    /// shorter); the standing makes them longer by what only the main chat
+    /// reads, so they have a cap of their own. Set the way the shared one
+    /// is: no headroom on the larger platform variant (Windows, whose
+    /// history lookup commands are 18 bytes longer: 7074 bytes on POSIX),
+    /// `\r` not counted. 6762 on POSIX before ticket 145; the standing
+    /// adds 312 (the paragraph, 342 bytes, in place of the 30-byte
+    /// opening line). Like the shared cap: to add a clause, remove one
+    /// first, or raise this number in the same diff and say why.
+    const MAIN_CHAT_STATIC_PROMPT_BUDGET_BYTES: usize = 7092;
+
     #[test]
-    fn main_chat_static_rules_stay_within_the_static_budget() {
-        let len = main_chat_static_prompt()
-            .bytes()
-            .filter(|&byte| byte != b'\r')
-            .count();
-        let shared = workbench_static_prompt()
-            .bytes()
-            .filter(|&byte| byte != b'\r')
-            .count();
-        assert!(len <= shared, "main chat static {len} > shared {shared}");
-        assert!(len <= STATIC_PROMPT_BUDGET_BYTES);
+    fn main_chat_static_rules_stay_within_their_budget() {
+        let bytes = |text: &str| text.bytes().filter(|&byte| byte != b'\r').count();
+        let len = bytes(&main_chat_static_prompt());
+        let shared = bytes(&workbench_static_prompt());
+        assert!(
+            len <= MAIN_CHAT_STATIC_PROMPT_BUDGET_BYTES,
+            "main chat static rules are {len} bytes, budget \
+             {MAIN_CHAT_STATIC_PROMPT_BUDGET_BYTES}: remove a clause first, or raise the \
+             budget with a reason"
+        );
+        // What makes them longer is the standing alone (ticket 36's swap
+        // still makes them shorter).
+        let config = bytes(USER_ONLY_CONFIGURATION) - bytes(MAIN_CHAT_USER_ONLY_CONFIGURATION);
+        let standing = bytes(MAIN_CHAT_STANDING) - bytes(GALLEY_OPENING);
+        assert_eq!(len, shared - config + standing);
+        assert!(shared - config <= STATIC_PROMPT_BUDGET_BYTES);
     }
 
     /// Tickets 36 and 41: the entry layer asks, unasked, for a to-do for

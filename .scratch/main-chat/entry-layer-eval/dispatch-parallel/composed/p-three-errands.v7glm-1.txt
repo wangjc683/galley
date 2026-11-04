@@ -1,0 +1,6 @@
+# Request sent to the model: p-three-errands / v7glm-1
+# model=glm-5.3-flash reasoning_effort=None stream=True temperature=(default)
+# tools offered: code_run, file_read, file_patch, file_write, web_scan, web_execute_js, update_working_checkpoint, ask_user, start_long_term_update, tell_user
+
+======== user ========
+帮我把下载文件夹里的发票按月份归档，把桌面上的截图按日期放进文件夹，再把「文档/合同」里的 PDF 改名成「日期-对方」

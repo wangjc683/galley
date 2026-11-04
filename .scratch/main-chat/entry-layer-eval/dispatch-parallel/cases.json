@@ -1,5 +1,5 @@
 {
-  "_note": "票 127（主对话 PRD 裁决 174）：几件互不相干的差事，或一件能拆成互不依赖的几块，一块一个标签、同一条回复派出去；问题不拆，要用同一个标签页或同一批文件的不拆。只在 new（main 加上票 126、127 的主对话提示词，galley-prompt/main_chat.new.txt）下跑。cases 是本票的 6 条：tags 是最终回复里该有的标签数（exact 正好几个，min 至少几个），should_dispatch 由它定（大于 0 为 true）；home_files 是放进假 HOME 的文件（相对 HOME，内容是占位文字），让用户说的文件夹在沙盒里真的有。reuse 指向票 115 的 16 条，原样带进来，按票 115 的判定看有没有退步。每个标签都要有 title，清理后（同 Core 的 subtask::tag_title）不超过 20 个字符，不能与派活说明第一行一模一样。票 134（裁决 183）：p-question-parts 从 exact 0 改成 exact 1（要查好几处的问题要派，一个问题不拆）；其余照旧。v2（票 134 改过的提示词，dispatch-criterion/galley-prompt/main_chat.v2.txt）只跑这 6 条，带进来的用例在 v2 下的结果见 dispatch-criterion。票 134 第三轮（裁决 184）：p-errand-and-question 改成 exact 2：订票与查天气都要上网，都派，两件互不相干，一件一个标签；v3 跑这 6 条。票 139（裁决 186）：v5 下自己做或交出去都合格，派了就看标签数（同上）；v5 是判法（见 dispatch-criterion/cases.json 的说明），may_delete：用户要的就是删（去重），自己做时删了文件不单列。票 143（裁决 193）：v6 按每条的 v6 判（见 dispatch-criterion/cases.json 的说明）：差事自己做或交出去都合格，派了照标签数判；p-question-parts 是问一句（question），派出去不合格；tags_v6 是 v6 下的标签数：订票加天气两条 1 到 2 个（天气是一个事实，自己答也行，订票派出去是 1 个）。",
+  "_note": "票 127（主对话 PRD 裁决 174）：几件互不相干的差事，或一件能拆成互不依赖的几块，一块一个标签、同一条回复派出去；问题不拆，要用同一个标签页或同一批文件的不拆。只在 new（main 加上票 126、127 的主对话提示词，galley-prompt/main_chat.new.txt）下跑。cases 是本票的 6 条：tags 是最终回复里该有的标签数（exact 正好几个，min 至少几个），should_dispatch 由它定（大于 0 为 true）；home_files 是放进假 HOME 的文件（相对 HOME，内容是占位文字），让用户说的文件夹在沙盒里真的有。reuse 指向票 115 的 16 条，原样带进来，按票 115 的判定看有没有退步。每个标签都要有 title，清理后（同 Core 的 subtask::tag_title）不超过 20 个字符，不能与派活说明第一行一模一样。票 134（裁决 183）：p-question-parts 从 exact 0 改成 exact 1（要查好几处的问题要派，一个问题不拆）；其余照旧。v2（票 134 改过的提示词，dispatch-criterion/galley-prompt/main_chat.v2.txt）只跑这 6 条，带进来的用例在 v2 下的结果见 dispatch-criterion。票 134 第三轮（裁决 184）：p-errand-and-question 改成 exact 2：订票与查天气都要上网，都派，两件互不相干，一件一个标签；v3 跑这 6 条。票 139（裁决 186）：v5 下自己做或交出去都合格，派了就看标签数（同上）；v5 是判法（见 dispatch-criterion/cases.json 的说明），may_delete：用户要的就是删（去重），自己做时删了文件不单列。票 143（裁决 193）：v6 按每条的 v6 判（见 dispatch-criterion/cases.json 的说明）：差事自己做或交出去都合格，派了照标签数判；p-question-parts 是问一句（question），派出去不合格；tags_v6 是 v6 下的标签数：订票加天气两条 1 到 2 个（天气是一个事实，自己答也行，订票派出去是 1 个）。票 145（裁决 194）：v7 不判派不派、拆几块，照记；留着的契约照判：标题（同上）与 v7_together 的两条（同一个标签页、同一批文件）派出去时只能一个标签。",
   "reuse": "dispatch-criterion/cases.json",
   "cases": [
     {"id": "p-three-errands", "v5": "errand", "v6": "errand", "group": "几件差事", "message": "帮我把下载文件夹里的发票按月份归档，把桌面上的截图按日期放进文件夹，再把「文档/合同」里的 PDF 改名成「日期-对方」",
@@ -24,9 +24,9 @@
        "Documents/客户/C/对账单_2026Q3.xlsx": "placeholder",
        "Documents/客户/C/项目周报_第42周.md": "placeholder"
      }},
-    {"id": "p-same-tab", "v5": "errand", "v6": "errand", "group": "同一个标签页", "message": "在京东把购物车里那三样东西下单",
+    {"id": "p-same-tab", "v5": "errand", "v6": "errand", "v7_together": true, "group": "同一个标签页", "message": "在京东把购物车里那三样东西下单",
      "tags": {"exact": 1}, "note": "三样东西在同一个购物车、同一个标签页里下单：不拆，一个标签。"},
-    {"id": "p-same-files", "v5": "errand", "v6": "errand", "may_delete": true, "group": "同一批文件", "message": "把下载文件夹里的 PDF 先去重，再按内容分类",
+    {"id": "p-same-files", "v5": "errand", "v6": "errand", "v7_together": true, "may_delete": true, "group": "同一批文件", "message": "把下载文件夹里的 PDF 先去重，再按内容分类",
      "tags": {"exact": 1}, "note": "去重与分类动的是同一批文件，后一步要等前一步：不拆，一个标签。下载文件夹里多放两份重复的 PDF。",
      "home_files": {
        "Downloads/发票_阿里云_2026-08 (1).pdf": "%PDF-1.4\n% placeholder fixture\n% Invoice: Alibaba Cloud ECS, August 2026, CNY 1,284.00\n%%EOF\n",

@@ -20,7 +20,8 @@ Note, without being asked, only what you will still need in a later
 segment:
 
 - Who they are: what they are called, their family, their work.
-- What they prefer or avoid.
+- What they prefer or avoid, how they want things done included
+  (「对比类不用派，直接查就行」).
 - The people and places they deal with (their landlord, and the number).
 - An interest that keeps coming up, said or seen: once they have asked
   about the same thing three times (a team, a stock, a show, a place),

@@ -1,0 +1,29 @@
+{
+  "_note": "票 145（主对话 PRD 裁决 194）：入口层说「their memos on how they like things done come first」，用户改口时照办、是一贯的做法就记成备忘。这一套看它照不照备忘：dispatch-criterion 的五条（cases 里的 id，消息、上下文与标注原样带进来），各放进两种备忘之一（memos：写进提示词的「Memo」一节，照 Core 的格式，也在假 galley 的 memo list 里）。fast 是「对比、调研这类要快，直接查就行，不用派出去」，照了是自己做（不派）；deep 是「要拿来做决定的东西宁可多等，也要查细」，照了是派出去。用例 id 是「备忘的 key-原用例 id」。只跑 v7（三个模型各一个变体）；派没派、几块、自己上没上网照记，照不照备忘计分，事实出处照 dispatch-criterion 的 v7 标注计分。",
+  "reuse": "dispatch-criterion/cases.json",
+  "memos": [
+    {
+      "key": "fast",
+      "group": "备忘：要快",
+      "follow": "self",
+      "id": "memo_c1d2e3f4a5b60718",
+      "days_ago": 5,
+      "text": "对比、调研这类要快，直接查就行，不用派出去"
+    },
+    {
+      "key": "deep",
+      "group": "备忘：要细",
+      "follow": "handoff",
+      "id": "memo_d2e3f4a5b6c70819",
+      "days_ago": 5,
+      "text": "要拿来做决定的东西宁可多等，也要查细"
+    }
+  ],
+  "cases": [
+    "q-headphones",
+    "c-phones-three",
+    "c-research-report",
+    "q-east",
+    "q-notes-apps"
+  ]
+}

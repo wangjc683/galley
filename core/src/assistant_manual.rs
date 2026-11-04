@@ -1171,7 +1171,10 @@ mod tests {
             // What to note, unasked, and what not.
             "Note, without being asked, only what you will still need in a later",
             "- Who they are: what they are called, their family, their work.",
-            "- What they prefer or avoid.",
+            // Ticket 145 (ruling 194): how they want things done is a
+            // preference too, in their words; the entry layer sends it here.
+            "- What they prefer or avoid, how they want things done included",
+            "(「对比类不用派，直接查就行」).",
             "- The people and places they deal with (their landlord, and the number).",
             // Ticket 98: a count to see it by (the memo eval's interest
             // cases had noted nothing on "keeps coming up" alone).
