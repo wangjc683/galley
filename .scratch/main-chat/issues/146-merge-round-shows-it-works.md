@@ -1,6 +1,6 @@
 # 146 你派出去的子任务回来、Galley 合成时看得见它在干活；待办面板不再列子任务
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-04 快进合入 `d6753a23`、`d90a02d3`。主会话验收：读过 `inSecondHalf`（派出它的回复所在那一轮开头不是叫醒行、或本身是下半场、或你在那条回复前插过话）、`cachedReportRound` 的缓存（主区与侧栏读 store 里同一个派活数组，不会每段字都重算）与入场分支；worktree 里复跑 typecheck、lint、`TZ=UTC` vitest 2,842 条全过、`git diff --check` 干净、新增行没有本机路径。第一轮 Open risk 1（叫醒那一刻三点与那一行瞬间出现、整栏上跳）在 S3 真机路径上，合入前让代理补成发出那一下的滑动加淡入；4（面板自动开一次、卡片飞行的「你那一轮」）一起补。主会话接受 2、3、6、7、9、10 照现状，8 的死分支先留；5（`managed_prompt.rs:956` 注释、`prompt-composition.md`「Source」那段）票 147 合入后主会话改。要真机看：下半场叫醒那一刻的第一帧与滑动、三点下那一行、侧栏卡片「正在工作…」、待办面板里没有子任务、7 件以上时「还有 N 件在办」原地展开）
 
 来源：[主对话 PRD](../PRD.md) 裁决 197（JC 11-04：「按你推荐推进」）。只改 GUI、设计文档与 `core/src/assistant_todo.rs` 的注释；只影响内置运行时的主对话；工作台零变化，外置运行时没有主对话。和票 [147](./147-merge-round-reads-reports-in-place.md)（合成那一轮变快，runner / 内置 GA / 评测）并行做，互不碰文件。
 
