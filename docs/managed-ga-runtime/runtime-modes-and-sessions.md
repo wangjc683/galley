@@ -357,6 +357,19 @@ result, send the subtask back, answer its question, or tell the user.
   completes, behind the user's queued messages. While it waits for the
   user's answer the report waits, since any message would be taken as the
   answer.
+- **A batch** (ticket 144, main chat PRD ruling 193 point 5): the subtasks
+  one reply started, when two or more of its `subtask_dispatches` rows (one
+  `parent_session_id` and `turn_index`) have a session and no failure. A
+  finished run's report waits while another of its batch still runs (its
+  run gate open, its session there and not promoted); one stopped
+  (`ABORTED`), deleted, promoted or already back does not hold the batch.
+  The held reports come due when none of the batch runs any more, or five
+  minutes after the first of them came (`BATCH_WAIT_SECS`), then go as
+  above; one back after that is held the same way among the ones still
+  out. Asking, the step limit, an error, a tag that started nothing and a
+  due reminder wake at once, carrying any held report along, as every wake
+  carries every report waiting. The scheduler's 60-second tick looks at
+  held reports again, so the cap is kept at most a tick late.
 - **What**: with the run gate reserved (never the visible queue) the waiting
   reports are read again — a subtask running again, answered, promoted or
   deleted drops out — and the rest go as one message: a visible user row in

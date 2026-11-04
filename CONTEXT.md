@@ -216,6 +216,12 @@ silently dropped argument (2026-07-11 decision; see devlog).
   'system'`, `supervisor = 'galley-report'`) when the main chat is idle,
   never while it waits for the user's answer; merged and re-read before
   sending. Not a send: the GUI never draws the row.
+- **Batch** — the subtasks one reply of the main chat started, when there
+  are two or more (`subtask_dispatches` rows of one `parent_session_id` and
+  `turn_index` with a session and no failure; main chat ticket 144, PRD
+  ruling 193 point 5). A finished one's report is **held** while another
+  still runs, five minutes at most (`BATCH_WAIT_SECS`), so the batch wakes
+  the main chat once.
 - **Send-back** — the assistant's message into its subtask
   (`supervisor = 'galley-assistant'`) when the reply before it did not end
   on `ask_user`; an answer to the subtask's question is not one.

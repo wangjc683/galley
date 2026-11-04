@@ -3,7 +3,8 @@
 //! conversation, and `subtask_dispatches`. What dispatches and when is
 //! [`crate::subtask`]'s. Ticket 29 adds what a subtask report reads (the
 //! latest run's replies, the send-back count) and the report row itself;
-//! when to report is [`crate::subtask_report`]'s.
+//! when to report is [`crate::subtask_report`]'s. Ticket 144 adds the
+//! batch a subtask is in ([`SqliteGalley::subtask_batch`]).
 
 use super::*;
 use crate::api::{SubtaskDispatch, SubtaskFailure, ASSISTANT_SUPERVISOR};
@@ -54,6 +55,21 @@ impl SubtaskDispatchRow {
 /// Columns of a [`SubtaskDispatchRow`].
 const SUBTASK_DISPATCH_COLS: &str = "parent_session_id, turn_index, ordinal, session_id, title, \
     failure, failure_detail, created_at";
+
+/// The subtasks one reply of the main chat started (main chat ticket 144,
+/// PRD ruling 193 point 5), as [`SqliteGalley::subtask_batch`] reads them:
+/// its `subtask_dispatches` with a session and no failure. Two or more
+/// make a **batch**, whose finished reports Core holds until it is back
+/// ([`crate::subtask_report`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubtaskBatch {
+    /// The main chat.
+    pub parent_session_id: String,
+    /// The reply's `turn_index`.
+    pub turn_index: i64,
+    /// Every subtask it started, in tag order.
+    pub session_ids: Vec<String>,
+}
 
 /// One visible assistant row of a subtask's latest run, as its report
 /// reads it ([`SqliteGalley::latest_run_replies`]).
@@ -417,6 +433,41 @@ impl SqliteGalley {
         let mut dispatch = row.into_dispatch();
         dispatch.send_backs = self.subtask_send_backs(session_id).await?;
         Ok(Some(dispatch))
+    }
+
+    /// The batch `session_id` is in (main chat ticket 144, PRD ruling 193
+    /// point 5): every subtask the reply that started it started — the
+    /// records of that reply (its first record's `parent_session_id` and
+    /// `turn_index`) with a session and no failure, in tag order, itself
+    /// included. `None` for a session no reply dispatched.
+    pub async fn subtask_batch(&self, session_id: &SessionId) -> Result<Option<SubtaskBatch>> {
+        let reply: Option<(String, i64)> = sqlx::query_as(
+            "SELECT parent_session_id, turn_index FROM subtask_dispatches \
+             WHERE session_id = ? ORDER BY created_at LIMIT 1",
+        )
+        .bind(session_id.as_str())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let Some((parent_session_id, turn_index)) = reply else {
+            return Ok(None);
+        };
+        let session_ids: Vec<String> = sqlx::query_scalar(
+            "SELECT session_id FROM subtask_dispatches \
+             WHERE parent_session_id = ? AND turn_index = ? \
+               AND session_id IS NOT NULL AND failure IS NULL \
+             ORDER BY ordinal",
+        )
+        .bind(&parent_session_id)
+        .bind(turn_index)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        Ok(Some(SubtaskBatch {
+            parent_session_id,
+            turn_index,
+            session_ids,
+        }))
     }
 
     /// How many times the assistant sent `session_id` back (ticket 29):

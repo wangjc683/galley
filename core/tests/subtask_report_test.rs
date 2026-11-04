@@ -11,6 +11,11 @@
 //! - what: one message for several reports, read again first (a subtask
 //!   running again, answered, promoted or deleted drops out), written as
 //!   the report row and dispatched on the shared runner path;
+//! - a batch (ticket 144): the finished reports of the subtasks one reply
+//!   started wait for the rest of it — not for one stopped, promoted or
+//!   deleted — or five minutes from the first, on a clock the test moves;
+//!   one asking, stopping short or failing wakes at once and takes them
+//!   along, as does a reminder; a reply that started one is no batch;
 //! - a wake that cannot be delivered keeps its reports, tells the desktop
 //!   once, and goes out on the next try;
 //! - a wake whose turn ends on an error before a reply, or loses its
@@ -30,7 +35,7 @@
 //! `turn_persistence::derive` and the shared golden fixtures.
 
 use async_trait::async_trait;
-use chrono::{Duration as ChronoDuration, Local, Utc};
+use chrono::{DateTime, Duration as ChronoDuration, Local, Utc};
 use galley_core_lib::api::schedule::{
     instant_to_utc_iso, CreateScheduledTaskInput, ScheduleTarget, ScheduledTaskRepeat,
     ScheduledWake, SCHEDULED_REMINDER_UNDELIVERED_EVENT, SCHEDULED_TASKS_CHANGED_EVENT,
@@ -53,7 +58,7 @@ use galley_core_lib::socket_listener::RunnerPort;
 use galley_core_lib::subtask::announce_send_back;
 use galley_core_lib::subtask_report::{
     deliver, record_not_started, record_run_end, record_wake_run_end, restore_pending_reminders,
-    take_due, wake_if_due, ReportOutcome, SubtaskReports, WakeOutcome,
+    take_due, wake_if_due, ReportOutcome, SubtaskReports, WakeOutcome, BATCH_WAIT_SECS,
 };
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
@@ -119,11 +124,19 @@ fn input(id: &str, title: &str) -> CreateSessionInput {
 /// A subtask as the dispatch makes it: its row, its instructions, and the
 /// record of its tag (the next tag of the main chat's turn 0).
 async fn subtask(galley: &SqliteGalley, id: &str, title: &str) {
+    subtask_of(galley, id, title, 0).await;
+}
+
+/// [`subtask`], started by the main chat's reply of `turn` (the next tag
+/// of that reply).
+async fn subtask_of(galley: &SqliteGalley, id: &str, title: &str, turn: i64) {
     let ordinal = galley
         .subtask_dispatches(&SessionId(MAIN.into()))
         .await
         .expect("records")
-        .len() as i64;
+        .iter()
+        .filter(|d| d.turn_index == turn)
+        .count() as i64;
     galley
         .create_subtask_session(
             input(id, title),
@@ -137,9 +150,9 @@ async fn subtask(galley: &SqliteGalley, id: &str, title: &str) {
     galley
         .record_subtask_dispatch(&SubtaskDispatch {
             parent_session_id: MAIN.into(),
-            turn_index: 0,
+            turn_index: turn,
             ordinal,
-            message_id: SubtaskDispatch::reply_message_id(MAIN, 0),
+            message_id: SubtaskDispatch::reply_message_id(MAIN, turn),
             session_id: Some(id.into()),
             title: title.into(),
             failure: None,
@@ -1419,6 +1432,436 @@ async fn a_report_is_told_once_across_a_failed_wake_and_the_paths_around_it() {
     assert_eq!(told().len(), 3);
     assert!(rec.named(SCHEDULED_TASKS_CHANGED_EVENT).is_empty());
     assert!(reports.in_flight(MAIN).is_empty());
+}
+
+// ---------------- a batch (ticket 144) ----------------
+
+/// When the first report of a batch comes, in the tests below.
+fn t0() -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339("2026-11-04T07:30:00Z")
+        .unwrap()
+        .with_timezone(&Utc)
+}
+
+/// A store whose clock the test moves ([`at`]), standing at [`t0`].
+fn clocked() -> (SubtaskReports, Arc<Mutex<DateTime<Utc>>>) {
+    let now = Arc::new(Mutex::new(t0()));
+    let reports = SubtaskReports::with_clock({
+        let now = now.clone();
+        Arc::new(move || *now.lock().unwrap())
+    });
+    (reports, now)
+}
+
+/// Move the clock to `secs` after [`t0`].
+fn at(clock: &Mutex<DateTime<Utc>>, secs: i64) {
+    *clock.lock().unwrap() = t0() + ChronoDuration::seconds(secs);
+}
+
+/// The main chat's reply of `turn` started `ids`, one tag each, all still
+/// running.
+async fn batch(galley: &SqliteGalley, runner: &Runner, turn: i64, ids: &[&str]) {
+    for id in ids {
+        subtask_of(galley, id, &format!("查 {id}"), turn).await;
+        runner.edit_gate(id, |g| g.open_run = true);
+    }
+}
+
+/// Subtask `id` finishes with `answer`, through the drain task's hook and
+/// the queue step; the main chat to wake, as the hook returns it.
+async fn finishes(
+    galley: &SqliteGalley,
+    runner: &Runner,
+    reports: &SubtaskReports,
+    id: &str,
+    answer: &str,
+) -> Option<String> {
+    let turn = last_user_turn(galley, id).await;
+    step(galley, id, turn, Some(answer), None, json!([])).await;
+    runner.run_ended(id, "CURRENT_TASK_DONE", false);
+    drain(reports, galley, runner, complete(id)).await
+}
+
+/// What a wake of the main chat does now — the drain task's after a run
+/// signal, the scheduler's every tick: what a delivered wake carried (its
+/// subtasks and due tasks, in order), empty when nothing went. The turn it
+/// started then ends with a reply.
+async fn wake_now(
+    reports: &SubtaskReports,
+    galley: &SqliteGalley,
+    runner: &Runner,
+    host: &RunnerHost<'_>,
+    rec: &Recorder,
+) -> Vec<String> {
+    match wake_if_due(reports, host, MAIN).await {
+        None => Vec::new(),
+        Some(WakeOutcome::Delivered {
+            reports: carried, ..
+        }) => {
+            runner.run_ended(MAIN, "CURRENT_TASK_DONE", false);
+            record_wake_run_end(reports, galley, runner, rec, &complete(MAIN)).await;
+            runner.settle(MAIN);
+            carried
+                .iter()
+                .map(|r| {
+                    r.subtask_id
+                        .clone()
+                        .or_else(|| r.due().map(|d| d.task_id.clone()))
+                        .expect("named")
+                })
+                .collect()
+        }
+        Some(other) => panic!("not delivered: {other:?}"),
+    }
+}
+
+/// Ruling 193 point 5's case: three phones looked up by three subtasks of
+/// one reply, back 267, 284 and 398 seconds in. One wake, with all three.
+#[tokio::test]
+async fn a_batch_wakes_the_main_chat_once_when_the_last_is_back() {
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let (reports, clock) = clocked();
+    let host = host(&galley, &runner, &env, rec.clone());
+    batch(&galley, &runner, 5, &["s-mi", "s-vivo", "s-oppo"]).await;
+
+    assert_eq!(
+        finishes(&galley, &runner, &reports, "s-vivo", "vivo 查好了")
+            .await
+            .as_deref(),
+        Some(MAIN)
+    );
+    assert!(wake_now(&reports, &galley, &runner, &host, &rec)
+        .await
+        .is_empty());
+    at(&clock, 17);
+    finishes(&galley, &runner, &reports, "s-mi", "小米查好了").await;
+    assert!(wake_now(&reports, &galley, &runner, &host, &rec)
+        .await
+        .is_empty());
+    assert_eq!(reports.waiting(MAIN).len(), 2);
+    assert_eq!(reports.holding(), vec![MAIN.to_string()]);
+    // Held is not undelivered: the desktop hears nothing, the main chat
+    // nothing either.
+    assert!(rec.named(SUBTASK_REPORT_UNDELIVERED_EVENT).is_empty());
+    assert!(runner.user_messages(MAIN).is_empty());
+    assert!(!runner.gate(MAIN).open_run);
+
+    at(&clock, 131);
+    finishes(&galley, &runner, &reports, "s-oppo", "OPPO 查好了").await;
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-vivo", "s-mi", "s-oppo"]
+    );
+    let sent = runner.user_messages(MAIN);
+    assert_eq!(sent.len(), 1, "one wake");
+    assert!(
+        sent[0].contains("`s-mi`") && sent[0].contains("`s-vivo`") && sent[0].contains("`s-oppo`")
+    );
+    assert!(sent[0].ends_with("Reply once, covering all of them."));
+    assert!(reports.waiting(MAIN).is_empty());
+    assert!(reports.holding().is_empty());
+}
+
+#[tokio::test]
+async fn a_batch_waits_five_minutes_from_its_first_report_at_most() {
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let (reports, clock) = clocked();
+    let host = host(&galley, &runner, &env, rec.clone());
+    batch(&galley, &runner, 5, &["s-a", "s-b", "s-c"]).await;
+
+    finishes(&galley, &runner, &reports, "s-a", "甲好了").await;
+    at(&clock, 60);
+    finishes(&galley, &runner, &reports, "s-b", "乙好了").await;
+    assert!(wake_now(&reports, &galley, &runner, &host, &rec)
+        .await
+        .is_empty());
+    // The scheduler's tick a second short of the cap, then at it.
+    at(&clock, BATCH_WAIT_SECS - 1);
+    assert!(wake_now(&reports, &galley, &runner, &host, &rec)
+        .await
+        .is_empty());
+    at(&clock, BATCH_WAIT_SECS);
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-a", "s-b"]
+    );
+    assert!(reports.holding().is_empty());
+
+    // The one still out comes back later: nothing else of its batch runs,
+    // it wakes the main chat at once.
+    at(&clock, 480);
+    finishes(&galley, &runner, &reports, "s-c", "丙好了").await;
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-c"]
+    );
+    assert_eq!(runner.user_messages(MAIN).len(), 2);
+}
+
+#[tokio::test]
+async fn after_the_cap_the_ones_still_out_are_held_among_themselves() {
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let (reports, clock) = clocked();
+    let host = host(&galley, &runner, &env, rec.clone());
+    batch(&galley, &runner, 5, &["s-a", "s-b", "s-c", "s-d"]).await;
+
+    finishes(&galley, &runner, &reports, "s-a", "甲好了").await;
+    at(&clock, BATCH_WAIT_SECS);
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-a"]
+    );
+    // The next one back waits for the two still out, five minutes from
+    // when it came — not from the first.
+    at(&clock, 360);
+    finishes(&galley, &runner, &reports, "s-b", "乙好了").await;
+    at(&clock, 600);
+    assert!(wake_now(&reports, &galley, &runner, &host, &rec)
+        .await
+        .is_empty());
+    at(&clock, 620);
+    finishes(&galley, &runner, &reports, "s-c", "丙好了").await;
+    assert!(wake_now(&reports, &galley, &runner, &host, &rec)
+        .await
+        .is_empty());
+    at(&clock, 640);
+    finishes(&galley, &runner, &reports, "s-d", "丁好了").await;
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-b", "s-c", "s-d"]
+    );
+    assert_eq!(runner.user_messages(MAIN).len(), 2);
+}
+
+#[tokio::test]
+async fn one_of_a_batch_asking_stopping_short_or_failing_wakes_at_once_with_the_held() {
+    for (exit, asking) in [
+        ("EXITED", true),
+        ("MAX_TURNS_EXCEEDED", false),
+        ("DONE_WITHOUT_EXIT", false),
+    ] {
+        let (_pool, galley) = with_main_chat().await;
+        let runner = Runner::default();
+        let env = FakeEnv;
+        let rec = Arc::new(Recorder::default());
+        let (reports, _clock) = clocked();
+        let host = host(&galley, &runner, &env, rec.clone());
+        batch(&galley, &runner, 5, &["s-a", "s-b", "s-c"]).await;
+
+        finishes(&galley, &runner, &reports, "s-a", "甲好了").await;
+        assert!(wake_now(&reports, &galley, &runner, &host, &rec)
+            .await
+            .is_empty());
+        let turn = last_user_turn(&galley, "s-b").await;
+        if asking {
+            step(
+                &galley,
+                "s-b",
+                turn,
+                None,
+                None,
+                ask_user("要国行还是港版？", &[]),
+            )
+            .await;
+        } else {
+            step(
+                &galley,
+                "s-b",
+                turn,
+                Some("查到一半"),
+                Some("查到一半"),
+                json!([{"toolName": "web_scan"}]),
+            )
+            .await;
+        }
+        runner.run_ended("s-b", exit, asking);
+        assert_eq!(
+            drain(&reports, &galley, &runner, complete("s-b"))
+                .await
+                .as_deref(),
+            Some(MAIN)
+        );
+        // At once, though s-c still runs; the held one goes along.
+        assert_eq!(
+            wake_now(&reports, &galley, &runner, &host, &rec).await,
+            vec!["s-a", "s-b"],
+            "{exit}"
+        );
+        assert!(reports.waiting(MAIN).is_empty(), "{exit}");
+    }
+}
+
+#[tokio::test]
+async fn a_stopped_one_does_not_hold_up_its_batch() {
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let (reports, _clock) = clocked();
+    let host = host(&galley, &runner, &env, rec.clone());
+    batch(&galley, &runner, 5, &["s-a", "s-b"]).await;
+    finishes(&galley, &runner, &reports, "s-a", "甲好了").await;
+    assert!(wake_now(&reports, &galley, &runner, &host, &rec)
+        .await
+        .is_empty());
+
+    // Stopped: it reports nothing, but its batch's main chat is looked at
+    // again, and nothing of the batch runs any more.
+    runner.run_ended("s-b", "ABORTED", false);
+    assert_eq!(
+        drain(&reports, &galley, &runner, complete("s-b"))
+            .await
+            .as_deref(),
+        Some(MAIN)
+    );
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-a"]
+    );
+}
+
+#[tokio::test]
+async fn a_promoted_or_deleted_one_does_not_hold_up_its_batch() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let (reports, _clock) = clocked();
+    let host = host(&galley, &runner, &env, rec.clone());
+    batch(&galley, &runner, 5, &["s-a", "s-b", "s-c"]).await;
+    finishes(&galley, &runner, &reports, "s-a", "甲好了").await;
+
+    // The user wrote in s-b: an ordinary conversation, its run theirs.
+    galley
+        .promote_subtask(&SessionId("s-b".into()))
+        .await
+        .expect("promote");
+    assert!(
+        wake_now(&reports, &galley, &runner, &host, &rec)
+            .await
+            .is_empty(),
+        "s-c runs"
+    );
+    // s-c deleted while its gate still shows the run: what the next tick
+    // finds is a batch with nothing running.
+    sqlx::query("DELETE FROM sessions WHERE id = 's-c'")
+        .execute(&pool)
+        .await
+        .expect("delete");
+    assert!(runner.gate("s-c").open_run);
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-a"]
+    );
+}
+
+#[tokio::test]
+async fn a_reply_that_started_one_subtask_is_no_batch() {
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let (reports, _clock) = clocked();
+    let host = host(&galley, &runner, &env, rec.clone());
+    // Turn 3 had three tags: one started, one empty, one whose runner did
+    // not start. Another reply's two subtasks still run.
+    subtask_of(&galley, "s-solo", "查天气", 3).await;
+    runner.edit_gate("s-solo", |g| g.open_run = true);
+    galley
+        .record_subtask_dispatch(&not_started(1, None, SubtaskFailure::Empty))
+        .await
+        .expect("empty tag");
+    subtask_of(&galley, "s-dead", "查报价", 3).await;
+    let dead = galley
+        .subtask_dispatch_for_session(&SessionId("s-dead".into()))
+        .await
+        .expect("read")
+        .expect("record");
+    galley
+        .mark_subtask_dispatch_failed(&dead, "fork failed")
+        .await
+        .expect("failed");
+    batch(&galley, &runner, 9, &["s-x", "s-y"]).await;
+    assert_eq!(
+        galley
+            .subtask_batch(&SessionId("s-solo".into()))
+            .await
+            .expect("read")
+            .map(|b| (b.turn_index, b.session_ids)),
+        Some((3, vec!["s-solo".to_string()]))
+    );
+
+    finishes(&galley, &runner, &reports, "s-solo", "晴").await;
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-solo"]
+    );
+}
+
+#[tokio::test]
+async fn a_reminder_coming_due_carries_the_held_reports() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let (reports, _clock) = clocked();
+    let host = host(&galley, &runner, &env, rec.clone());
+    batch(&galley, &runner, 5, &["s-a", "s-b"]).await;
+    finishes(&galley, &runner, &reports, "s-a", "甲好了").await;
+    assert!(wake_now(&reports, &galley, &runner, &host, &rec)
+        .await
+        .is_empty());
+
+    due_reminder(&pool, &galley, &reports, "sched_water", "提醒用户喝水").await;
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-a", "sched_water"]
+    );
+    assert_eq!(
+        wake_state(&galley, "sched_water").await,
+        Some(ScheduledWake::Delivered)
+    );
+    // The rest of the batch then comes back on its own.
+    finishes(&galley, &runner, &reports, "s-b", "乙好了").await;
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-b"]
+    );
+}
+
+#[tokio::test]
+async fn a_batch_back_while_the_main_chat_runs_goes_in_one_wake_after_its_run() {
+    let (_pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let (reports, _clock) = clocked();
+    let host = host(&galley, &runner, &env, rec.clone());
+    runner.edit_gate(MAIN, |g| g.open_run = true);
+    batch(&galley, &runner, 5, &["s-a", "s-b"]).await;
+
+    finishes(&galley, &runner, &reports, "s-a", "甲好了").await;
+    assert!(take_due(&reports, &host, MAIN).await.is_none(), "held");
+    finishes(&galley, &runner, &reports, "s-b", "乙好了").await;
+    assert!(take_due(&reports, &host, MAIN).await.is_none(), "busy");
+    // Its run completes: the queue step closes the gate, the drain task
+    // asks again.
+    runner.settle(MAIN);
+    assert_eq!(
+        wake_now(&reports, &galley, &runner, &host, &rec).await,
+        vec!["s-a", "s-b"]
+    );
+    assert_eq!(runner.user_messages(MAIN).len(), 1);
+    assert!(rec.named(SUBTASK_REPORT_UNDELIVERED_EVENT).is_empty());
 }
 
 // ---------------- send-backs ----------------

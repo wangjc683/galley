@@ -75,6 +75,11 @@
 //! never handed to a notification (its words are for the model). The user
 //! stops it by asking the main chat, which pauses it; Galley never makes
 //! it again.
+//!
+//! Main chat ticket 144 (PRD ruling 193 point 5): the tick is also the
+//! clock of the subtask reports held for their batch
+//! (`crate::subtask_report`): a main chat holding them is woken once they
+//! are due, at most a tick after the five-minute cap ([`wake_for_held`]).
 
 use std::sync::Arc;
 
@@ -294,9 +299,11 @@ async fn tick(app: &tauri::AppHandle, galley: &SqliteGalley) {
         }
     }
     // Every pending fire — this tick's and any a restart left — goes to
-    // the main chat.
+    // the main chat. Then the reports held for their batch are looked at
+    // again (main chat ticket 144).
     if let Some(reports) = app.try_state::<Arc<SubtaskReports>>() {
         wake_for_pending(app, galley, reports.inner()).await;
+        wake_for_held(app, galley, reports.inner()).await;
     }
 }
 
@@ -357,6 +364,29 @@ async fn wake_for_pending(
     let manager: Arc<RunnerManager> = app.state::<Arc<RunnerManager>>().inner().clone();
     let notifier = crate::notify::TauriNotifier::new(app.clone());
     spawn_wake_if_due(reports, galley, &manager, &notifier, Some(app), &main).await;
+}
+
+/// The clock of a batch's held reports (main chat ticket 144, PRD ruling
+/// 193 point 5): every tick, a main chat holding finished reports for the
+/// rest of their batch is woken if they are due now
+/// (`crate::subtask_report::take_due`). So the cap — five minutes after
+/// the first of them came ([`crate::subtask_report::BATCH_WAIT_SECS`]) —
+/// and a subtask of the batch promoted or deleted with no run signal of
+/// its own are seen at most a tick late. Nothing held, nothing done.
+async fn wake_for_held(
+    app: &tauri::AppHandle,
+    galley: &SqliteGalley,
+    reports: &Arc<SubtaskReports>,
+) {
+    let holding = reports.holding();
+    if holding.is_empty() {
+        return;
+    }
+    let manager: Arc<RunnerManager> = app.state::<Arc<RunnerManager>>().inner().clone();
+    let notifier = crate::notify::TauriNotifier::new(app.clone());
+    for main in holding {
+        spawn_wake_if_due(reports, galley, &manager, &notifier, Some(app), &main).await;
+    }
 }
 
 /// Record the fire of a task that wakes the assistant (`target =

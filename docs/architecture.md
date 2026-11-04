@@ -162,7 +162,9 @@ ticket 138). See
 When a subtask's run ends, the same task reports it to the main chat and
 wakes it for a turn ([`subtask_report.rs`](../core/src/subtask_report.rs),
 ticket 29): a report row taken through the run gate and the shared runner
-path, kept in memory until the main chat is free. See
+path, kept in memory until the main chat is free. The subtasks one reply
+started come back as one (ticket 144): a finished one's report waits for
+the others still running, five minutes at most. See
 [subtask reports](./managed-ga-runtime/runtime-modes-and-sessions.md#subtask-reports).
 The desktop can delete one message of the main chat (ticket 32,
 [`message_delete.rs`](../core/src/message_delete.rs)): Core works out which

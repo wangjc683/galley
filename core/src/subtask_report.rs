@@ -27,13 +27,37 @@
 //!   inside Galley, so Galley quitting stops it too; what is lost is only
 //!   a report waiting while Galley quits (ruling 8). A subtask's newer
 //!   report replaces its older one still waiting.
-//! - **When** ([`take_due`]): at once when the main chat is idle — its run
-//!   gate free, nothing the user queued, no question of its own waiting —
-//!   else after its run completes (the drain task asks again after the
-//!   queue step, so the user's queued messages go first). While the main
-//!   chat waits for the user's answer, any `user_message` would be taken
-//!   as that answer, so reports wait and the desktop is told they could
-//!   not be delivered ([`SUBTASK_REPORT_UNDELIVERED_EVENT`]).
+//! - **When** ([`take_due`]): a report is due at once, unless it is held
+//!   for its batch (below). Due, it goes at once when the main chat is
+//!   idle — its run gate free, nothing the user queued, no question of its
+//!   own waiting — else after its run completes (the drain task asks again
+//!   after the queue step, so the user's queued messages go first). While
+//!   the main chat waits for the user's answer, any `user_message` would be
+//!   taken as that answer, so reports wait and the desktop is told they
+//!   could not be delivered ([`SUBTASK_REPORT_UNDELIVERED_EVENT`]).
+//! - **A batch** (ticket 144, main chat PRD ruling 193 point 5): the
+//!   subtasks one reply started, when there are two or more — its
+//!   `subtask_dispatches` (one `parent_session_id` and `turn_index`) with a
+//!   session and no failure ([`SqliteGalley::subtask_batch`]). A finished
+//!   run's report ([`ReportOutcome::Done`]) is **held** while another of
+//!   its batch still runs: its run open, its session there and not
+//!   promoted ([`still_running`]). One whose report waits, is in flight or
+//!   went, one stopped (`ABORTED`, which reports nothing), deleted or
+//!   promoted runs no more: the batch waits only for what really runs.
+//!   The held reports come due when none of their batch runs any more, or
+//!   [`BATCH_WAIT_SECS`] after the first of them came, whichever is first
+//!   ([`due_now`]); one that comes back after that is held the same way
+//!   among the ones still out, from when it came. Asking, the step limit,
+//!   an error and a tag that started nothing are never held — they need
+//!   the main chat now — nor is a due task or a scheduled task's session;
+//!   a reply that started one subtask is no batch. Whatever wakes the main
+//!   chat carries every report waiting, held ones too, as one message.
+//!   Looked at on each run signal that adds a report or ends a run of a
+//!   batch with reports held ([`record_run_end`]), and on every scheduler
+//!   tick ([`SubtaskReports::holding`], `crate::scheduler`), so the cap
+//!   is kept at most a tick (60 seconds) late. The time is the wall clock
+//!   ([`SubtaskReports::with_clock`] for tests). Held reports live in
+//!   memory like the rest.
 //! - **What is sent** ([`deliver`]): with the run gate taken (never the
 //!   visible queue), the waiting reports are read again — a subtask
 //!   running again, its question answered, promoted or deleted drops out
@@ -105,7 +129,7 @@ use crate::api::{
     SubtaskDispatch, SubtaskFailure, SubtaskReportUndeliveredPayload,
     SUBTASK_REPORT_UNDELIVERED_EVENT,
 };
-use crate::db::{RunReply, SqliteGalley};
+use crate::db::{RunReply, SqliteGalley, SubtaskBatch};
 use crate::error::GalleyError;
 use crate::ipc::{IpcCommand, UserMessageCommand};
 use crate::notify::{notify, Notifier};
@@ -115,7 +139,7 @@ use crate::session_runner::{
 };
 use crate::session_send::{UserMessagePersistedPayload, USER_MESSAGE_PERSISTED_EVENT};
 use crate::socket_listener::RunnerPort;
-use chrono::{DateTime, TimeZone};
+use chrono::{DateTime, TimeZone, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
 use tauri::AppHandle;
@@ -132,6 +156,15 @@ pub const REPORT_TEXT_MAX_CHARS: usize = 3_000;
 /// the subtask back again but to tell the user what it has (ticket 29).
 /// Core refuses no send: the user may still ask for another try.
 pub const SEND_BACK_LIMIT: u32 = 2;
+
+/// How long, in seconds, a batch's finished reports wait for the rest of
+/// it, from the first of them that came (ticket 144, main chat PRD ruling
+/// 193 point 5): then the ones back go without the others. On 11-04 three
+/// phones were looked up as three subtasks, which finished 131 seconds
+/// apart; pieces of one size finish within a few minutes of each other,
+/// and the cap means a result that came first reaches the main chat at
+/// most five minutes late.
+pub const BATCH_WAIT_SECS: i64 = 5 * 60;
 
 // ---------------- wording ----------------
 //
@@ -1118,7 +1151,30 @@ struct Waiting {
     report: SubtaskReport,
     /// The desktop was told this report could not be delivered.
     announced: bool,
+    /// Held for its batch (ticket 144): a finished run's report while
+    /// others of the reply that started it may still run ([`due_now`]).
+    held: Option<Held>,
 }
+
+/// A report held for its batch: the batch, and when the report came.
+#[derive(Debug, Clone)]
+struct Held {
+    batch: SubtaskBatch,
+    since: DateTime<Utc>,
+}
+
+/// The held reports of one batch waiting for a main chat, as [`due_now`]
+/// weighs them: its subtasks, and when the first of them came.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HeldBatch {
+    session_ids: Vec<String>,
+    since: DateTime<Utc>,
+}
+
+/// What the store reads the time from: the wall clock in Core, as the
+/// scheduler does (the Mac sleeping, the cap is still five minutes of the
+/// user's time); one a test moves ([`SubtaskReports::with_clock`]).
+pub type Clock = Arc<dyn Fn() -> DateTime<Utc> + Send + Sync>;
 
 #[derive(Default)]
 struct State {
@@ -1135,9 +1191,15 @@ struct State {
 
 /// The reports waiting for their main chat, in memory. One per process,
 /// owned by the drain task (`crate::message_queue`).
-#[derive(Default)]
 pub struct SubtaskReports {
     state: Mutex<State>,
+    clock: Clock,
+}
+
+impl Default for SubtaskReports {
+    fn default() -> Self {
+        Self::with_clock(Arc::new(Utc::now))
+    }
 }
 
 impl SubtaskReports {
@@ -1145,13 +1207,40 @@ impl SubtaskReports {
         Self::default()
     }
 
+    /// A store reading the time from `clock`: how a test moves past
+    /// [`BATCH_WAIT_SECS`] without waiting for it.
+    pub fn with_clock(clock: Clock) -> Self {
+        Self {
+            state: Mutex::default(),
+            clock,
+        }
+    }
+
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn now(&self) -> DateTime<Utc> {
+        (self.clock)()
     }
 
     /// Keep `report` for its main chat, replacing the same subtask's
     /// earlier one. `false` when its end was reported before.
     pub fn add(&self, report: SubtaskReport) -> bool {
+        self.add_in_batch(report, None)
+    }
+
+    /// [`Self::add`] for a report whose subtask is in `batch` (ticket
+    /// 144): a finished run's report is held when the batch has two
+    /// subtasks or more; any other is not.
+    fn add_in_batch(&self, report: SubtaskReport, batch: Option<SubtaskBatch>) -> bool {
+        let held = batch
+            .filter(|batch| batch.session_ids.len() >= 2)
+            .filter(|_| matches!(report.outcome, ReportOutcome::Done { .. }))
+            .map(|batch| Held {
+                batch,
+                since: self.now(),
+            });
         let mut state = self.lock();
         if !state.seen.insert(report.key.clone()) {
             return false;
@@ -1170,8 +1259,63 @@ impl SubtaskReports {
         waiting.push(Waiting {
             report,
             announced: false,
+            held,
         });
         true
+    }
+
+    /// The batches `main_chat_id`'s waiting reports are held for, when
+    /// every one of them is held; `None` when one is not — it goes now,
+    /// and the held ones with it.
+    fn held_batches(&self, main_chat_id: &str) -> Option<Vec<HeldBatch>> {
+        let state = self.lock();
+        let mut batches: Vec<(i64, HeldBatch)> = Vec::new();
+        for waiting in state.waiting.get(main_chat_id).into_iter().flatten() {
+            let held = waiting.held.as_ref()?;
+            match batches
+                .iter_mut()
+                .find(|(turn, _)| *turn == held.batch.turn_index)
+            {
+                Some((_, batch)) => batch.since = batch.since.min(held.since),
+                None => batches.push((
+                    held.batch.turn_index,
+                    HeldBatch {
+                        session_ids: held.batch.session_ids.clone(),
+                        since: held.since,
+                    },
+                )),
+            }
+        }
+        Some(batches.into_iter().map(|(_, batch)| batch).collect())
+    }
+
+    /// The main chats with reports held for their batch: what the
+    /// scheduler's tick looks at again (`crate::scheduler`), so the cap is
+    /// kept with no other event.
+    pub fn holding(&self) -> Vec<String> {
+        self.lock()
+            .waiting
+            .iter()
+            .filter(|(_, list)| list.iter().any(|w| w.held.is_some()))
+            .map(|(main, _)| main.clone())
+            .collect()
+    }
+
+    /// The main chat holding reports for a batch `session_id` is in: a
+    /// run of it that ended without a report of its own (stopped, deleted,
+    /// promoted) may be the one the batch waited for.
+    fn holding_for(&self, session_id: &str) -> Option<String> {
+        self.lock()
+            .waiting
+            .iter()
+            .find(|(_, list)| {
+                list.iter().any(|w| {
+                    w.held
+                        .as_ref()
+                        .is_some_and(|h| h.batch.session_ids.iter().any(|id| id == session_id))
+                })
+            })
+            .map(|(main, _)| main.clone())
     }
 
     /// The reports waiting for `main_chat_id`, oldest first.
@@ -1232,7 +1376,8 @@ impl SubtaskReports {
     }
 
     /// Put reports back after a failed delivery, ahead of any that came
-    /// in meanwhile — except a subtask's that a newer one replaced.
+    /// in meanwhile — except a subtask's that a newer one replaced. They
+    /// were due: none is held again.
     fn restore(&self, main_chat_id: &str, back: Vec<Waiting>) {
         let mut state = self.lock();
         let waiting = state.waiting.entry(main_chat_id.to_string()).or_default();
@@ -1248,6 +1393,7 @@ impl SubtaskReports {
                     .as_ref()
                     .is_none_or(|id| !newer.contains(id))
             })
+            .map(|w| Waiting { held: None, ..w })
             .collect();
         merged.append(waiting);
         *waiting = merged;
@@ -1295,9 +1441,12 @@ fn announce_undelivered(notifier: &dyn Notifier, main_chat_id: &str, subtask_ids
 // ---------------- recording ----------------
 
 /// The drain task's hook for a run signal, called before the queue step:
-/// a subtask's run that ended is reported to its main chat. Returns that
-/// main chat when a report was added, for the caller to wake once the
-/// queue step is done ([`take_due`]).
+/// a subtask's run that ended is reported to its main chat, held when it
+/// finished and its batch has others (ticket 144). Returns that main chat
+/// when a report was added, for the caller to wake once the queue step is
+/// done ([`take_due`]) — and, for a run that reported nothing (stopped,
+/// promoted, deleted), the main chat holding reports for its batch, which
+/// may wait for it no longer.
 pub async fn record_run_end(
     reports: &SubtaskReports,
     galley: &SqliteGalley,
@@ -1308,15 +1457,40 @@ pub async fn record_run_end(
         RunSignal::RunComplete { session_id } | RunSignal::Closed { session_id } => session_id,
     };
     let state = runner.run_state(session_id).await;
-    let end = run_end(signal, &state)?;
+    let Some(end) = run_end(signal, &state) else {
+        return reports.holding_for(session_id);
+    };
     match report_for_run_end(galley, runner, session_id, end).await {
         Ok(Some(report)) => {
             let main = report.main_chat_id.clone();
-            reports.add(report).then_some(main)
+            let batch = batch_of(galley, &report).await;
+            if reports.add_in_batch(report, batch) {
+                Some(main)
+            } else {
+                reports.holding_for(session_id)
+            }
         }
-        Ok(None) => None,
+        Ok(None) => reports.holding_for(session_id),
         Err(e) => {
             eprintln!("[subtask-report {session_id}] reading the run that ended failed: {e}");
+            reports.holding_for(session_id)
+        }
+    }
+}
+
+/// The batch of the subtask `report` is about, when it may be held for
+/// one: a finished run of a main chat's subtask (not a scheduled task's
+/// session). A failed read holds nothing — a report late is worse than
+/// one alone.
+async fn batch_of(galley: &SqliteGalley, report: &SubtaskReport) -> Option<SubtaskBatch> {
+    if !matches!(report.outcome, ReportOutcome::Done { .. }) || report.scheduled_task_id.is_some() {
+        return None;
+    }
+    let id = report.subtask_id.as_deref()?;
+    match galley.subtask_batch(&SessionId(id.to_string())).await {
+        Ok(batch) => batch.filter(|b| b.parent_session_id == report.main_chat_id),
+        Err(e) => {
+            eprintln!("[subtask-report {id}] reading its batch failed: {e}");
             None
         }
     }
@@ -1371,16 +1545,22 @@ pub enum WakeOutcome {
 }
 
 /// Take `main_chat_id`'s run gate for its waiting reports, when it has
-/// any and is idle. While it waits for the user's answer the reports
-/// stay, and the desktop is told they could not be delivered — except a
-/// due task's, which is consumed and handed to a notification instead
-/// ([`return_due_tasks`]). `None` when there is nothing to send now.
+/// any, one of them is due ([`due_now`]: not held for its batch, or its
+/// batch back or out of time) and it is idle. While it waits for the
+/// user's answer the reports stay, and the desktop is told they could not
+/// be delivered — except a due task's, which is consumed and handed to a
+/// notification instead ([`return_due_tasks`]). `None` when there is
+/// nothing to send now.
 pub async fn take_due(
     reports: &SubtaskReports,
     host: &RunnerHost<'_>,
     main_chat_id: &str,
 ) -> Option<WakeJob> {
     if !reports.has_waiting(main_chat_id) {
+        return None;
+    }
+    // Ticket 144: finished reports held for their batch wake nobody yet.
+    if !due_now(reports, host, main_chat_id).await {
         return None;
     }
     // A question of the main chat's own is waiting: a message now would
@@ -1416,6 +1596,52 @@ pub async fn take_due(
         main_chat_id: main_chat_id.to_string(),
         reports: taken,
     })
+}
+
+/// Whether `main_chat_id`'s waiting reports wake it now (ticket 144, main
+/// chat PRD ruling 193 point 5): yes when one of them is not held for its
+/// batch; when all are, once a batch they are held for is back — none of
+/// its subtasks still running ([`still_running`]) — or the first of its
+/// reports came [`BATCH_WAIT_SECS`] ago. Whatever wakes it, every report
+/// waiting goes ([`take_due`] takes them all).
+async fn due_now(reports: &SubtaskReports, host: &RunnerHost<'_>, main_chat_id: &str) -> bool {
+    let Some(batches) = reports.held_batches(main_chat_id) else {
+        return true;
+    };
+    let now = reports.now();
+    for batch in batches {
+        if (now - batch.since).num_seconds() >= BATCH_WAIT_SECS {
+            return true;
+        }
+        if !still_running(host, &batch.session_ids).await {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether one of `session_ids` is still running: its run open (the run
+/// gate: a run dispatched whose end has not come) and its session there
+/// and not promoted. One whose report waits, is in flight or went, one
+/// stopped (`ABORTED`), asking, deleted or promoted is not: the batch
+/// waits only for what is really running.
+async fn still_running(host: &RunnerHost<'_>, session_ids: &[String]) -> bool {
+    for id in session_ids {
+        if !host.runner.run_state(id).await.open_run {
+            continue;
+        }
+        match host.galley.session_brief(SessionId(id.clone())).await {
+            Ok(session) if session.promoted == Some(true) => {}
+            Ok(_) => return true,
+            Err(GalleyError::NotFound { .. }) => {}
+            // The run gate says it runs; the cap bounds the wait.
+            Err(e) => {
+                eprintln!("[subtask-report {id}] reading the subtask failed: {e}");
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Send the wake `job` carries, with its run gate held: read the reports
@@ -2707,5 +2933,80 @@ mod tests {
         assert_eq!(waiting.len(), 2);
         assert_eq!(waiting[0].subtask_id, None);
         assert_eq!(waiting[1], newest);
+    }
+
+    /// Ticket 144: what the store holds for a batch, and how it tells the
+    /// wake about it.
+    #[test]
+    fn a_finished_report_is_held_for_a_batch_of_two_or_more() {
+        let t0 = DateTime::parse_from_rfc3339("2026-11-04T07:30:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let now = Arc::new(Mutex::new(t0));
+        let reports = SubtaskReports::with_clock({
+            let now = now.clone();
+            Arc::new(move || *now.lock().unwrap())
+        });
+        let batch = |turn: i64, ids: &[&str]| SubtaskBatch {
+            parent_session_id: "s-main".into(),
+            turn_index: turn,
+            session_ids: ids.iter().map(|id| id.to_string()).collect(),
+        };
+
+        // A reply that started one subtask is no batch; not finished is
+        // never held.
+        assert!(reports.add_in_batch(
+            report(Some("s-solo"), 0, done("a")),
+            Some(batch(1, &["s-solo"]))
+        ));
+        assert!(reports.add_in_batch(
+            report(
+                Some("s-2"),
+                0,
+                ReportOutcome::StepLimit {
+                    last_words: "x".into()
+                }
+            ),
+            Some(batch(2, &["s-1", "s-2"]))
+        ));
+        assert_eq!(reports.held_batches("s-main"), None);
+        assert!(reports.holding().is_empty());
+        reports.take("s-main");
+
+        // Finished, in a batch of two or more: held, from when it came.
+        assert!(reports.add_in_batch(
+            report(Some("s-1"), 0, done("a")),
+            Some(batch(2, &["s-1", "s-2", "s-3"]))
+        ));
+        *now.lock().unwrap() = t0 + chrono::Duration::seconds(90);
+        assert!(reports.add_in_batch(
+            report(Some("s-3"), 0, done("c")),
+            Some(batch(2, &["s-1", "s-2", "s-3"]))
+        ));
+        assert_eq!(
+            reports.held_batches("s-main"),
+            Some(vec![HeldBatch {
+                session_ids: vec!["s-1".into(), "s-2".into(), "s-3".into()],
+                since: t0,
+            }])
+        );
+        assert_eq!(reports.holding(), vec!["s-main".to_string()]);
+        assert_eq!(reports.holding_for("s-2").as_deref(), Some("s-main"));
+        assert_eq!(reports.holding_for("s-other"), None);
+
+        // One not held among them: nothing is weighed, all go.
+        assert!(reports.add(report(
+            None,
+            0,
+            ReportOutcome::NotStarted { why: "x".into() }
+        )));
+        assert_eq!(reports.held_batches("s-main"), None);
+
+        // Put back after a failed delivery, they were due: none held.
+        let taken = reports.take("s-main");
+        reports.restore("s-main", taken);
+        assert_eq!(reports.waiting("s-main").len(), 3);
+        assert!(reports.holding().is_empty());
+        assert_eq!(reports.holding_for("s-2"), None);
     }
 }
