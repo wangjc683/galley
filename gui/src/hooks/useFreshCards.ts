@@ -9,7 +9,7 @@ import {
   type FreshBatch,
   type FreshCard,
 } from "@/lib/fresh-cards";
-import { inReportRound } from "@/lib/subtasks";
+import { inRoundOfYours } from "@/lib/subtasks";
 import { flyFreshCards } from "@/lib/todo-flight-run";
 import {
   introduceTodoPanel,
@@ -21,6 +21,7 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { useMemoStore } from "@/stores/memo";
 import { useMessagesStore } from "@/stores/messages";
 import { useSessionsStore } from "@/stores/sessions";
+import { useSubtasksStore } from "@/stores/subtasks";
 import { useUiStore } from "@/stores/ui";
 
 /**
@@ -29,7 +30,8 @@ import { useUiStore } from "@/stores/ui";
  * fresh read of the noted to-dos, of Galley's own reminders and of the
  * memo writes says which cards are new (lib/fresh-cards.ts); what one
  * round made is gathered (`FRESH_CARDS_GATHER_MS`) and put to
- * `todoPanelIntroduces` — the panel never met, under a round you sent,
+ * `todoPanelIntroduces` — the panel never met, under a round you sent
+ * or its second half (ruling 197, lib/subtasks.ts `inRoundOfYours`),
  * Galley's conversation on screen and wide enough, read as the wait
  * ends — and when it says so Galley's panel opens on that page at those
  * rows (`introduceTodoPanel`). Until ticket 101 only the to-dos were
@@ -49,10 +51,11 @@ export function useFreshCards(mainChatId: string | undefined): void {
     const add = (cards: FreshCard[]) => {
       if (cards.length === 0) return;
       const turns = useMessagesStore.getState().byId[mainChatId]?.turns ?? [];
-      // A round opened by a report row is one Core woke Galley for —
-      // the second half of yours too: ruling 197 drew that one as yours
-      // (the typing dots, lib/assistant-conversation.ts), not this.
-      gatherer.add(cards, !inReportRound(turns));
+      // A round opened by a report row is one Core woke Galley for, but
+      // for the second half of a round of yours (ruling 197): that one is
+      // your round, as the typing dots draw it.
+      const dispatches = useSubtasksStore.getState().byParent[mainChatId] ?? [];
+      gatherer.add(cards, inRoundOfYours(turns, dispatches));
     };
     const unsubscribeTodos = useAssistantTodoStore.subscribe(
       (state, previous) => {

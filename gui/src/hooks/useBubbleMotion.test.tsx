@@ -148,6 +148,16 @@ function send(running = true) {
   });
 }
 
+/** The store write Core's wake makes: its report row in, the run
+ * started — no send of yours, so no submit tick (stores/messages.ts
+ * `applyUserMessagePersisted`: a report moves no viewport). */
+function wake() {
+  const state = useMessagesStore.getState();
+  useMessagesStore.setState({
+    byId: { ...state.byId, main: { ...EMPTY_MESSAGES, agentRunning: true } },
+  });
+}
+
 /** The store write a stop makes. */
 function stop() {
   const state = useMessagesStore.getState();
@@ -607,5 +617,120 @@ describe("a round Core woke it for", () => {
     // Taken out of the column, not just gone with it.
     expect(layer.parentElement).toBeNull();
     for (const p of page.played) expect(p.animation.cancel).toHaveBeenCalled();
+  });
+});
+
+// Ruling 197 (ticket 146): the wake that brings back what a round of
+// yours sent off is that round's second half, its typing bubble up from
+// the wake on — not live, then live with the dots, in one commit. It
+// comes in as after your send (ruling 138's send, `playSend`), nothing of
+// yours fading in.
+describe("the wake of a second half of your round", () => {
+  const PROGRESS: TypingProgress = {
+    doing: "思考中",
+    startedAtMs: null,
+    baseMs: 0,
+  };
+
+  it("slides the column up as a send does, and fades the dots and their line in once it is in place", () => {
+    page.layout.columnTop = 300;
+    mount({ rows: [A1, U1, A2], typing: false, live: false });
+    page.frame();
+    render(
+      { rows: [A1, U1, A2], typing: true, live: true, progress: PROGRESS },
+      wake,
+    );
+    // Nothing yet: it starts in the frame's resize step, as a send.
+    expect(page.played).toEqual([]);
+    // The typing bubble took 67px: the column is up by that much.
+    page.layout.columnTop = 233;
+    page.frame();
+
+    const moved = slides();
+    expect(moved.map((p) => p.el)).toEqual([column().children[0], typingRow()]);
+    for (const p of moved) {
+      const frames = transforms(p);
+      expect(frames[0]).toBe("translateY(67px)");
+      expect(frames[frames.length - 1]).toBe("translateY(0px)");
+      expect(p.options).toEqual({
+        duration: scrollDurationMs(67),
+        easing: "linear",
+      });
+    }
+    expect(column().style.overflow).toBe("clip");
+    // The typing bubble (its row holds the line under the dots) fades in
+    // once the slide is over: the send's fade, not the woken round's.
+    const typing = page.played.filter(
+      (p) => p.el === typingRow() && opacities(p) !== null,
+    );
+    expect(typing).toHaveLength(1);
+    expect(
+      typingRow()!.querySelector('[data-role="assistant-progress"]'),
+    ).not.toBeNull();
+    expect(opacities(typing[0])).toEqual([0, 1]);
+    expect(typing[0].options).toEqual({
+      duration: BASE,
+      delay: scrollDurationMs(67),
+      easing: POP,
+      fill: "backwards",
+    });
+    // Nothing of yours came in: no row of the conversation fades.
+    for (const id of ["a-1", "u-1", "a-2"]) {
+      expect(page.played.filter(on(rowOf(id)))).toEqual([]);
+    }
+  });
+
+  it("only fades under reduced motion: no slide, the dots a beat later", () => {
+    page.reduceMotion();
+    mount({ rows: [A1, U1, A2], typing: false, live: false });
+    page.frame();
+    render({ rows: [A1, U1, A2], typing: true, live: true }, wake);
+    page.layout.columnTop -= 67;
+    page.frame();
+    expect(slides()).toEqual([]);
+    const typing = page.played.find(
+      (p) => p.el === typingRow() && opacities(p) !== null,
+    )!;
+    expect(typing.options).toEqual({
+      duration: BASE,
+      delay: BASE,
+      easing: POP,
+      fill: "backwards",
+    });
+  });
+
+  it("plays nothing at a wake whose dots wait for its words, then the woken round's own fade", () => {
+    // A reminder, the morning review, what they sent off coming back:
+    // live with no dots.
+    mount({ rows: [A1, U1, A2], typing: false, live: false });
+    page.frame();
+    render({ rows: [A1, U1, A2], typing: false, live: true }, wake);
+    page.frame();
+    expect(page.played).toEqual([]);
+    // It writes: the woken round's fade (fast, at once), not the send's.
+    render({ rows: [A1, U1, A2], typing: true, live: true });
+    page.layout.columnTop -= 67;
+    page.frame();
+    const fade = page.played.find(
+      (p) => p.el === typingRow() && opacities(p) !== null,
+    )!;
+    expect(fade.options).toEqual({
+      duration: FAST,
+      delay: 0,
+      easing: POP,
+      fill: "backwards",
+    });
+  });
+
+  it("keeps a wake's reading to its own commit: a restore that goes live later plays nothing", () => {
+    // Restoring: MainView passes `live: false` while the turns are read
+    // back, whatever the store says.
+    mount({ rows: [A1, U1], typing: true, live: false });
+    page.frame();
+    render({ rows: [A1, U1], typing: true, live: false }, wake);
+    page.frame();
+    render({ rows: [A1, U1], typing: true, live: true });
+    page.frame();
+    expect(page.played).toEqual([]);
   });
 });

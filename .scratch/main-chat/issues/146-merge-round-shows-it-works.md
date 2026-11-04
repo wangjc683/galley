@@ -143,3 +143,41 @@ prettier 只格式化自己的 hunk，旧文件别整篇 `--write`。真机 dev 
 8. `lib/todo-panel.ts` 的 `assistantRowLine`、`todoRowText`、`doneRowLine` 与 `lib/todo-open.ts` 跳到子任务的分支还在（纯函数，测试还在），面板已走不到；面板行组件里的子任务画法已删。
 9. 卡片在下半场写「正在工作…」只在 selector 层测了：`Sidebar.main-chat.test.tsx` 把 `useAssistantRound`、`useAssistantTyping` 整个替换掉，卡片里的接线（两个 hook 各挂一个 `loadFor`，同一个主对话去重）没有组件级测试。
 10. 裁决 197 第 3 条记下的代价照旧：巡看、提醒在不出声的一轮里派的子任务，停下后桌面上哪儿都看不到；`deferred.md`「全部子任务」补了一句。
+
+### 验收后补（2026-11-04 第二轮：Open risks 1、4）
+
+主会话验收后要补的两处，同一分支。其余 Open risks 照主会话的裁定：2、3、6、7、9、10 维持现状；5 留给主会话在票 147 合入后统一改，这里没碰；8 的死分支先留着。
+
+**1. 叫醒那一刻的入场（原 Open risk 1）**
+
+- 做法：照发出那一下，不另造动效。`hooks/useBubbleMotion.ts` 的 store 订阅里，在「你发了消息」（`userSubmitTick` 加一）之外再认一种：这一轮由不在跑变成在跑，但没有你发的东西，即 Core 叫醒（报告行进库时不加 `userSubmitTick`，见 `stores/messages.ts` 的 `applyUserMessagePersisted`）。这时用 `lib/bubble-motion-play.ts` 新加的 `captureWake` 量下屏上的样子，即 `captureSend` 再加一个 `wake` 标记。提交后的 layout effect 里，满足「有这份量法、这次提交 live、上一次提交不 live、三点在」就先 `settleBubbleMotion`，再放发出那一套 `playSend`：整栏从原位滑上来，用发出的时长与曲线；三点连同那一行等滑到位再淡入（`sendFades`：`--motion-base`、`--ease-pop`，延迟等于滑动时长）；减少动态下只淡不移。`wake` 标记让 `playSend` 跳过「你的气泡淡入」那一步：叫醒行不画，没有你的气泡；`sentRows` 认不准最后一行时会退到你最新一条消息，不能让它把你的旧消息再淡一次。
+- 三点不在的叫醒（提醒、巡看，以及它们那一轮派的子任务回来，等写字才出三点），这份量法在当次提交就作废，之后照旧随写字淡入（`playTypingAppear`）。整页重载、冷启动恢复（恢复期间 MainView 给 `live: false`）、切回来、重新挂载都碰不到那一次 store 写入，不放。
+- 怎么确认的：用 `test/bubble-motion-page.ts` 那套假页面（jsdom 不排版，它按 `data-h` 模拟版面，记下每一次 `animate`，帧的 resize 那一步由测试手动推）。`hooks/useBubbleMotion.test.tsx` 新加 4 条：
+  - 下半场叫醒那一刻走入场分支：在 store 里写一次叫醒（只有 `agentRunning` 由假变真，不加 tick），同一次提交 `live: true`、三点与那一行在；把栏顶上移 67px 后推一帧。断言：滑的是对话与三点两样，从 `translateY(67px)` 到 0，时长是 `scrollDurationMs(67)`，栏 `overflow: clip`；三点那一行（里面有 `assistant-progress`）淡入 `[0, 1]`，`{duration: 160, delay: scrollDurationMs(67), easing: --ease-pop}`，与发出时三点那次逐字段相同；对话里的行都没有淡入。
+  - 减少动态：不滑，三点延迟 160 淡入。
+  - 等写字才出三点的叫醒：叫醒那一刻什么都不放，写字时走叫醒轮自己的淡入（120、不延迟）。
+  - 恢复：叫醒写入时 `live: false`，下一次提交才 `live: true`，什么都不放。
+- 变异：把入场分支临时关掉，前两条失败（`Tests  2 failed | 23 passed (25)`），已还原。
+- 只能真机看的（合入后在 dev 里看第一帧）：
+  1. 贴底时跟随（`useStickyScroll` 的 ResizeObserver）在叫醒那一刻是否真把栏推上去三点加一行的高度，滑动是否从你看着的那一屏起，第一帧不闪旧内容。这里与票 94 发出那一下是同一条路径，WebKit 的 `overflow: clip` 修法共用。
+  2. 往上翻着、没贴底时不滑，只有三点延迟淡入。
+  3. 同一刻回执打勾、侧栏子任务行离开，与这次滑动叠在一起的观感。
+  4. 那一行的扫光在淡入期间的相位。
+
+**2. 面板自动开一次与卡片飞行的「你那一轮」（原 Open risk 4）**
+
+- `lib/subtasks.ts` 新加 `inRoundOfYours(turns, dispatches)`，等于 `!inReportRound(turns) || inSecondHalf(turns, dispatches)`，与三点用的是同一个下半场判定。`hooks/useFreshCards.ts` 改用它，派活记录读 `useSubtasksStore.getState().byParent[主对话]`；这是 store 回调，不在渲染里。卡片自己挂载时就读过一次记录，所以这里拿得到。`lib/todo-open.ts` 的 `yourRound`、`lib/fresh-cards.ts` 的 `FreshBatch.yourRound` 注释跟着改。设计文档「只自动开一次」那句改成下半场算你那一轮。
+- 没跟着改的：你插过话的叫醒轮，在这里照旧算叫醒（票 136 起只有三点这样算），与改前一样；主会话只要求认下半场，没扩。
+- 测试：`lib/subtasks.test.ts` 新 1 条，覆盖你开的、下半场、没记录时、巡看派的回来、提醒叫醒。`hooks/useFreshCards.test.tsx` 新 1 条：下半场里新出现一张提醒卡，面板自动打开并亮那一行；同一次叫醒没有派活记录时，面板不开。变异：把记录换成空数组，这条失败（`Tests  1 failed | 13 passed (14)`），已还原。
+
+**文件**：`gui/src/hooks/useBubbleMotion.ts`、`gui/src/lib/bubble-motion-play.ts`、`gui/src/lib/bubble-motion.ts`（注释）、`gui/src/hooks/useFreshCards.ts`、`gui/src/lib/subtasks.ts`、`gui/src/lib/todo-open.ts`（注释）、`gui/src/lib/fresh-cards.ts`（注释）；测试 `gui/src/hooks/useBubbleMotion.test.tsx`、`gui/src/hooks/useFreshCards.test.tsx`、`gui/src/lib/subtasks.test.ts`；文档 `docs/design/conversation.md`（「下半场」新加「入场」一条，「出现与离开」的「叫醒那一轮」，「只自动开一次」）。
+
+**验证（照抄输出）**
+
+- `pnpm --dir gui typecheck`：`> tsc --noEmit`，无报错。
+- `pnpm --dir gui lint`：`> eslint src --max-warnings 0`，无报错。
+- `pnpm --dir gui exec vitest run`：`Test Files  255 passed (255)`，`Tests  2842 passed (2842)`。
+- `TZ=UTC pnpm --dir gui exec vitest run`：`Test Files  255 passed (255)`，`Tests  2842 passed (2842)`。
+- `node scripts/check-docs-links.mjs`：`docs link gate OK: 494 files checked.`
+- `git diff --check`：退出码 0。
+- prettier：改到的文件原本都干净，`--check` 全过；新增行的全角标点扫过。

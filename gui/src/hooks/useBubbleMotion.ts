@@ -7,6 +7,7 @@ import {
 } from "@/lib/bubble-motion";
 import {
   captureSend,
+  captureWake,
   columnOf,
   conversationOf,
   playSend,
@@ -91,6 +92,7 @@ export function useBubbleMotion({
   scrollContainerRef: RefObject<HTMLDivElement | null>;
 }): void {
   const sendRef = useRef<SendBefore | null>(null);
+  const wakeRef = useRef<SendBefore | null>(null);
   const trackRef = useRef<Tracking>({
     live: false,
     typing: null,
@@ -104,7 +106,7 @@ export function useBubbleMotion({
   // Inside the store write, before React renders it: your message going
   // in (every way it comes: the composer, a queued one going out, your
   // answer to its question, the CLI, the phone — all in front of you),
-  // and the run stopping.
+  // a run starting without it (Core's wake), and the run stopping.
   useEffect(() => {
     if (!enabled || sessionId === undefined) return;
     return useMessagesStore.subscribe((state, prev) => {
@@ -116,6 +118,15 @@ export function useBubbleMotion({
       if (state.userSubmitTick > prev.userSubmitTick) {
         settleBubbleMotion(container);
         sendRef.current = captureSend(container);
+        return;
+      }
+      // A run starting with nothing of yours sent: Core woke it. What is
+      // on screen now, in case its typing bubble comes in the same
+      // commit — the second half of a round of yours (main chat PRD
+      // ruling 197), drawn as your round from the wake on. Any other
+      // wake shows its dots only once it writes, and this goes unused.
+      if (!before?.agentRunning && now?.agentRunning) {
+        wakeRef.current = captureWake(container);
         return;
       }
       if (before?.agentRunning && !now?.agentRunning) {
@@ -137,12 +148,27 @@ export function useBubbleMotion({
     const container = scrollContainerRef.current;
     const send = sendRef.current;
     sendRef.current = null;
+    const wake = wakeRef.current;
+    wakeRef.current = null;
     const track = trackRef.current;
     const stopOpacity = track.stopOpacity;
     track.stopOpacity = null;
     if (!container) return;
     if (send) {
       playSend(container, send);
+    } else if (wake && live && !track.live) {
+      // Not live, then live with the typing bubble up in one commit,
+      // with no send of yours: the wake of a second half (ruling 197).
+      // It comes in as after your send — the column slides up, the
+      // typing bubble and the line under it fade in once it is in place
+      // (`playSend`; nothing of yours fades). Only on the store write
+      // that started the run: a restore going live, a remount, a switch
+      // back caught none, and play nothing.
+      const column = columnOf(container);
+      if (column && typingRowOf(column)) {
+        settleBubbleMotion(container);
+        playSend(container, wake);
+      }
     } else if (track.live) {
       const column = columnOf(container);
       const typing = column ? typingRowOf(column) : null;

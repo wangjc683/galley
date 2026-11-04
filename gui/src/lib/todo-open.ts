@@ -370,10 +370,9 @@ export interface TodoIntroduction {
    * gathered from the three reads (lib/fresh-cards.ts; the first read of
    * each says only what is there, and brings none). */
   fresh: readonly FreshCard[];
-  /** The round they came with is one you sent, not one Core woke Galley
-   * for (lib/subtasks.ts `inReportRound`; the second half of one of yours
-   * counts as woken here, though the typing dots draw it as yours,
-   * ruling 197). */
+  /** The round they came with is one you sent, or the second half of
+   * one (ruling 197), not one Core woke Galley for otherwise
+   * (lib/subtasks.ts `inRoundOfYours`). */
   yourRound: boolean;
   /** Galley's conversation itself is in the main area
    * (`mainChatOnScreen`). */

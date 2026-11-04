@@ -15,7 +15,11 @@
  *            refusing, the other way round.
  *   typing   the typing bubble with nothing growing out of it fades
  *            where it stood, and what took its place fades in; in a
- *            round Core woke it for, it fades in and out as it types.
+ *            round Core woke it for, it fades in and out as it types —
+ *            but at the wake of the second half of a round of yours
+ *            (ruling 197), up from the wake on, it comes in as after a
+ *            send, the column sliding up (lib/bubble-motion-play.ts
+ *            `captureWake`).
  *
  * The end layout and the scroll position are what they were before
  * (the anchor, 贴底, the follow): only the way there moves — transform

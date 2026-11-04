@@ -19,8 +19,10 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { useMemoStore } from "@/stores/memo";
 import { useMessagesStore } from "@/stores/messages";
 import { useSessionsStore } from "@/stores/sessions";
+import { useSubtasksStore } from "@/stores/subtasks";
 import { useUiStore } from "@/stores/ui";
 import { makeSession } from "@/test/factories";
+import { after, wake, yourRound } from "@/test/second-half";
 import type { Turn } from "@/types/conversation";
 
 /**
@@ -138,6 +140,7 @@ beforeEach(() => {
   });
   useAssistantTodoStore.setState({ noted: [], loaded: false });
   useMemoStore.setState({ events: [], loaded: false });
+  useSubtasksStore.setState({ byParent: {} });
   useUiStore.setState({
     screen: "main",
     todoPanelOpen: { galley: false, elsewhere: false },
@@ -292,6 +295,39 @@ describe("the panel opens by itself once, for any card the panel lists", () => {
       [task("sched_new", 7)],
       [task("sched_new", 7), task("sched_two", 8)],
     );
+    wait(FRESH_CARDS_GATHER_MS);
+    expect(ui().todoPanelOpen.galley).toBe(false);
+  });
+
+  // Ruling 197 (ticket 146): the wake that brings back what your round
+  // sent off is that round's second half — a round of yours here too.
+  it("opens for the second half of your round, not for what the review sent off coming back", () => {
+    const back = after(yourRound(), {
+      turns: [wake("s-phone-a,s-phone-b", 3)],
+      dispatches: [],
+    });
+    useSubtasksStore.setState({ byParent: { [MAIN]: back.dispatches } });
+    useMessagesStore.setState({
+      byId: { [MAIN]: { turns: back.turns } } as never,
+    });
+    mount();
+    firstReads();
+    reminderRead([], [task("sched_new", 7)]);
+    wait(FRESH_CARDS_GATHER_MS);
+    expect(ui().todoPanelOpen.galley).toBe(true);
+    expect(ui().todoRowRequest?.ids).toEqual(["sched_new"]);
+    // The same wake with no record of what your round sent off: woken.
+    act(() => root?.unmount());
+    root = null;
+    useUiStore.setState({
+      todoPanelOpen: { galley: false, elsewhere: false },
+      todoPanelIntroduced: false,
+      todoRowRequest: null,
+    });
+    useSubtasksStore.setState({ byParent: {} });
+    mount();
+    firstReads();
+    reminderRead([], [task("sched_two", 8)]);
     wait(FRESH_CARDS_GATHER_MS);
     expect(ui().todoPanelOpen.galley).toBe(false);
   });

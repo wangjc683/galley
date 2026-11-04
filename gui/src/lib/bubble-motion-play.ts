@@ -387,7 +387,8 @@ function contentOrigin(container: HTMLElement): { top: number; left: number } {
 
 // ---- A send ----------------------------------------------------------------
 
-/** What was on screen when your message went in. */
+/** What was on screen when your message went in — or when Core woke
+ * the main chat (`wake`). */
 export interface SendBefore {
   /** The column's top in the viewport. */
   columnTop: number;
@@ -395,6 +396,9 @@ export interface SendBefore {
   lastRow: Element | null;
   /** The typing bubble was up already (a `/btw` question while it runs). */
   typing: boolean;
+  /** Core woke it, no message of yours went in: nothing of yours fades
+   * in (`captureWake`). */
+  wake?: true;
 }
 
 export function captureSend(container: HTMLElement): SendBefore | null {
@@ -405,6 +409,15 @@ export function captureSend(container: HTMLElement): SendBefore | null {
     lastRow: conversationOf(column)?.lastElementChild ?? null,
     typing: typingRowOf(column) !== null,
   };
+}
+
+/** What was on screen when Core woke the main chat (its report row in,
+ * the run started, nothing of yours): for the second half of a round of
+ * yours, whose typing bubble is up from the wake on (main chat PRD
+ * ruling 197) and comes in as after your send (`playSend`). */
+export function captureWake(container: HTMLElement): SendBefore | null {
+  const before = captureSend(container);
+  return before ? { ...before, wake: true } : null;
 }
 
 /** Your new message's row and the time line that came with it: the new
@@ -431,7 +444,10 @@ function sentRows(column: HTMLElement, lastRow: Element | null): Element[] {
  * The send (ruling 138 第 3 条): the column slides up from where it was
  * on the programmatic scroll's numbers; your bubble fades in with it; the
  * typing bubble, there from the first frame, fades in once the slide is
- * over. Reduced motion: no slide, the fades.
+ * over. Reduced motion: no slide, the fades. The wake of a second half
+ * of your round (ruling 197, `captureWake`) plays the same, with no
+ * bubble of yours: the column slides up, the typing bubble and the line
+ * under it fade in once it is in place.
  */
 export function playSend(container: HTMLElement, before: SendBefore): void {
   const column = columnOf(container);
@@ -443,7 +459,8 @@ export function playSend(container: HTMLElement, before: SendBefore): void {
         ? columnSlide(before.columnTop - columnViewTop(column, container))
         : null;
     const fades = sendFades(timing, slide);
-    for (const row of sentRows(column, before.lastRow)) {
+    const sent = before.wake ? [] : sentRows(column, before.lastRow);
+    for (const row of sent) {
       run.fade(row, [0, 1], fades.bubble);
     }
     const typing = typingRowOf(column);

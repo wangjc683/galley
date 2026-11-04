@@ -751,6 +751,23 @@ export function inSecondHalf(
   return secondHalf(groups.length - 1);
 }
 
+/**
+ * Whether the latest run of `turns` is a round of yours: no report row
+ * opened it (your message did), or it is the second half of one
+ * (`inSecondHalf`, ruling 197: the wake that brings back what your round
+ * sent off is that round). What the to-do panel's one opening by itself
+ * asks for its 「你发出的那一轮」 (hooks/useFreshCards.ts, lib/todo-open.ts
+ * `yourRound`; ruling 131 point 4). A woken round you wrote into is not
+ * one here, as before; the typing dots alone count it (ticket 136,
+ * lib/assistant-conversation.ts).
+ */
+export function inRoundOfYours(
+  turns: readonly Turn[],
+  dispatches: readonly SubtaskDispatch[],
+): boolean {
+  return !inReportRound(turns) || inSecondHalf(turns, dispatches);
+}
+
 /** The ids a report row covers: its reason, comma-separated. */
 function reportIds(row: UserTurn): string[] {
   return (row.origin?.reason ?? "")

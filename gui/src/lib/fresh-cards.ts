@@ -146,8 +146,10 @@ export interface FreshBatch {
   /** In the cards' order under a reply (to-dos, reminders, memos), each
    * kind in the order it was read. */
   cards: FreshCard[];
-  /** The round they came with is one you sent (not one Core woke Galley
-   * for), as read when the first of them came: the round settling then. */
+  /** The round they came with is one you sent, or its second half (not
+   * one Core woke Galley for otherwise: lib/subtasks.ts
+   * `inRoundOfYours`, ruling 197), as read when the first of them came:
+   * the round settling then. */
   yourRound: boolean;
 }
 

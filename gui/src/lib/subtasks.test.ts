@@ -8,6 +8,7 @@ import {
   endsInSilentReport,
   hiddenReportTurns,
   inReportRound,
+  inRoundOfYours,
   inSecondHalf,
   isSilentReport,
   isSubtaskReportTurn,
@@ -907,5 +908,28 @@ describe("the second half of your round", () => {
       you("谢谢", 5),
     );
     expect(second(r)).toBe(false);
+  });
+});
+
+// Ruling 197: the to-do panel's one opening by itself (ruling 131 point
+// 4) asks the same of the round its cards came with.
+describe("a round of yours", () => {
+  it("is one your message opened, or the second half of one; not another wake", () => {
+    expect(inRoundOfYours(yourRound().turns, [])).toBe(true);
+    const back = after(yourRound(), {
+      turns: [wake("s-phone-a,s-phone-b", 3), reply("两款对比如下。", 4)],
+      dispatches: [],
+    });
+    expect(inRoundOfYours(back.turns, back.dispatches)).toBe(true);
+    // Without the records, as before: woken.
+    expect(inRoundOfYours(back.turns, [])).toBe(false);
+    const review = after(reviewRound(), {
+      turns: [wake("s-ferry", 13), reply("周六上午还有票。", 14)],
+      dispatches: [],
+    });
+    expect(inRoundOfYours(review.turns, review.dispatches)).toBe(false);
+    expect(
+      inRoundOfYours([...yourRound().turns, wake("sched_water", 3)], []),
+    ).toBe(false);
   });
 });
