@@ -181,3 +181,7 @@ prettier 只格式化自己的 hunk，旧文件别整篇 `--write`。真机 dev 
 - `node scripts/check-docs-links.mjs`：`docs link gate OK: 494 files checked.`
 - `git diff --check`：退出码 0。
 - prettier：改到的文件原本都干净，`--check` 全过；新增行的全角标点扫过。
+
+## Comments
+
+- 2026-11-04 09:47–09:55 UTC 主会话 dev 走查（CLI 发、查库，界面没看）：两款相机对比，两个子任务由 CLI 发起的那一轮派出，回来那一轮（09:54:04 叫醒、09:55:09 回复）按判定是下半场。三点、那一行、卡片「正在工作…」、入场滑动、面板与溢出要 JC 在 dev 窗口里看。

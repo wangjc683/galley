@@ -948,12 +948,18 @@ Telegram and Discord now read L0 too. Not dogfooded in dev.
 `0.7.6` (`559ea1af`), but the draft and the tag were deleted after smoke
 S3. When a batch of subtasks the user dispatched came back, the main
 chat's merge round ran 100 s with nothing drawn for its first ~54 s (main
-chat ruling 134 point 2 drew no progress in a woken round). Before the
-retag: a merge round for subtasks you dispatched draws like your own
-round, the to-do panel stops listing subtasks, the sidebar's 「还有 N
-件在办」 expands in place (ruling 197, ticket 146); the merge round reads
-the reports without detouring through a file (upstream GA saves any input
-over 2,000 characters to one; ruling 198, ticket 147, measure first).
+chat ruling 134 point 2 drew no progress in a woken round). Merged since
+for the retag: a merge round for subtasks you dispatched draws like your
+own round (the dots and 「在做什么 · 用时」 from the wake, sliding in as a
+send does; the card 「正在工作…」), the to-do panel stops listing
+subtasks, the sidebar's 「还有 N 件在办」 expands in place (ruling 197,
+ticket 146); in the managed runtime the runner hands the main chat a
+wake note of its own in full instead of upstream GA's 「Long user prompt
+saved to …」 file (any input over 2,000 characters), and a cut answer
+points at `finalAnswer[3000:]` (ruling 198, ticket 147; gpt-6.1-sol one
+step fewer in the eval; dev walk 11-04: the merge round 65 s and 2 steps,
+S3's was 100 s). Evals use gpt-6.1-sol only from 11-04. Owed before the
+retag: JC looks at the merge round in the dev window.
 
 **Owed from the `v0.7.5` smoke** (the list is in the release devlog). S1
 and S3 passed by JC's word: the reply notification read 「Galley · …」 and
