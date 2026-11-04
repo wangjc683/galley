@@ -955,7 +955,9 @@ const IN_HAND_AGENT_CHARS: usize = 24;
 /// ([`crate::assistant_todo::assistant_todo`]) — its yours, Galley's and
 /// routine groups, in its order ("what you see is what it sees", but for
 /// the daily review: the desktop leaves its row out, main chat PRD
-/// ruling 145); the done group stays out. Deterministic, no model call. Core writes it
+/// ruling 145; and for subtasks: the desktop's panel leaves them out,
+/// the sidebar shows the running ones, ruling 197); the done group
+/// stays out. Deterministic, no model call. Core writes it
 /// into the main chat's state block at every runner spawn — each
 /// segment's start, and a respawn mid-segment — so it is a snapshot: it
 /// says when it was read, and which commands read it now (`todo list`

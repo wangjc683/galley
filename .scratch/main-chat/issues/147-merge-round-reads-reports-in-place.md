@@ -1,6 +1,6 @@
 # 147 合成那一轮少走几步：子任务的结果直接读到，不先绕文件
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-04 rebase 到含票 146 的 main 后快进合入 `74802766`、`ed120d84`。主会话验收：读过截断提示的两种写法（做完的回答指向 `finalAnswer[3000:]`，步数到顶照旧）与 runner 的 `agent_before` 钩子（只在 Core 叫醒的那一轮把「Long user prompt saved to …」换回全文，你打的长消息照旧走上游）；rebase 后复跑 `cargo test --workspace` 1,345 条、pytest 766 条、mypy、ruff、`check-managed-ga-payload`、`check-ga-baseline-drift`、`rustfmt --check`、`git diff --check` 全过，`managed-ga/` 下没有 `__pycache__`；新增行扫过本机路径、接口主机、服务商配置与本机待办备忘，0 处（网址是评测虚构站点）。第一轮 glm 在长结果合成上出处 2/2 → 0/2，主会话先卡住合入、让代理试留头尾截断；JC 11-04 定评测只用 gpt-6.1-sol，第二轮中止，按第一轮合入，glm / deepseek 的出处照 Open risk 1 记着。要真机看：dev 里重走 S3，合成那一轮第一步不再读 `user_prompt_*.md`，从叫醒到回复的秒数）
 
 来源：[主对话 PRD](../PRD.md) 裁决 198（JC 11-04：「丙，0.7.6 不急着发布」「按你推荐推进」）。只在内置运行时的主对话；外置零变化（外置没有主对话，也没有子任务回报）。和票 [146](./146-merge-round-shows-it-works.md)（只动 GUI）并行做，互不碰文件。**先量，再改。**
 

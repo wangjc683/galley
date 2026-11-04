@@ -351,15 +351,19 @@ Follow-ups the user turned down (to-dos and reminders you set that were cancelle
 
 - **Source**: the read behind the desktop's 「待办」,
   `assistant_todo::assistant_todo(galley, runners, now)` (tickets 37, 39):
-  its yours, Galley's and routine groups, in its order, so what the user
-  sees is what the main chat is told; the done group stays out. A to-do's
+  its yours, Galley's and routine groups, in its order; the done group
+  stays out. The desktop's panel draws the same groups but its subtasks
+  (main chat PRD ruling 197, ticket 146): the panel holds what is to come,
+  the sidebar what is running, the receipt under each reply what a subtask
+  came to, while the main chat is still told its subtasks not finished so
+  it does not send one off twice. A to-do's
   reminder is on its to-do's line, not a task line of its own. The
   morning review (ticket 73, Galley's own daily task, `system` +
   `galley-review`) is a routine like any other, its line saying
   "Galley's morning review, not set by you" where an outside agent's says
   "set by the outside agent <label>" (the manual asks before pausing an
   outside agent's task, not Galley's).
-  Deterministic, no model call. The fourth group is the one exception to
+  Deterministic, no model call. The fourth group is a further exception to
   "what you see is what it sees" (ruling 113 point 4), read on its own by
   `assistant_todo::declined_follow_ups` (both through
   `assistant_todo::in_hand_read`): the to-dos and tasks Galley made
