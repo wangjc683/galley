@@ -915,7 +915,11 @@ before the tools run (tickets 137, 142; ruling 191). A subtask it
 dispatches carries the main chat's last turns (up to 10, 15,000
 characters) as read-only background, stored with the dispatch record
 (ticket 138, migration 056, ruling 187). Answer-like results come back in
-full (ruling 183 point 4). When one reply dispatches two or more subtasks
+full (ruling 183 point 4). Deliverables the user will decide on or keep
+and that take looking into (a comparison, a plan, a report, a survey) go
+to subtasks by default, one tag per part when they split, and the main
+chat merges the parts when they are back; questions, remarks and single
+facts it answers itself (ruling 193, ticket 143, eval v6). When one reply dispatches two or more subtasks
 (a batch), Core holds a finished one's report while its siblings still
 run and wakes the main chat once when the batch is back, or 5 minutes
 after the first finished; asks, errors, step-limit pauses and
