@@ -88,6 +88,7 @@ import {
   isPendingInterjection,
   useMessagesStore,
 } from "@/stores/messages";
+import { useSubtaskDispatches } from "@/stores/subtasks";
 import { useUiStore } from "@/stores/ui";
 import type {
   PendingAskUser,
@@ -264,6 +265,12 @@ function MainViewContent({
   // The main chat's subtask cards (ticket 06a), by the reply that
   // dispatched them. Every other session has none.
   const subtaskDispatches = useSubtaskDispatchesByMessage(
+    isMainChat ? activeSessionId : undefined,
+  );
+  // …and as they were read, one list: which woken round is the second
+  // half of a round of yours (ruling 197, lib/subtasks.ts
+  // `inSecondHalf`), drawn as that round below.
+  const mainChatDispatches = useSubtaskDispatches(
     isMainChat ? activeSessionId : undefined,
   );
   // …the user's to-dos it noted in them (ticket 42), and the reminders
@@ -478,18 +485,25 @@ function MainViewContent({
   // question arrives.
   const roundLive = isRunning && isMainChat && !roundSettled && !pendingAskUser;
   // The typing bubble (rulings 107, 110): from the send on in a round
-  // you start, only while it writes words in one Core woke it for, never
-  // in a silent one (lib/assistant-conversation.ts `typingBubbleShown`).
+  // you start, from the wake on in the second half of one (ruling 197),
+  // only while it writes words in any other Core woke it for, never in a
+  // silent one (lib/assistant-conversation.ts `typingBubbleShown`).
   const typingShown = useMemo(
-    () => typingBubbleShown(roundLive, turns, inFlightContent),
-    [roundLive, turns, inFlightContent],
+    () =>
+      typingBubbleShown(roundLive, turns, inFlightContent, mainChatDispatches),
+    [roundLive, turns, inFlightContent, mainChatDispatches],
   );
   // The line under the dots (rulings 134, 135): in a round you started,
-  // what it is doing and the round's time (lib/assistant-progress.ts
-  // `assistantDoing`, null in a round Core woke it for).
+  // or its second half (ruling 197), what it is doing and the round's
+  // time — from the wake in a second half, the round's own clock
+  // (lib/assistant-progress.ts `assistantDoing`, null in any other round
+  // Core woke it for).
   const progressDoing = useMemo(
-    () => (typingShown ? assistantDoing(turns, inFlightContent, copy) : null),
-    [typingShown, turns, inFlightContent, copy],
+    () =>
+      typingShown
+        ? assistantDoing(turns, inFlightContent, copy, mainChatDispatches)
+        : null,
+    [typingShown, turns, inFlightContent, copy, mainChatDispatches],
   );
   const typingProgress: TypingProgress | null = progressDoing
     ? {

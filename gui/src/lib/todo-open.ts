@@ -180,19 +180,6 @@ export function openTodoPanel(spot: TodoSpot): void {
   useUiStore.getState().requestTodoPage("todo");
 }
 
-/** The sidebar's 「还有 N 件在办」 (main chat ticket 128, PRD ruling 176
- * point 2): the panel opens where you are, as ⌘K's 「待办」 opens it (on
- * its 待办 page; a look when narrow), and the subtasks the sidebar had no
- * room for light up in 「Galley 在办」, the first scrolled into view
- * (useTodoPanelFlash). */
-export function showSubtasksInTodo(
-  spot: TodoSpot,
-  ids: readonly string[],
-): void {
-  openTodoPanel(spot);
-  useUiStore.getState().requestTodoRows(ids);
-}
-
 /** The panel's × and Esc (ticket 87): a look folds; wide, this place is
  * remembered closed too. Narrow, the remembered open is left as it is:
  * nothing narrow writes it (ruling 131 point 2). */
@@ -384,8 +371,9 @@ export interface TodoIntroduction {
    * each says only what is there, and brings none). */
   fresh: readonly FreshCard[];
   /** The round they came with is one you sent, not one Core woke Galley
-   * for (lib/subtasks.ts `inReportRound`, the typing dots' own rule in
-   * lib/assistant-conversation.ts). */
+   * for (lib/subtasks.ts `inReportRound`; the second half of one of yours
+   * counts as woken here, though the typing dots draw it as yours,
+   * ruling 197). */
   yourRound: boolean;
   /** Galley's conversation itself is in the main area
    * (`mainChatOnScreen`). */

@@ -20,8 +20,13 @@ import { assistantDoing } from "@/lib/assistant-progress";
 import { copyForLanguage } from "@/lib/i18n";
 import { dispatchIPCEvent } from "@/lib/ipc-handlers";
 import { buildRunGroups } from "@/lib/run-groups";
-import { endsInSilentReport, SUBTASK_REPORT_SUPERVISOR } from "@/lib/subtasks";
+import {
+  endsInSilentReport,
+  SUBTASK_REPORT_SUPERVISOR,
+  type SubtaskDispatch,
+} from "@/lib/subtasks";
 import { EMPTY_MESSAGES, useMessagesStore } from "@/stores/messages";
+import { dispatched } from "@/test/second-half";
 import { resetStores } from "@/test/store-reset";
 import type { AgentTurn, Turn, UserTurn } from "@/types/conversation";
 
@@ -111,12 +116,40 @@ const wakeBeat: Beat = [
     }),
 ];
 
+/** Core's report row waking the main chat for `reason` (the ids it
+ * covers, ruling 197); `woke` keeps when it was written. */
+let woke = "";
+const wakeFor = (reason: string): Beat => [
+  `wake for ${reason}`,
+  () => {
+    woke = stamp();
+    useMessagesStore.getState().applyUserMessagePersisted({
+      sessionId: MAIN,
+      message: {
+        id: `report-${reason}`,
+        sessionId: MAIN,
+        role: "user",
+        content: "子任务汇报",
+        createdAt: woke,
+        turnIndex: 60,
+        origin: {
+          via: "system",
+          supervisor: SUBTASK_REPORT_SUPERVISOR,
+          reason,
+        },
+      },
+      dispatch: "dispatched",
+    });
+  },
+];
+
 /** A tool step: its stream in `chunks` (ending in the dispatch), then it
- * lands with the summary GA kept. */
+ * lands with the summary GA kept; its row at `base + turnIndex`. */
 function toolStepBeats(
   turnIndex: number,
   chunks: string[],
   summary: string,
+  base = 100,
 ): Beat[] {
   return [
     [
@@ -151,14 +184,14 @@ function toolStepBeats(
           toolResults: [{ content: "ok" }],
           responseContent: chunks.join(""),
           exitReason: null,
-          absoluteTurnIndex: 100 + turnIndex,
+          absoluteTurnIndex: base + turnIndex,
           timestamp: stamp(),
         }),
     ],
   ];
 }
 
-function replyBeats(turnIndex: number, pieces: string[]): Beat[] {
+function replyBeats(turnIndex: number, pieces: string[], base = 100): Beat[] {
   const content = pieces.join("");
   return [
     [
@@ -186,7 +219,7 @@ function replyBeats(turnIndex: number, pieces: string[]): Beat[] {
           toolResults: [],
           responseContent: content,
           exitReason: { result: "CURRENT_TASK_DONE", data: null },
-          absoluteTurnIndex: 100 + turnIndex,
+          absoluteTurnIndex: base + turnIndex,
           timestamp: stamp(),
         }),
     ],
@@ -257,17 +290,51 @@ function slice() {
 }
 
 /** MainView: the line is drawn while the typing bubble is (the main
- * chat's live round, `typingBubbleShown`), saying `assistantDoing`. */
-function lineNow(): string | null {
+ * chat's live round, `typingBubbleShown`), saying `assistantDoing`;
+ * `dispatches`, the main chat's records (ruling 197). */
+function lineNow(dispatches?: readonly SubtaskDispatch[]): string | null {
   const m = slice();
   const groups = buildRunGroups(m.turns);
   const last = groups[groups.length - 1];
   const settled = (last?.complete ?? false) || endsInSilentReport(m.turns);
   const live = m.agentRunning && !settled && m.pendingAskUser === null;
-  return typingBubbleShown(live, m.turns, m.inFlightContent)
-    ? assistantDoing(m.turns, m.inFlightContent, zh)
+  return typingBubbleShown(live, m.turns, m.inFlightContent, dispatches)
+    ? assistantDoing(m.turns, m.inFlightContent, zh, dispatches)
     : null;
 }
+
+// Ruling 197 (ticket 146): your round sends a subtask off (its reply the
+// row at 201), and the wake that brings it back is that round's second
+// half; the morning review's round sends one off (its reply at 301), and
+// the wake that brings that back stays woken.
+const SECOND_HALF: SubtaskDispatch[] = [dispatched("s-phone-a", 201)];
+const REVIEW_SENT: SubtaskDispatch[] = [dispatched("s-ferry", 301)];
+
+const yourRoundComesBack = (): Beat[] => [
+  ...sendBeats("比较这两款手机，拆开查"),
+  ...replyBeats(1, ["好，我派人分头查。"], 200),
+  wakeFor("s-phone-a"),
+  ...toolStepBeats(
+    1,
+    ["<summary>两份都到了；我核对两款的口径</summary>", DISPATCH],
+    "两份都到了；我核对两款的口径",
+    210,
+  ),
+  ...replyBeats(2, ["两款对比如下，", "差在续航。"], 210),
+];
+
+const reviewComesBack = (): Beat[] => [
+  wakeFor("sched_review"),
+  ...replyBeats(1, ["<subtask>查周六的船票</subtask>\n<no-reply/>"], 300),
+  wakeFor("s-ferry"),
+  ...toolStepBeats(
+    1,
+    ["<summary>船票查到了；我核对班次</summary>", DISPATCH],
+    "船票查到了；我核对班次",
+    310,
+  ),
+  ...replyBeats(2, ["周六上午还有票。"], 310),
+];
 
 function play<T>(beats: Beat[], read: () => T): [string, T][] {
   return beats.map(([label, run]) => {
@@ -314,6 +381,34 @@ describe("the line under the dots, a round driven through the page's events", ()
   it("is not drawn in a round Core woke it for", () => {
     expect(changes(play(woken(), lineNow))).toEqual([null]);
   });
+
+  it("is drawn from the wake on in the second half of your round, its time from the wake", () => {
+    const seen = play(yourRoundComesBack(), () => lineNow(SECOND_HALF));
+    expect(changes(seen)).toEqual([
+      "思考中",
+      "正在写回复",
+      null,
+      // The wake: the rest of your round.
+      "思考中",
+      "我核对两款的口径",
+      "正在写回复",
+      null,
+    ]);
+    expect(seen.find(([l]) => l === "wake for s-phone-a")?.[1]).toBe("思考中");
+    // The round's own clock starts at the wake.
+    resetStores();
+    play(yourRoundComesBack().slice(0, -5), () => null);
+    expect(slice().currentRunStartedAtMs).toBe(Date.parse(woke));
+    // Without the records: woken, as before.
+    resetStores();
+    const blind = play(yourRoundComesBack(), () => lineNow());
+    expect(blind.find(([l]) => l === "wake for s-phone-a")?.[1]).toBeNull();
+  });
+
+  it("is not drawn when what comes back is what the morning review sent off", () => {
+    const seen = play(reviewComesBack(), () => lineNow(REVIEW_SENT));
+    expect(changes(seen)).toEqual([null]);
+  });
 });
 
 describe("selectAssistantRound: the card's read", () => {
@@ -336,6 +431,37 @@ describe("selectAssistantRound: the card's read", () => {
 
   it("says a woken round as one, writing or not", () => {
     expect(changes(play(woken(), read))).toEqual(["woken", null]);
+  });
+
+  // Ruling 197: the card says 「正在工作…」 in a second half as in your
+  // round; what the review sent off coming back stays woken.
+  it("says the second half of your round as yours, the review's comeback as woken", () => {
+    const readWith = (dispatches: readonly SubtaskDispatch[]) => () =>
+      selectAssistantRound(
+        useMessagesStore.getState(),
+        MAIN,
+        slice()?.agentRunning ?? false,
+        dispatches,
+      );
+    const seen = play(yourRoundComesBack(), readWith(SECOND_HALF));
+    expect(changes(seen)).toEqual([
+      "own",
+      "own-writing",
+      "own",
+      null,
+      "own",
+      "own-writing",
+      "own",
+      null,
+    ]);
+    expect(seen.find(([l]) => l === "wake for s-phone-a")?.[1]).toBe("own");
+    resetStores();
+    expect(changes(play(reviewComesBack(), readWith(REVIEW_SENT)))).toEqual([
+      "woken",
+      null,
+      "woken",
+      null,
+    ]);
   });
 
   it("reads nothing while it is not running", () => {

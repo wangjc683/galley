@@ -28,8 +28,12 @@ import type { SessionStatus } from "@/types/session";
  *     PRD rulings 134, 135): in a round you started 「正在工作…」 with the
  *     main chat on screen; away from it 「正在输入…」 while it writes
  *     (an IM chat list's way), else 「正在工作…」, from a minute on
- *     「正在工作 · N 分钟」 (`workingLine`). In a round Core woke it for
- *     「正在输入…」 only while the conversation shows its dots
+ *     「正在工作 · N 分钟」 (`workingLine`). The second half of a round
+ *     you started says the same (ruling 197: Core woke it with a subtask
+ *     that round sent off, lib/subtasks.ts `inSecondHalf`; you are still
+ *     waiting), its minutes from the wake. In any other round Core woke
+ *     it for (a reminder, the daily review, a subtask one of those sent
+ *     off) 「正在输入…」 only while the conversation shows its dots
  *     (`assistantTyping`, rulings 107, 110), else the last message, the
  *     face at work. Away from the main chat (in the workbench, or in one
  *     of its subtasks) it speaks for it at rest: the question itself,
@@ -49,8 +53,9 @@ import type { SessionStatus } from "@/types/session";
  *     message and the draft are both on screen there already.
  *
  * Running, two places speak (rulings 134, 135): the conversation, the
- * typing bubble and, in a round you started, the line under it — what
- * it is doing and for how long (lib/assistant-progress.ts) — and then
+ * typing bubble and, in a round you started or its second half (ruling
+ * 197), the line under it — what it is doing and for how long
+ * (lib/assistant-progress.ts) — and then
  * what it says; the card, what the screen does not show. The assistant
  * reports no steps anywhere; the subtasks it sends off are task
  * conversations and keep their 「第 N 步」 (lib/subtasks.ts), as the
@@ -198,7 +203,8 @@ export interface AssistantLastMessage {
  *   error    「出错」 / 「出错 · N」                         red
  *   ask      「等你回复：」 + the question, or 「等你回复」    amber prefix
  *   running  「正在工作…」 / 「正在工作 · N 分钟」 /             brand
- *            「正在输入…」 (`workingLine`); a woken round
+ *            「正在输入…」 (`workingLine`: a round you started,
+ *            or its second half); another woken round
  *            「正在输入…」 or the last message
  *   draft    「草稿：」 + the draft, or 「[图片]」 / 「[引用]」 brand prefix
  *   message  「你：」 for the user's own, then the message      muted
@@ -241,20 +247,20 @@ export function assistantCardLine(
      * in the composer right there all leave it be; the avatar's mark
      * and the name's weight say the state. */
     open: boolean;
-    /** While a round Core woke it for runs: it reads as typing
-     * (`assistantTyping`) — only while it writes words, as the
-     * conversation's dots. */
+    /** While a round Core woke it for runs (not the second half of one
+     * of yours): it reads as typing (`assistantTyping`) — only while it
+     * writes words, as the conversation's dots. */
     typing?: boolean;
-    /** While a round you started runs: whether it writes words now
-     * (`assistantWriting`) and the run's whole minutes
-     * (hooks/useAssistantProgress.ts); absent in a woken round, which
-     * keeps `typing`. */
+    /** While a round you started runs, or its second half (ruling
+     * 197): whether it writes words now (`assistantWriting`) and the
+     * run's whole minutes (hooks/useAssistantProgress.ts); absent in any
+     * other woken round, which keeps `typing`. */
     working?: { writing: boolean; minutes: number };
   },
   copy: AppCopy,
 ): AssistantCardLine | null {
   if (state.kind === "running") {
-    // A round you started (rulings 134, 135).
+    // A round you started, or its second half (rulings 134, 135, 197).
     if (working) {
       return { kind: "running", text: workingLine(working, open, copy) };
     }
@@ -303,8 +309,8 @@ export function assistantCardLine(
 }
 
 /**
- * The card while a round you started runs (rulings 134, 135): it says
- * only what the screen does not. With the main chat on screen
+ * The card while a round you started runs, or its second half (rulings
+ * 134, 135, 197): it says only what the screen does not. With the main chat on screen
  * 「正在工作…」 throughout, the last seconds too (the dots and the line
  * under them are right there); away from it 「正在输入…」 while it writes
  * (an IM chat list's way), else 「正在工作…」, from a minute on

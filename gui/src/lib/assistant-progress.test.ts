@@ -10,6 +10,13 @@ import {
   streamedStepSummary,
 } from "@/lib/assistant-progress";
 import { copyForLanguage } from "@/lib/i18n";
+import {
+  after,
+  reviewRound,
+  toolStep as stepOf,
+  wake,
+  yourRound,
+} from "@/test/second-half";
 import type {
   AgentTurn,
   ConversationToolEvent,
@@ -462,6 +469,43 @@ describe("assistantDoing: what the line under the dots says", () => {
     expect(
       assistantDoing([...woken, toolStep(STEP_ONE, 1)], "", zh),
     ).toBeNull();
+  });
+
+  // Ruling 197 (ticket 146): the wake bringing back what your round sent
+  // off is that round's second half; the line runs from the wake.
+  it("says it in the second half of a round you started, from the wake on", () => {
+    const { turns, dispatches } = after(yourRound(), {
+      turns: [wake("s-phone-a,s-phone-b", 3)],
+      dispatches: [],
+    });
+    expect(assistantDoing(turns, "", zh, dispatches)).toBe("思考中");
+    expect(
+      assistantDoing(
+        turns,
+        `<summary>两份都到了；我核对两款的口径</summary>${dispatch()}`,
+        zh,
+        dispatches,
+      ),
+    ).toBe("我核对两款的口径");
+    const reading = [...turns, stepOf("两份都到了；我核对两款的口径", 4)];
+    expect(assistantDoing(reading, "", zh, dispatches)).toBe(
+      "我核对两款的口径",
+    );
+    expect(assistantDoing(reading, "两款对比如下", zh, dispatches)).toBe(
+      "正在写回复",
+    );
+    // Without the main chat's records it cannot be told: a woken round,
+    // no line.
+    expect(assistantDoing(turns, "", zh)).toBeNull();
+  });
+
+  it("draws nothing when what comes back is what the morning review sent off", () => {
+    const { turns, dispatches } = after(reviewRound(), {
+      turns: [wake("s-ferry", 13)],
+      dispatches: [],
+    });
+    expect(assistantDoing(turns, "", zh, dispatches)).toBeNull();
+    expect(assistantDoing(turns, "船票还有。", zh, dispatches)).toBeNull();
   });
 
   describe("both streams, chunk by chunk", () => {

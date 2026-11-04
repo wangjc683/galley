@@ -23,6 +23,14 @@ import {
   dispatchRoundRows,
   EARLIER_REPLY,
 } from "@/test/dispatch-round";
+import {
+  after,
+  reviewRound,
+  toolStep,
+  wake,
+  you,
+  yourRound,
+} from "@/test/second-half";
 import type {
   AgentTurn,
   ConversationToolEvent,
@@ -202,6 +210,56 @@ describe("the typing bubble", () => {
     expect(typingBubbleShown(false, [...conversation(), report], "好了")).toBe(
       false,
     );
+  });
+
+  // Ruling 197 (ticket 146): Galley merging what your round sent off is
+  // the rest of your round.
+  it("shows from the wake on in the second half of a round you started, words or not", () => {
+    const { turns, dispatches } = after(yourRound(), {
+      turns: [wake("s-phone-a,s-phone-b", 3)],
+      dispatches: [],
+    });
+    for (const stream of ["", "<thinking>看看结果", DISPATCH, "两款都查好了"]) {
+      expect(typingBubbleShown(true, turns, stream, dispatches)).toBe(true);
+      expect(assistantTyping(turns, stream, dispatches)).toBe(true);
+    }
+    const reading = [...turns, toolStep("两份都到了；我核对两款的口径", 4)];
+    expect(typingBubbleShown(true, reading, "", dispatches)).toBe(true);
+    // Without the records it cannot be told: a woken round, as before.
+    expect(typingBubbleShown(true, turns, "")).toBe(false);
+  });
+
+  it("keeps to the woken rule when what comes back is the morning review's, or a reminder's wake", () => {
+    const review = after(reviewRound(), {
+      turns: [wake("s-ferry", 13)],
+      dispatches: [],
+    });
+    expect(typingBubbleShown(true, review.turns, "", review.dispatches)).toBe(
+      false,
+    );
+    expect(assistantTyping(review.turns, "", review.dispatches)).toBe(false);
+    expect(
+      typingBubbleShown(true, review.turns, "船票还有。", review.dispatches),
+    ).toBe(true);
+    const reminder = after(yourRound(), {
+      turns: [wake("sched_water", 3)],
+      dispatches: [],
+    });
+    expect(
+      typingBubbleShown(true, reminder.turns, "", reminder.dispatches),
+    ).toBe(false);
+  });
+
+  it("goes on showing when you write into a second half", () => {
+    const { turns, dispatches } = after(yourRound(), {
+      turns: [
+        wake("s-phone-a", 3),
+        toolStep("一份到了；我等另一份", 4),
+        you("价格按国行算", 5, { interjected: true }),
+      ],
+      dispatches: [],
+    });
+    expect(typingBubbleShown(true, turns, "", dispatches)).toBe(true);
   });
 });
 

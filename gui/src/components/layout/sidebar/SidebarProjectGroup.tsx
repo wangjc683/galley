@@ -650,6 +650,7 @@ export function SidebarShowMoreRow({
   ariaLabel,
   count,
   onToggle,
+  dataRole,
 }: {
   mode: "more" | "less";
   label: string;
@@ -657,6 +658,9 @@ export function SidebarShowMoreRow({
   ariaLabel?: string;
   count?: number;
   onToggle: () => void;
+  /** Its `data-role`, for a list that names its own (Galley's subtasks'
+   * 「还有 N 件在办」, sidebar/SidebarSubtaskRows.tsx). */
+  dataRole?: string;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const anchorTopRef = useRef<number | null>(null);
@@ -687,6 +691,7 @@ export function SidebarShowMoreRow({
         }
         onToggle();
       }}
+      data-role={dataRole}
       aria-expanded={mode === "less"}
       aria-label={ariaLabel}
       className={cn(

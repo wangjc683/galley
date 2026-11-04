@@ -28,9 +28,10 @@ const DOT_STYLE = {
  * opacity rising one after another, iMessage's way), `ink-muted`, at
  * twice its size (TYPING_DOT_EM); still under reduced motion (the
  * class's own rule). Read as 「Galley 正在输入」 (`role="status"`). In a
- * round you started a line under it says what it is doing and for how
- * long (`ProgressLine`, rulings 134, 135): with the card, the only two
- * places that speak while it runs; the header says nothing then.
+ * round you started, and in the second half of one (ruling 197), a line
+ * under it says what it is doing and for how long (`ProgressLine`,
+ * rulings 134, 135): with the card, the only two places that speak while
+ * it runs; the header says nothing then.
  *
  * The row has no top margin: the reply that takes its place stands right
  * under the row above (`assistantRowGap` gives it `mt-0` under either
@@ -42,8 +43,9 @@ export function TypingBubble({
   progress,
 }: {
   ref?: Ref<HTMLDivElement>;
-  /** The line under the dots, in a round you started (MainView); absent
-   * (a round Core woke it for), the bubble alone. */
+  /** The line under the dots, in a round you started or its second half
+   * (MainView); absent (any other round Core woke it for), the bubble
+   * alone. */
   progress?: TypingProgress | null;
 }) {
   const copy = useCopy();

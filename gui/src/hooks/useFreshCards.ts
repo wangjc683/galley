@@ -49,8 +49,9 @@ export function useFreshCards(mainChatId: string | undefined): void {
     const add = (cards: FreshCard[]) => {
       if (cards.length === 0) return;
       const turns = useMessagesStore.getState().byId[mainChatId]?.turns ?? [];
-      // The typing dots' rule (lib/assistant-conversation.ts): a round
-      // opened by a report row is one Core woke Galley for.
+      // A round opened by a report row is one Core woke Galley for —
+      // the second half of yours too: ruling 197 drew that one as yours
+      // (the typing dots, lib/assistant-conversation.ts), not this.
       gatherer.add(cards, !inReportRound(turns));
     };
     const unsubscribeTodos = useAssistantTodoStore.subscribe(

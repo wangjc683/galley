@@ -43,6 +43,7 @@ import {
   todoTitleTarget,
   todoWithoutDeleting,
   todoWritesOnTheirWay,
+  withoutSubtasks,
   type TodoHold,
 } from "@/lib/todo-panel";
 
@@ -654,6 +655,47 @@ describe("cards under replies", () => {
 });
 
 describe("the list", () => {
+  // Ruling 197 (ticket 146): the panel is what you and Galley are going
+  // to do; the subtasks Core lists stay in the store for the sidebar.
+  it("draws Core's list without its subtasks: Galley's reminders and your done ones stay", () => {
+    const running: TodoItem = {
+      kind: "subtask",
+      id: "s-run",
+      text: "查船票",
+      state: "running",
+      createdBy: "assistant",
+    };
+    const back: TodoItem = { ...running, id: "s-back", state: "done" };
+    const own = task({ id: "sched_once" });
+    const done = todo({ id: "todo_done", state: "done" });
+    const listed: AssistantTodo = {
+      ...EMPTY_TODO,
+      yours: { today: [], later: [], anytime: [todo({ id: "todo_a" })] },
+      assistant: [running, own],
+      routine: [task({ id: "sched_daily", repeat: { kind: "daily" } })],
+      done: [back, done],
+      doneOmitted: 1,
+      todayCount: 0,
+    };
+    const shown = withoutSubtasks(listed);
+    expect(shown.assistant).toEqual([own]);
+    expect(shown.done).toEqual([done]);
+    expect(shown.yours).toBe(listed.yours);
+    expect(shown.routine).toBe(listed.routine);
+    expect(shown.doneOmitted).toBe(1);
+    // Untouched: Core's list as it came.
+    expect(listed.assistant).toEqual([running, own]);
+    // None: the same object.
+    const without = { ...listed, assistant: [own], done: [done] };
+    expect(withoutSubtasks(without)).toBe(without);
+    // Subtasks alone: the empty state.
+    expect(
+      todoPanelEmpty(
+        withoutSubtasks({ ...EMPTY_TODO, assistant: [running], done: [back] }),
+      ),
+    ).toBe(true);
+  });
+
   // Ticket 88 (PRD ruling 132 point 4): what the panel draws while
   // to-dos deleted there wait for Core.
   it("leaves out the to-dos deleted here and not yet by Core, wherever they are", () => {
@@ -932,14 +974,26 @@ describe("what lights up (ticket 87, ruling 131 points 3 and 5)", () => {
     at: local(2026, 10, 17, 8, 0),
   });
 
-  it("lights what is new among your to-dos, Galley's and the routines, a subtask too", () => {
+  it("lights what is new among your to-dos, Galley's and the routines — never a subtask (ruling 197)", () => {
     const before = list({ yours: yours(A), assistant: [ONCE], routine: [] });
     const after = list({
       yours: yours(A, B),
       assistant: [ONCE, SUB],
       routine: [DAILY],
     });
-    expect(lit(before, after)).toEqual(["todo_b", "s-sub", "sched_daily"]);
+    // The panel draws no subtask, so one appearing lights nothing
+    // (ruling 131 point 5's light on it went with it).
+    expect(lit(before, after)).toEqual(["todo_b", "sched_daily"]);
+    expect(
+      lit(list({ assistant: [ONCE] }), list({ assistant: [SUB, ONCE] })),
+    ).toEqual([]);
+    // Nor one coming back into 已完成.
+    expect(
+      lit(
+        list({ assistant: [SUB] }),
+        list({ done: [{ ...SUB, state: "done" }] }),
+      ),
+    ).toEqual([]);
   });
 
   it("lights a to-do of yours with new words, due time, reminder or notes", () => {

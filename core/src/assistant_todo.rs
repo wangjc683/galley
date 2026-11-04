@@ -1,10 +1,21 @@
 //! The assistant's to-do list (main chat ticket 37, regrouped by ticket
 //! 39; main chat PRD rulings 86 and 91, assistant PRD rulings 5 and 9):
 //! the user's to-dos, what Galley is on, its routines, and what was done
-//! lately. One read, two readers — the desktop's 「待办」 and the
-//! 「在办的事」 lines Core writes at the start of each segment of the main
-//! chat (ticket 36). "What you see is what it sees": both read the same groups
-//! in the same order.
+//! lately. One read, its readers in the same groups and order: the
+//! desktop's 「待办」 panel and the sidebar's rows under Galley's card
+//! (main chat ticket 128), and the 「在办的事」 lines Core writes at the
+//! start of each segment of the main chat (ticket 36).
+//!
+//! The panel and the lines are no longer the same list row for row (main
+//! chat PRD ruling 197, ticket 146; until then "what you see is what it
+//! sees"). The panel is what you and Galley are going to do — your
+//! to-dos, its own reminders, its routines, what got done — and the
+//! desktop draws no subtask there: the subtasks running you see in the
+//! sidebar, how each went in its receipt under the reply that sent it;
+//! the model sees its subtasks in the lines, so it does not send one off
+//! twice. The desktop leaves the daily review out of the panel too
+//! (ruling 145). Both leave-outs are the desktop's alone: this read, the
+//! lines and `galley todo list` (the Agent API) carry everything below.
 //!
 //! - **Yours** ([`AssistantTodo::yours`], 你的事): the user's to-dos not
 //!   done (`crate::api::todo`), in three parts by their due date read in
@@ -21,7 +32,7 @@
 //!   target), soonest first, paused ones last. A subtask that is not
 //!   running and has not moved for [`RECENT_WINDOW_DAYS`] drops out: it
 //!   was reported to the assistant when its run ended, and a stale
-//!   failure carried forever is noise in both readers.
+//!   failure carried forever is noise to the model.
 //! - **Routine** ([`AssistantTodo::routine`], 例行): the repeating tasks,
 //!   either target, by their next fire; paused ones after them.
 //! - **Done** ([`AssistantTodo::done`], 已完成): within the last
@@ -52,11 +63,10 @@
 //! tasks cancelled within [`DECLINED_WINDOW_DAYS`] by the user at the
 //! desktop, or by Galley on the user's word — so a "don't remind me of
 //! this kind" is in front of the main chat at every segment, not in a
-//! memory it may not open. A read of its own, on purpose: "what you see
-//! is what it sees" has this one exception (ruling 113 point 4). It is a
-//! record for the main chat's judgement, not a list, so the panel has no
-//! such group, and [`AssistantTodo`] (what the panel reads) never carries
-//! it; [`in_hand_read`] reads both for the main chat.
+//! memory it may not open. A read of its own, on purpose (ruling 113
+//! point 4): a record for the main chat's judgement, not a list, so the
+//! panel has no such group, and [`AssistantTodo`] (what the panel reads)
+//! never carries it; [`in_hand_read`] reads both for the main chat.
 //!
 //! A subtask's state comes from its live run state (Core's run gate)
 //! and its latest run's last reply in the database: running while a run

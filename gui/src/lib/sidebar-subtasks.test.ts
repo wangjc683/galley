@@ -5,15 +5,17 @@ import type { TodoItem, TodoState } from "@/lib/assistant-todo";
 import {
   NO_SIDEBAR_SUBTASKS,
   SIDEBAR_SUBTASK_ROWS,
+  sidebarSubtaskRowsShown,
   sidebarSubtasks,
   subtaskNeedsYou,
 } from "./sidebar-subtasks";
 
 /**
  * The subtasks under Galley's card (main chat ticket 128, PRD rulings
- * 176, 177): of the panel's 「Galley 在办」 subtasks, those asking you,
- * first and all of them, then at most five running by start time, the
- * rest behind 「还有 N 件在办」. Failed, out of steps or stopped: not
+ * 176, 177): of Core's 「Galley 在办」 subtasks (the panel draws none
+ * since ruling 197), those asking you, first and all of them, then at
+ * most five running by start time, the rest behind 「还有 N 件在办」,
+ * which unfolds them in place. Failed, out of steps or stopped: not
  * listed.
  */
 
@@ -165,7 +167,40 @@ describe("in what order, and how many", () => {
     );
     expect(SIDEBAR_SUBTASK_ROWS).toBe(5);
     expect(ids(list)).toEqual(["ask", "r0", "r1", "r2", "r3", "r4"]);
-    expect(list.more).toEqual(["r5", "r6", "r7"]);
+    expect(list.more.map((row) => row.id)).toEqual(["r5", "r6", "r7"]);
+    // Rows as the others: its title, its state.
+    expect(list.more[0]).toEqual({
+      id: "r5",
+      title: "title-r5",
+      state: "running",
+    });
+  });
+
+  // Ruling 197 point 4: 「还有 N 件在办」 unfolds them in place.
+  it("draws the folded ones after the rest while unfolded", () => {
+    const running = Array.from({ length: 7 }, (_, i) =>
+      item(`r${i}`, "running"),
+    );
+    const list = sidebarSubtasks(
+      [...running, item("ask", "asking")],
+      [...running.map((r, i) => session(r.id, 10 + i)), session("ask", 30)],
+    );
+    const shown = (unfolded: boolean) =>
+      sidebarSubtaskRowsShown(list, unfolded).map((row) => row.id);
+    expect(shown(false)).toEqual(["ask", "r0", "r1", "r2", "r3", "r4"]);
+    expect(shown(true)).toEqual([
+      "ask",
+      "r0",
+      "r1",
+      "r2",
+      "r3",
+      "r4",
+      "r5",
+      "r6",
+    ]);
+    // Nothing folded: the same rows, unfolded or not.
+    const few = sidebarSubtasks([item("r0", "running")], [session("r0", 1)]);
+    expect(sidebarSubtaskRowsShown(few, true)).toBe(few.rows);
   });
 
   // Ruling 177 point 1: subtasks stopped days ago used to take the five

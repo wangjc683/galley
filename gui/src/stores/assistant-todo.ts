@@ -52,7 +52,10 @@ import { makeAppError } from "@/types/app-error";
  * PRD ruling 145), taken out as each read comes in: this is the one
  * copy every reader of the panel's list has — the panel, its lit rows
  * (useTodoPanelFlash), a card's title (`todoListed`) — so none of them
- * meets it.
+ * meets it. The subtasks stay in it (the sidebar lists the ones running
+ * from here, hooks/useSidebarSubtasks.ts); the panel and its lit rows
+ * go without them since ruling 197 (lib/todo-panel.ts
+ * `withoutSubtasks`).
  *
  * The writes the user has here (PRD ruling 91 point 3) go through it
  * too:

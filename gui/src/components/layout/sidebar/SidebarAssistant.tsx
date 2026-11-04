@@ -165,9 +165,11 @@ function lineText(line: AssistantCardLine): string {
  * (main chat PRD rulings 134, 135): in a round you started 「正在工作…」
  * with the main chat on screen (the dots and the line under them are
  * right there); away from it 「正在输入…」 while it writes, else
- * 「正在工作…」, from a minute on 「正在工作 · N 分钟」. In a round Core
- * woke it for 「正在输入…」 only while the conversation shows its dots,
- * else the last message (rulings 107, 110). With the main chat itself on
+ * 「正在工作…」, from a minute on 「正在工作 · N 分钟」 — and so in the
+ * second half of a round you started (ruling 197: Core woke it with a
+ * subtask that round sent off), the minutes from the wake. In any other
+ * round Core woke it for 「正在输入…」 only while the conversation shows
+ * its dots, else the last message (rulings 107, 110). With the main chat itself on
  * screen the card is the sidebar's selected place and otherwise says
  * only the last message, whatever the state — the question when it asks
  * (ruling 104, overturning ruling 87's 「等你回复」 there); the badge and
@@ -226,12 +228,13 @@ export function SidebarAssistantCard({
   const draft = useComposerDraft(open ? undefined : mainChat.id);
   // Running, a round Core woke it for says 「正在输入…」 only while the
   // conversation shows its dots, else the last message, the live round's
-  // steps skipped (rulings 107, 110).
+  // steps skipped (rulings 107, 110) — unless it is the second half of
+  // a round you started (ruling 197), which is that round below.
   const typing = useAssistantTyping(mainChat.id, own.kind === "running");
-  // A round you started says 「正在工作…」; away from the main chat
-  // 「正在输入…」 while it writes and the whole minutes from one on
-  // (rulings 134, 135). The minutes re-render the card only when one
-  // turns.
+  // A round you started, or its second half, says 「正在工作…」; away
+  // from the main chat 「正在输入…」 while it writes and the whole
+  // minutes from one on (rulings 134, 135, 197). The minutes re-render
+  // the card only when one turns.
   const round = useAssistantRound(mainChat.id, own.kind === "running");
   const ownRound = round === "own" || round === "own-writing";
   const minutes = useAssistantRunMinutes(mainChat.id, ownRound);

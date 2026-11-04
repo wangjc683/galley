@@ -14,7 +14,6 @@ import {
   quoteForComposer,
   quoteTodo,
   showMemoRow,
-  showSubtasksInTodo,
   showTodoRow,
   takeQuote,
   talkToGalley,
@@ -624,37 +623,6 @@ describe("a card's title (ticket 87, ruling 131 point 3)", () => {
     expect(glance()).toEqual({ at: "main:s-main", arrived: true });
     expect(open()).toEqual({ galley: true, elsewhere: false });
     expect(rows()).toEqual(["todo_2"]);
-  });
-});
-
-// Ticket 128 (PRD ruling 176 point 2): the sidebar's 「还有 N 件在办」.
-describe("the sidebar's 「还有 N 件在办」", () => {
-  const rows = () => useUiStore.getState().todoRowRequest;
-  const page = () => useUiStore.getState().todoPageRequest?.page;
-
-  it("opens the panel where you are as ⌘K does, on 待办, the subtasks lit", () => {
-    useUiStore.setState({ todoNarrow: false });
-    showSubtasksInTodo(WORK, ["s-r6", "s-r7"]);
-    expect(open()).toEqual({ galley: false, elsewhere: true });
-    expect(page()).toBe("todo");
-    expect(rows()?.ids).toEqual(["s-r6", "s-r7"]);
-    // Lit, not opened: a subtask's row has nothing to open.
-    expect(rows()?.open).toBeUndefined();
-    expect(introduced()).toBe(true);
-  });
-
-  it("opens a look when narrow, and leaves a panel on screen open", () => {
-    showSubtasksInTodo(narrow(GALLEY), ["s-r6"]);
-    expect(open()).toEqual(CLOSED);
-    expect(glance()).toEqual({ at: "main:s-main", arrived: true });
-    useUiStore.setState({
-      todoNarrow: false,
-      todoGlance: null,
-      todoPanelOpen: { galley: true, elsewhere: false },
-    });
-    showSubtasksInTodo(GALLEY, ["s-r7"]);
-    expect(open()).toEqual({ galley: true, elsewhere: false });
-    expect(rows()?.ids).toEqual(["s-r7"]);
   });
 });
 

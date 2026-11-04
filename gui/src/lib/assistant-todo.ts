@@ -31,9 +31,12 @@ import { SUBTASK_DISPATCHED_EVENT } from "@/lib/subtasks";
  * to-do panel beside the conversation: the user's to-dos, what Galley
  * is on, its routines, what was done lately — one Core read
  * (`list_assistant_todo`, core/src/assistant_todo.rs), the same one
- * Core writes the main chat's 「在办的事」 from (ticket 36), so what the
- * user sees is what the assistant sees, but for the daily review: the
- * desktop leaves it out (`withoutDailyReview`, PRD ruling 145).
+ * Core writes the main chat's 「在办的事」 from (ticket 36). What the user
+ * sees there is what the assistant sees, but for two things: the daily
+ * review, which the desktop leaves out at once (`withoutDailyReview`,
+ * PRD ruling 145), and since ruling 197 the subtasks, which the panel
+ * alone goes without (lib/todo-panel.ts `withoutSubtasks`): the sidebar
+ * lists the ones running from this same read (lib/sidebar-subtasks.ts).
  *
  * Everything here is pure but the Core calls: the wire shapes, the
  * card's state, the words and times a row shows, where a row leads.

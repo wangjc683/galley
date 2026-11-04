@@ -20,8 +20,10 @@ import { SidebarSubtaskRows } from "./SidebarSubtaskRows";
  * The rows under Galley's card, pressed for real (main chat ticket 128):
  * a row opens its subtask on pointerdown as a session row does, the
  * click after it swallowed, Enter and Space as any button; 「还有 N 件在
- * 办」 hands over the subtasks it stands for. Where they stand and how
- * they draw is Sidebar.subtask-rows.test.tsx.
+ * 办」 unfolds the rest in place and becomes 「收起」 (ruling 197 point 4,
+ * ticket 146). Where they stand and how they draw is
+ * Sidebar.subtask-rows.test.tsx; the sidebar holding it unfolded,
+ * Sidebar.subtask-more.dom.test.tsx.
  */
 
 beforeAll(() => {
@@ -49,19 +51,27 @@ const LIST: SidebarSubtasks = {
     { id: "s-ask", title: "比较三款扫地机器人的价格", state: "asking" },
     { id: "s-run", title: "整理下载文件夹里的发票", state: "running" },
   ],
-  more: ["s-r6", "s-r7"],
+  more: [
+    { id: "s-r6", title: "查周六的船票", state: "running" },
+    { id: "s-r7", title: "订周日的餐厅", state: "running" },
+  ],
 };
 
 function mount(props: {
   subtasks?: SidebarSubtasks;
+  unfolded?: boolean;
+  onToggleMore?: () => void;
   activeId?: string;
   onOpen?: (id: string) => void;
-  onMore?: (ids: readonly string[]) => void;
 }) {
   act(() =>
     root.render(
       <CopyProvider language="zh-CN">
-        <SidebarSubtaskRows subtasks={props.subtasks ?? LIST} {...props} />
+        <SidebarSubtaskRows
+          subtasks={props.subtasks ?? LIST}
+          onToggleMore={() => {}}
+          {...props}
+        />
       </CopyProvider>,
     ),
   );
@@ -141,12 +151,45 @@ describe("a row", () => {
   });
 });
 
-describe("「还有 N 件在办」", () => {
-  it("hands over the subtasks it stands for", () => {
-    const onMore = vi.fn();
-    mount({ onMore });
+describe("「还有 N 件在办」 (ruling 197 point 4)", () => {
+  const drawn = () =>
+    Array.from(
+      host.querySelectorAll<HTMLElement>('[data-role="sidebar-subtask"]'),
+    ).map((el) => el.dataset.subtaskId);
+
+  it("folded, draws the rows but the ones it stands for, and asks to unfold", () => {
+    const onToggleMore = vi.fn();
+    mount({ onToggleMore });
+    expect(drawn()).toEqual(["s-ask", "s-run"]);
     expect(more().textContent).toBe("还有 2 件在办");
+    expect(more().getAttribute("aria-expanded")).toBe("false");
     act(() => more().click());
-    expect(onMore).toHaveBeenCalledWith(["s-r6", "s-r7"]);
+    expect(onToggleMore).toHaveBeenCalledTimes(1);
+  });
+
+  it("unfolded, draws them after the rest, and becomes 「收起」", () => {
+    const onToggleMore = vi.fn();
+    mount({ onToggleMore, unfolded: true });
+    expect(drawn()).toEqual(["s-ask", "s-run", "s-r6", "s-r7"]);
+    expect(more().textContent).toBe("收起");
+    expect(more().getAttribute("aria-expanded")).toBe("true");
+    act(() => more().click());
+    expect(onToggleMore).toHaveBeenCalledTimes(1);
+  });
+
+  it("an unfolded row opens and is selected as any other", () => {
+    const onOpen = vi.fn();
+    mount({ onOpen, unfolded: true, activeId: "s-r7" });
+    expect(row("s-r7").getAttribute("aria-current")).toBe("page");
+    press(row("s-r6"));
+    expect(onOpen).toHaveBeenCalledWith("s-r6");
+  });
+
+  it("is not there with nothing past five, unfolded or not", () => {
+    for (const unfolded of [false, true]) {
+      mount({ unfolded, subtasks: { rows: LIST.rows, more: [] } });
+      expect(more()).toBeNull();
+      expect(drawn()).toEqual(["s-ask", "s-run"]);
+    }
   });
 });

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { useLoadedSubtaskDispatches } from "@/hooks/useSubtaskCards";
 import {
   assistantTyping,
   assistantWriting,
@@ -9,6 +10,7 @@ import {
   msToNextRunMinute,
 } from "@/lib/assistant-progress";
 import { liveRunElapsedBaseMs } from "@/lib/run-groups";
+import type { SubtaskDispatch } from "@/lib/subtasks";
 import {
   EMPTY_TURNS,
   type MessagesStore,
@@ -18,39 +20,51 @@ import {
 /*
  * The sidebar card's reads while the main chat runs (main chat PRD
  * rulings 134, 135): whose round it is, whether it writes words, and the
- * run's whole minutes — what the card says in a round you started
- * (lib/assistant.ts `assistantCardLine`'s `working`).
+ * run's whole minutes — what the card says in a round you started, and
+ * since ruling 197 in the second half of one (lib/assistant.ts
+ * `assistantCardLine`'s `working`).
  */
 
-/** Whose round runs: one you started (`own`; `own-writing` while it
- * writes words, `assistantWriting`) or one Core woke it for (`woken`). */
+/** Whose round runs: one you started or its second half (`own`;
+ * `own-writing` while it writes words, `assistantWriting`), or any other
+ * Core woke it for (`woken`). */
 export type AssistantRound = "own" | "own-writing" | "woken";
 
 /** useAssistantRound's selector: null at rest without looking at the
- * turns or the stream. */
+ * turns or the stream. `dispatches`: the main chat's records, which tell
+ * a second half (ruling 197, lib/subtasks.ts `inSecondHalf`). */
 export function selectAssistantRound(
   state: MessagesStore,
   sessionId: string,
   running: boolean,
+  dispatches?: readonly SubtaskDispatch[],
 ): AssistantRound | null {
   if (!running) return null;
   const m = state.byId[sessionId];
-  // A round you started reads as typing with nothing streaming
-  // (`assistantTyping`'s report-round check, kept for the last turns).
-  if (!assistantTyping(m?.turns ?? EMPTY_TURNS, "")) return "woken";
+  // A round you started, or its second half, reads as typing with
+  // nothing streaming (`assistantTyping`'s report-round check, kept for
+  // the last turns and records).
+  if (!assistantTyping(m?.turns ?? EMPTY_TURNS, "", dispatches)) {
+    return "woken";
+  }
   return assistantWriting(m?.inFlightContent ?? "") ? "own-writing" : "own";
 }
 
 /**
  * While the main chat runs, whose round it is and whether it writes
  * words: a string, so the card re-renders only when it changes, never
- * per chunk.
+ * per chunk. Its dispatch records are read here too, once
+ * (`useLoadedSubtaskDispatches`): the card stands whether the main chat
+ * was opened or not.
  */
 export function useAssistantRound(
   sessionId: string,
   running: boolean,
 ): AssistantRound | null {
-  return useMessagesStore((s) => selectAssistantRound(s, sessionId, running));
+  const dispatches = useLoadedSubtaskDispatches(sessionId);
+  return useMessagesStore((s) =>
+    selectAssistantRound(s, sessionId, running, dispatches),
+  );
 }
 
 /** Past the minute's turn, so a timer that fires early by a few

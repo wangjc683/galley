@@ -141,12 +141,23 @@ const OWN_REMINDER: TodoItem = {
   createdIn: { sessionId: "s-main", turnIndex: 6 },
 };
 
+/** A subtask that came back (Core lists it under 已完成). */
+const SUBTASK_BACK: TodoItem = {
+  ...SUBTASK,
+  id: "s-back",
+  text: "查周六的船票",
+  state: "done",
+  at: inDays(0, 8),
+};
+
+/** Core's list as it comes: its subtasks among Galley's and the done
+ * ones, which the panel no longer draws (ruling 197, ticket 146). */
 const FULL: AssistantTodo = {
   ...EMPTY_TODO,
   yours: { today: [OVERDUE], later: [REMINDED], anytime: [ANYTIME] },
-  assistant: [SUBTASK],
+  assistant: [SUBTASK, OWN_REMINDER],
   routine: [ROUTINE],
-  done: [DONE_TODO],
+  done: [DONE_TODO, SUBTASK_BACK],
   doneOmitted: 2,
   todayCount: 1,
 };
@@ -288,6 +299,31 @@ describe("the panel's groups", () => {
     );
   });
 
+  // Ruling 197 (ticket 146): the panel is what you and Galley are going
+  // to do; what runs is in the sidebar.
+  it("draws no subtask: 「Galley 在办」 its reminders alone, 已完成 none back; subtasks alone, no group", () => {
+    const ids = (part: string) =>
+      [...part.matchAll(/data-todo-row="([^"]+)"/g)].map((m) => m[1]);
+    const html = panel(FULL, { doneOpen: true });
+    const galley = html.slice(
+      html.indexOf('data-todo-group="assistant"'),
+      html.indexOf('data-todo-group="routine"'),
+    );
+    expect(ids(galley)).toEqual(["sched_water"]);
+    expect(ids(html.slice(html.indexOf('data-todo-group="done"')))).toEqual([
+      "todo_done",
+    ]);
+    // Nothing but subtasks: neither group, the empty state.
+    const only = panel(
+      { ...EMPTY_TODO, assistant: [SUBTASK], done: [SUBTASK_BACK] },
+      { doneOpen: true },
+    );
+    expect(only).not.toContain('data-todo-group="assistant"');
+    expect(only).not.toContain('data-todo-group="done"');
+    expect(only).not.toContain(">Galley 在办<");
+    expect(only).toContain('data-role="todo-empty"');
+  });
+
   it("sets the groups 12px apart, none over the first (ticket 83)", () => {
     const groups = (html: string) =>
       html.slice(html.indexOf('data-role="todo-groups"'));
@@ -316,7 +352,7 @@ describe("the panel's groups", () => {
     const folded = panel(FULL);
     expect(folded).toContain('aria-expanded="false"');
     expect(folded).not.toContain('data-todo-row="todo_done"');
-    // 1 listed + 2 past the cap.
+    // 1 listed + 2 past the cap; the subtask back counts for none.
     expect(folded).toMatch(/已完成<\/span><span[^>]*>3<svg/);
     const open = panel(FULL, { doneOpen: true });
     expect(open).toContain('data-todo-row="todo_done"');
@@ -437,18 +473,23 @@ describe("the panel's rows", () => {
       expect(title![1]).toContain("truncate");
       expect(title![1]).not.toContain("underline");
     }
-    expect(row(html, "s-sub")).toMatch(
-      /<button[^>]*hover:underline[^>]*>查周五去上海的机票</,
+    expect(row(html, "sched_water")).toMatch(
+      /<button[^>]*hover:underline[^>]*>提醒喝水</,
     );
   });
 
-  it("gives what Galley is on no box but the session rows' glyph", () => {
+  it("gives what Galley will come back to no box but the clock, and its subtasks no row (ruling 197)", () => {
     const html = panel(FULL);
-    const sub = row(html, "s-sub");
-    expect(sub).not.toContain('type="checkbox"');
-    expect(sub).toContain("spin");
-    expect(sub).toContain(">正在工作<");
-    expect(sub).toContain('aria-label="说说这件"');
+    const own = row(html, "sched_water");
+    expect(own).not.toContain('type="checkbox"');
+    expect(own).not.toContain("spin");
+    expect(own).toContain(">明天 15:00 · 待提醒<");
+    expect(own).toContain('aria-label="说说这件"');
+    // The subtask Core lists among Galley's is not drawn: it runs under
+    // Galley's card in the sidebar.
+    expect(html).not.toContain('data-todo-row="s-sub"');
+    expect(html).not.toContain("查周五去上海的机票");
+    expect(html).not.toContain(">正在工作<");
     const daily = row(html, "sched_daily");
     expect(daily).not.toContain('type="checkbox"');
     expect(daily).toContain("每天 08:00 · 下次 明天 08:00");
@@ -585,16 +626,16 @@ describe("the panel's rows", () => {
     ).toContain(EMPTY_BOX);
   });
 
-  it("sets a done subtask's and a gone-off reminder's title in ink-muted, a ticked to-do's ink", () => {
+  it("sets a gone-off reminder's title in ink-muted, a ticked to-do's ink, and draws no subtask back", () => {
     const html = panel(
       {
         ...FULL,
         done: [
           DONE_TODO,
-          { ...SUBTASK, id: "s-back", state: "done", at: inDays(0, 8) },
+          SUBTASK_BACK,
           {
             kind: "task",
-            id: "sched_water",
+            id: "sched_drank",
             text: "提醒喝水",
             state: "fired",
             createdBy: "assistant",
@@ -606,10 +647,11 @@ describe("the panel's rows", () => {
       },
       { doneOpen: true },
     );
-    const sub = row(html, "s-back");
-    expect(sub).toMatch(/<button[^>]*text-ink-muted"[^>]*>查周五去上海的机票</);
-    expect(sub).not.toContain("text-ink-soft");
-    const fired = row(html, "sched_water");
+    // Ruling 197: how a subtask went is in its receipt and in what
+    // Galley said, not in 已完成.
+    expect(html).not.toContain('data-todo-row="s-back"');
+    expect(html).not.toContain("查周六的船票");
+    const fired = row(html, "sched_drank");
     expect(fired).toMatch(
       /<span class="block truncate text-ink-muted">提醒喝水</,
     );
@@ -767,7 +809,7 @@ describe("cancelling Galley's own reminder from the panel (ticket 80)", () => {
     );
   });
 
-  it("is not on a subtask, a routine, or what is done", () => {
+  it("is not on a routine, or what is done", () => {
     const html = panel(
       {
         ...list([SUBTASK, OWN_REMINDER]),
@@ -779,12 +821,12 @@ describe("cancelling Galley's own reminder from the panel (ticket 80)", () => {
       },
       { doneOpen: true },
     );
-    for (const id of ["s-sub", "sched_daily", "todo_done", "sched_fired"]) {
+    for (const id of ["sched_daily", "todo_done", "sched_fired"]) {
       expect(row(html, id)).not.toContain('aria-label="取消提醒"');
     }
-    // A subtask's line is as it was: one cut line, no button after it.
-    expect(row(html, "s-sub")).toMatch(
-      /<div class="mt-0\.5 truncate text-\[12px\][^"]*">正在工作<\/div>/,
+    // A routine's line is one cut line, no button after it.
+    expect(row(html, "sched_daily")).toMatch(
+      /<div class="mt-0\.5 truncate text-\[12px\][^"]*">每天 08:00 · 下次 明天 08:00<\/div>/,
     );
   });
 });
@@ -835,7 +877,6 @@ describe("your to-do's menu (ticket 88)", () => {
     for (const id of [
       "todo_report",
       "todo_done",
-      "s-sub",
       "sched_water",
       "sched_daily",
     ]) {
@@ -843,7 +884,7 @@ describe("your to-do's menu (ticket 88)", () => {
       expect(row(html, id)).not.toContain("data-galley-context-menu-trigger");
     }
     // A row with 说说这件 alone keeps its 32px.
-    expect(row(html, "s-sub")).toContain("group-hover/todo-row:pr-8");
+    expect(row(html, "sched_daily")).toContain("group-hover/todo-row:pr-8");
     expect(row(html, "todo_late")).toContain('aria-label="更多"');
   });
 

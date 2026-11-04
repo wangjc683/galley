@@ -8,6 +8,7 @@ import {
   endsInSilentReport,
   hiddenReportTurns,
   inReportRound,
+  inSecondHalf,
   isSilentReport,
   isSubtaskReportTurn,
   isUnpromotedSubtask,
@@ -24,6 +25,16 @@ import {
   type SubtaskLiveView,
 } from "@/lib/subtasks";
 import { makeSession } from "@/test/factories";
+import {
+  after,
+  dispatched,
+  reply,
+  reviewRound,
+  toolStep,
+  wake,
+  you,
+  yourRound,
+} from "@/test/second-half";
 import type {
   AgentTurn,
   ConversationToolEvent,
@@ -762,5 +773,139 @@ describe("report rounds", () => {
     expect(inReportRound(turns)).toBe(false);
     expect(endsInSilentReport(turns)).toBe(false);
     expect(hiddenReportTurns(turns).size).toBe(0);
+  });
+});
+
+// Ruling 197 (ticket 146): the wake that brings back what a round of
+// yours sent off is that round's second half.
+describe("the second half of your round", () => {
+  const second = ({
+    turns,
+    dispatches,
+  }: {
+    turns: Turn[];
+    dispatches: SubtaskDispatch[];
+  }) => inSecondHalf(turns, dispatches);
+
+  it("is the wake bringing back what your round sent off, from the wake on", () => {
+    const r = after(yourRound(), {
+      turns: [wake("s-phone-a,s-phone-b", 3)],
+      dispatches: [],
+    });
+    expect(second(r)).toBe(true);
+    // Its steps and its words are still it.
+    r.turns.push(toolStep("两份结果都到了；我核对两款的参数口径", 4));
+    expect(second(r)).toBe(true);
+    // One of the two back alone is enough.
+    expect(
+      second(
+        after(yourRound(), { turns: [wake("s-phone-b", 3)], dispatches: [] }),
+      ),
+    ).toBe(true);
+  });
+
+  it("is the wake bringing back what a second half sent off (it sent one back as new)", () => {
+    const r = after(
+      yourRound(),
+      {
+        turns: [
+          wake("s-phone-a,s-phone-b", 3),
+          reply("还差一家的价格，我再派一个人补查。", 4),
+        ],
+        dispatches: [dispatched("s-phone-c", 4)],
+      },
+      { turns: [wake("s-phone-c", 5)], dispatches: [] },
+    );
+    expect(second(r)).toBe(true);
+  });
+
+  it("is a subtask of yours sent back and back again: its record is the first going", () => {
+    const r = after(yourRound(), {
+      turns: [
+        wake("s-phone-a", 3),
+        reply("", 4, { finalAnswer: null, silent: true }),
+        wake("s-phone-a", 5),
+      ],
+      dispatches: [],
+    });
+    expect(second(r)).toBe(true);
+  });
+
+  it("is not what the morning review sent off, nor a reminder's or the review's own wake", () => {
+    const back = after(reviewRound(), {
+      turns: [wake("s-ferry", 13)],
+      dispatches: [],
+    });
+    expect(second(back)).toBe(false);
+    expect(
+      second(
+        after(yourRound(), { turns: [wake("sched_water", 3)], dispatches: [] }),
+      ),
+    ).toBe(false);
+    expect(second(after(yourRound(), reviewRound()))).toBe(false);
+  });
+
+  it("is a wake carrying yours with anything else; not one carrying only others", () => {
+    const both = after(yourRound(), reviewRound());
+    const carry = (reason: string) =>
+      second({
+        turns: [...both.turns, wake(reason, 20)],
+        dispatches: both.dispatches,
+      });
+    expect(carry("sched_water,s-phone-a")).toBe(true);
+    expect(carry("s-ferry,s-phone-b")).toBe(true);
+    expect(carry("s-ferry,sched_water")).toBe(false);
+    expect(carry("s-ferry")).toBe(false);
+  });
+
+  it("is what a woken round sent off after you wrote into it (ticket 136: yours from then on)", () => {
+    const review = reviewRound();
+    review.turns.splice(
+      2,
+      0,
+      you("顺便看看周日回程的船", 11, { interjected: true }),
+    );
+    expect(
+      second(after(review, { turns: [wake("s-ferry", 13)], dispatches: [] })),
+    ).toBe(true);
+  });
+
+  it("stays one when you write into it", () => {
+    const r = after(yourRound(), {
+      turns: [
+        wake("s-phone-a,s-phone-b", 3),
+        toolStep("两份结果都到了；我核对口径", 4),
+        you("价格按国行算", 5, { interjected: true }),
+      ],
+      dispatches: [],
+    });
+    expect(second(r)).toBe(true);
+  });
+
+  it("cannot be told without the records, or with the reply on a page not read: woken, as before", () => {
+    const r = after(yourRound(), {
+      turns: [wake("s-phone-a", 3)],
+      dispatches: [],
+    });
+    expect(inSecondHalf(r.turns, [])).toBe(false);
+    // The page holds the wake but not the round that sent it off.
+    expect(inSecondHalf(r.turns.slice(2), r.dispatches)).toBe(false);
+    // A record of a subtask that never started names no one.
+    expect(
+      inSecondHalf(r.turns, [
+        { ...dispatched("s-phone-a", 2), sessionId: null },
+      ]),
+    ).toBe(false);
+  });
+
+  it("is no second half while the latest round is yours, or before any wake", () => {
+    const r = yourRound();
+    expect(second(r)).toBe(false);
+    r.turns.push(
+      wake("s-phone-a", 3),
+      reply("两款都查好了。", 4),
+      you("谢谢", 5),
+    );
+    expect(second(r)).toBe(false);
   });
 });

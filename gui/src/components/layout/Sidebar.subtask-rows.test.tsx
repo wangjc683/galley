@@ -12,7 +12,9 @@ import { Sidebar } from "./Sidebar";
 /**
  * The subtasks Galley has in hand, under its card (main chat ticket 128,
  * PRD rulings 176, 177). lib/sidebar-subtasks.test.ts covers which and
- * in what order; this is where they stand and how they draw.
+ * in what order; this is where they stand and how they draw, folded
+ * (static rendering: unfolding them in place, ruling 197, is
+ * Sidebar.subtask-more.dom.test.tsx).
  */
 
 // Static rendering reads the to-do store's first state; Galley's group
@@ -66,7 +68,6 @@ function render(
   opts: {
     activeId?: string;
     language?: "zh-CN" | "en-US";
-    onShowSubtasks?: (ids: readonly string[]) => void;
   } = {},
 ) {
   return renderToStaticMarkup(
@@ -79,7 +80,6 @@ function render(
           onNewChat={() => {}}
           onSelectSession={() => {}}
           onArchiveSession={() => {}}
-          onShowSubtasks={opts.onShowSubtasks}
         />
       </Tooltip.Provider>
     </CopyProvider>,
@@ -277,7 +277,7 @@ describe("in hand", () => {
     }
   });
 
-  it("folds what runs past five into 「还有 N 件在办」", () => {
+  it("folds what runs past five into 「还有 N 件在办」, a 「显示更多」 row", () => {
     const seven = Array.from({ length: 7 }, (_, i) =>
       subtask(`s-r${i}`, `差事 ${i}`, 10 + i),
     );
@@ -285,17 +285,15 @@ describe("in hand", () => {
       ...seven.map((s) => item(s.id, "running")),
       item("s-vac", "asking"),
     ];
-    const html = render([mainChat, sideChat, ...seven, vacuums], {
-      onShowSubtasks: () => {},
-    });
+    const html = render([mainChat, sideChat, ...seven, vacuums]);
     expect(rowTags(html)).toHaveLength(6);
+    // A project group's 「显示更多」 row (ruling 197 point 4: it unfolds in
+    // place), folded: its caret down, not out to a panel.
     expect(tagWith(html, MORE)).toMatch(/^<button type="button"/);
+    expect(tagWith(html, MORE)).toContain('aria-expanded="false"');
     expect(html).toContain(">还有 2 件在办</span>");
     // Its name is its words.
     expect(tagWith(html, MORE)).not.toContain("aria-label");
-    // Not wired: words only, no button that does nothing.
-    const bare = render([mainChat, sideChat, ...seven, vacuums]);
-    expect(tagWith(bare, MORE)).toMatch(/^<div /);
   });
 
   it("speaks English", () => {

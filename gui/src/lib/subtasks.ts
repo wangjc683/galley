@@ -28,8 +28,9 @@ import type { Session } from "@/types/session";
  * reply that said nothing; the user hears from the assistant alone.
  *
  * Everything here is pure: the wire shape, which sessions count as an
- * unpromoted subtask, the card's state, and which rows of the main
- * chat belong to a report round.
+ * unpromoted subtask, the card's state, which rows of the main chat
+ * belong to a report round, and whether a report round is the second
+ * half of a round of yours (ruling 197, `inSecondHalf`).
  */
 
 /** Mirror of Core's dispatch record (`list_subtask_dispatches`, the
@@ -591,7 +592,10 @@ export function subtaskBreadcrumb(
 // ---- Report rounds -------------------------------------------------------
 
 /** A report round: a run Core opened by waking the main chat — its
- * opener is a report row. */
+ * opener is a report row. A subtask's report, a reminder coming due and
+ * the daily review all wake it with one (the same `galley-report`
+ * origin); which subtasks it brings back is its reason
+ * (`inSecondHalf`). */
 export function isReportRound(
   group: RunGroup,
   turns: readonly Turn[],
@@ -608,11 +612,12 @@ export function isReportRound(
  * review with no result yet). Nothing of it is drawn but the questions
  * it asked the user and their answers — no steps, and no cards of what
  * it dispatched, which hang under that silent reply alone; the subtask
- * is in the to-do panel's 「Galley 在办」. It notifies nobody, marks
- * nothing unread and is no last message. Once its silent reply lands it
- * counts as settled, before run_complete. A `<no-reply/>` outside a
- * report round is a misuse and reads as a reply that was only tags,
- * its cards under it.
+ * is under Galley's card in the sidebar while it runs (ticket 128; the
+ * to-do panel no longer lists subtasks, ruling 197). It notifies
+ * nobody, marks nothing unread and is no last message. Once its silent
+ * reply lands it counts as settled, before run_complete. A
+ * `<no-reply/>` outside a report round is a misuse and reads as a reply
+ * that was only tags, its cards under it.
  */
 export function isSilentReport(
   group: RunGroup,
@@ -645,6 +650,113 @@ export function inReportRound(turns: readonly Turn[]): boolean {
   const groups = buildRunGroups(turns as Turn[]);
   const last = groups[groups.length - 1];
   return !!last && isReportRound(last, turns);
+}
+
+// ---- The second half of your round (ruling 197) ---------------------------
+
+/**
+ * Whether the latest run of `turns` is the second half of a round of
+ * yours (main chat PRD ruling 197, ticket 146): a report round whose
+ * report row names a subtask a round of yours dispatched. You sent
+ * something off and are waiting for it to come back; Galley merging what
+ * came back is the rest of your round, drawn as one (the typing dots and
+ * the line under them from the wake on, the card 「正在工作…」:
+ * lib/assistant-conversation.ts `assistantTyping`).
+ *
+ * Read from three things, nothing guessed:
+ *
+ *   - the report row's reason: the ids it covers, comma-separated (Core's
+ *     `Origin::subtask_report`, the `note_ids` of `core/src/
+ *     subtask_report.rs`) — a subtask's session id, or a reminder's or
+ *     the daily review's `sched_…` task;
+ *   - the main chat's dispatch records (`SubtaskDispatch`): which reply
+ *     (`messageId`) dispatched which subtask (`sessionId`). A subtask sent
+ *     back keeps its record, so its return is a second half when its
+ *     first going was; an id with no record (a `sched_…` task, a
+ *     scheduled run's own session) dispatched nothing;
+ *   - the run that reply closed (`buildRunGroups` over `turns`). It is a
+ *     round of yours when your message opened it (any row but a report
+ *     row: typed here, from the phone, from IM, from the CLI), when it is
+ *     itself a second half (merging, it sent a new one off), or when you
+ *     wrote into it before that reply (ticket 136: a woken round reads as
+ *     yours from your words on).
+ *
+ * One of yours among the ids is enough: a wake that also carries a
+ * reminder, or the review's subtask, is still yours. Anything else reads
+ * as woken, as before: a reminder's wake, the review's, and a subtask the
+ * review or a reminder's round dispatched. So does a subtask the page
+ * cannot place — its record not read yet, its reply on a page not loaded
+ * — the old drawing being the safe one: dots that never come rather than
+ * dots that come for nobody.
+ */
+export function inSecondHalf(
+  turns: readonly Turn[],
+  dispatches: readonly SubtaskDispatch[],
+): boolean {
+  if (dispatches.length === 0 || !turns.some(isSubtaskReportTurn)) {
+    return false;
+  }
+  const groups = buildRunGroups(turns as Turn[]);
+  if (groups.length === 0) return false;
+  const replyOf = new Map<string, string>();
+  for (const d of dispatches) {
+    if (d.sessionId) replyOf.set(d.sessionId, d.messageId);
+  }
+  // Each reply's run and place in `turns`, by its message id.
+  const placed = new Map<string, { group: number; index: number }>();
+  groups.forEach((group, g) => {
+    for (const i of group.memberIndices) {
+      const turn = turns[i];
+      if (turn.role === "agent" && turn.messageId) {
+        placed.set(turn.messageId, { group: g, index: i });
+      }
+    }
+  });
+  const memo = new Map<number, boolean>();
+  const secondHalf = (g: number): boolean => {
+    const known = memo.get(g);
+    if (known !== undefined) return known;
+    // False while it is being worked out, so nothing recurs for ever
+    // (and nothing should: a reply comes before the report of what it
+    // sent off, and a later one is skipped below).
+    memo.set(g, false);
+    const group = groups[g];
+    let yours = false;
+    if (isReportRound(group, turns)) {
+      const opener = turns[group.openerIndex] as UserTurn;
+      for (const id of reportIds(opener)) {
+        const reply = replyOf.get(id);
+        const at = reply === undefined ? undefined : placed.get(reply);
+        // Only a reply of an earlier run sends what a report brings back.
+        if (!at || at.group >= g) continue;
+        if (roundOfYours(at.group, at.index)) {
+          yours = true;
+          break;
+        }
+      }
+    }
+    memo.set(g, yours);
+    return yours;
+  };
+  const roundOfYours = (g: number, replyIndex: number): boolean => {
+    const group = groups[g];
+    if (group.openerIndex < 0) return false;
+    if (!isReportRound(group, turns)) return true;
+    if (secondHalf(g)) return true;
+    return group.memberIndices.some((i) => {
+      const turn = turns[i];
+      return i < replyIndex && turn.role === "user" && turn.interjected;
+    });
+  };
+  return secondHalf(groups.length - 1);
+}
+
+/** The ids a report row covers: its reason, comma-separated. */
+function reportIds(row: UserTurn): string[] {
+  return (row.origin?.reason ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id.length > 0);
 }
 
 function asksUser(turn: Turn): boolean {

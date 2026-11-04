@@ -660,6 +660,37 @@ export function todoNotedLine(
 }
 
 /**
+ * Core's list without the subtasks (main chat PRD ruling 197, ticket
+ * 146): what the panel draws. The panel is what you and Galley are
+ * going to do — a promise each: whose hand the next step is in, when,
+ * what counts as done (ruling 128 point 1) — and a subtask is the doing
+ * of one, not a promise. So 「Galley 在办」 keeps Galley's own one-off
+ * reminders, and 已完成 the to-dos ticked off and the reminders that
+ * went off; a group left empty is not drawn, and a list of subtasks
+ * alone is the empty state. What runs is under Galley's card in the
+ * sidebar (ticket 128), how each went in its receipt under the reply
+ * that sent it (ruling 179) and in what Galley said. Only the panel goes
+ * without them: the store keeps Core's list whole, as the sidebar reads
+ * its subtasks there (lib/sidebar-subtasks.ts); the main chat's
+ * 「在办的事」 lists them, so it does not send one off twice; `galley
+ * todo list` is the Agent API. The same object when there are none.
+ */
+export function withoutSubtasks(todo: AssistantTodo): AssistantTodo {
+  const keep = (items: TodoItem[]) =>
+    items.some(isSubtaskItem)
+      ? items.filter((item) => !isSubtaskItem(item))
+      : items;
+  const assistant = keep(todo.assistant);
+  const done = keep(todo.done);
+  if (assistant === todo.assistant && done === todo.done) return todo;
+  return { ...todo, assistant, done };
+}
+
+function isSubtaskItem(item: TodoItem): boolean {
+  return item.kind === "subtask";
+}
+
+/**
  * The list as the panel draws it while to-dos deleted there wait for
  * Core (main chat ticket 88, PRD ruling 132 point 4): without them, in
  * whichever group — off the panel the moment 删除 is chosen, and back
@@ -741,9 +772,7 @@ function yourTodoChanged(before: TodoItem, after: TodoItem): boolean {
 }
 
 /** A row of 「Galley 在办」 changed: only one of its own one-off
- * reminders, in its words or its time. A subtask's state, title and
- * latest activity move with its work, not with Galley's changing the
- * list. */
+ * reminders, in its words or its time. */
 function assistantRowChanged(before: TodoItem, after: TodoItem): boolean {
   if (after.kind !== "task" || (after.repeat?.kind ?? "once") !== "once") {
     return false;
@@ -772,24 +801,28 @@ function byId(items: readonly TodoItem[]): Map<string, TodoItem> {
  * point 5: what Galley moved, so you see it move. Compared field by
  * field (the panel's rows carry no `updatedAt`); `mine` are this
  * window's own writes on their way (`todoWritesOnTheirWay`), never lit.
+ * Both read as the panel draws them (`withoutSubtasks`).
  *
- * Lit: a row new to the user's to-dos, 「Galley 在办」 (a subtask too) or
- * 例行; one of the user's to-dos with new words, due time, reminder
- * (time or paused), notes or items (ticket 111); one of Galley's own one-off reminders with
- * new words or time; a routine with new words, rule, time of day, or
- * paused or resumed; and one of the user's to-dos Galley ticked off —
+ * Lit: a row new to the user's to-dos, 「Galley 在办」 or 例行; one of
+ * the user's to-dos with new words, due time, reminder (time or paused),
+ * notes or items (ticket 111); one of Galley's own one-off reminders
+ * with new words or time; a routine with new words, rule, time of day,
+ * or paused or resumed; and one of the user's to-dos Galley ticked off —
  * held where it stood a moment (`held`), lit there, then in 已完成.
  *
- * Not lit: a subtask after it appears (its state, title, activity); a
+ * Not lit: a subtask, ever — the panel no longer draws them (ruling 197,
+ * which took away ruling 131 point 5's light on one appearing); a
  * routine's next time moving on as it goes off; a one-off reminder going
  * off into 已完成; anything else new in 已完成; a row that leaves (a
  * cancelled one just goes: the panel draws nothing cancelled).
  */
 export function todoPanelChanges(
-  previous: AssistantTodo,
-  next: AssistantTodo,
+  previousList: AssistantTodo,
+  nextList: AssistantTodo,
   mine: ReadonlySet<string>,
 ): TodoPanelChange {
+  const previous = withoutSubtasks(previousList);
+  const next = withoutSubtasks(nextList);
   const flash = new Set<string>();
   const compare = (
     before: readonly TodoItem[],

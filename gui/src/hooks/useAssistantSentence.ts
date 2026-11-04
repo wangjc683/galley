@@ -1,4 +1,6 @@
+import { useLoadedSubtaskDispatches } from "@/hooks/useSubtaskCards";
 import { assistantTyping } from "@/lib/assistant-conversation";
+import type { SubtaskDispatch } from "@/lib/subtasks";
 import {
   EMPTY_TURNS,
   type MessagesStore,
@@ -20,16 +22,23 @@ import {
 /**
  * useAssistantTyping's selector: false at rest without looking at the
  * stream; running, whether it reads as typing (`assistantTyping`: a
- * round you started throughout, a woken one while it writes words).
+ * round you started throughout, and the second half of one — told by
+ * the main chat's `dispatches`, ruling 197 — any other woken one while
+ * it writes words).
  */
 export function selectAssistantTyping(
   state: MessagesStore,
   sessionId: string,
   running: boolean,
+  dispatches?: readonly SubtaskDispatch[],
 ): boolean {
   if (!running) return false;
   const m = state.byId[sessionId];
-  return assistantTyping(m?.turns ?? EMPTY_TURNS, m?.inFlightContent ?? "");
+  return assistantTyping(
+    m?.turns ?? EMPTY_TURNS,
+    m?.inFlightContent ?? "",
+    dispatches,
+  );
 }
 
 /**
@@ -42,5 +51,8 @@ export function useAssistantTyping(
   sessionId: string,
   running: boolean,
 ): boolean {
-  return useMessagesStore((s) => selectAssistantTyping(s, sessionId, running));
+  const dispatches = useLoadedSubtaskDispatches(sessionId);
+  return useMessagesStore((s) =>
+    selectAssistantTyping(s, sessionId, running, dispatches),
+  );
 }

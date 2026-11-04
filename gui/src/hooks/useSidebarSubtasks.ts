@@ -6,9 +6,10 @@ import type { Session } from "@/types/session";
 
 /**
  * The subtasks the sidebar lists under Galley's card (main chat ticket
- * 128, PRD ruling 176; lib/sidebar-subtasks.ts): the to-do panel's
- * 「Galley 在办」 read, which `useAssistantTodoSync` keeps current while
- * there is a main chat, matched to `subtasks`, the main chat's
+ * 128, PRD ruling 176; lib/sidebar-subtasks.ts): Core's 「Galley 在办」
+ * read as the store keeps it, whole (the to-do panel draws it without
+ * subtasks since ruling 197), which `useAssistantTodoSync` keeps current
+ * while there is a main chat, matched to `subtasks`, the main chat's
  * unpromoted subtask sessions.
  */
 export function useSidebarSubtasks(

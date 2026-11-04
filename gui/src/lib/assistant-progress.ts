@@ -7,6 +7,7 @@ import {
 } from "@/lib/assistant-conversation";
 import { modelReplyEnd } from "@/lib/ipc/ga-output-cleaning";
 import { isProtocolFailureSummary } from "@/lib/session-summary";
+import type { SubtaskDispatch } from "@/lib/subtasks";
 import type { Turn } from "@/types/conversation";
 
 /*
@@ -16,7 +17,10 @@ import type { Turn } from "@/types/conversation";
  * typing bubble says 「{在做什么} · {用时}」 (TypingBubble), and the
  * sidebar card says 「正在工作…」, away from the main chat 「正在输入…」
  * while it writes and the whole minutes from one on (lib/assistant.ts
- * `assistantCardLine`). A round Core woke it for draws no line.
+ * `assistantCardLine`). So does the second half of a round you started
+ * (ruling 197: Core woke it with a subtask that round sent off,
+ * lib/subtasks.ts `inSecondHalf`), its time from the wake. Any other
+ * round Core woke it for draws no line.
  */
 
 // ---- 在做什么 ----------------------------------------------------------------
@@ -127,10 +131,12 @@ function settledStepHalf(turns: readonly Turn[]): string | null {
 
 /**
  * What the line under the typing bubble says it is doing (rulings 134,
- * 135), for a round you started; null for a round Core woke it for (no
- * line: nobody is waiting on it). Within this stretch — from your last
- * message, or from your answer to its question; what you said while it
- * worked (main chat ticket 136) opens none, the line runs on under it:
+ * 135), for a round you started or its second half (ruling 197, read
+ * with the main chat's `dispatches`); null for any other round Core
+ * woke it for (no line: nobody is waiting on it). Within this stretch —
+ * from your last message, or from the wake of a second half, or from
+ * your answer to its question; what you said while it worked (main chat
+ * ticket 136) opens none, the line runs on under it:
  *
  *   1. writing words now (`assistantWriting`): 「正在写回复」;
  *   2. else this step's dispatch has shown with a closed summary before
@@ -150,10 +156,12 @@ export function assistantDoing(
   turns: readonly Turn[],
   inFlightContent: string,
   copy: AppCopy,
+  dispatches?: readonly SubtaskDispatch[],
 ): string | null {
-  // A round you started reads as typing with nothing streaming
-  // (`assistantTyping`'s report-round check, kept for the last turns).
-  if (!assistantTyping(turns, "")) return null;
+  // A round you started, or its second half, reads as typing with
+  // nothing streaming (`assistantTyping`'s report-round check, kept for
+  // the last turns and records).
+  if (!assistantTyping(turns, "", dispatches)) return null;
   if (assistantWriting(inFlightContent)) {
     return copy.assistant.progressWriting;
   }

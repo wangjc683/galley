@@ -2,7 +2,6 @@ import {
   BellSimpleSlash,
   ChatTeardropText,
   Clock,
-  PauseCircle,
   Plus,
   Repeat,
   X,
@@ -39,7 +38,6 @@ import {
 } from "@/lib/assistant-todo";
 import { caretOffsetAt, caretSourceOffsetAt } from "@/lib/caret-point";
 import { useCopy, useLanguage } from "@/lib/i18n";
-import { StatusIcon } from "@/lib/status-icon";
 import {
   assistantRowLine,
   assistantTaskCancellable,
@@ -60,6 +58,7 @@ import {
   todoSubitemsShown,
   todoTitleTarget,
   todoWithoutDeleting,
+  withoutSubtasks,
   type TodoHold,
   type TodoLineTone,
   type TodoWordsField,
@@ -103,7 +102,7 @@ export interface TodoPanelProps {
    * whether the main area is narrow, where it is a look (ticket 87,
    * lib/todo-open.ts). */
   spot: TodoSpot;
-  /** Open a session: a subtask, or the session a scheduled run made. */
+  /** Open a session: the one a scheduled run made. */
   onOpenSession: (sessionId: string) => void;
   /** 「跟 Galley 说」 beside Galley: its composer takes the caret. */
   onTalk: () => void;
@@ -126,16 +125,20 @@ export interface TodoPanelProps {
  *               Core's order — overdue, today, later by day, no time
  *               (ticket 86, ruling 130): a box, the title, when it is
  *               due and its reminder, its notes (ticket 80)
- *   Galley 在办  its subtasks and the one-off tasks it will come back
- *               to: no box, the session rows' status glyphs
+ *   Galley 在办  the one-off tasks it will come back to: no box, a
+ *               clock and the time
  *   例行         repeating tasks: the rule and the next time
  *   已完成       the last seven days, folded, with its count: ticked
  *               to-dos (their box in neutral grey), reminders that went
- *               off, subtasks back
+ *               off
  *
  * Empty groups are not drawn; with nothing in any, the empty state is
  * (`todoPanelEmpty`). The daily review is in none of them: the store
- * keeps the list without it (`withoutDailyReview`, PRD ruling 145). The
+ * keeps the list without it (`withoutDailyReview`, PRD ruling 145). Nor
+ * is a subtask (ruling 197, ticket 146): the panel is what you and
+ * Galley are going to do, not what runs now — that is under Galley's
+ * card in the sidebar — and it draws Core's list without them
+ * (`withoutSubtasks`), which the store keeps whole for the sidebar. The
  * actions are only these: tick and untick the user's own (TodoCheck),
  * cancel a to-do's reminder or one of Galley's own one-off reminders
  * (ticket 80), delete one of the user's own not done (ticket 88, its
@@ -145,8 +148,8 @@ export interface TodoPanelProps {
  * Core hears of it when its undo toast goes (stores/assistant-todo.ts);
  * meanwhile the panel draws the list without it (`todoWithoutDeleting`).
  * A title goes where the thing came from: the reply that noted it
- * (the 查找聊天记录 jump), a subtask, a scheduled run's session — but
- * on your to-dos not done, which open (below). A jump out of the panel
+ * (the 查找聊天记录 jump), a scheduled run's session — but on your
+ * to-dos not done, which open (below). A jump out of the panel
  * takes the panel along (lib/todo-open.ts). Escape closes it from
  * anywhere but a text field, as it does the reading panel; with a row
  * open it folds the row first.
@@ -215,8 +218,9 @@ export function TodoPanel({
   const pageId = useId();
   const listed = useAssistantTodoStore((s) => s.todo);
   const deleting = useAssistantTodoStore((s) => s.deleting);
-  // The rows deleted here wait off the panel for their undo (ticket 88).
-  const todo = todoWithoutDeleting(listed, deleting);
+  // No subtasks (ruling 197); the rows deleted here wait off the panel
+  // for their undo (ticket 88).
+  const todo = todoWithoutDeleting(withoutSubtasks(listed), deleting);
   const loaded = useAssistantTodoStore((s) => s.loaded);
   const list = useRef<HTMLDivElement>(null);
   const { held, request } = useTodoPanelFlash(list);
@@ -1409,11 +1413,12 @@ function MetaLine({
   );
 }
 
-/** What Galley is on: the session rows' glyph, the title, the state;
- * on one of its own one-off reminders still to go off, 「取消提醒」 at
- * the end of that line on hover, as on a to-do's reminder (ticket 80,
- * ruling 128 point 7). Straight to Core as the reminder card's 「取消」;
- * the row leaves with the fresh list. */
+/** What Galley will come back to (since ruling 197 its one-off
+ * reminders alone; its subtasks ran here with the session rows'
+ * glyphs): the clock, the title, the time and the state; on one still
+ * to go off, 「取消提醒」 at the end of that line on hover, as on a
+ * to-do's reminder (ticket 80, ruling 128 point 7). Straight to Core as
+ * the reminder card's 「取消」; the row leaves with the fresh list. */
 function AssistantRow(props: RowProps) {
   const { item, onTalkAbout } = props;
   const copy = useCopy();
@@ -1426,7 +1431,7 @@ function AssistantRow(props: RowProps) {
   return (
     <RowShell
       {...props}
-      leading={<AssistantGlyph item={item} />}
+      leading={<Clock size={14} weight="thin" className="text-ink-muted" />}
       titleClass="text-ink"
       line={
         <PlainLine
@@ -1446,26 +1451,6 @@ function AssistantRow(props: RowProps) {
       failure={canCancel && failure ? todoFailureText(failure, copy) : null}
     />
   );
-}
-
-/** The session rows' set (lib/status-icon.tsx, the subtask card's
- * asking glyph); a task waiting for its time gets the clock. */
-function AssistantGlyph({ item }: { item: TodoItem }) {
-  switch (item.state) {
-    case "running":
-      return <StatusIcon status="running" size={14} />;
-    case "asking":
-      return <PauseCircle size={14} weight="fill" className="text-warning" />;
-    case "failed":
-      return <StatusIcon status="error" size={14} />;
-    case "step_limit":
-    case "stopped":
-      return <StatusIcon status="idle" size={14} incomplete />;
-    case "done":
-      return <StatusIcon status="completed" size={14} />;
-    default:
-      return <Clock size={14} weight="thin" className="text-ink-muted" />;
-  }
 }
 
 /** 例行: the repeat glyph, the title, the rule and the next time. */
@@ -1492,11 +1477,12 @@ function RoutineRow(props: RowProps) {
 
 /**
  * 已完成: what Core lists there since ticket 82 — the user's ticked
- * to-dos, Galley's one-off reminders that went off, subtasks that came
- * back (a routine's fires stay out). A to-do keeps its box, ticked in
- * neutral grey, not brand (unticking it brings it back); a subtask and
- * a reminder their kind's glyph, the title in `ink-muted` as a ticked
- * to-do's (main chat ticket 84, ruling 129 point 2: B).
+ * to-dos and Galley's one-off reminders that went off (a routine's fires
+ * stay out; the subtasks that came back too since ruling 197, the panel
+ * drawing none). A to-do keeps its box, ticked in neutral grey, not
+ * brand (unticking it brings it back); a reminder the clock, the title
+ * in `ink-muted` as a ticked to-do's (main chat ticket 84, ruling 129
+ * point 2: B).
  */
 function DoneRow(props: RowProps) {
   const { item } = props;
@@ -1533,13 +1519,7 @@ function DoneRow(props: RowProps) {
   return (
     <RowShell
       {...props}
-      leading={
-        item.kind === "subtask" ? (
-          <StatusIcon status="completed" size={14} />
-        ) : (
-          <Clock size={14} weight="thin" className="text-ink-muted" />
-        )
-      }
+      leading={<Clock size={14} weight="thin" className="text-ink-muted" />}
       titleClass="text-ink-muted"
       line={line}
     />

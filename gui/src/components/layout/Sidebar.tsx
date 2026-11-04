@@ -6,6 +6,7 @@ import { useSidebarSubtasks } from "@/hooks/useSidebarSubtasks";
 import { useCopy } from "@/lib/i18n";
 import { findMainChat } from "@/lib/main-chat";
 import { sortProjectsForNavigation } from "@/lib/projects";
+import { sidebarSubtaskRowsShown } from "@/lib/sidebar-subtasks";
 import {
   buildSidebarSections,
   findSectionsSlot,
@@ -105,9 +106,6 @@ export interface SidebarProps {
   /** Count of archived sessions. Not rendered as a numeral — it only
    * decides whether the footer exists at all (0 → no footer row). */
   archivedCount?: number;
-  /** 「还有 N 件在办」 under the assistant's card → open the to-do panel,
-   * these subtasks lit (main chat ticket 128). */
-  onShowSubtasks?: (ids: readonly string[]) => void;
 }
 
 /**
@@ -186,7 +184,6 @@ export function Sidebar({
   onOpenEarlier,
   onOpenArchived,
   archivedCount = 0,
-  onShowSubtasks,
 }: SidebarProps) {
   const copy = useCopy();
   const mainChat = useMemo(() => findMainChat(sessions), [sessions]);
@@ -205,18 +202,31 @@ export function Sidebar({
     [sessions, mainChat],
   );
   // The subtasks Galley has in hand, under its card (ticket 128, rulings
-  // 176, 177): those asking you, then at most five running.
+  // 176, 177): those asking you, then at most five running, the rest
+  // behind 「还有 N 件在办」, which unfolds them in place (ruling 197
+  // point 4). Unfolded is this sidebar's alone, not remembered; with
+  // nothing left behind it, it folds back, so the next overflow starts
+  // folded. Guarded setState-in-render: the rows it draws decide the
+  // selected place in this same render.
   const subtaskRows = useSidebarSubtasks(mainChatSubtasks);
-  // An open subtask with a row of its own there is that row's to select
-  // (a conversation row, ruling 176 point 6); one without — done,
-  // stopped, failed, or behind 「还有 N 件在办」 — keeps the assistant's
-  // card selected: the selected place must be in the sidebar
+  const [subtasksUnfolded, setSubtasksUnfolded] = useState(false);
+  if (subtasksUnfolded && subtaskRows.more.length === 0) {
+    setSubtasksUnfolded(false);
+  }
+  const subtaskRowsShown = sidebarSubtaskRowsShown(
+    subtaskRows,
+    subtasksUnfolded,
+  );
+  // An open subtask with a row of its own drawn there is that row's to
+  // select (a conversation row, ruling 176 point 6); one without — done,
+  // stopped, failed, or folded behind 「还有 N 件在办」 — keeps the
+  // assistant's card selected: the selected place must be in the sidebar
   // (layout-and-chrome.md), and only once.
   const mainChatSelected =
     !!mainChat &&
     (activeId === mainChat.id ||
       (mainChatSubtasks.some((s) => s.id === activeId) &&
-        !subtaskRows.rows.some((row) => row.id === activeId)));
+        !subtaskRowsShown.some((row) => row.id === activeId)));
   // The sectioned sidebar is the main chat's (its collapse lives in
   // AppShell); the external runtime keeps the sidebar as it was.
   const sectioned = mainChat !== undefined;
@@ -490,9 +500,10 @@ export function Sidebar({
           />
           <SidebarSubtaskRows
             subtasks={subtaskRows}
+            unfolded={subtasksUnfolded}
+            onToggleMore={() => setSubtasksUnfolded((open) => !open)}
             activeId={activeId}
             onOpen={handleSelectSession}
-            onMore={onShowSubtasks}
           />
         </div>
       ) : (

@@ -3,10 +3,11 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { CaretRight, CircleNotch, PauseCircle } from "@phosphor-icons/react";
+import { CircleNotch, PauseCircle } from "@phosphor-icons/react";
 
 import { useCopy } from "@/lib/i18n";
 import {
+  sidebarSubtaskRowsShown,
   subtaskNeedsYou,
   type SidebarSubtask,
   type SidebarSubtasks,
@@ -16,12 +17,15 @@ import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { truncationFadeRef } from "@/lib/truncation-fade";
 import { cn } from "@/lib/utils";
 
+import { SidebarShowMoreRow } from "./SidebarProjectGroup";
+
 /**
  * The subtasks Galley has in hand, under its card in the assistant zone
  * (main chat ticket 128, PRD rulings 176, 177; which and in what order
  * is lib/sidebar-subtasks.ts): one row per subtask running or asking
- * you, then, when more than five run, 「还有 N 件在办」. Nothing to list,
- * nothing at all: the zone is as it was, to the pixel.
+ * you, then, when more than five run, 「还有 N 件在办」, which unfolds the
+ * rest in place and becomes 「收起」 (ruling 197 point 4). Nothing to
+ * list, nothing at all: the zone is as it was, to the pixel.
  *
  * A row is a conversation, one line on the session rows' grid: the
  * status glyph in the 16px column on the 18px line, the title on the
@@ -47,33 +51,44 @@ import { cn } from "@/lib/utils";
  * Galley's business.
  *
  * Each row is a button named 「子任务：{标题}」, 「，等你回复」 after it
- * when it asks; 「还有 N 件在办」 is named by its words and opens the
- * to-do panel where you are, the subtasks it stands for lit
- * (lib/todo-open.ts `showSubtasksInTodo`).
+ * when it asks. 「还有 N 件在办」 is a project group's 「显示更多」 row
+ * (SidebarShowMoreRow: its look, its caret down, 「收起」 with the caret
+ * up at the end of what it unfolded, held under the pointer as it folds
+ * back), named by its words: it unfolds the running subtasks past five
+ * under the others, and 「收起」 folds them again. Until ruling 197 it
+ * opened the to-do panel with them lit; the panel lists no subtask now,
+ * and it touches the panel no more. Unfolded or not is the sidebar's
+ * (`unfolded`, Sidebar), as an open subtask folded away leaves the
+ * selected place on Galley's card; nothing remembers it.
  */
 export function SidebarSubtaskRows({
   subtasks,
+  unfolded = false,
+  onToggleMore,
   activeId,
   onOpen,
-  onMore,
 }: {
   subtasks: SidebarSubtasks;
-  /** The session in the main area: its row, if listed, is selected. */
+  /** The running ones past five are drawn (`sidebarSubtaskRowsShown`). */
+  unfolded?: boolean;
+  /** 「还有 N 件在办」 and 「收起」: unfold, fold. */
+  onToggleMore: () => void;
+  /** The session in the main area: its row, if drawn, is selected. */
   activeId?: string;
   /** Open a subtask in the main area. Absent, a row does nothing (the
    * dev switcher's demo rows). */
   onOpen?: (id: string) => void;
-  /** 「还有 N 件在办」: open the to-do panel, these lit. Absent, the
-   * line is words only. */
-  onMore?: (ids: readonly string[]) => void;
 }) {
+  const copy = useCopy();
   const { rows, more } = subtasks;
   if (rows.length === 0 && more.length === 0) return null;
+  const shown = sidebarSubtaskRowsShown(subtasks, unfolded);
+  const open = unfolded && more.length > 0;
   return (
     // 6px under the card, as the card block's own foot is 6px over the
     // strong line: the rows sit in the zone, above it.
     <div data-role="sidebar-subtasks" className="mt-1.5">
-      {rows.map((row) => (
+      {shown.map((row) => (
         <SubtaskRow
           key={row.id}
           row={row}
@@ -81,8 +96,17 @@ export function SidebarSubtaskRows({
           onOpen={onOpen ? () => onOpen(row.id) : undefined}
         />
       ))}
+      {/* One slot for both words, so 收起 stays the same instance and
+          holds itself under the pointer as it folds (SidebarShowMoreRow). */}
       {more.length > 0 && (
-        <MoreRow count={more.length} onMore={onMore && (() => onMore(more))} />
+        <SidebarShowMoreRow
+          dataRole="sidebar-subtasks-more"
+          mode={open ? "less" : "more"}
+          label={
+            open ? copy.sidebar.showLess : copy.subtask.sidebarMore(more.length)
+          }
+          onToggle={onToggleMore}
+        />
       )}
     </div>
   );
@@ -189,8 +213,9 @@ function SubtaskRow({
   );
 }
 
-/** The session rows' glyphs (lib/status-icon.tsx, the to-do panel's
- * 「Galley 在办」): asking, the filled amber pause; running, the spinner —
+/** The session rows' glyphs (lib/status-icon.tsx; the to-do panel's
+ * 「Galley 在办」 drew its subtasks with them until ruling 197): asking,
+ * the filled amber pause; running, the spinner —
  * the same bold `CircleNotch`, turning — in muted ink, not brand (B3,
  * ruling 177 point 5). Drawn here: StatusIcon keeps the workbench rows'
  * brand spinner and takes no colour. */
@@ -202,44 +227,5 @@ function SubtaskGlyph({ state }: { state: SidebarSubtaskState }) {
     <span className="inline-flex shrink-0 spin">
       <CircleNotch size={14} weight="bold" className="text-ink-muted" />
     </span>
-  );
-}
-
-/** 「还有 N 件在办」: the 「显示更多」 row's register (SidebarShowMoreRow:
- * 28px, 11px muted, a 10px caret in the glyph column), the caret
- * pointing out, to the panel it opens. */
-function MoreRow({ count, onMore }: { count: number; onMore?: () => void }) {
-  const copy = useCopy();
-  const className =
-    "mx-1.5 grid min-h-7 w-[calc(100%-12px)] grid-cols-[16px_minmax(0,1fr)] items-center gap-2 rounded-sm px-3 text-left text-[11px] text-ink-muted";
-  const content = (
-    <>
-      <span aria-hidden className="flex justify-center">
-        <CaretRight size={10} weight="regular" className="opacity-60" />
-      </span>
-      <span className="min-w-0 truncate">
-        {copy.subtask.sidebarMore(count)}
-      </span>
-    </>
-  );
-  if (!onMore) {
-    return (
-      <div data-role="sidebar-subtasks-more" className={className}>
-        {content}
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      data-role="sidebar-subtasks-more"
-      onClick={onMore}
-      className={cn(
-        className,
-        "outline-none hover:bg-hover hover:text-ink-soft focus-visible:ring-2 focus-visible:ring-brand/30",
-      )}
-    >
-      {content}
-    </button>
   );
 }

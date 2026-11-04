@@ -11,7 +11,13 @@ import {
   type RunStats,
 } from "@/lib/run-groups";
 import { cleanSessionSummary } from "@/lib/session-summary";
-import { inReportRound, isReportRound, isSilentReport } from "@/lib/subtasks";
+import {
+  inReportRound,
+  inSecondHalf,
+  isReportRound,
+  isSilentReport,
+  type SubtaskDispatch,
+} from "@/lib/subtasks";
 import type { Turn } from "@/types/conversation";
 
 /**
@@ -21,6 +27,8 @@ import type { Turn } from "@/types/conversation";
  * than as the workbench's task record. MainView's `isMainChat` is the
  * gate; every other conversation (the workbench's, a subtask opened from
  * the assistant, the external runtime's) keeps the workbench rendering.
+ * Ruling 197 (ticket 146) draws the second half of a round of yours as
+ * that round (process, reports below).
  *
  *   bubbles   on both sides: the user's words on the right (apricot),
  *             the assistant's replies, questions and greeting on the
@@ -31,10 +39,14 @@ import type { Turn } from "@/types/conversation";
  *             (`assistantRowGap`).
  *   process   while it works, the typing bubble at the conversation's
  *             end (three dots, `typingBubbleShown`: a round you
- *             started from the send on, a woken one only while it
- *             writes words — until you write into it), and in a round
- *             you started a line under
- *             it, 「{在做什么} · {用时}」 (lib/assistant-progress.ts);
+ *             started from the send on, and the second half of one —
+ *             the round Core woke it in with a subtask your round sent
+ *             off, lib/subtasks.ts `inSecondHalf` — from the wake on;
+ *             any other woken one only while it writes words — until
+ *             you write into it), and in a round you started, or the
+ *             second half of one, a line under it, 「{在做什么} ·
+ *             {用时}」 (lib/assistant-progress.ts; the time from the
+ *             send, or from the wake);
  *             what you say while it works (main chat ticket 136) is
  *             your bubble at the end, the dots and the line under it,
  *             going on; the reply answers it with the rest; a line
@@ -47,8 +59,9 @@ import type { Turn } from "@/types/conversation";
  *             says nothing while it runs; the sidebar card says what
  *             the screen does not — 「正在工作…」, away from the main
  *             chat 「正在输入…」 while it writes and the minutes from
- *             one on, in a woken round 「正在输入…」 with the dots
- *             (`assistantTyping`, the dots' own rule).
+ *             one on (a second half the same), in any other woken round
+ *             「正在输入…」 with the dots (`assistantTyping`, the dots'
+ *             own rule).
  *             The reply appears whole once the round has its answer.
  *             Under it nothing shows at rest: the action bar comes in
  *             on hover, icons only (copy, quote, save, for a reply of
@@ -66,9 +79,16 @@ import type { Turn } from "@/types/conversation";
  *   time      the send time at a break as a centred line between two
  *             messages, and one above the greeting.
  *   reports   a round Core woke it for (a subtask finished, asks or
- *             failed; tickets 29 / 31) draws no row of yours: its reply
- *             stands alone, dated by the report at a break, and a reply
- *             that said nothing (`<no-reply/>`) draws nothing at all.
+ *             failed, tickets 29 / 31; a reminder came due; the daily
+ *             review) draws no row of yours: its reply stands alone,
+ *             dated by the report at a break, and a reply that said
+ *             nothing (`<no-reply/>`) draws nothing at all. While it
+ *             works it is drawn as above: the second half of a round of
+ *             yours as that round (ruling 197: you sent something off
+ *             and wait for it — merging what came back is the rest of
+ *             your round), any other as a woken one. A second half that
+ *             says nothing in the end (none so far) leaves nothing: its
+ *             dots and their line fade where they stood (ruling 138).
  *   scroll    贴底: a short conversation stacks up from the composer, a
  *             send lands at the bottom, and following the growth stops
  *             before the reply's start leaves the viewport
@@ -137,17 +157,35 @@ export const TYPING_DOT_GAP_EM = 4 / 15;
 /** The dots' row width in em. */
 export const TYPING_DOTS_WIDTH_EM = 3 * TYPING_DOT_EM + 2 * TYPING_DOT_GAP_EM;
 
-let reportCache: { turns: readonly Turn[]; report: boolean } | null = null;
+/** No dispatch records: one array, for the callers that have none. */
+const NO_DISPATCHES: readonly SubtaskDispatch[] = [];
 
-/** `inReportRound`, kept for the last turns array: the card's selector
- * runs on every store write (each chunk), and the turns change only
- * when a row lands. A woken round you wrote into while it worked (main
- * chat ticket 136) reads as one you started from then on: you are
- * waiting on it now. */
-function cachedReportRound(turns: readonly Turn[]): boolean {
-  if (reportCache?.turns === turns) return reportCache.report;
-  const report = inReportRound(turns) && !endsInYourWordsMidRound(turns);
-  reportCache = { turns, report };
+let reportCache: {
+  turns: readonly Turn[];
+  dispatches: readonly SubtaskDispatch[];
+  report: boolean;
+} | null = null;
+
+/** `inReportRound`, kept for the last turns and dispatch records: the
+ * card's selector runs on every store write (each chunk), and both
+ * change only when a row or a record lands. Two woken rounds read as
+ * one you started: one you wrote into while it worked (main chat ticket
+ * 136), from then on — you are waiting on it now; and the second half
+ * of a round of yours (ruling 197, lib/subtasks.ts `inSecondHalf`: a
+ * subtask your round sent off came back), from the wake on — you were
+ * waiting on it all along. */
+function cachedReportRound(
+  turns: readonly Turn[],
+  dispatches: readonly SubtaskDispatch[],
+): boolean {
+  if (reportCache?.turns === turns && reportCache.dispatches === dispatches) {
+    return reportCache.report;
+  }
+  const report =
+    inReportRound(turns) &&
+    !endsInYourWordsMidRound(turns) &&
+    !inSecondHalf(turns, dispatches);
+  reportCache = { turns, dispatches, report };
   return report;
 }
 
@@ -167,17 +205,25 @@ function endsInYourWordsMidRound(turns: readonly Turn[]): boolean {
  * woke it for the card's 「正在输入…」 too, say the same thing (a round
  * you started has the card's own words, rulings 134, 135: lib/
  * assistant.ts `workingLine`). A round you started types from the send
- * on; a round Core woke it for (its opener a report row: lib/
- * subtasks.ts `inReportRound`) only while it writes words
- * (`assistantWriting`) — it stops when a tool dispatch shows and starts
- * again when it writes again, as someone in an IM types on and off; a
- * silent one (`<no-reply/>`, held back by the cleaning) never does.
+ * on, and so does the second half of one (ruling 197: Core woke it with
+ * a subtask your round sent off, `inSecondHalf` over the main chat's
+ * `dispatches`), from the wake on; any other round Core woke it for
+ * (its opener a report row: lib/subtasks.ts `inReportRound` — a
+ * reminder, the daily review, a subtask one of those sent off) only
+ * while it writes words (`assistantWriting`) — it stops when a tool
+ * dispatch shows and starts again when it writes again, as someone in
+ * an IM types on and off; a silent one (`<no-reply/>`, held back by the
+ * cleaning) never does. Without `dispatches` no woken round is a second
+ * half.
  */
 export function assistantTyping(
   turns: readonly Turn[],
   inFlightContent: string,
+  dispatches: readonly SubtaskDispatch[] = NO_DISPATCHES,
 ): boolean {
-  return !cachedReportRound(turns) || assistantWriting(inFlightContent);
+  return (
+    !cachedReportRound(turns, dispatches) || assistantWriting(inFlightContent)
+  );
 }
 
 /**
@@ -185,16 +231,18 @@ export function assistantTyping(
  * MainView's condition for the round at the conversation's end
  * (running, the main chat, the round not settled — its answer landed,
  * or a silent report — and not asking you: it waits then, it is not
- * busy); within it, `assistantTyping`. Only a live round reads the
- * turns, so a workbench conversation never touches the cache.
+ * busy); within it, `assistantTyping`, with the main chat's dispatch
+ * records. Only a live round reads the turns, so a workbench
+ * conversation never touches the cache.
  */
 export function typingBubbleShown(
   live: boolean,
   turns: readonly Turn[],
   inFlightContent: string,
+  dispatches: readonly SubtaskDispatch[] = NO_DISPATCHES,
 ): boolean {
   if (!live) return false;
-  return assistantTyping(turns, inFlightContent);
+  return assistantTyping(turns, inFlightContent, dispatches);
 }
 
 // ---- While it runs: a step's first line -----------------------------------
@@ -253,8 +301,9 @@ let writingCache: { inFlightContent: string; writing: boolean } | null = null;
  * Whether the assistant is writing words right now — in a round Core
  * woke it for, the typing bubble and the card's 「正在输入…」
  * (`assistantTyping`; main chat PRD rulings 104, 110); in a round you
- * started, the line under the dots' 「正在写回复」 and, away from the
- * main chat, the card's 「正在输入…」 (rulings 134, 135;
+ * started or its second half (ruling 197), the line under the dots'
+ * 「正在写回复」 and, away from the main chat, the card's 「正在输入…」
+ * (rulings 134, 135;
  * lib/assistant-progress.ts, hooks/useAssistantProgress.ts). A
  * deterministic reading of this step's raw stream (`inFlightContent`;
  * turn_end clears it), no guess: no `<thinking>` left open
