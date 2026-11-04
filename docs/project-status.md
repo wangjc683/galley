@@ -9,24 +9,23 @@ live in [refactor](./archive/refactor/README.md).
 
 ## Current Target
 
-- Package version: `0.7.5`.
-- Git tag / GitHub Release: `v0.7.5` is the current published stable release
-  (tagged at `6e4fc6f0` on 2026-11-03, published 2026-11-03, GitHub Latest).
+- Package version: `0.7.6`.
+- Git tag / GitHub Release: `v0.7.6` is the current published stable release
+  (tagged at `a6ccf951` on 2026-11-04, published 2026-11-04, GitHub Latest).
 - Agent API schema: `schemaVersion: 3` (since the Goal removal on
   2026-10-13, first shipped in `v0.7.0`; `2` first shipped in `v0.5.0`). The
   server keeps answering `1` and `2` for every command that did not change;
   every goal command, v1 and v2, is `unknown_command` under every pin.
-- Release tier: stable patch; default update channel points at `v0.7.5`.
+- Release tier: stable patch; default update channel points at `v0.7.6`.
   `beta` is kept as a legacy alias for older builds.
-- Shipped GA baseline: `a9a36b4` (audited 2026-10-26, first shipped in
-  `v0.7.1`, again in `v0.7.2`, `v0.7.3`, `v0.7.4` and `v0.7.5`; two `ga.py` fixes, no Galley change). The previous `b70079d`
-  shipped `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never shipped
-  on its own; upstream's new mykey store broke the managed loader, fixed in
-  the runner); `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` `v0.5.1` …
-  `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. Audited on main,
-  not yet shipped: `d66509b` (2026-11-03; `llmcore.py`'s text protocol
-  split into `legacy_llmcore.py`, one `0001` hunk so managed memory
-  distillation still reads L0, no Galley code change). See
+- Shipped GA baseline: `d66509b` (audited 2026-11-03, first shipped in
+  `v0.7.6`; `llmcore.py`'s text protocol split into `legacy_llmcore.py`,
+  one `0001` hunk so managed memory distillation still reads L0, no Galley
+  code change). The previous `a9a36b4` shipped `v0.7.1` … `v0.7.5`,
+  `b70079d` `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never
+  shipped on its own; upstream's new mykey store broke the managed loader,
+  fixed in the runner); `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f`
+  `v0.5.1` … `v0.6.0`, `efb3bc6` before it `v0.4.11` … `v0.5.0`. See
   [GA baseline](./ga-baseline.md).
 - Product shape: a personal assistant on the user's own computer that
   scales into a local agent team (since `v0.7.0`; before it, a dual-native
@@ -35,6 +34,43 @@ live in [refactor](./archive/refactor/README.md).
 Galley GUI and Galley CLI are peer frontends over Rust-side Galley Core. The
 GUI is for the human operator at the desk; the CLI is for trusted Agent /
 Supervisor automation on the same machine.
+
+`v0.7.6` (2026-11-04) is a patch one day after `v0.7.5`, 86 commits (the
+first draft's 77, the retag's 9). The main chat leans on the model with a few judgments
+instead of dispatch rules (main chat ruling 186, ticket 139): it looks
+things up on the web itself and gives sources; a deliverable the user will
+decide on, pass on or keep goes to subtasks, one per part and all at once,
+and comes back merged (ruling 193, ticket 143); the user's memos on how
+they want such work done come first, and work of its own starts with a
+line of how (rulings 194–196, ticket 145). Text sent while it runs is
+interjected and read at its next step (ticket 136; `session send` may
+answer `dispatch: "interjected"`); a `tell_user` tool and words outside
+`<summary>` reach the user mid-run (tickets 137, 142); a subtask starts
+with the main chat's last turns as background (ticket 138, migration 056);
+one reply's batch of subtasks wakes the main chat once, when all are back
+or 5 minutes after the first (ticket 144). A merge round for subtasks the
+user dispatched draws like the user's own round, the to-do panel no longer
+lists subtasks, and the sidebar's 「还有 N 件在办」 unfolds in place (ruling
+197, ticket 146); the managed runner hands the main chat its wake note in
+full instead of upstream's 「Long user prompt saved to …」 file, and a cut
+answer points at `finalAnswer[3000:]` (ruling 198, ticket 147). Bundled
+GA: patch `0031` cuts a model request still streaming at 300 s (ticket
+140); baseline `a9a36b4` -> `d66509b`. Process cards draw `Bash` /
+`PowerShell` as running code and name a lone tool when a step has no
+summary (baseline tickets 02–03). Graded patch: the largest piece (the
+main chat's judgments and interjection) extends the `v0.7.0` main chat;
+`dispatch: "interjected"` is additive under schema 3. The first draft was
+withdrawn: on smoke S3 the merge round ran 100 s with nothing drawn for
+its first ~54 s; JC chose to fix both the drawing and the speed before
+shipping (rulings 197–198). Pre-flight for the retag: `check.yml` green on
+`a6ccf951` (run 41811337897), all seven jobs; the six gate scripts in a
+`git archive` copy of `9254fdbd`; the bundled-runtime gate on `mac-x64`;
+vitest in two time zones. JC's smoke of the second draft: S3 passed, the
+merge round 73 s and 3 steps from the wake, the first step 13 s in, no
+read of the saved prompt file (S1 and S2 passed on the first draft). Stable
+promoted and verified the same session (run 41826253185). W1 not done.
+Full narrative: devlog
+[2026-11-04-v0.7.6-release](./devlog/2026-11-04-v0.7.6-release.md).
 
 `v0.7.5` (2026-11-03) is a patch four days after `v0.7.4`, 98 commits. The
 main chat hands work out differently: what you ask it answers itself, an
@@ -725,19 +761,20 @@ devlog 2026-07-21-windows-composer-refocus).
 
 ## Current Release State
 
-`v0.7.5` is published and promoted as the live stable release (published
-2026-11-03 08:45 UTC). The default `updates/stable/latest.json` channel points
-at `v0.7.5`, with the legacy `updates/beta/latest.json` alias pointing at the
+`v0.7.6` is published and promoted as the live stable release (published
+2026-11-04 12:05 UTC). The default `updates/stable/latest.json` channel points
+at `v0.7.6`, with the legacy `updates/beta/latest.json` alias pointing at the
 same version for older installed builds. The live verifier passed with
 `--cache-bust` for both channels across all three platforms (darwin-aarch64,
-darwin-x86_64, windows-x86_64), in the promote run (41605673604) and again
-locally (channel branch at `00952110`); a plain `curl` read 0.7.5 right
-after promote. One draft cut (release run 41596646551, on the bump commit
-`6e4fc6f0`); JC smoked the notification and the reply frame on it and
-approved publishing; the two replacement dispatch sentences and W1 are
-owed under Unreleased On Main. The bundled-runtime gate passed on
-`mac-x64`; `check.yml` was green on `008dfae0` (run 41594453188) and on the
-bump commit (run 41596646226), all seven jobs.
+darwin-x86_64, windows-x86_64), in the promote run (41826253185) and again
+locally (channel branch at `2f6d8407`); a plain `curl` read 0.7.6 at 12:06
+UTC, right after promote. Two drafts cut: the first (release run
+41790806641, on `559ea1af`) was withdrawn after smoke S3 and its tag
+deleted; the second (release run 41813629971, tag on `a6ccf951`) is the one
+published. JC smoked S3 on it and approved publishing; W1 is owed under
+Unreleased On Main. The bundled-runtime gate passed on `mac-x64`;
+`check.yml` was green on `559ea1af` (run 41788853109) and on `a6ccf951`
+(run 41811337897), all seven jobs.
 
 `v0.7.3` (2026-10-28) went through the same path as `v0.7.2`: one draft cut
 (release run 40662506980), JC approved publishing without reporting smoke
@@ -838,11 +875,11 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.7.4` → `v0.7.5` (and `v0.7.0` →
-   `v0.7.1` → `v0.7.2` → `v0.7.3` → `v0.7.4` before it) is owed. JC's Mac was installed
-   straight from the draft all five times, so it needs a machine still on an
-   older build (the Windows one, for instance); the CDN served 0.7.5 without
-   cache-bust at 08:46 UTC, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
+1. App-update dogfood (SOP step 10): `v0.7.5` → `v0.7.6` (and `v0.7.0` →
+   `v0.7.1` → `v0.7.2` → `v0.7.3` → `v0.7.4` → `v0.7.5` before it) is owed.
+   JC's Mac was installed straight from the draft all six times, so it needs
+   a machine still on an older build (the Windows one, for instance); the
+   CDN served 0.7.6 without cache-bust at 12:06 UTC, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -894,72 +931,24 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.5..HEAD`. Merged since `v0.7.5`
-(2026-11-03/04), not all dogfooded yet. The main chat now leans on the
-model with a few hands instead of dispatch rules (main chat PRD ruling
-186, which turns back rulings 183-185's dispatch lines and ticket 135's
-browser guard; JC chose to ship this as one `v0.7.6`): its entry layer is
-a few judgments (do it yourself, on the web too, or hand it to subtasks,
-several at once; look a fact in the world up and give sources; change
-things on the user's computer or accounts by `authority.md`'s three
-levels), and it runs what the manual's parts will ask for in the step it
-reads them (ruling 192; ticket 139, eval v5). Text sent while its run is
-going is interjected: Core hands it to the runner, which writes GA's
-`intervene`; the next step reads it and it is saved right after that
-step; unread at the run's end, it goes out as the next turn (ticket 136;
-`session send` may answer `dispatch: "interjected"`). The model has a
-`tell_user` tool (runner layer, not the patch stack) for a line to the
-user mid-run, and in a run the user started, words it writes outside
-`<summary>` in a step that calls tools reach the user the same way
-before the tools run (tickets 137, 142; ruling 191). A subtask it
-dispatches carries the main chat's last turns (up to 10, 15,000
-characters) as read-only background, stored with the dispatch record
-(ticket 138, migration 056, ruling 187). Answer-like results come back in
-full (ruling 183 point 4). Deliverables the user will decide on or keep
-and that take looking into (a comparison, a plan, a report, a survey) go
-to subtasks by default, one tag per part when they split, and the main
-chat merges the parts when they are back; questions, remarks and single
-facts it answers itself (ruling 193, ticket 143, eval v6). In the main
-chat the Galley layer opens with its standing (the user's personal
-assistant with a team behind it), and the dispatch paragraph states
-what each path costs; ruling 193's default stays as the starting point,
-the user's memos on how they want things done come first, what they
-say goes, work done here starts with a line of how, and unrelated
-errands go out at once (rulings 194-196, ticket 145, eval v7-v9 on
-three models). When one reply dispatches two or more subtasks
-(a batch), Core holds a finished one's report while its siblings still
-run and wakes the main chat once when the batch is back, or 5 minutes
-after the first finished; asks, errors, step-limit pauses and
-not-started reports still wake at once (ruling 193 point 5, ticket 144). Reminders and the morning review check things
-themselves or by a subtask. In the managed runtime each model request
-gets 300 seconds from sending to its last line read; past that the
-stream is cut without a retry and the model sees an interrupted-stream
-marker (ruling 188, ticket 140, patch `0031`; two degenerate requests ran
-~900 s). The GUI draws `Bash` / `PowerShell` calls as `code_run`
-(baseline ticket 02), and a step whose heading falls back reads a lone
-tool's name instead of 「调用了 code_run」 (baseline ticket 03). GA baseline `a9a36b4` -> `d66509b` (target
-`v0.7.6`, [devlog](./devlog/2026-11-03-ga-upstream-upgrade-a9a36b4-to-d66509b.md)):
-upstream anchored L0 to the code dir, which would have switched off managed
-memory distillation; patch `0001` points it at the state root, so Feishu,
-Telegram and Discord now read L0 too. Not dogfooded in dev.
+Release-scope truth is `git log v0.7.6..HEAD`. Merged since `v0.7.6`:
+release docs only.
 
-**`v0.7.6`'s first draft was withdrawn** (2026-11-04,
-[devlog](./devlog/2026-11-04-v0.7.6-release.md)): main carries version
-`0.7.6` (`559ea1af`), but the draft and the tag were deleted after smoke
-S3. When a batch of subtasks the user dispatched came back, the main
-chat's merge round ran 100 s with nothing drawn for its first ~54 s (main
-chat ruling 134 point 2 drew no progress in a woken round). Merged since
-for the retag: a merge round for subtasks you dispatched draws like your
-own round (the dots and 「在做什么 · 用时」 from the wake, sliding in as a
-send does; the card 「正在工作…」), the to-do panel stops listing
-subtasks, the sidebar's 「还有 N 件在办」 expands in place (ruling 197,
-ticket 146); in the managed runtime the runner hands the main chat a
-wake note of its own in full instead of upstream GA's 「Long user prompt
-saved to …」 file (any input over 2,000 characters), and a cut answer
-points at `finalAnswer[3000:]` (ruling 198, ticket 147; gpt-6.1-sol one
-step fewer in the eval; dev walk 11-04: the merge round 65 s and 2 steps,
-S3's was 100 s). Evals use gpt-6.1-sol only from 11-04. Owed before the
-retag: JC looks at the merge round in the dev window.
+**Owed from the `v0.7.6` smoke** (the list is in the release devlog). S1
+(it looks the weather up itself, a line first, sources) and S2 (an
+interjection read at the next step) passed on the first draft; S3 failed
+there (the merge round drew nothing for ~54 s) and passed on the second:
+two subtasks dispatched 33 s after the message, back 323 s apart, one
+wake carrying both, the merge round's first step 13 s after the wake and
+its answer at 73 s in 3 steps, no read of the saved prompt file (upstream
+still writes one per long wake into the state root's `temp/`, ticket 147
+Open risk 6). JC said S3 passed; the merge round's first-frame slide and
+ruling 197's sidebar and panel parts were not reported one by one. Ticket
+147's other Open risk stands: on glm and deepseek a merge of long results
+dropped its sources (evals run on gpt-6.1-sol only from 11-04). Not done:
+W1, a Windows install, which would also be the first packaged build to
+run migrations 053–056 on an older database (the Windows machine's is
+likely at 052).
 
 **Owed from the `v0.7.5` smoke** (the list is in the release devlog). S1
 and S3 passed by JC's word: the reply notification read 「Galley · …」 and
@@ -969,11 +958,10 @@ reported one by one). S2: the weather question was answered in the main
 chat (8 steps); the first dispatch sentence was answered too, correctly
 under ruling 160 (the sentence was wrong), and became ruling 183; the two
 replacement sentences (a research report; two independent file errands in
-one message) were not sent, so parallel dispatch on a packaged build is
-unseen (JC sent two in tauri dev for ticket 127). Ticket 129's
-undelivered-report notification was not provoked. Not done: W1, a Windows
-install, which would also be the first packaged build to run migrations
-053–055 on an older database. Still owed from before: ticket 04's second
+one message) were not sent; parallel dispatch on a packaged build was
+first seen in `v0.7.6`'s S3 (two subtasks, both drafts). Ticket 129's
+undelivered-report notification was not provoked. W1 is carried under
+`v0.7.6` above. Still owed from before: ticket 04's second
 real-machine step (stopping a workbench run you watch); ticket 98's noticed
 interest (from `v0.7.2`).
 
@@ -1208,7 +1196,11 @@ in `v0.7.3` with upstream at `e4d956f`: six commits that touch only
 still at `e4d956f`, and in `v0.7.5` with upstream 17 commits past
 `e4d956f`: among them `llmcore.py`'s split into `legacy_llmcore.py`, right
 where patches `0007` and `0030` sit, so the bump gets its own round
-(reasoning in the `v0.7.5` release devlog).
+(reasoning in the `v0.7.5` release devlog). That round audited `d66509b`
+(2026-11-03), which shipped in `v0.7.6` with upstream 4 commits past it
+(`38085e0`: reflect mode in `agentmain.py` and `frontends/p2p_ws_client.py`,
+neither of which Galley loads, so not followed; reasoning in the `v0.7.6`
+release devlog).
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -1252,10 +1244,10 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.7.5 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.7.6 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `a9a36b4` (2026-10-26), shipped since `v0.7.1` (again in `v0.7.2`, `v0.7.3`, `v0.7.4` and `v0.7.5`; `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `d66509b` (2026-11-03), shipped in `v0.7.6` (`a9a36b4` shipped `v0.7.1` … `v0.7.5`, `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -1278,7 +1270,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.7.5`. For the next release, bump every
+- Current package metadata uses `0.7.6`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.

@@ -20,7 +20,7 @@ Locked commit: `d66509bf09f6dd356704a257744a1d7ff899f8f9`
 - Tree hash: `009430679a2d3587a4b7ffd51fda89df92fa7bbe`
 - Source: `lsdefine/GenericAgent` upstream `main`
 - Date audited: 2026-11-03
-- Shipped in: not yet; audited for `v0.7.6` (after `v0.7.5`)
+- Shipped in: `v0.7.6` (2026-11-04; upstream `main` at `38085e0`, 4 commits past `d66509b`, not followed: reflect mode in `agentmain.py` and `frontends/p2p_ws_client.py`, neither of which Galley loads)
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.
