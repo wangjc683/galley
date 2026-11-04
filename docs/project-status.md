@@ -919,7 +919,14 @@ full (ruling 183 point 4). Deliverables the user will decide on or keep
 and that take looking into (a comparison, a plan, a report, a survey) go
 to subtasks by default, one tag per part when they split, and the main
 chat merges the parts when they are back; questions, remarks and single
-facts it answers itself (ruling 193, ticket 143, eval v6). When one reply dispatches two or more subtasks
+facts it answers itself (ruling 193, ticket 143, eval v6). In the main
+chat the Galley layer opens with its standing (the user's personal
+assistant with a team behind it), and the dispatch paragraph states
+what each path costs; ruling 193's default stays as the starting point,
+the user's memos on how they want things done come first, what they
+say goes, work done here starts with a line of how, and unrelated
+errands go out at once (rulings 194-196, ticket 145, eval v7-v9 on
+three models). When one reply dispatches two or more subtasks
 (a batch), Core holds a finished one's report while its siblings still
 run and wakes the main chat once when the batch is back, or 5 minutes
 after the first finished; asks, errors, step-limit pauses and
