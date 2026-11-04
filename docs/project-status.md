@@ -915,7 +915,11 @@ before the tools run (tickets 137, 142; ruling 191). A subtask it
 dispatches carries the main chat's last turns (up to 10, 15,000
 characters) as read-only background, stored with the dispatch record
 (ticket 138, migration 056, ruling 187). Answer-like results come back in
-full (ruling 183 point 4). Reminders and the morning review check things
+full (ruling 183 point 4). When one reply dispatches two or more subtasks
+(a batch), Core holds a finished one's report while its siblings still
+run and wakes the main chat once when the batch is back, or 5 minutes
+after the first finished; asks, errors, step-limit pauses and
+not-started reports still wake at once (ruling 193 point 5, ticket 144). Reminders and the morning review check things
 themselves or by a subtask. In the managed runtime each model request
 gets 300 seconds from sending to its last line read; past that the
 stream is cut without a retry and the model sees an interrupted-stream

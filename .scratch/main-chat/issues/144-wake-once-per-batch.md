@@ -1,6 +1,6 @@
 # 144 同一条回复派出的几件，Core 等齐了一起叫醒主对话
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-04 快进合入 `fa881e4c`。主会话验收：读过认批、`still_running`、`due_now`、`held_batches`、调度器那一拍与批次查询；在 worktree 重跑 `subtask_report_test` 27 条全过；代理验证 workspace 1,344 条、文档链接与门禁过，并做过变异检验（`due_now` 恒真时 7 条失败）。Open risk 6 的两个读法主会话同意：上限过后晚到的几件从其中第一件回来起重新计时；被打回的那件算在跑，同批后做完的等它，最多 5 分钟。要真机看：三件一批只叫醒一次、合成一张表）
 
 来源：[主对话 PRD](../PRD.md) 裁决 193 第 5 条（JC 11-04：「甲甲甲」）。只在内置运行时的主对话；外置零变化（外置没有主对话，也没有子任务）。和票 [143](./143-deep-work-fans-out.md)（条款、手册、评测）并行做，互不碰文件。
 
