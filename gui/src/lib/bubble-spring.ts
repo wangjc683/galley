@@ -46,6 +46,15 @@ export const SETTLE_WITHIN_PX = 0.5;
  * (px; ticket 151, ruling 201 第 4 条). */
 export const MAX_KICK_PX = 1.5;
 
+/** How fast you scroll (px/s) for the rows farthest from the pointer to
+ * reach MAX_LAG_PX (ruling 201 第 8 条): below it a row lags in
+ * proportion to your speed, so a slow read barely moves the rows (about
+ * 1.5px at 400px/s) and a quick flick stretches them to the cap. Taking
+ * each frame's whole move instead held the far rows at the cap from
+ * about 35px/s up: in the real window (2026-11-06 probe) a fixed 6px
+ * sink for the whole of every scroll, slow or fast. */
+export const FULL_LAG_SPEED_PX_S = 1500;
+
 // ---- The spring ---------------------------------------------------------------
 
 /** A row on the spring: how far it is from its place (px; positive:
@@ -148,6 +157,16 @@ export function naturalFrequency(
 export const SPRING_OMEGA = naturalFrequency();
 
 /**
+ * The share of each frame's move a row at share 1 takes (`lag`), from
+ * FULL_LAG_SPEED_PX_S: scrolling steadily at speed u, a row taking g of
+ * the move each frame settles where the spring's pull matches it, at
+ * g·u·2ζ/ω, so this gain puts that at MAX_LAG_PX for u at
+ * FULL_LAG_SPEED_PX_S.
+ */
+export const LAG_GAIN =
+  MAX_LAG_PX / ((FULL_LAG_SPEED_PX_S * 2 * DAMPING_RATIO) / SPRING_OMEGA);
+
+/**
  * How far past its place a push of `velocity` (px/s) carries a row at
  * rest, at most (px; signed as the push). Linear in the push.
  */
@@ -204,7 +223,8 @@ export function lagShare(distance: number, viewportHeight: number): number {
 }
 
 /**
- * A row lags by its share of the scroll: content moving up by `delta`
+ * A row lags by its share of the scroll, times LAG_GAIN (so how far it
+ * lags follows your speed): content moving up by `delta`
  * (scrollTop grew) leaves the row lower (positive), at most MAX_LAG_PX
  * from its place. Held at the cap it stops there (its speed 0): let go,
  * it comes back as from rest.
@@ -213,8 +233,9 @@ export function lag(
   state: SpringState,
   share: number,
   delta: number,
+  gain: number = LAG_GAIN,
 ): SpringState {
-  const x = state.x + share * delta;
+  const x = state.x + gain * share * delta;
   if (Math.abs(x) <= MAX_LAG_PX) return { x, v: state.v };
   return { x: Math.sign(x) * MAX_LAG_PX, v: 0 };
 }

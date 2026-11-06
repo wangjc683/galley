@@ -33,6 +33,7 @@ import {
 } from "@/lib/animate-scroll";
 import {
   KEY_GRACE_MS,
+  LAG_GAIN,
   WHEEL_GRACE_MS,
   anchorDistance,
   anchorIndex,
@@ -221,7 +222,10 @@ class BubbleSpring {
   private readonly cleanups: (() => void)[] = [];
   private readonly access: ScrollTopAccess | null;
 
-  constructor(private readonly container: HTMLElement) {
+  constructor(
+    private readonly container: HTMLElement,
+    private readonly lagGain: number = LAG_GAIN,
+  ) {
     this.access = watchWrites(container, (before, after) => {
       this.count(before);
       this.seen = after;
@@ -436,6 +440,7 @@ class BubbleSpring {
             viewHeight,
           ),
           delta,
+          this.lagGain,
         ),
       );
     }
@@ -462,7 +467,10 @@ class BubbleSpring {
     }
     this.rows = next;
 
-    if (this.pending === 0 && states.every(atRest)) {
+    // Not on a frame that took some of your scroll: a slow scroll adds
+    // less than REST_PX a frame (LAG_GAIN), and resting there would set
+    // every row back to its place each frame, so it would never lag.
+    if (delta === 0 && this.pending === 0 && states.every(atRest)) {
       this.rest();
       return;
     }
@@ -512,10 +520,16 @@ class BubbleSpring {
 const springs = new WeakMap<HTMLElement, BubbleSpring>();
 
 /** Hangs the main chat's rows on the spring (`container`: its scroller).
- * Returns the detach: listeners and the accessor off, every row back. */
-export function attachBubbleSpring(container: HTMLElement): () => void {
+ * Returns the detach: listeners and the accessor off, every row back.
+ * `lagGain` is for tests of the rules that do not depend on how fast you
+ * scroll (anchor, neighbours, band, settling): 1 takes each frame's
+ * whole move, so a few frames show them; the page uses LAG_GAIN. */
+export function attachBubbleSpring(
+  container: HTMLElement,
+  options: { lagGain?: number } = {},
+): () => void {
   springs.get(container)?.detach();
-  const spring = new BubbleSpring(container);
+  const spring = new BubbleSpring(container, options.lagGain);
   springs.set(container, spring);
   return () => {
     spring.detach();

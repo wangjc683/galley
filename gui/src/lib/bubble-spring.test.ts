@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   DAMPING_RATIO,
+  FULL_LAG_SPEED_PX_S,
+  LAG_GAIN,
   MAX_KICK_PX,
   MAX_LAG_PX,
   MAX_NEIGHBOUR_STEP_PX,
@@ -139,13 +141,33 @@ describe("lagging behind the scroll", () => {
   });
 
   it("lags the way the content does not move: down when it scrolls up", () => {
-    expect(lag({ x: 0, v: 0 }, 0.5, 4)).toEqual({ x: 2, v: 0 });
-    expect(lag({ x: 0, v: 5 }, 1, -3)).toEqual({ x: -3, v: 5 });
+    expect(lag({ x: 0, v: 0 }, 0.5, 4, 1)).toEqual({ x: 2, v: 0 });
+    expect(lag({ x: 0, v: 5 }, 1, -3, 1)).toEqual({ x: -3, v: 5 });
+  });
+
+  it("takes LAG_GAIN of the move by default: the far rows reach 6px at FULL_LAG_SPEED_PX_S (ruling 201 第 8 条)", () => {
+    expect(lag({ x: 0, v: 0 }, 1, 10).x).toBeCloseTo(10 * LAG_GAIN);
+    // Scrolling steadily, the spring's pull matches the lag at
+    // g·u·2ζ/ω: MAX_LAG_PX at the full speed, a quarter of it at a
+    // quarter of the speed.
+    const settled = (speed: number) => {
+      let s = { x: 0, v: 0 };
+      for (let i = 0; i < 300; i++) {
+        s = springStep(s, 16);
+        s = lag(s, 1, (speed * 16) / 1000);
+      }
+      return s.x;
+    };
+    expect(settled(FULL_LAG_SPEED_PX_S)).toBeCloseTo(MAX_LAG_PX, 0);
+    expect(settled(FULL_LAG_SPEED_PX_S / 4)).toBeCloseTo(MAX_LAG_PX / 4, 0);
   });
 
   it("stops at 6px, and held there stops moving", () => {
-    expect(lag({ x: 5, v: -20 }, 1, 40)).toEqual({ x: MAX_LAG_PX, v: 0 });
-    expect(lag({ x: -5, v: 20 }, 1, -40)).toEqual({ x: -MAX_LAG_PX, v: 0 });
+    expect(lag({ x: 5, v: -20 }, 1, 40, 1)).toEqual({ x: MAX_LAG_PX, v: 0 });
+    expect(lag({ x: -5, v: 20 }, 1, -40, 1)).toEqual({
+      x: -MAX_LAG_PX,
+      v: 0,
+    });
   });
 
   it("finds the row the anchor is on, else the nearest", () => {

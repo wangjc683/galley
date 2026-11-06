@@ -112,6 +112,12 @@ function build(extra?: (root: HTMLElement) => void): void {
   rows = Array.from(root.children) as HTMLElement[];
 }
 
+/** The rules that do not depend on how fast you scroll (anchor,
+ * neighbours, band, settling, whose scroll) at a gain of 1: each frame's
+ * whole move, so a few test frames show them. The real gain has its own
+ * test ("follows your speed"). */
+const WHOLE_MOVE = { lagGain: 1 };
+
 function scrollTopNow(): number {
   return engineScrollTop.get!.call(container) as number;
 }
@@ -175,7 +181,7 @@ afterEach(() => {
 describe("the person's scroll (ruling 201 第 2 条)", () => {
   it("lags the rows far from the pointer, not the one under it, and lets them back", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     // The pointer over row 4 (100 + 4 × 50 = 300 … 340); 15px of scroll
     // leaves it under the pointer.
     wheelScroll(3, 5, 320);
@@ -217,7 +223,7 @@ describe("the person's scroll (ruling 201 第 2 条)", () => {
   it("lags the other way scrolling up", () => {
     build();
     engineScrollTop.set!.call(container, 400);
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheelScroll(-30, 3, 50);
     expect(Math.min(...offsets())).toBeLessThan(-3);
     expect(Math.max(...offsets())).toBeLessThanOrEqual(0);
@@ -229,7 +235,7 @@ describe("the person's scroll (ruling 201 第 2 条)", () => {
       card.setAttribute("data-role", "assistant-process-card");
       root.insertBefore(card, root.children[9]);
     });
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheelScroll(30, 3, 60);
     const card = container.querySelector(
       '[data-role="assistant-process-card"]',
@@ -241,7 +247,7 @@ describe("the person's scroll (ruling 201 第 2 条)", () => {
 
   it("moves only the rows in and near the viewport", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheelScroll(20, 3, 60);
     // 60px scrolled: the viewport shows content 60 … 660, the band 160px
     // beyond. Row 25 starts at 1350.
@@ -252,7 +258,7 @@ describe("the person's scroll (ruling 201 第 2 条)", () => {
 
   it("lifts rows into their own layer only while they are off their place", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheelScroll(30, 2, 60);
     const moved = rows.filter((row) => translateOf(row) !== 0);
     expect(moved.length).toBeGreaterThan(0);
@@ -267,7 +273,7 @@ describe("the person's scroll (ruling 201 第 2 条)", () => {
 
   it("takes the viewport's middle for a scroll by keys", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     for (let i = 0; i < 3; i++) {
       document.body.dispatchEvent(
         new KeyboardEvent("keydown", { key: "PageDown", bubbles: true }),
@@ -286,7 +292,7 @@ describe("the person's scroll (ruling 201 第 2 条)", () => {
 
   it("takes the scrollbar held as the person's, from the middle", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     container.dispatchEvent(
       new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
     );
@@ -300,7 +306,7 @@ describe("the person's scroll (ruling 201 第 2 条)", () => {
 
   it("hears a touch", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     for (let i = 0; i < 3; i++) {
       const touch = new Event("touchmove", { bubbles: true });
       Object.defineProperty(touch, "touches", { value: [{ clientY: 60 }] });
@@ -311,9 +317,28 @@ describe("the person's scroll (ruling 201 第 2 条)", () => {
     expect(Math.max(...offsets())).toBeGreaterThan(3);
   });
 
+  it("follows your speed at the page's gain: a slow read barely moves the rows, a quick scroll takes them to 6px (ruling 201 第 8 条)", () => {
+    const farthest = (perFrame: number) => {
+      build();
+      detach = attachBubbleSpring(container);
+      wheelScroll(perFrame, 30, 60);
+      const most = Math.max(...offsets());
+      detach();
+      frames.runOut();
+      container.remove();
+      return most;
+    };
+    // 5px a frame (about 300px/s, reading): about 1px. 25px a frame
+    // (about 1,560px/s, past FULL_LAG_SPEED_PX_S): at the cap.
+    const slow = farthest(5);
+    expect(slow).toBeGreaterThan(0);
+    expect(slow).toBeLessThanOrEqual(2);
+    expect(farthest(25)).toBe(MAX_LAG_PX);
+  });
+
   it("is a frame of any length: a dropped frame neither blows up nor jumps back", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheel(60);
     userScroll(200);
     frames.tick(250);
@@ -328,7 +353,7 @@ describe("the person's scroll (ruling 201 第 2 条)", () => {
 describe("the app's scrolls move nothing (ruling 201 第 3 条)", () => {
   it("a `scrollTop` the app writes, even right after a wheel tick", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheel(60);
     // The follow's pin, a page held in place, a delete's anchor…
     container.scrollTop = 300;
@@ -343,7 +368,7 @@ describe("the app's scrolls move nothing (ruling 201 第 3 条)", () => {
 
   it("a write in the middle of the person's scroll takes out only its own move", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheel(60);
     userScroll(10);
     container.scrollTop = scrollTopNow() + 500;
@@ -358,7 +383,7 @@ describe("the app's scrolls move nothing (ruling 201 第 3 条)", () => {
     detach();
     frames.runOut();
     engineScrollTop.set!.call(container, 510);
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheel(60);
     userScroll(20);
     frames.tick();
@@ -367,7 +392,7 @@ describe("the app's scrolls move nothing (ruling 201 第 3 条)", () => {
 
   it("a smooth scroll of lib/animate-scroll.ts", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     animateScroll(container, 400);
     for (let i = 0; i < 40; i++) {
       container.dispatchEvent(new Event("scroll"));
@@ -379,7 +404,7 @@ describe("the app's scrolls move nothing (ruling 201 第 3 条)", () => {
 
   it("a scroll with no wheel, key, touch or scrollbar behind it", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     userScroll(40);
     frames.tick();
     expect(offsets().every((x) => x === 0)).toBe(true);
@@ -393,7 +418,7 @@ describe("the app's scrolls move nothing (ruling 201 第 3 条)", () => {
 
   it("not while a press in the content selects text", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     rows[3].dispatchEvent(
       new PointerEvent("pointerdown", {
         bubbles: true,
@@ -410,7 +435,7 @@ describe("the app's scrolls move nothing (ruling 201 第 3 条)", () => {
 
   it("not a key typed into a field", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     const field = document.createElement("textarea");
     document.body.append(field);
     field.dispatchEvent(
@@ -427,7 +452,7 @@ describe("reduced motion (foundations §2.7 「只淡不移」)", () => {
   it("moves nothing", () => {
     build();
     frames.state.reducedMotion = true;
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheelScroll(30, 3, 60);
     expect(offsets().every((x) => x === 0)).toBe(true);
     expect(kickBubbleRow(container, rows[2], -1.5)).toBe(false);
@@ -435,7 +460,7 @@ describe("reduced motion (foundations §2.7 「只淡不移」)", () => {
 
   it("read live: switched on mid-way, the rows are back the next frame", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheelScroll(30, 3, 60);
     expect(Math.max(...offsets())).toBeGreaterThan(0);
     frames.state.reducedMotion = true;
@@ -452,7 +477,7 @@ describe("the landing push (ticket 151's way in)", () => {
       value: 2,
       configurable: true,
     });
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     const bubble = rows[6].firstElementChild!;
     expect(kickBubbleRow(container, bubble, -1.5)).toBe(true);
     const path: number[] = [];
@@ -475,7 +500,7 @@ describe("the landing push (ticket 151's way in)", () => {
 
   it("says when the person's scroll is moving the rows", () => {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     expect(bubbleSpringScrolling(container)).toBe(false);
     wheel(60);
     userScroll(20);
@@ -491,7 +516,7 @@ describe("detaching", () => {
     expect(Object.getOwnPropertyDescriptor(container, "scrollTop")).toBe(
       undefined,
     );
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     expect(Object.getOwnPropertyDescriptor(container, "scrollTop")).not.toBe(
       undefined,
     );
@@ -513,7 +538,7 @@ describe("detaching", () => {
 describe("what measures the conversation (ruling 201 第 5 条)", () => {
   function lagged(): void {
     build();
-    detach = attachBubbleSpring(container);
+    detach = attachBubbleSpring(container, WHOLE_MOVE);
     wheelScroll(30, 3, 60);
     expect(Math.max(...offsets())).toBeGreaterThan(1);
   }
