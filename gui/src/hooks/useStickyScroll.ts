@@ -274,7 +274,8 @@ export function useStickyScroll({
   stickBottom?: boolean;
   /**
    * Bumped by MainView in the commit where the main chat's typing
-   * bubble hands over to its reply (tickets 51, 58): that commit's
+   * bubble hands over to its reply (tickets 51, 58), or where a line it
+   * tells you mid-run grows in above it (ticket 149): that commit's
    * follow is smooth, on the growth's clock (`Landing` above). Not
    * following then (you are reading further up): nothing scrolls, as
    * before.

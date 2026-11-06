@@ -23,6 +23,7 @@ import {
   settledTypingOpacity,
   shrinkOrigin,
   slideKeyframes,
+  toldLineFade,
   typingDepartureClaimed,
   typingLeaveFades,
   wokenTypingFade,
@@ -191,6 +192,17 @@ describe("the typing bubble with nothing growing out of it", () => {
       delayMs: 0,
       easing: "pop",
     });
+  });
+});
+
+describe("a line told mid-run under reduced motion", () => {
+  it("fades in whole, as your bubble on a send: --motion-base, --ease-pop, at once", () => {
+    expect(toldLineFade(TIMING)).toEqual({
+      durationMs: 160,
+      delayMs: 0,
+      easing: "pop",
+    });
+    expect(toldLineFade(TIMING)).toEqual(sendFades(TIMING, null).bubble);
   });
 });
 

@@ -80,8 +80,10 @@ import { mendStreamingMarkdown } from "@/lib/mend-streaming-markdown";
 import { stepLimitTailVisible } from "@/lib/step-limit";
 import { takeQuote } from "@/lib/todo-open";
 import {
+  toldLineAtEnd,
+  toldLineGrows,
   typingBubbleHandoff,
-  type TypingBubbleFrame,
+  type ToldLineFrame,
   type TypingBubbleHandoff,
 } from "@/lib/typing-bubble-handoff";
 import { cn } from "@/lib/utils";
@@ -523,17 +525,23 @@ function MainViewContent({
   // cold-start restore (lib/typing-bubble-handoff.ts). MainView mounts
   // per session, so a switch or a reload starts from what is there.
   // Guarded setState-in-render: the hand-off has to be known in the
-  // commit that lands it.
-  const typingFrameNow: TypingBubbleFrame = {
+  // commit that lands it. A line told mid-run that lands at the end
+  // while it is live grows in above the typing bubble the same way
+  // (ruling 200, ticket 149; `toldLineGrows`): read off the turns whole,
+  // so a message put back after a delete is nothing new. Elsewhere both
+  // stay put, and nothing renders twice for them.
+  const typingFrameNow: ToldLineFrame = {
     sessionId: activeSessionId,
     live: roundLive && !restoring,
+    told: isMainChat ? toldLineAtEnd(turns) : null,
+    turns: isMainChat ? turns.length : 0,
   };
-  const [typingFrame, setTypingFrame] =
-    useState<TypingBubbleFrame>(typingFrameNow);
+  const [typingFrame, setTypingFrame] = useState<ToldLineFrame>(typingFrameNow);
   const [handoff, setHandoff] = useState<TypingBubbleHandoff | null>(null);
   if (
     typingFrame.sessionId !== typingFrameNow.sessionId ||
-    typingFrame.live !== typingFrameNow.live
+    typingFrame.live !== typingFrameNow.live ||
+    typingFrame.told !== typingFrameNow.told
   ) {
     setTypingFrame(typingFrameNow);
     const kind = typingBubbleHandoff(typingFrame, {
@@ -552,6 +560,12 @@ function MainViewContent({
         tick: (handoff?.tick ?? 0) + 1,
         kind,
         messageId: kind === "reply" ? replyId : null,
+      });
+    } else if (toldLineGrows(typingFrame, typingFrameNow)) {
+      setHandoff({
+        tick: (handoff?.tick ?? 0) + 1,
+        kind: "told",
+        messageId: typingFrameNow.told,
       });
     }
   }

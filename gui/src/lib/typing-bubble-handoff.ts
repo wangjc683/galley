@@ -13,21 +13,31 @@
  * stays where the dots were. Under reduced motion it only fades
  * (foundations §2.7 「只淡不移」).
  *
+ * A line it tells you mid-run (main chat ruling 200, ticket 149; tickets
+ * 137, 142) grows the same way while the round goes on: from a typing
+ * bubble's box at its own top-left corner, as a woken round's reply
+ * whose dots were not up; the typing bubble stays and is pushed down on
+ * the growth's clock, and the follow keeps that clock too
+ * (`toldLineGrows`).
+ *
  * The rules here; the DOM side is hooks/useTypingBubbleHandoff.ts, the
  * scroll is useStickyScroll's `landingTick`.
  */
 import type { ScrollTiming } from "@/lib/animate-scroll";
 import { cubicBezier, parseCubicBezier } from "@/lib/composer-grow";
+import type { Turn } from "@/types/conversation";
 
 /** What took the typing bubble's place: the round's answer, or its
  * question. */
 export type TypingBubbleHandoffKind = "reply" | "question";
 
-/** One hand-off, as MainView hands it to the hook: a new `tick` each
- * time; the answer's `messageId` (its row's `data-message-id`). */
+/** One landing, as MainView hands it to the hook: a hand-off, or
+ * (`told`, ticket 149) a line told mid-run growing in above the typing
+ * bubble, which stays. A new `tick` each time; the bubble's
+ * `messageId` (its row's `data-message-id`; the answer's, the line's). */
 export interface TypingBubbleHandoff {
   tick: number;
-  kind: TypingBubbleHandoffKind;
+  kind: TypingBubbleHandoffKind | "told";
   messageId: string | null;
 }
 
@@ -80,6 +90,68 @@ export function typingBubbleHandoff(
   if (now.question) return "question";
   if (now.settled && !now.silent) return "reply";
   return null;
+}
+
+// ---- A line told mid-run (ruling 200, ticket 149) ------------------------
+
+/**
+ * The line told mid-run the conversation ends in (an `interim` agent
+ * turn with words: `tell_user`, ticket 137, or a step's words beside its
+ * tools, ticket 142), by its message id; null when it ends in anything
+ * else — a step, a reply, your words waiting to be read (the line lands
+ * above those, ticket 136).
+ */
+export function toldLineAtEnd(turns: readonly Turn[]): string | null {
+  const last = turns[turns.length - 1];
+  if (!last || last.role !== "agent" || !last.interim) return null;
+  if (last.finalAnswer === null) return null;
+  return last.messageId ?? null;
+}
+
+/** The hand-off's frame, with what a told line is read against: the
+ * line the conversation ends in (`toldLineAtEnd`) and how many turns it
+ * has. MainView reads both off the turns whole, not the rows a deletion
+ * on its way hides. */
+export interface ToldLineFrame extends TypingBubbleFrame {
+  told: string | null;
+  turns: number;
+}
+
+/**
+ * Whether a line told mid-run grows in: only the one you watch land —
+ * the round live in the render before and still, in this same session,
+ * not under a cold-start restore, the conversation now ending in a line
+ * it did not end in then, with more turns than then. A session switch,
+ * a reload, a return from the workbench (MainView mounts with what is
+ * there), an earlier page (the end stays), a message put back after a
+ * delete (the turns whole never lost it) or a deletion that leaves an
+ * earlier line at the end (fewer turns) never do. A line landing above
+ * your words waiting to be read is not at the end: it just appears, as
+ * a reply landing above them does not grow out of the dots.
+ */
+export function toldLineGrows(
+  previous: ToldLineFrame,
+  now: ToldLineFrame,
+): boolean {
+  return (
+    previous.live &&
+    now.live &&
+    previous.sessionId === now.sessionId &&
+    now.told !== null &&
+    now.told !== previous.told &&
+    now.turns > previous.turns
+  );
+}
+
+/**
+ * How far a row under a line told mid-run moved down in the column when
+ * the line landed (px; its top there before and after): the typing
+ * bubble, held where it was and let down on the growth's curve. Under
+ * half a pixel: none.
+ */
+export function rowPush(before: number, after: number): number {
+  const push = after - before;
+  return Math.abs(push) < 0.5 ? 0 : push;
 }
 
 /** Reduced motion only fades (foundations §2.7 「只淡不移」): the dots

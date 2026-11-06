@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { buildAgentTurn, interimTurn } from "@/lib/agent-turn";
 import { cubicBezier, parseCubicBezier } from "@/lib/composer-grow";
 import {
   bubbleGrowInsets,
@@ -13,12 +14,17 @@ import {
   handoffMotion,
   insetClipPath,
   landingScrollTiming,
+  rowPush,
+  toldLineAtEnd,
+  toldLineGrows,
   typingBubbleHandoff,
   parseDurationMs,
   readHandoffTiming,
+  type ToldLineFrame,
   type TypingBubbleFrame,
   type TypingBubbleNow,
 } from "@/lib/typing-bubble-handoff";
+import type { Turn } from "@/types/conversation";
 
 /** The tokens as globals.css defines them: the tests read the
  * definitions, as the page does, never a copy of their numbers. */
@@ -137,6 +143,107 @@ describe("which hand-offs play", () => {
   it("only fades under reduced motion (只淡不移)", () => {
     expect(handoffMotion(false)).toBe("grow");
     expect(handoffMotion(true)).toBe("fade");
+  });
+});
+
+describe("a line told mid-run (ruling 200, ticket 149)", () => {
+  /** A line it told you, as the live `tell_user` event draws it. */
+  function told(id: string, words: string | null = "记上了，天气还在查"): Turn {
+    const turn = interimTurn(words ?? "", 3);
+    if (words === null) turn.finalAnswer = null;
+    turn.messageId = id;
+    return turn;
+  }
+  const you: Turn = {
+    role: "user",
+    content: "帮我查明天的天气",
+    messageId: "u-1",
+  };
+  const step: Turn = buildAgentTurn({
+    tools: [],
+    finalAnswer: null,
+    turnIndex: 3,
+  });
+  /** Your words said while it works, not read yet (ticket 136). */
+  const waiting: Turn = {
+    role: "user",
+    content: "顺便看看后天",
+    queueId: "q-1",
+  };
+
+  it("reads the line the conversation ends in, nothing else", () => {
+    expect(toldLineAtEnd([you, told("t-1")])).toBe("t-1");
+    expect(toldLineAtEnd([you, told("t-1"), step])).toBeNull();
+    // It lands above your words waiting to be read: not at the end.
+    expect(toldLineAtEnd([you, told("t-1"), waiting])).toBeNull();
+    // No words, no bubble.
+    expect(toldLineAtEnd([you, told("t-1", null)])).toBeNull();
+    expect(toldLineAtEnd([you])).toBeNull();
+    expect(toldLineAtEnd([])).toBeNull();
+  });
+
+  /** The render before: live, the conversation ending in your words. */
+  const before: ToldLineFrame = {
+    sessionId: S,
+    live: true,
+    told: null,
+    turns: 2,
+  };
+
+  it("grows the one you watch land: live before and still, a new line at the end", () => {
+    expect(toldLineGrows(before, { ...before, told: "t-1", turns: 3 })).toBe(
+      true,
+    );
+    // The next one, right after another.
+    expect(
+      toldLineGrows(
+        { ...before, told: "t-1", turns: 3 },
+        { ...before, told: "t-2", turns: 4 },
+      ),
+    ).toBe(true);
+  });
+
+  it("does not grow on a reload, a session switch, a return from the workbench or a cold restore", () => {
+    const landed: ToldLineFrame = { ...before, told: "t-1", turns: 3 };
+    // MainView mounts with what is there: the frame before is this one.
+    expect(toldLineGrows(landed, landed)).toBe(false);
+    // Another session's round (MainView mounts per session).
+    expect(toldLineGrows({ ...before, sessionId: "workbench-1" }, landed)).toBe(
+      false,
+    );
+    // A cold-start restore reads turns back while not live, and going
+    // live it brings nothing new.
+    expect(toldLineGrows({ ...before, live: false }, landed)).toBe(false);
+    expect(toldLineGrows(before, { ...landed, live: false })).toBe(false);
+  });
+
+  it("does not grow for an earlier page, a message put back, or a delete that leaves an earlier line last", () => {
+    const landed: ToldLineFrame = { ...before, told: "t-1", turns: 3 };
+    // An earlier page: more turns, the same end.
+    expect(toldLineGrows(landed, { ...landed, turns: 40 })).toBe(false);
+    // Put back after a delete: MainView reads the turns whole, which
+    // never lost it — nothing changed.
+    expect(toldLineGrows(landed, landed)).toBe(false);
+    // Core deleted the last line, an earlier one is last now: fewer turns.
+    expect(
+      toldLineGrows(
+        { ...before, told: "t-2", turns: 4 },
+        { ...before, told: "t-1", turns: 3 },
+      ),
+    ).toBe(false);
+  });
+
+  it("does not grow when it is not at the end: a step after it, your words waiting under it", () => {
+    expect(toldLineGrows(before, { ...before, told: null, turns: 3 })).toBe(
+      false,
+    );
+  });
+
+  it("pushes the typing bubble by how far it moved down, nothing under half a pixel", () => {
+    // One line, 43.25px, and the 4px between it and the dots.
+    expect(rowPush(400, 447.25)).toBe(47.25);
+    expect(rowPush(400, 400)).toBe(0);
+    expect(rowPush(400, 400.4)).toBe(0);
   });
 });
 

@@ -191,6 +191,14 @@ export function sendFades(
   };
 }
 
+/** A line told mid-run under reduced motion (ruling 200, ticket 149):
+ * it does not grow, it fades in whole (`--motion-base`, `--ease-pop`),
+ * as your bubble does on a send; the typing bubble under it does not
+ * move or fade (hooks/useTypingBubbleHandoff.ts). */
+export function toldLineFade(timing: BubbleMotionTiming): FadeTiming {
+  return { durationMs: timing.baseMs, delayMs: 0, easing: timing.pop };
+}
+
 /** The typing bubble of a round Core woke it for, as it starts to
  * write: no send to wait for. */
 export function wokenTypingFade(timing: BubbleMotionTiming): FadeTiming {

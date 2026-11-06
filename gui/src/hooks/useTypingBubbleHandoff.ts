@@ -4,8 +4,13 @@ import { prefersReducedMotion } from "@/lib/animate-scroll";
 import { TYPING_DOTS_WIDTH_EM } from "@/lib/assistant-conversation";
 import {
   claimTypingDeparture,
+  holdBubbleMotion,
+  readBubbleMotionTiming,
+  releaseBubbleMotion,
   settleBubbleMotion,
   settledTypingOpacity,
+  toldLineFade,
+  type RunningBubbleMotion,
 } from "@/lib/bubble-motion";
 import { translateYOf } from "@/lib/bubble-motion-play";
 import {
@@ -15,7 +20,9 @@ import {
   handoffMotion,
   insetClipPath,
   readHandoffTiming,
+  rowPush,
   type Box,
+  type HandoffTiming,
   type TypingBubbleHandoff,
 } from "@/lib/typing-bubble-handoff";
 import {
@@ -51,6 +58,17 @@ import {
  * fade-in had reached, and a hand-off that plays claims the typing
  * bubble's going (hooks/useBubbleMotion.ts fades it only when nothing
  * grew out of it).
+ *
+ * A line told mid-run (ruling 200, ticket 149: `told`) grows with the
+ * same pieces while the round goes on: its tint from a typing bubble's
+ * box at its own top-left corner, its words on the same segment
+ * (`growTint`); nothing leaves — the typing bubble and the line under it
+ * stay, their loops, sweep and time going on, and are pushed down on the
+ * growth's curve (`holdColumn`), the follow on the same clock. Under
+ * reduced motion the line only fades in (`--motion-base`). It is one of
+ * ruling 138's motions while it plays: anything after it that measures
+ * or moves the conversation (a send, a delete, a stop, an earlier page,
+ * the next line, the reply) puts it to its end first.
  */
 
 interface TypingRecord {
@@ -87,6 +105,9 @@ interface HandoffState {
   now: Frame;
   /** The typing bubble as last measured (kept after it goes). */
   record: TypingRecord | null;
+  /** …and as it was before this commit measured it: where a line told
+   * mid-run pushed it down from. */
+  before: TypingRecord | null;
 }
 
 const NO_FRAME: Frame = { present: false, columnTop: null };
@@ -140,7 +161,8 @@ function measureTyping(
 }
 
 /** The bubble that took the typing bubble's place: the answer's (by its
- * row's message id), or the live question's. */
+ * row's message id), or the live question's; or the line told mid-run
+ * (by its row's message id too). */
 function findBubble(
   column: Element,
   handoff: TypingBubbleHandoff,
@@ -224,6 +246,125 @@ function typingSizeFor(bubble: HTMLElement): { width: number; height: number } {
   };
 }
 
+// ---- The growth: shared by the hand-off and a line told mid-run ----------
+
+/** A bubble's box in the column (`inner`: the column's rect). */
+function boxInColumn(rect: DOMRect, inner: DOMRect): Box {
+  return {
+    top: rect.top - inner.top,
+    left: rect.left - inner.left,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+/** Where a bubble with no typing bubble in its place grows from: a box of
+ * the typing bubble's `size` at its own top-left corner — a woken round's
+ * reply whose dots were not up, a line told mid-run (ticket 149). */
+function cornerStart(
+  target: Box,
+  size: { width: number; height: number },
+): Box {
+  return {
+    top: target.top,
+    left: target.left,
+    width: size.width,
+    height: size.height,
+  };
+}
+
+/** The fade-in of what comes in with the growth: from half the dots'
+ * fade to the end of the growth (`handoffFadeIn`), transparent while it
+ * waits. */
+function comeInFader(
+  timing: HandoffTiming,
+  animations: Animation[],
+): (element: Element) => void {
+  const comeIn = handoffFadeIn(timing);
+  return (element) => {
+    animations.push(
+      element.animate(
+        { opacity: [0, 1] },
+        {
+          duration: comeIn.duration,
+          delay: comeIn.delay,
+          easing: timing.easing,
+          fill: "backwards",
+        },
+      ),
+    );
+  };
+}
+
+/**
+ * The bubble's tint opening from `start` to its own box (`target`, both
+ * in the column; `radius`, its corners) over the growth, and its words —
+ * and the action row beside them (`fadeParts`) — coming in (`fadeIn`).
+ */
+function growTint(
+  bubble: HTMLElement,
+  start: Box,
+  target: Box,
+  radius: string,
+  timing: HandoffTiming,
+  fadeIn: (element: Element) => void,
+  animations: Animation[],
+): void {
+  animations.push(
+    bubble.animate(
+      {
+        clipPath: [
+          insetClipPath(bubbleGrowInsets(start, target), radius),
+          insetClipPath(undefined, radius),
+        ],
+      },
+      { duration: timing.growMs, easing: timing.easing },
+    ),
+  );
+  // The words, and the action row beside them (`fadeParts`).
+  for (const words of Array.from(bubble.children)) {
+    for (const part of fadeParts(words)) fadeIn(part);
+  }
+}
+
+/**
+ * What moved at once in this commit, held where it looked to be and let
+ * go to its place on the growth's duration and curve: each of `moves`
+ * from `translateY(by)` to none. Their own boxes are not moved, so the
+ * scroller's height and the follow's numbers stay. While the column's
+ * content is held down (`clip`: a conversation shorter than the
+ * viewport, moved up at once) it is clipped at the column's edge so it
+ * adds no overflow (no scrollbar for a frame), and not shrunk by it: in
+ * the main chat's flex scroller WebKit drops a clipped flex item's
+ * minimum height to 0 (lib/bubble-motion-play.ts `clip`). Returns what
+ * puts the column's style back.
+ */
+function holdColumn(
+  column: HTMLElement,
+  moves: readonly (readonly [Element, number])[],
+  clip: boolean,
+  timing: HandoffTiming,
+  animations: Animation[],
+): () => void {
+  const previousOverflow = column.style.overflow;
+  const previousShrink = column.style.flexShrink;
+  if (clip) {
+    column.style.overflow = "clip";
+    column.style.flexShrink = "0";
+  }
+  const options = { duration: timing.growMs, easing: timing.easing };
+  for (const [element, by] of moves) {
+    animations.push(
+      element.animate({ transform: [`translateY(${by}px)`, "none"] }, options),
+    );
+  }
+  return () => {
+    if (!clip) return;
+    column.style.overflow = previousOverflow;
+    column.style.flexShrink = previousShrink;
+  };
+}
+
 function playTypingHandoff(
   container: HTMLElement,
   previous: Frame,
@@ -259,40 +400,15 @@ function playTypingHandoff(
       : 0;
   const followers = followersOf(bubble, column);
   const radius = getComputedStyle(bubble).borderTopLeftRadius || "0px";
-  const targetBox: Box = {
-    top: target.top - inner.top,
-    left: target.left - inner.left,
-    width: target.width,
-    height: target.height,
-  };
+  const targetBox = boxInColumn(target, inner);
   // Where the tint opens from: the typing bubble as it stood, else one
   // at the bubble's own top-left corner (the size it had last time, or
   // the one it would have).
   const size = lastRecord?.box ?? typingSizeFor(bubble);
-  const start: Box = record
-    ? record.box
-    : {
-        top: targetBox.top,
-        left: targetBox.left,
-        width: size.width,
-        height: size.height,
-      };
+  const start: Box = record ? record.box : cornerStart(targetBox, size);
 
   const animations: Animation[] = [];
-  const comeIn = handoffFadeIn(timing);
-  const fadeIn = (element: Element) => {
-    animations.push(
-      element.animate(
-        { opacity: [0, 1] },
-        {
-          duration: comeIn.duration,
-          delay: comeIn.delay,
-          easing: timing.easing,
-          fill: "backwards",
-        },
-      ),
-    );
-  };
+  const fadeIn = comeInFader(timing, animations);
 
   // The leaving dots: a copy of the row, on its old place in the column,
   // outside the layout — in a zero-size layer at the scroll content's
@@ -362,41 +478,23 @@ function playTypingHandoff(
     void leavingFade.finished.then(remove, remove);
   }
 
-  const previousOverflow = column.style.overflow;
-  const previousShrink = column.style.flexShrink;
+  let undoHold = () => {};
   if (motion === "grow") {
-    animations.push(
-      bubble.animate(
-        {
-          clipPath: [
-            insetClipPath(bubbleGrowInsets(start, targetBox), radius),
-            insetClipPath(undefined, radius),
-          ],
-        },
-        { duration: timing.growMs, easing: timing.easing },
-      ),
-    );
-    // The words, and the action row beside them (`fadeParts`).
-    for (const words of Array.from(bubble.children)) {
-      for (const part of fadeParts(words)) fadeIn(part);
-    }
+    growTint(bubble, start, targetBox, radius, timing, fadeIn, animations);
     if (lift !== 0) {
       // The column moved up at once (a conversation shorter than the
-      // viewport): held where it was and let up on the growth's curve.
-      // Its own box is not moved, so the scroller's height and the
-      // follow's numbers stay; what it carries is, clipped at its edge
-      // so it adds no overflow (no scrollbar for a frame). Not shrunk by
-      // it: in the main chat's flex scroller WebKit drops a clipped flex
-      // item's minimum height to 0 (lib/bubble-motion-play.ts `clip`).
-      column.style.overflow = "clip";
-      column.style.flexShrink = "0";
-      const lifted = { transform: [`translateY(${lift}px)`, "none"] };
-      const options = { duration: timing.growMs, easing: timing.easing };
-      for (const child of Array.from(column.children)) {
-        animations.push(child.animate(lifted, options));
-      }
-      if (leaving) animations.push(leaving.animate(lifted, options));
-      if (leavingLine) animations.push(leavingLine.animate(lifted, options));
+      // viewport): held where it was and let up on the growth's curve,
+      // the leaving copies with it.
+      const lifted: Element[] = Array.from(column.children);
+      if (leaving) lifted.push(leaving);
+      if (leavingLine) lifted.push(leavingLine);
+      undoHold = holdColumn(
+        column,
+        lifted.map((element) => [element, lift] as const),
+        true,
+        timing,
+        animations,
+      );
     }
   } else {
     fadeIn(bubble);
@@ -409,11 +507,126 @@ function playTypingHandoff(
     done = true;
     for (const animation of animations) animation.cancel();
     layer?.remove();
-    if (lift !== 0) {
-      column.style.overflow = previousOverflow;
-      column.style.flexShrink = previousShrink;
-    }
+    undoHold();
   };
+  void Promise.all(animations.map((animation) => animation.finished)).then(
+    stop,
+    stop,
+  );
+  return stop;
+}
+
+/**
+ * A line told mid-run growing in above the typing bubble (ruling 200,
+ * ticket 149): its tint from a typing bubble's box at its own top-left
+ * corner, its words on the hand-off's segment — the growth of a woken
+ * round's reply whose dots were not up. The typing bubble is not copied
+ * and does not fade: it stays, and what the line pushed down (the rows
+ * after the conversation: the typing bubble and the line under it) is
+ * held where it was and let down on the growth's curve, while the
+ * follow (useStickyScroll's `landingTick`) or, in a conversation shorter
+ * than the viewport, the column's lift moves the rest up on the same
+ * clock. Following, the dots stay where they were and the line grows up
+ * out of them; scrolled up, nothing scrolls and the dots slide down as
+ * it grows. Under reduced motion the line only fades in, whole, and
+ * nothing moves. `before` and `after`: the typing bubble as the commit
+ * before and this one measured it.
+ */
+function playToldLine(
+  container: HTMLElement,
+  previous: Frame,
+  now: Frame,
+  before: TypingRecord | null,
+  after: TypingRecord | null,
+  handoff: TypingBubbleHandoff,
+): () => void {
+  const noop = () => {};
+  const column = container.firstElementChild;
+  if (!(column instanceof HTMLElement)) return noop;
+  const bubble = findBubble(column, handoff);
+  const timing = readHandoffTiming();
+  const motionTiming = readBubbleMotionTiming();
+  if (!bubble || !timing || !motionTiming) return noop;
+  if (typeof bubble.animate !== "function") return noop;
+  const motion = handoffMotion(prefersReducedMotion());
+  // Anything of ruling 138's still moving (a send's slide, the typing
+  // bubble's fade-in) goes to its end before anything is measured.
+  settleBubbleMotion(container);
+
+  // Everything measured before anything moves.
+  const outer = container.getBoundingClientRect();
+  const inner = column.getBoundingClientRect();
+  const columnTop = inner.top - outer.top + container.scrollTop;
+  const followers = followersOf(bubble, column);
+  const animations: Animation[] = [];
+  let undoHold = () => {};
+  if (motion === "grow") {
+    const targetBox = boxInColumn(bubble.getBoundingClientRect(), inner);
+    const radius = getComputedStyle(bubble).borderTopLeftRadius || "0px";
+    const size = after?.box ?? before?.box ?? typingSizeFor(bubble);
+    const lift =
+      previous.columnTop !== null
+        ? columnLift(previous.columnTop, columnTop)
+        : 0;
+    const push =
+      previous.present && now.present && before && after
+        ? rowPush(before.box.top, after.box.top)
+        : 0;
+    const fadeIn = comeInFader(timing, animations);
+    growTint(
+      bubble,
+      cornerStart(targetBox, size),
+      targetBox,
+      radius,
+      timing,
+      fadeIn,
+      animations,
+    );
+    // The conversation lifted with the column; what comes after it (the
+    // typing bubble's row) held up by the push as well. In the column's
+    // one flow, so the two cancel when the column moved up by just the
+    // line (贴底, a short conversation): the dots do not move at all.
+    const moves: (readonly [Element, number])[] = [];
+    let pushed = false;
+    for (const child of Array.from(column.children)) {
+      const by = pushed ? lift - push : lift;
+      if (Math.abs(by) >= 0.5) moves.push([child, by]);
+      if (child.getAttribute("data-role") === "conversation") pushed = true;
+    }
+    undoHold = holdColumn(column, moves, lift !== 0, timing, animations);
+    for (const follower of followers) fadeIn(follower);
+  } else {
+    const fade = toldLineFade(motionTiming);
+    for (const element of [bubble, ...followers]) {
+      animations.push(
+        element.animate(
+          { opacity: [0, 1] },
+          {
+            duration: fade.durationMs,
+            delay: fade.delayMs,
+            easing: fade.easing,
+            fill: "backwards",
+          },
+        ),
+      );
+    }
+  }
+
+  // One of ruling 138's motions while it plays: a send, a delete, a
+  // stop, an earlier page or the next landing puts it to its end first.
+  let done = false;
+  const running: RunningBubbleMotion = {
+    finish: () => stop(),
+    typingOpacity: () => null,
+  };
+  const stop = () => {
+    if (done) return;
+    done = true;
+    releaseBubbleMotion(container, running);
+    for (const animation of animations) animation.cancel();
+    undoHold();
+  };
+  holdBubbleMotion(container, running);
   void Promise.all(animations.map((animation) => animation.finished)).then(
     stop,
     stop,
@@ -448,6 +661,7 @@ export function useTypingBubbleHandoff({
     previous: NO_FRAME,
     now: NO_FRAME,
     record: null,
+    before: null,
   });
   // For the observer below, as the last commit had it.
   const liveRef = useRef(live);
@@ -463,6 +677,7 @@ export function useTypingBubbleHandoff({
     const row = rowRef.current;
     liveRef.current = live;
     state.previous = state.now;
+    state.before = state.record;
     if (!live) {
       // No hand-off can follow this commit: nothing to measure.
       state.now = { present: row !== null, columnTop: null };
@@ -498,6 +713,16 @@ export function useTypingBubbleHandoff({
     const container = scrollContainerRef.current;
     if (!enabled || !handoff || !container) return;
     const state = stateRef.current;
+    if (handoff.kind === "told") {
+      return playToldLine(
+        container,
+        state.previous,
+        state.now,
+        state.before,
+        state.record,
+        handoff,
+      );
+    }
     return playTypingHandoff(container, state.previous, state.record, handoff);
   }, [enabled, handoff, scrollContainerRef]);
 
