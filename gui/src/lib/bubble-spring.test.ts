@@ -19,6 +19,7 @@ import {
   kickVelocity,
   lag,
   lagShare,
+  landingKick,
   paintedOffsets,
   settleTimeMs,
   springStep,
@@ -278,6 +279,31 @@ describe("the landing push (ticket 151's way in)", () => {
       t += 1;
     }
     expect(t).toBeLessThan(500);
+  });
+});
+
+describe("a new bubble's landing (ticket 151)", () => {
+  it("goes up when it came up, the full 1.5px", () => {
+    // Your send's slide of 140px, a follow of one reply line.
+    expect(landingKick(-140)).toBe(-MAX_KICK_PX);
+    expect(landingKick(-47.25)).toBe(-MAX_KICK_PX);
+  });
+
+  it("goes down when it grew where it stands (its tint opens downward), or came down", () => {
+    expect(landingKick(0)).toBe(MAX_KICK_PX);
+    expect(landingKick(-0.4)).toBe(MAX_KICK_PX);
+    expect(landingKick(30)).toBe(MAX_KICK_PX);
+  });
+
+  it("is within 0.5px of its place by 350ms, as a scroll's lag", () => {
+    let s: SpringState = { x: 0, v: kickVelocity(landingKick(-140)) };
+    let peak = 0;
+    for (let t = 1; t <= SETTLE_MS; t++) {
+      s = springStep(s, 1);
+      peak = Math.min(peak, s.x);
+    }
+    expect(peak).toBeCloseTo(-MAX_KICK_PX, 2);
+    expect(Math.abs(s.x)).toBeLessThanOrEqual(SETTLE_WITHIN_PX);
   });
 });
 

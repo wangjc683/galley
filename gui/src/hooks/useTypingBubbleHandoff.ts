@@ -13,6 +13,8 @@ import {
   type RunningBubbleMotion,
 } from "@/lib/bubble-motion";
 import { translateYOf } from "@/lib/bubble-motion-play";
+import { bubbleSpringShift } from "@/lib/bubble-spring";
+import { landAfter } from "@/lib/bubble-spring-play";
 import {
   bubbleGrowInsets,
   columnLift,
@@ -300,6 +302,7 @@ function comeInFader(
  * The bubble's tint opening from `start` to its own box (`target`, both
  * in the column; `radius`, its corners) over the growth, and its words —
  * and the action row beside them (`fadeParts`) — coming in (`fadeIn`).
+ * Returns the growth.
  */
 function growTint(
   bubble: HTMLElement,
@@ -309,22 +312,47 @@ function growTint(
   timing: HandoffTiming,
   fadeIn: (element: Element) => void,
   animations: Animation[],
-): void {
-  animations.push(
-    bubble.animate(
-      {
-        clipPath: [
-          insetClipPath(bubbleGrowInsets(start, target), radius),
-          insetClipPath(undefined, radius),
-        ],
-      },
-      { duration: timing.growMs, easing: timing.easing },
-    ),
+): Animation {
+  const growth = bubble.animate(
+    {
+      clipPath: [
+        insetClipPath(bubbleGrowInsets(start, target), radius),
+        insetClipPath(undefined, radius),
+      ],
+    },
+    { duration: timing.growMs, easing: timing.easing },
   );
+  animations.push(growth);
   // The words, and the action row beside them (`fadeParts`).
   for (const words of Array.from(bubble.children)) {
     for (const part of fadeParts(words)) fadeIn(part);
   }
+  return growth;
+}
+
+/** Where `el` stands on screen (viewport px), the scroll spring's offset
+ * taken off. */
+function screenTop(el: Element): number {
+  return el.getBoundingClientRect().top - bubbleSpringShift(el);
+}
+
+/**
+ * The landing bounce once the bubble has grown (ticket 151;
+ * lib/bubble-spring-play.ts `landAfter`): its row goes MAX_KICK_PX past
+ * its place along the way it came, then back on the scroll spring.
+ * `startTop`: where the bubble stood on screen in the growth's first
+ * frame (viewport px, the spring off) — against where it stands at the
+ * end, that is how it came: up with the follow or a short conversation
+ * let up, or not at all (grown where it stands: down, the way its tint
+ * opened).
+ */
+function landWhenGrown(
+  container: HTMLElement,
+  bubble: HTMLElement,
+  growth: Animation,
+  startTop: number,
+): void {
+  landAfter(container, bubble, growth, () => screenTop(bubble) - startTop);
 }
 
 /**
@@ -480,7 +508,23 @@ function playTypingHandoff(
 
   let undoHold = () => {};
   if (motion === "grow") {
-    growTint(bubble, start, targetBox, radius, timing, fadeIn, animations);
+    const growth = growTint(
+      bubble,
+      start,
+      targetBox,
+      radius,
+      timing,
+      fadeIn,
+      animations,
+    );
+    // In the first frame its row stands where it is now, held down by
+    // the lift (below).
+    landWhenGrown(
+      container,
+      bubble,
+      growth,
+      target.top - bubbleSpringShift(bubble) + lift,
+    );
     if (lift !== 0) {
       // The column moved up at once (a conversation shorter than the
       // viewport): held where it was and let up on the growth's curve,
@@ -561,7 +605,8 @@ function playToldLine(
   const animations: Animation[] = [];
   let undoHold = () => {};
   if (motion === "grow") {
-    const targetBox = boxInColumn(bubble.getBoundingClientRect(), inner);
+    const target = bubble.getBoundingClientRect();
+    const targetBox = boxInColumn(target, inner);
     const radius = getComputedStyle(bubble).borderTopLeftRadius || "0px";
     const size = after?.box ?? before?.box ?? typingSizeFor(bubble);
     const lift =
@@ -573,7 +618,7 @@ function playToldLine(
         ? rowPush(before.box.top, after.box.top)
         : 0;
     const fadeIn = comeInFader(timing, animations);
-    growTint(
+    const growth = growTint(
       bubble,
       cornerStart(targetBox, size),
       targetBox,
@@ -581,6 +626,14 @@ function playToldLine(
       timing,
       fadeIn,
       animations,
+    );
+    // In the first frame it stands where it is now, held down by the
+    // lift (below).
+    landWhenGrown(
+      container,
+      bubble,
+      growth,
+      target.top - bubbleSpringShift(bubble) + lift,
     );
     // The conversation lifted with the column; what comes after it (the
     // typing bubble's row) held up by the push as well. In the column's

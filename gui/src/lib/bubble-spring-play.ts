@@ -44,6 +44,7 @@ import {
   kickVelocity,
   lag,
   lagShare,
+  landingKick,
   paintedOffsets,
   recordBubbleSpring,
   springStep,
@@ -556,4 +557,29 @@ export function kickBubbleRow(
  * landing bounce then stays out: ticket 151). */
 export function bubbleSpringScrolling(container: HTMLElement): boolean {
   return springs.get(container)?.scrolling() ?? false;
+}
+
+/**
+ * A new bubble's landing bounce (ticket 151; ruling 200 第 3 条, 201 第
+ * 4 条): once `entrance` — the motion that brought the bubble in — has
+ * played to its end, the row `el` is in goes MAX_KICK_PX past its place
+ * along the way it came (`landingKick` of `travel()`, read then: how far
+ * it moved on screen over the entrance, px, negative up) and the spring
+ * brings it back. The entrance's own timing is not touched. Not when
+ * something after it put it at its end at once (a cancel: its
+ * `finished` rejects), not while the person's scroll is moving the rows
+ * (the spring has them already), and wherever `kickBubbleRow` does
+ * nothing (not the main chat, reduced motion, no row).
+ */
+export function landAfter(
+  container: HTMLElement,
+  el: Element,
+  entrance: Animation,
+  travel: () => number,
+): void {
+  const land = () => {
+    if (!el.isConnected || bubbleSpringScrolling(container)) return;
+    kickBubbleRow(container, el, landingKick(travel()));
+  };
+  void entrance.finished.then(land, () => {});
 }

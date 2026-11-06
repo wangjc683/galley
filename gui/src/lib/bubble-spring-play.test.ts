@@ -15,6 +15,7 @@ import {
   attachBubbleSpring,
   bubbleSpringScrolling,
   kickBubbleRow,
+  landAfter,
 } from "@/lib/bubble-spring-play";
 import { userMsgParkOffset } from "@/lib/conversation-anchor";
 import { captureScrollAnchor, scrollAnchorDrift } from "@/lib/scroll-anchor";
@@ -507,6 +508,116 @@ describe("the landing push (ticket 151's way in)", () => {
     expect(bubbleSpringScrolling(container)).toBe(true);
     frames.tick(400);
     expect(bubbleSpringScrolling(container)).toBe(false);
+  });
+});
+
+describe("a new bubble's landing (ticket 151)", () => {
+  /** An entrance as Web Animations hand it over: it plays to its end,
+   * or something after it cancels it (`finished` rejects). */
+  function entrance() {
+    let finish: () => void = () => {};
+    let cancel: () => void = () => {};
+    const finished = new Promise<void>((resolve, reject) => {
+      finish = resolve;
+      cancel = () => reject(new DOMException("cancelled", "AbortError"));
+    });
+    return {
+      animation: { finished } as unknown as Animation,
+      finish,
+      cancel,
+    };
+  }
+  /** Lets the promise callbacks run. */
+  const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  /** The row's offsets over the frames that follow. */
+  function pathOf(row: Element): number[] {
+    const path: number[] = [];
+    for (let i = 0; i < 60 && frames.pending() > 0; i++) {
+      frames.tick();
+      path.push(translateOf(row));
+    }
+    return path;
+  }
+
+  it("waits for the entrance's end, then bounces the row up the way it came and back", async () => {
+    build();
+    detach = attachBubbleSpring(container);
+    const bubble = rows[6].firstElementChild!;
+    const { animation, finish } = entrance();
+    landAfter(container, bubble, animation, () => -140);
+    await settle();
+    expect(frames.pending()).toBe(0);
+    finish();
+    await settle();
+    const path = pathOf(rows[6]);
+    expect(Math.min(...path)).toBeLessThan(0);
+    expect(Math.max(...path)).toBe(0);
+    expect(path[path.length - 1]).toBe(0);
+    for (const i of [5, 7]) expect(translateOf(rows[i])).toBe(0);
+  });
+
+  it("bounces it down when it grew where it stands", async () => {
+    build();
+    detach = attachBubbleSpring(container);
+    const { animation, finish } = entrance();
+    landAfter(container, rows[6], animation, () => 0);
+    finish();
+    await settle();
+    expect(Math.max(...pathOf(rows[6]))).toBeGreaterThan(0);
+  });
+
+  it("not when something after it put it at its end (a cancel)", async () => {
+    build();
+    detach = attachBubbleSpring(container);
+    const { animation, cancel } = entrance();
+    landAfter(container, rows[6], animation, () => -140);
+    cancel();
+    await settle();
+    expect(frames.pending()).toBe(0);
+    expect(translateOf(rows[6])).toBe(0);
+  });
+
+  it("not while the person's scroll is moving the rows", async () => {
+    build();
+    detach = attachBubbleSpring(container);
+    const { animation, finish } = entrance();
+    landAfter(container, rows[6], animation, () => -140);
+    wheel(60);
+    userScroll(20);
+    expect(bubbleSpringScrolling(container)).toBe(true);
+    finish();
+    await settle();
+    // The rows move with the scroll; the landed one no more than its
+    // neighbour above, which got no push.
+    frames.tick();
+    expect(translateOf(rows[6])).toBeGreaterThanOrEqual(translateOf(rows[5]));
+  });
+
+  it("not under reduced motion, nor without the spring, nor once the row is gone", async () => {
+    build();
+    frames.state.reducedMotion = true;
+    detach = attachBubbleSpring(container);
+    const first = entrance();
+    landAfter(container, rows[6], first.animation, () => -140);
+    first.finish();
+    await settle();
+    expect(frames.pending()).toBe(0);
+    detach();
+    frames.state.reducedMotion = false;
+    // No spring here (not the main chat).
+    const second = entrance();
+    landAfter(container, rows[6], second.animation, () => -140);
+    second.finish();
+    await settle();
+    expect(frames.pending()).toBe(0);
+    // The row gone before the end.
+    detach = attachBubbleSpring(container);
+    const third = entrance();
+    landAfter(container, rows[6], third.animation, () => -140);
+    rows[6].remove();
+    third.finish();
+    await settle();
+    expect(frames.pending()).toBe(0);
   });
 });
 

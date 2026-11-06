@@ -198,6 +198,23 @@ export function kickVelocity(peakPx: number): number {
   return peak / UNIT_KICK_PEAK;
 }
 
+/** Under this a bubble's move over its entrance is no move (px). */
+const LANDING_STILL_PX = 0.5;
+
+/**
+ * A new bubble's landing bounce (ticket 151; ruling 200 第 3 条, 201 第
+ * 4 条): how far past its place its row goes, signed (negative: up),
+ * once its entrance has played. Along the way it came — `travel`, how
+ * far it moved on screen over the entrance (px; negative: up): up when
+ * it came up (your send's slide, a follow on the growth's clock, a
+ * short conversation let up); down when it grew where it stands (not
+ * following: its tint opened from its top-left corner downward). Always
+ * the full MAX_KICK_PX: one landing, one size.
+ */
+export function landingKick(travel: number): number {
+  return travel < -LANDING_STILL_PX ? -MAX_KICK_PX : MAX_KICK_PX;
+}
+
 // ---- Lagging behind the scroll -------------------------------------------------
 
 /** How far a row is from the anchor (px): 0 when the anchor is on it. */

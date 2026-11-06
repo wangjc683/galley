@@ -708,7 +708,15 @@ export function Conversation({
     turnIndex: number,
     previous: AssistantRowSide | null,
   ): ReactNode => {
-    const key = `turn-${ordinal(turnIndex)}`;
+    // A line told mid-run by its message, not its place: the step that
+    // said it lands after it and before it in the turns (stores/
+    // messages.ts `withLandedStep`) and draws nothing while it runs, so
+    // by its place the row would be drawn anew mid-growth (ticket 149's
+    // growth and ticket 151's bounce cut off; found by the dev probe).
+    const key =
+      turn.role === "agent" && turn.interim && turn.messageId
+        ? `told-${turn.messageId}`
+        : `turn-${ordinal(turnIndex)}`;
     if (turn.role === "user") {
       return (
         <Fragment key={key}>{userRow(turn, turnIndex, previous)}</Fragment>

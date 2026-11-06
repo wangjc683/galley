@@ -46,6 +46,7 @@ import {
   type SlideTiming,
 } from "@/lib/bubble-motion";
 import { clearBubbleSpringStyle } from "@/lib/bubble-spring";
+import { landAfter } from "@/lib/bubble-spring-play";
 import { firstRowBelow } from "@/lib/scroll-anchor";
 import type { Box } from "@/lib/typing-bubble-handoff";
 import {
@@ -323,7 +324,7 @@ function start(
 /** The column's content slid by `slide`: everything in it (the
  * conversation, the typing bubble, the live question, the step-limit
  * tail), and `also` beside it (a copy that moves with them), clipped
- * while it is moved down. */
+ * while it is moved down. Returns the slide's animations. */
 function slideColumn(
   run: Run,
   column: HTMLElement,
@@ -331,13 +332,15 @@ function slideColumn(
   timing: SlideTiming,
   down: boolean,
   also: readonly Element[] = [],
-): void {
+): Animation[] {
   if (down) run.clip(column);
   const options = { duration: timing.durationMs, easing: timing.easing };
+  const slid: Animation[] = [];
   for (const child of Array.from(column.children)) {
-    if (!isLayer(child)) run.play(child, keyframes, options);
+    if (!isLayer(child)) slid.push(run.play(child, keyframes, options));
   }
-  for (const el of also) run.play(el, keyframes, options);
+  for (const el of also) slid.push(run.play(el, keyframes, options));
+  return slid;
 }
 
 /** A copy of `el` for the layer: the same look, nothing anything else
@@ -450,7 +453,10 @@ function sentRows(column: HTMLElement, lastRow: Element | null): Element[] {
  * over. Reduced motion: no slide, the fades. The wake of a second half
  * of your round (ruling 197, `captureWake`) plays the same, with no
  * bubble of yours: the column slides up, the typing bubble and the line
- * under it fade in once it is in place.
+ * under it fade in once it is in place. Once the slide is over, your
+ * bubble's row lands with a bounce on the scroll spring, up the way it
+ * came (ticket 151, `landAfter`); a wake has no bubble of yours, and no
+ * slide (reduced motion, a far jump) no landing.
  */
 export function playSend(container: HTMLElement, before: SendBefore): void {
   const column = columnOf(container);
@@ -470,7 +476,14 @@ export function playSend(container: HTMLElement, before: SendBefore): void {
     if (typing && !before.typing) {
       run.watchTyping(run.fade(typing, [0, 1], fades.typing));
     }
-    if (slide) slideColumnBy(run, column, slide);
+    if (slide) {
+      const slid = slideColumnBy(run, column, slide);
+      const yours = sent.filter((row) => sideOf(row) === "user").pop();
+      // From `distance` below its place back to it: it moved up by that.
+      if (yours && slid[0]) {
+        landAfter(container, yours, slid[0], () => -slide.distance);
+      }
+    }
   });
 }
 
@@ -478,8 +491,8 @@ function slideColumnBy(
   run: Run,
   column: HTMLElement,
   slide: ColumnSlide,
-): void {
-  slideColumn(
+): Animation[] {
+  return slideColumn(
     run,
     column,
     slideKeyframes(slide),
