@@ -1,6 +1,6 @@
 # 149 途中先说的话从三点大小的框长出来，三点被平滑推下去
 
-Status: needs-dogfood（2026-11-06 rebase 到 `81cb83c5` 后快进合入 `0b1f5024`。主会话验收：读过放不放的规则（`toldLineAtEnd`、`toldLineGrows`：这一轮在跑、同一会话、末尾是新的先说的话、轮数只增）与 `rowPush`；worktree 复跑 typecheck、lint 过，`TZ=UTC` vitest 256 个文件 2,873 条全过，`check-docs-links` 494 个文件过，`git diff --check` 干净，新增行没有本机路径。Open risk 1（没在跟随时三点也平滑滑下去，不是瞬时推开）主会话认同：瞬时推开读作「三点长成这一句、又来新三点」，正是裁决 200 要避开的。要真机看：先说的话进来的第一帧三点不跳、底色从三点上沿往上长、连着 4 句的整体感觉；第一帧探针与票 150 合入后一起在 dev 真窗口量）
+Status: needs-dogfood（2026-11-06 rebase 到 `7adfd323` 后快进合入 `84619031`。主会话验收：读过放不放的规则（`toldLineAtEnd`、`toldLineGrows`：这一轮在跑、同一会话、末尾是新的先说的话、轮数只增）与 `rowPush`；worktree 复跑 typecheck、lint 过，`TZ=UTC` vitest 256 个文件 2,873 条全过，`check-docs-links` 494 个文件过，`git diff --check` 干净，新增行没有本机路径。Open risk 1（没在跟随时三点也平滑滑下去，不是瞬时推开）主会话认同：瞬时推开读作「三点长成这一句、又来新三点」，正是裁决 200 要避开的。要真机看：先说的话进来的第一帧三点不跳、底色从三点上沿往上长、连着 4 句的整体感觉；第一帧探针与票 150 合入后一起在 dev 真窗口量）
 
 真窗口探针（2026-11-06，主会话代测）：四轮带先说的话的真对话。第 1 轮先说的话没长（字直接出现，跟随照样平滑），原因由票 151 查清：它的行按位置记 key，说出它的那一步紧跟着落下、插在它前面，key 变了整行重挂，`clip-path` 留在旧节点上；票 151 改按消息 id 记 key（`told-<messageId>`）。其余各轮与 151 合入后的两句都正常：`clip-path` 240ms 展开、字与行动条晚 60ms 淡入，扣掉每帧滚动后三点稳在约 757px（误差 <1px）。四轮测试对话已从主对话删掉（库备份在主会话 scratchpad）。
 
@@ -58,7 +58,7 @@ Status: needs-dogfood（2026-11-06 rebase 到 `81cb83c5` 后快进合入 `0b1f50
 
 ## 报告
 
-2026-11-06，代理在分支 `t149-told-line-grows-in` 上做完（从本地 main `a93883ac` 起），代码、测试、文档在 `d4782cd8`，本节另一个提交；未 push、未合入。票面前提与代码对得上，没有扩范围。
+2026-11-06，代理在分支 `t149-told-line-grows-in` 上做完（从本地 main `d88378a0` 起），代码、测试、文档在 `d4782cd8`，本节另一个提交；未 push、未合入。票面前提与代码对得上，没有扩范围。
 
 ### 1–7 条各在哪（行号按 `d4782cd8`）
 
@@ -93,7 +93,7 @@ Status: needs-dogfood（2026-11-06 rebase 到 `81cb83c5` 后快进合入 `0b1f50
 - `TZ=UTC pnpm --dir gui test`：`Test Files  256 passed (256)`、`Tests  2873 passed (2873)`。
 - `node scripts/check-docs-links.mjs`：`docs link gate OK: 494 files checked.`
 - `git diff --check`：干净。
-- prettier：动过的 7 个旧文件在 `a93883ac` 上都是 prettier-clean（逐个核过），整文件格式化后 diff 只落在自己的 hunk；新测试文件整篇格式化。
+- prettier：动过的 7 个旧文件在 `d88378a0` 上都是 prettier-clean（逐个核过），整文件格式化后 diff 只落在自己的 hunk；新测试文件整篇格式化。
 - 全角标点：自写正则扫新增行，`docs/` 与 `.scratch/` 0 处；`gui/src` 3 处都是英文注释或测试名里夹「贴底」（`(贴底, …)`、`贴底 (shorter …)`），英文句子用半角，同仓库已有写法，不改。
 - 新增行没有本机路径。
 
