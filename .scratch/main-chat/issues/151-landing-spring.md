@@ -1,6 +1,8 @@
 # 151 新气泡落定时一次极轻的回弹（同一根弹簧，最多冲过 1.5px）
 
-Status: blocked（等票 149、150 合入：要用 150 的弹簧模块，落在 149 改过的进场代码上）
+Status: ready-for-agent（149、150 已合入 main `f6216ac3`）
+
+接口（票 150）：`gui/src/lib/bubble-spring-play.ts` 的 `kickBubbleRow(container, el, peakPx)`（`el` 是这一行里的任一元素；`peakPx` 带符号、负为向上，封顶 1.5px，由同一根弹簧拉回；只动这一行；没有弹簧、减少动态或找不到行时返回 false、什么都不动）与 `bubbleSpringScrolling(container)`（你最近 150ms 内的滚动还在动这些行时为真，落定时人正在滚就不加）；常量 `MAX_KICK_PX` 在 `gui/src/lib/bubble-spring.ts`。
 
 来源：[主对话 PRD](../PRD.md) 裁决 200 第 3 条、裁决 201 第 4 条（JC 2026-11-06：「甲和乙都做」「不做切换器，直接按建议推进」）。只改 GUI 与设计文档；只影响内置运行时的主对话；工作台、子任务、外置运行时零变化。
 
