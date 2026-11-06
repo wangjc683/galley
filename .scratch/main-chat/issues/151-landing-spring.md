@@ -1,6 +1,8 @@
 # 151 新气泡落定时一次极轻的回弹（同一根弹簧，最多冲过 1.5px）
 
-Status: needs-dogfood（2026-11-06 rebase 到 `99a7af9c`（主会话的速度增益修正）后快进合入 `67a2b26e`，文档一处冲突主会话手合。主会话验收：读过 `landingKick` 与 `told-<messageId>` 的 key；worktree 复跑 typecheck、lint 过，`TZ=UTC` vitest 261 个文件 2,950 条全过，`check-docs-links` 494 个文件过，`git diff --check` 干净，新增行没有本机路径。dev 真窗口探针（主会话代测，JC 交出电脑）：发出、两句先说的话、回复四次进场都在落定时回弹一次，峰值 1.5px（2 倍屏按 0.5px 一格），约 50ms 升到顶、停约 130ms、约 250ms 回位，全程约 400ms；两句先说的话的 `clip-path` 都走完全程，没被重挂截掉（第 2 节的修法真窗口成立）。要真机看：1.5px 读不读得出、读成灵动还是抽动；发出时回弹与三点淡入同时会不会忙）
+Status: done（2026-11-06 JC 真机：「我按甲真机看过了，没问题」。库里：07:58:05 UTC 主对话收到「这个周末厦门天气怎么样」，11 秒后先说一句、6 步答完，发出、先说的话、回复三处落定都走到）
+
+验收记录：（2026-11-06 rebase 到 `99a7af9c`（主会话的速度增益修正）后快进合入 `67a2b26e`，文档一处冲突主会话手合。主会话验收：读过 `landingKick` 与 `told-<messageId>` 的 key；worktree 复跑 typecheck、lint 过，`TZ=UTC` vitest 261 个文件 2,950 条全过，`check-docs-links` 494 个文件过，`git diff --check` 干净，新增行没有本机路径。dev 真窗口探针（主会话代测，JC 交出电脑）：发出、两句先说的话、回复四次进场都在落定时回弹一次，峰值 1.5px（2 倍屏按 0.5px 一格），约 50ms 升到顶、停约 130ms、约 250ms 回位，全程约 400ms；两句先说的话的 `clip-path` 都走完全程，没被重挂截掉（第 2 节的修法真窗口成立）。要真机看：1.5px 读不读得出、读成灵动还是抽动；发出时回弹与三点淡入同时会不会忙）
 
 接口（票 150）：`gui/src/lib/bubble-spring-play.ts` 的 `kickBubbleRow(container, el, peakPx)`（`el` 是这一行里的任一元素；`peakPx` 带符号、负为向上，封顶 1.5px，由同一根弹簧拉回；只动这一行；没有弹簧、减少动态或找不到行时返回 false、什么都不动）与 `bubbleSpringScrolling(container)`（你最近 150ms 内的滚动还在动这些行时为真，落定时人正在滚就不加）；常量 `MAX_KICK_PX` 在 `gui/src/lib/bubble-spring.ts`。
 
