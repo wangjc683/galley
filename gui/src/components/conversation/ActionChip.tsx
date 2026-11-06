@@ -18,8 +18,9 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  * two independent questions — conflating them is what put a bordered
  * box against a highlighter stroke until 2026-08-10.
  *
- *   - bar: in the reply action bar under an assistant answer
- *     (MessageActions), shown while that answer is hovered
+ *   - bar: in the reply action bar of an assistant answer
+ *     (MessageActions: under it in the workbench, beside its bubble in
+ *     the assistant's conversation), shown while that answer is hovered
  *     (2026-09-28; always visible until then).
  *   - transient: fades in on a user action — hovering a user message
  *     (MessageUser) or selecting assistant text (SelectionCopyToolbar).
@@ -27,7 +28,7 @@ import { blurAfterClick, preventMouseFocus } from "@/lib/pointer-focus";
  * Skin is decided by WHAT IS BEHIND THE CHIP, not by its lifetime, and
  * the chip itself is always the bare one (`inline` in the design docs):
  * a muted glyph, a background only on hover. On clean canvas — the reply
- * bar, the row under a user message out in the margin — that is all it
+ * bar, the chips by a user message out in the margin — that is all it
  * wears; armour it does not need reads as a UI part intruding on the
  * content. Where chips land on top of arbitrary content and have to cut
  * themselves out of it (the portal'd selection toolbar, the one such

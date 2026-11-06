@@ -103,12 +103,16 @@ function AssistantRunSummary({
 }
 
 /**
- * The card, opened in place under the reply's action row by the process
- * button and swept open / closed as ExpandSection does. 6px under the
- * action row (the bubble → action row gap again), 20px of its own under
- * it (the change-of-side gap, assistantRowGap's mt-5), so the next
- * message or time line no longer sits on its edge; both inside the
- * sweep, so they open and close with it.
+ * The card, opened in place under the reply by the process button and
+ * swept open / closed as ExpandSection does. 4px under the row above —
+ * the bubble, or the frame of cards under it, or the 「中途停下」 line —
+ * as one thing of its side follows another (main chat PRD ruling 199):
+ * the reply, its cards and its card read as one group, and nothing of
+ * its own under it — the next message or time line takes its IM gap
+ * from the card's foot (lib/assistant-conversation.ts `assistantRowGap`:
+ * 4px on its side, 16px for yours). The 4px is inside the sweep, so it
+ * opens and closes with the card. Until ruling 199 it sat 6px under the
+ * action row then under the reply, with 20px of its own below.
  *
  * `numbers`: the first line (AssistantRunSummary). Off for the card the
  * 「中途停下 · N 步」 line opens (main chat PRD ruling 159 item 8): that
@@ -134,19 +138,17 @@ export function AssistantProcessCard({
   numbers?: boolean;
 }) {
   return (
-    <ExpandSection open={open} openClassName="mt-1.5" closedClassName="mt-0">
-      <div className="pb-5">
-        <ProcessCard
-          steps={steps}
-          heading={
-            numbers ? (
-              <AssistantRunSummary stats={stats} telemetry={telemetry} />
-            ) : undefined
-          }
-          capped
-          className={ASSISTANT_BUBBLE_MAX}
-        />
-      </div>
+    <ExpandSection open={open} openClassName="mt-1" closedClassName="mt-0">
+      <ProcessCard
+        steps={steps}
+        heading={
+          numbers ? (
+            <AssistantRunSummary stats={stats} telemetry={telemetry} />
+          ) : undefined
+        }
+        capped
+        className={ASSISTANT_BUBBLE_MAX}
+      />
     </ExpandSection>
   );
 }
@@ -180,8 +182,9 @@ function lineFigures(text: string, lifted: boolean): ReactNode {
  * before the line), without its first line: the line is its heading
  * (ruling 159 item 8).
  *
- * The line: the process button's `Footprints` first, sitting where that
- * chip's glyph sits under a reply (5px in from the bubble's left edge),
+ * The line: the process button's `Footprints` first, where that chip's
+ * glyph sat while a reply's bar was under it (5px in from the bubble's
+ * left edge; ruling 199 moved the bar beside the bubble, the line stays),
  * then the words — ink-muted, the count ink-soft, at the step size, as
  * the card's first line (AssistantRunSummary). No bubble ground: it is
  * not something it said. The whole line is the toggle, in the step
@@ -192,11 +195,11 @@ function lineFigures(text: string, lifted: boolean): ReactNode {
  * No message menu: it is no bubble, and it cannot be deleted.
  *
  * The gaps: its top margin is the conversation's (`className`, the IM
- * row gap, the line counting as its side). Under it 24px of its own,
- * where a reply has its action row: the glyphs end about 5px above the
- * line's foot, so your next bubble reads about 30px under them, as it
- * does under a reply bubble. Opened, those 24px give way to the card's
- * own 6px above and 20px below (AssistantProcessCard), swept with it.
+ * row gap, the line counting as its side), and so is the next row's
+ * from its foot (ruling 199: 4px on its side, 16px for yours); nothing
+ * of its own under it. Opened, the card comes in 4px under it
+ * (AssistantProcessCard), swept with it. Until ruling 199 it kept 24px
+ * under it, where a reply had its action row.
  */
 export function AssistantStoppedRun({
   stats,
@@ -248,14 +251,7 @@ export function AssistantStoppedRun({
     </div>
   );
   return (
-    <div
-      data-at={at}
-      className={cn(
-        "transition-[padding-bottom] duration-(--motion-slow) ease-firm motion-reduce:transition-none",
-        shown ? "pb-0" : "pb-6",
-        className,
-      )}
-    >
+    <div data-at={at} className={className}>
       {toggle ? (
         <TooltipLabel
           text={

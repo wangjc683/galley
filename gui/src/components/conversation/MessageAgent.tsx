@@ -1,7 +1,10 @@
 import { CaretDown, XCircle } from "@phosphor-icons/react";
 import { isValidElement, memo, useId, useState, type ReactNode } from "react";
 
-import { AssistantBubble } from "@/components/conversation/AssistantParts";
+import {
+  ASSISTANT_BUBBLE_MAX,
+  AssistantBubble,
+} from "@/components/conversation/AssistantParts";
 import { ChatGptPlanErrorNotice } from "@/components/conversation/ChatGptPlanErrorNotice";
 import { MarkdownView } from "@/components/conversation/MarkdownView";
 import { MessageActions } from "@/components/conversation/MessageActions";
@@ -38,6 +41,15 @@ import type { MessageTelemetry } from "@/types/conversation";
  * (`data-selection-yield`, lib/selection-copy): while a selection in
  * the answer has the toolbar up, the action bar yields (main chat PRD
  * ruling 108).
+ *
+ * In the assistant's conversation (`bubble`) the bar hangs beside the
+ * bubble, out of flow (ruling 199; MessageActions): it is the bubble's
+ * last child, so it follows the bubble's right and bottom edges, and the
+ * cards under the reply (`attachment`) come right after the bubble. A
+ * reply without a bubble — a ChatGPT plan error, leaked tool-call markup
+ * — takes the bubble's cap in a box of its own, the bar beside that.
+ * The hover region is still the whole row (`group/answer`), the column
+ * wide.
  */
 // Memoised: during streaming the conversation re-renders on every
 // throttled chunk, but settled agent turns carry an immutable string
@@ -59,7 +71,7 @@ export const MessageAgent = memo(function MessageAgent({
    * palette full-text hit on this answer can scroll to it. */
   messageId?: string;
   /** The assistant's conversation: the answer sits in a left bubble on
-   * the neutral ground; the action bar under it is the assistant's,
+   * the neutral ground; the action bar beside it is the assistant's,
    * icons only. */
   bubble?: boolean;
   /** The answer's row margin (the assistant's IM grouping). */
@@ -67,8 +79,8 @@ export const MessageAgent = memo(function MessageAgent({
   /** The assistant's process button, last in the action bar: a reply of
    * two steps or more. */
   process?: AssistantProcessToggle;
-  /** Between the bubble and its action row: the reply's subtask cards,
-   * in the assistant's conversation. */
+  /** Under the bubble: the reply's cards, in the assistant's
+   * conversation (the action row is beside the bubble). */
   attachment?: ReactNode;
 }) {
   const selectionYieldKey = useId();
@@ -96,19 +108,39 @@ export const MessageAgent = memo(function MessageAgent({
           className={cn("group/answer", className)}
           onMouseEnter={onMouseEnter}
         >
-          {planError.before && (
-            <MarkdownView source={planError.before} variant="agent" />
+          {bubble ? (
+            // No bubble: the notice takes the bubble's cap, and the bar
+            // hangs beside it as beside a bubble (ruling 199).
+            <div className={cn("relative", ASSISTANT_BUBBLE_MAX)}>
+              {planError.before && (
+                <MarkdownView source={planError.before} variant="agent" />
+              )}
+              <ChatGptPlanErrorNotice error={planError} />
+              {/* Like the protocol-failure notice: nothing to copy,
+                  quote or save; the process button and the ⋯ stay. */}
+              {bar(
+                <MessageActions
+                  source={children}
+                  assistant={{ process, processOnly: true }}
+                  messageId={messageId}
+                />,
+              )}
+            </div>
+          ) : (
+            <>
+              {planError.before && (
+                <MarkdownView source={planError.before} variant="agent" />
+              )}
+              <ChatGptPlanErrorNotice error={planError} />
+            </>
           )}
-          <ChatGptPlanErrorNotice error={planError} />
           {attachment}
-          {/* Like the protocol-failure notice: nothing to copy, quote
-              or save; the process button and the assistant's ⋯ stay. */}
-          {(process !== undefined || bubble) &&
+          {!bubble &&
+            process !== undefined &&
             bar(
               <MessageActions
                 source={children}
                 assistant={{ process, processOnly: true }}
-                messageId={bubble ? messageId : undefined}
               />,
             )}
         </div>
@@ -134,14 +166,28 @@ export const MessageAgent = memo(function MessageAgent({
           className={cn("group/answer", className)}
           onMouseEnter={onMouseEnter}
         >
-          <ProtocolFailureNotice markup={children} />
+          {bubble ? (
+            // As the plan error: the bubble's cap, the bar beside it.
+            <div className={cn("relative", ASSISTANT_BUBBLE_MAX)}>
+              <ProtocolFailureNotice markup={children} />
+              {bar(
+                <MessageActions
+                  source={children}
+                  assistant={{ process, processOnly: true }}
+                  messageId={messageId}
+                />,
+              )}
+            </div>
+          ) : (
+            <ProtocolFailureNotice markup={children} />
+          )}
           {attachment}
-          {(process !== undefined || bubble) &&
+          {!bubble &&
+            process !== undefined &&
             bar(
               <MessageActions
                 source={children}
                 assistant={{ process, processOnly: true }}
-                messageId={bubble ? messageId : undefined}
               />,
             )}
         </div>
@@ -150,8 +196,20 @@ export const MessageAgent = memo(function MessageAgent({
     const body = (
       <MarkdownView source={children} variant="agent" selectionCopyScope />
     );
+    const actions =
+      showActions &&
+      bar(
+        <MessageActions
+          source={children}
+          telemetry={telemetry}
+          assistant={bubble ? { process } : undefined}
+          messageId={bubble ? messageId : undefined}
+          selectionYieldKey={selectionYieldKey}
+        />,
+      );
     // `group/answer`: the hover region that reveals MessageActions —
-    // the answer body plus its bar (2026-09-28).
+    // the answer body plus its bar (2026-09-28). In the assistant's
+    // conversation the bar is the bubble's, beside it (ruling 199).
     return (
       <div
         data-message-id={messageId}
@@ -159,18 +217,16 @@ export const MessageAgent = memo(function MessageAgent({
         className={cn("group/answer", className)}
         onMouseEnter={onMouseEnter}
       >
-        {bubble ? <AssistantBubble>{body}</AssistantBubble> : body}
+        {bubble ? (
+          <AssistantBubble>
+            {body}
+            {actions}
+          </AssistantBubble>
+        ) : (
+          body
+        )}
         {attachment}
-        {showActions &&
-          bar(
-            <MessageActions
-              source={children}
-              telemetry={telemetry}
-              assistant={bubble ? { process } : undefined}
-              messageId={bubble ? messageId : undefined}
-              selectionYieldKey={selectionYieldKey}
-            />,
-          )}
+        {!bubble && actions}
       </div>
     );
   }

@@ -18,7 +18,7 @@ import { createContext } from "react";
  * So the assistant's rows (MessageUser, MessageAgent with `bubble`)
  * mount them on the first hover of the row and keep them from then on:
  * the chips are hidden and click-through until that hover anyway (the
- * row under your bubble shows them in the same render; a reply's bar
+ * chips beside your bubble show them in the same render; a reply's bar
  * shows them through CSS, a render ahead). Until then each chip is its
  * bare button, with its own name (`aria-label`). Everywhere else — the
  * workbench, the selection toolbar — nothing provides this, and the

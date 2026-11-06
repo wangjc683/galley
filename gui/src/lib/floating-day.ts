@@ -25,9 +25,10 @@ export const ROW_AT_ATTRIBUTE = "data-at";
  * `h-6` tall, 12 + 24). What it covers is not what the reader sees at
  * the top. Read at the very edge, a day's first time line slid behind
  * the capsule while the row crossing the edge was still the previous
- * reply's — its action row, empty until hovered (30px) — so the capsule
- * said the day before over the time line it hid, with nothing of that
- * day in sight (ticket 124 preview). Read here, the day turns as the
+ * reply's — its action row, then 30px under it and empty until hovered
+ * (ruling 199 moved it beside the bubble) — so the capsule said the day
+ * before over the time line it hid, with nothing of that day in sight
+ * (ticket 124 preview). Read here, the day turns as the
  * time line reaches the capsule.
  */
 export const FLOATING_DAY_PROBE_PX = 36;

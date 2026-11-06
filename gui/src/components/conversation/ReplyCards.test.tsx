@@ -163,11 +163,13 @@ const tagOf = (html: string, needle: string) => {
 describe("a reply's frame of cards", () => {
   const html = render();
 
-  it("is one frame: the process card's, as wide as its widest line, 12px off the bubble", () => {
+  it("is one frame: the process card's, as wide as its widest line, 4px off the bubble", () => {
     expect(count(html, 'data-role="reply-cards"')).toBe(1);
     expect(html.startsWith('<div data-role="reply-cards"')).toBe(true);
+    // 4px, as one thing of the reply's side after another (ruling 199;
+    // 12px until then, the action row under the frame).
     expect(tagOf(html, 'data-role="reply-cards"')).toContain(
-      'class="mt-3 w-fit max-w-full rounded-md border border-line bg-app p-1 has-[[data-role=ask-user-bubble]]:w-auto"',
+      'class="mt-1 w-fit max-w-full rounded-md border border-line bg-app p-1 has-[[data-role=ask-user-bubble]]:w-auto"',
     );
     // In the panel's order: files, subtasks, to-dos, reminders, memos.
     const order = [

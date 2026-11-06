@@ -18,8 +18,8 @@ import type { Turn } from "@/types/conversation";
 /**
  * A bubble's message menu in the assistant's conversation (main chat
  * ticket 38, PRD ruling 85): right-click a bubble, or the ⋯ at the end of
- * a reply's action bar or of the row under your bubble (ticket 53, PRD
- * ruling 105) — one list for both (layout-and-chrome: right-click
+ * a reply's action bar or of the chips beside your bubble (ticket 53,
+ * PRD rulings 105, 199) — one list for both (layout-and-chrome: right-click
  * for the practised hand, ⋯ for whoever looks for it, the same actions
  * in the same order).
  *
@@ -32,7 +32,7 @@ import type { Turn } from "@/types/conversation";
  * and the bar's 引用 runs this menu's (ticket 47, PRD ruling 99).
  * The greeting is a reply with no process; a question it asked copies
  * and quotes its question (it has no bar). Yours copies your words as
- * sent (`userMessageCopyText`), and the row under your bubble offers
+ * sent (`userMessageCopyText`), and the chips beside your bubble offer
  * the same three on the same terms (ticket 53). 引用 quotes the whole
  * message, cut short when long
  * (`wholeMessageQuote`). 删除 is last, after a separator, and the only

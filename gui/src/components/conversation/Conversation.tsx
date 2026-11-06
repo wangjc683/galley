@@ -31,6 +31,7 @@ import {
   type AssistantRowSide,
   type AssistantRunSteps,
   assistantLinePlan,
+  assistantLastSide,
   assistantRowGap,
   endsWithActionRow,
 } from "@/lib/assistant-conversation";
@@ -570,12 +571,13 @@ export function Conversation({
 
   // A user message, on the right (both conversations since the
   // workbench's ticket 01). Its send time at a break is a centred line
-  // of its own before it, with nothing above it right under an action
-  // row, which is the gap (`previous`: the side of the row right
-  // above). Its own row under the bubble is the gap to what follows:
-  // the workbench's hover copy, or in the assistant's conversation copy
-  // · quote · ⋯ (ruling 105, ticket 53), which adds its IM row gap
-  // above and keeps the selection's floating copy.
+  // of its own before it, with nothing above it right under the
+  // workbench's reply, whose action row is the gap (`previous`: the
+  // side of the row right above). In the workbench its own row under
+  // the bubble, the hover copy, is the gap to what follows; in the
+  // assistant's conversation copy · quote · ⋯ hang beside the bubble
+  // (rulings 105, 199) and the row takes its IM gap above, and keeps
+  // the selection's floating copy.
   const userRow = (
     turn: UserTurn,
     turnIndex: number,
@@ -613,8 +615,9 @@ export function Conversation({
   };
 
   // What hangs under a reply (its frame of cards, ReplyCards). In the
-  // assistant's conversation it sits right under the reply bubble
-  // (before its action row), on the left, at most the bubble's width.
+  // assistant's conversation it sits right under the reply bubble, on
+  // the left, at most the bubble's width (its action row is beside the
+  // bubble, ruling 199).
   const afterAnswer = (messageId: string) => {
     const node = renderAfterAnswer?.(messageId);
     return assistant && node ? (
@@ -685,6 +688,14 @@ export function Conversation({
     );
   };
 
+  // A question of the assistant's conversation not drawn where it was
+  // asked: the one still waiting for you (the live bubble at the tail),
+  // or one with nothing to show. Only a report round's time line above
+  // it is drawn here.
+  const waitingQuestion = (turn: AgentTurn, turnIndex: number) =>
+    linePlan?.question.has(turnIndex) === true &&
+    (turn === pendingAskUserTurn || !mergedAskUserArgs(turn.tools));
+
   // A message row of the assistant's conversation: a user message, a
   // question it asked (answered: a pending one is the live bubble at the
   // tail), the greeting with its time, or a run's answer with the
@@ -717,7 +728,7 @@ export function Conversation({
     ) : null;
     if (linePlan?.question.has(turnIndex)) {
       const args = mergedAskUserArgs(turn.tools);
-      if (turn === pendingAskUserTurn || !args) {
+      if (!args || waitingQuestion(turn, turnIndex)) {
         // The pending question is the live bubble at the tail; a report
         // round's time still goes right above it.
         return reportDivider ? (
@@ -739,8 +750,9 @@ export function Conversation({
         </Fragment>
       );
     }
-    // The steps under the action bar open on the process button (the
-    // run fold's overrides, keyed the same way) and start closed.
+    // The steps under the reply open on the process button in its
+    // action bar (the run fold's overrides, keyed the same way) and
+    // start closed.
     const steps = linePlan?.steps.get(turnIndex);
     const open =
       steps !== undefined && foldOverrides[ordinal(steps.opener)] === true;
@@ -979,8 +991,8 @@ export function Conversation({
     section = null;
   };
   // The side of the last message row: the assistant's IM row gap, and
-  // in both conversations whether a time line sits right under a
-  // reply's action row.
+  // in the workbench whether a time line sits right under a reply's
+  // action row.
   let prevSide: AssistantRowSide | null = null;
   turns.forEach((turn, turnIndex) => {
     // The assistant's conversation shows a run's steps only under its
@@ -1014,23 +1026,23 @@ export function Conversation({
           : null;
         if (row) {
           rendered.push(row);
-          // Your message ends with its row of chips (ruling 105), a
-          // reply with its action bar: either is the gap to the next.
+          // Its side (ruling 199: the hover rows take no room, so each
+          // row ends at its last box). A question still waiting for you
+          // is the live bubble after the conversation; all it draws here
+          // is a report round's time line above it, which ends the side.
           prevSide =
             turn.role === "user"
-              ? "user-bar"
-              : turn.role !== "agent"
+              ? "user"
+              : turn.role !== "agent" || waitingQuestion(turn, turnIndex)
                 ? null
-                : linePlan.question.has(turnIndex)
-                  ? "agent"
-                  : "agent-bar";
+                : "agent";
         }
-        // A run without an answer: its line after its last turn, which
-        // ends with its own gap under it, as a reply ends with its bar.
+        // A run without an answer: its line after its last turn, on its
+        // side.
         const stopped = linePlan.stopped.get(turnIndex);
         if (stopped) {
           rendered.push(renderStoppedRun(stopped, turnIndex, prevSide));
-          prevSide = "agent-bar";
+          prevSide = "agent";
         }
         return;
       }
@@ -1093,8 +1105,10 @@ export function Conversation({
       );
       flushSection();
       rendered.push(renderItem(turn, turnIndex));
-      // The answer ends with its action row (the assistant's row gap).
-      prevSide = "agent-bar";
+      // The workbench's answer ends with its action row, which a time
+      // line right under it reads; in the assistant's conversation the
+      // next row takes the gap after a run drawn flat (ruling 199).
+      prevSide = assistant ? null : "agent-bar";
       return;
     }
     section.nodes.push(renderItem(turn, turnIndex));
@@ -1186,7 +1200,19 @@ export function Conversation({
         }
       : null;
   // `data-role` names the rows a prepend keeps still (lib/scroll-anchor).
-  const root = <div data-role="conversation">{rendered}</div>;
+  // The assistant's conversation marks the side of its last row: what
+  // MainView draws right after it — the typing bubble, the live question
+  // — takes its IM gap from it (`peer`, lib/assistant-conversation.ts
+  // `ASSISTANT_TAIL_GAP`).
+  const root = (
+    <div
+      data-role="conversation"
+      data-last-side={assistant ? assistantLastSide(prevSide) : undefined}
+      className={assistant ? "peer" : undefined}
+    >
+      {rendered}
+    </div>
+  );
   return (
     <WrittenFilesContext.Provider value={writtenFiles}>
       <BrowserSitesContext.Provider value={browserSites}>

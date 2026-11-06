@@ -160,13 +160,16 @@ const MENU: MessageMenuWiring = {
   model: () => null,
 };
 
+/** The workbench's bar, under its answer. */
 const BAR = 'class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1';
 const HOVER_HIDDEN =
   "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100";
 
-/** Each reply's bar's class, in order. */
+/** Each reply's bar's class, in order: beside its bubble in the
+ * assistant's conversation (ruling 199), under its answer in the
+ * workbench. */
 function barClasses(markup: string): string[] {
-  return [...markup.matchAll(/class="(mt-1\.5 flex flex-wrap[^"]*)"/g)].map(
+  return [...markup.matchAll(/data-hover-row="" class="([^"]*)"/g)].map(
     (m) => m[1],
   );
 }
@@ -255,14 +258,17 @@ function elementAt(markup: string, start: number): string {
   throw new Error("unbalanced div");
 }
 
-/** The row under each of your bubbles: its chips' container class. */
+/** The chips beside each of your bubbles (ruling 199): their
+ * container's class. */
+const CHIPS =
+  "absolute right-full bottom-0 flex w-max items-center gap-0.5 pr-1.5";
 function chipGroups(markup: string): string[] {
-  return [...markup.matchAll(/class="(flex items-center gap-0\.5[^"]*)"/g)].map(
+  return [...markup.matchAll(/data-hover-row="" class="([^"]*)"/g)].map(
     (m) => m[1],
   );
 }
 
-describe("the row under your bubble yields to the selection toolbar", () => {
+describe("the chips beside your bubble yield to the selection toolbar", () => {
   const bubbles = () =>
     html(
       <MessageMenuProvider value={MENU}>
@@ -280,21 +286,13 @@ describe("the row under your bubble yields to the selection toolbar", () => {
       /<div class="group relative[^"]*" data-selection-yield="[^"]+">/,
     );
 
-    expect(chipGroups(bubbles())).toEqual([
-      "flex items-center gap-0.5",
-      "flex items-center gap-0.5",
-    ]);
+    expect(chipGroups(bubbles())).toEqual([CHIPS, CHIPS]);
     selectionToolbarServes(keys[1]);
     const [other, served] = chipGroups(bubbles());
-    expect(served).toBe(
-      "flex items-center gap-0.5 pointer-events-none opacity-0",
-    );
-    expect(other).toBe("flex items-center gap-0.5");
+    expect(served).toBe(`${CHIPS} pointer-events-none opacity-0`);
+    expect(other).toBe(CHIPS);
     selectionToolbarServes(null);
-    expect(chipGroups(bubbles())).toEqual([
-      "flex items-center gap-0.5",
-      "flex items-center gap-0.5",
-    ]);
+    expect(chipGroups(bubbles())).toEqual([CHIPS, CHIPS]);
   });
 
   it("keeps a long message's toggle, which is no hover action", () => {
@@ -311,12 +309,13 @@ describe("the row under your bubble yields to the selection toolbar", () => {
     selectionToolbarServes(key);
     const yielded = markup();
     expect(chipGroups(yielded)).toEqual([
-      "flex items-center gap-0.5 pointer-events-none opacity-0",
+      `${CHIPS} pointer-events-none opacity-0`,
     ]);
-    // The toggle stands beside the chips, outside what yields.
+    // The toggle stands under the bubble, apart from the chips, outside
+    // what yields.
     const group = elementAt(
       yielded,
-      yielded.lastIndexOf("<div", yielded.indexOf("gap-0.5 pointer-events")),
+      yielded.lastIndexOf("<div", yielded.indexOf("pr-1.5 pointer-events")),
     );
     const expand = zhCopy.conversation.expandLines(9);
     expect(group).not.toContain(expand);

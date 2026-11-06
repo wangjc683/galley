@@ -13,7 +13,11 @@ import { cn } from "@/lib/utils";
  * The frame is the process card's (ProcessCard.tsx): a hairline
  * `border-line`, `rounded-md`, the page ground, 4px inside. It is as wide
  * as its widest line (`w-fit`), up to the bubble's cap (Conversation
- * wraps it in `ASSISTANT_BUBBLE_MAX`), 12px under the bubble. While a
+ * wraps it in `ASSISTANT_BUBBLE_MAX`), 4px under the bubble: one thing of
+ * the reply's side after another, as two of its bubbles (main chat PRD
+ * ruling 199). At 12px, with the next bubble 4px under it, the frame read
+ * as the next message's (a reply, its to-do, the reply of the round that
+ * woke it); and the action row no longer comes between. While a
  * subtask's question is answered in its line (ruling 101) the frame goes
  * to the cap, so the question and the reply field are never squeezed.
  * No `overflow-hidden`: a file line's 「在文件夹中显示」 floats just
@@ -23,7 +27,7 @@ export function ReplyCards({ children }: { children: ReactNode }) {
   return (
     <div
       data-role="reply-cards"
-      className="mt-3 w-fit max-w-full rounded-md border border-line bg-app p-1 has-[[data-role=ask-user-bubble]]:w-auto"
+      className="mt-1 w-fit max-w-full rounded-md border border-line bg-app p-1 has-[[data-role=ask-user-bubble]]:w-auto"
     >
       {children}
     </div>

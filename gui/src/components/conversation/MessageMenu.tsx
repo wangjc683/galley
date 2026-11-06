@@ -243,8 +243,8 @@ export function MessageContextMenu({
  * the quote strip appearing and the caret in the composer are the
  * receipt. It shows exactly where the menu has 引用 (`wiring.canQuote`,
  * the menu's own judgment): not where the reply has no menu, as the ⋯,
- * nor under a reply with nothing to quote (an image alone). The row
- * under your bubble has it too (ticket 53), the same way: your words
+ * nor for a reply with nothing to quote (an image alone). Your
+ * bubble's chips have it too (ticket 53), the same way: your words
  * whole, cut short when long.
  */
 export function MessageQuoteButton({
@@ -253,8 +253,8 @@ export function MessageQuoteButton({
 }: {
   /** The bubble's row: a reply's answer row, or your message's. */
   messageId: string;
-  /** The row under your bubble shows and hides its chips itself
-   * (ActionChip `revealed`); a reply's bar hides as a whole. */
+  /** The chips beside your bubble show and hide one by one (ActionChip
+   * `revealed`); a reply's bar hides as a whole. */
   revealed?: boolean;
 }) {
   const copy = useCopy();
@@ -279,9 +279,10 @@ export function MessageQuoteButton({
  * `tabIndex={-1}`), 「更多」 for its name and tooltip, pressed while the
  * menu is open; the bar holds it (`open` keeps the bar up). Nothing
  * where the reply has no menu (outside the assistant's conversation, a
- * reply drawn the workbench way). It also ends the row under your
- * bubble (ticket 53), where the menu opens from its right edge (`align
- * "end"`): that row sits on the right, flush with the bubble.
+ * reply drawn the workbench way). It also ends your bubble's chips
+ * (ticket 53), left of the bubble since ruling 199, where the menu opens
+ * from its right edge (`align "end"`), over the margin rather than over
+ * your words.
  *
  * Its menu's root mounts with the row's other chip roots, on the row's
  * first hover (lib/chip-roots.ts, ticket 72), or when it opens. Before
@@ -299,11 +300,12 @@ export function MessageMenuButton({
   messageId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** The row under your bubble shows and hides its chips itself
-   * (ActionChip `revealed`); a reply's bar hides as a whole. */
+  /** The chips beside your bubble show and hide one by one (ActionChip
+   * `revealed`); a reply's bar hides as a whole. */
   revealed?: boolean;
-  /** The menu's edge on the ⋯: its left under a reply (the bar is on
-   * the left), its right under your bubble. */
+  /** The menu's edge on the ⋯: its left beside a reply (the bar is right
+   * of the bubble, the menu opens away from it), its right beside your
+   * bubble (the chips are left of it). */
   align?: "start" | "end";
 }) {
   const copy = useCopy();

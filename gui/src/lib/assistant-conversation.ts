@@ -32,11 +32,14 @@ import type { Turn } from "@/types/conversation";
  *
  *   bubbles   on both sides: the user's words on the right (apricot),
  *             the assistant's replies, questions and greeting on the
- *             left (`bg-assistant-tint`); no avatar, no name. A reply's
- *             action row is the gap under it, and so is the row under
- *             your bubble (copy, quote, ⋯ on hover; ruling 105): 30px
- *             after either; its own consecutive messages sit 4px apart
- *             (`assistantRowGap`).
+ *             left (`bg-assistant-tint`); no avatar, no name. Spaced as
+ *             an IM in two steps (ruling 199, `assistantRowGap`): 4px
+ *             within a side, 16px across. The hover buttons take no
+ *             room: a reply's action row hangs outside its bubble on the
+ *             right, the row of your bubble (copy, quote, ⋯; ruling
+ *             105) outside it on the left, bottom edges flush, 6px off
+ *             (MessageActions, MessageUser). Until ruling 199 both hung
+ *             under their bubble, and their hidden 30px was the gap.
  *   process   while it works, the typing bubble at the conversation's
  *             end (three dots, `typingBubbleShown`: a round you
  *             started from the send on, and the second half of one —
@@ -63,10 +66,11 @@ import type { Turn } from "@/types/conversation";
  *             「正在输入…」 with the dots (`assistantTyping`, the dots'
  *             own rule).
  *             The reply appears whole once the round has its answer.
- *             Under it nothing shows at rest: the action bar comes in
- *             on hover, icons only (copy, quote, save, for a reply of
- *             two steps or more the process button, then ⋯; the
- *             process button opens its steps in place as a card: the
+ *             Nothing shows around it at rest: the action bar comes in
+ *             on hover beside the bubble, icons only (copy, quote,
+ *             save, for a reply of two steps or more the process
+ *             button, then ⋯; the process button opens its steps in
+ *             place as a card 4px under the reply: the
  *             round's numbers — 「4 步 · 用时 45 秒 · ↑33k ↓1.1k」 —
  *             then one line a step, eight at most before it scrolls
  *             (lib/assistant-process.ts); no context percentage
@@ -105,44 +109,97 @@ import type { Turn } from "@/types/conversation";
 
 // ---- Bubbles ----------------------------------------------------------
 
-/** The side of the message row above, for the row gap. Two end with an
- * action row's reserved 30px, hidden until hovered: a reply row
- * (`agent-bar`: copy, quote, save, the process button, ⋯), and your
- * message in the assistant's conversation (`user-bar`, ruling 105,
- * ticket 53: copy, quote, ⋯ under the bubble). A question it asked
- * (`agent`) ends at its candidates. `user` is the workbench's user
- * message, which only a time line reads (the workbench has no IM gap;
- * its copy row sits in the row's bottom margin, and the line's own
- * margin collapses into it). */
-export type AssistantRowSide = "user" | "user-bar" | "agent" | "agent-bar";
+/** The row above, as the conversation keeps it for the next row's top
+ * margin and a time line's (Conversation's `prevSide`). In the
+ * assistant's conversation, its side: `user` your message, `agent`
+ * anything of its own — a reply, a line it told mid-run, a question it
+ * asked, the greeting, the 「中途停下」 line — whatever hangs under it
+ * (the cards, the candidates, an open process card) included. Its rows
+ * end at their last box: since ruling 199 no hover row reserves room
+ * under them. `agent-bar` is the workbench's reply, whose action row
+ * still keeps its place under the answer (6 + 24 = 30px); only a time
+ * line reads it (`endsWithActionRow`), and the assistant's conversation
+ * never records it. The workbench's user message is `user` (its copy
+ * row sits in the row's bottom margin, and a time line's own margin
+ * collapses into it). */
+export type AssistantRowSide = "user" | "agent" | "agent-bar";
 
-/** Whether the row above ends with an action row's reserved 30px (a
- * reply's, or your message's in the assistant's conversation): that row
- * is the gap, and neither the next message row nor a time line adds
- * anything above. */
+/** Whether the row above ends with an action row's reserved 30px — the
+ * workbench's reply (`agent-bar`): that row is the gap, and a time line
+ * right under it adds nothing above. Never in the assistant's
+ * conversation since ruling 199, where the hover rows take no room. */
 export function endsWithActionRow(previous: AssistantRowSide | null): boolean {
-  return previous === "agent-bar" || previous === "user-bar";
+  return previous === "agent-bar";
 }
 
 /**
- * Top margin of a message row: 4px under a row on the same side (an IM
- * group), 20px (the workbench user message's my-5) when the side
- * changes or something else sits in between, and none under an action
- * row, whose reserved 30px already is the gap (otherwise a change of
- * side reads 50px one way and 20px the other, and the conversation
- * falls into question–answer pairs). Since your message carries its row
- * too (ruling 105), both changes of side are 30px, and so are two of
- * yours in a row: no 4px group on your side (bursts are rare in the
- * main chat — none among your 9 messages in the database when ruling
- * 105 was made — so no second set of rules for them).
+ * Top margin of a message row in the assistant's conversation (ruling
+ * 199): 4px under a row on the same side (an IM group: it → it, you →
+ * you), 16px when the side changes (it → you, you → it), and 20px (the
+ * workbench user message's my-5) when something else sits in between —
+ * a run drawn flat, a system line — or nothing does; under a time line
+ * its callers give the row `mt-5` themselves. 16px is 37% of a one-line
+ * bubble (43px), Telegram's 32% a little looser: our leading is 1.55,
+ * our bubbles fatter; not 12, which would read as the distance to
+ * something that hangs under a bubble. Until ruling 199 every gap
+ * between two bubbles was the 30px a hover row kept under the one above
+ * (`mt-0` here), so the 4px groups hardly ever showed. What MainView
+ * draws after the conversation takes the same gap from its last row
+ * (`ASSISTANT_TAIL_GAP`).
  */
 export function assistantRowGap(
   previous: AssistantRowSide | null,
   side: "user" | "agent",
 ): string {
-  if (endsWithActionRow(previous)) return "mt-0";
-  return previous === side ? "mt-1" : "mt-5";
+  if (previous === null) return "mt-5";
+  return (previous === "user") === (side === "user") ? "mt-1" : "mt-4";
 }
+
+/**
+ * The side of the conversation's last row, as its root carries it
+ * (`data-last-side`, the assistant's conversation only): `other` when
+ * something else ends it — a time line, a run drawn flat — or nothing is
+ * drawn.
+ */
+export type AssistantLastSide = "user" | "agent" | "other";
+
+export function assistantLastSide(
+  previous: AssistantRowSide | null,
+): AssistantLastSide {
+  if (previous === null) return "other";
+  return previous === "user" ? "user" : "agent";
+}
+
+/**
+ * The top margin of what MainView draws right after the assistant's
+ * conversation, on its side: the typing bubble (TypingBubble) and the
+ * live question (AskUserBubble). It is `assistantRowGap(last, "agent")`,
+ * read off the conversation's root, the `peer` before them in the
+ * column (`data-last-side`): 16px under your bubble, 4px under its last
+ * reply (a woken round) or a line it told mid-run, 20px under anything
+ * else. The reply that takes the typing bubble's place gets the same
+ * value from `assistantRowGap`, so it opens where the dots stood
+ * (lib/typing-bubble-handoff.ts), and so does the question. Until
+ * ruling 199 neither had a top margin of its own: they stood under the
+ * hover row's 30px. Tailwind reads class names as written, so the three
+ * are spelled out; the tests pin them to `assistantRowGap`.
+ */
+export const ASSISTANT_TAIL_GAP =
+  "peer-data-[last-side=user]:mt-4 peer-data-[last-side=agent]:mt-1 peer-data-[last-side=other]:mt-5";
+
+/** The room a reply's action row takes beside its bubble (main chat PRD
+ * ruling 199; MessageActions), which the reply bubble's cap leaves free
+ * on its right (AssistantParts `ASSISTANT_BUBBLE_MAX`): five chips at
+ * most — copy, quote, save, the process, ⋯ — 24px each (ActionChip),
+ * 2px apart, 6px off the bubble's edge. 5 × 24 + 4 × 2 + 6 = 134px. */
+export const ASSISTANT_BAR_CHIPS = 5;
+export const ASSISTANT_BAR_CHIP_PX = 24;
+export const ASSISTANT_BAR_CHIP_GAP_PX = 2;
+export const ASSISTANT_BAR_OFFSET_PX = 6;
+export const ASSISTANT_BAR_ROOM_PX =
+  ASSISTANT_BAR_CHIPS * ASSISTANT_BAR_CHIP_PX +
+  (ASSISTANT_BAR_CHIPS - 1) * ASSISTANT_BAR_CHIP_GAP_PX +
+  ASSISTANT_BAR_OFFSET_PX;
 
 // ---- While it runs: the typing bubble ------------------------------------
 

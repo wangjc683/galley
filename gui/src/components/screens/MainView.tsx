@@ -51,7 +51,10 @@ import { useTodosByMessage } from "@/hooks/useTodoCards";
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { useTypingBubbleHandoff } from "@/hooks/useTypingBubbleHandoff";
 import { useMarkdownStream } from "@/hooks/useMarkdownStream";
-import { typingBubbleShown } from "@/lib/assistant-conversation";
+import {
+  ASSISTANT_TAIL_GAP,
+  typingBubbleShown,
+} from "@/lib/assistant-conversation";
 import { assistantDoing } from "@/lib/assistant-progress";
 import { filesByMessage } from "@/lib/file-cards";
 import { openMainChat } from "@/lib/main-chat";
@@ -897,6 +900,9 @@ function MainViewContent({
                   composerRef.current?.prefillText(text)
                 }
                 bubble={isMainChat}
+                // The IM gap under the conversation's last row, as the
+                // typing bubble it may take over from (ruling 199).
+                className={isMainChat ? ASSISTANT_TAIL_GAP : undefined}
                 disabled={questionLocked}
               >
                 {questionLocked && (

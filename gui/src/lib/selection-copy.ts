@@ -15,7 +15,7 @@ export const SELECTION_COPY_SCOPE =
 /**
  * The hover row yields to the selection toolbar (main chat PRD ruling
  * 108): while the toolbar shows for a message, that message's hover row
- * — a reply's action bar (MessageActions), the row under your bubble
+ * — a reply's action bar (MessageActions), the chips beside your bubble
  * (MessageUser) — does not, so one set of actions shows at a time.
  *
  * A message whose text can get the toolbar carries a key of its own

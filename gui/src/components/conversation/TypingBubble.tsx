@@ -2,7 +2,11 @@ import { useEffect, useState, type Ref } from "react";
 
 import { ASSISTANT_BUBBLE_MAX } from "@/components/conversation/AssistantParts";
 import { useProgressRoll } from "@/hooks/useProgressRoll";
-import { TYPING_DOT_EM, TYPING_DOT_GAP_EM } from "@/lib/assistant-conversation";
+import {
+  ASSISTANT_TAIL_GAP,
+  TYPING_DOT_EM,
+  TYPING_DOT_GAP_EM,
+} from "@/lib/assistant-conversation";
 import { assistantProgressElapsed } from "@/lib/assistant-progress";
 import { useCopy } from "@/lib/i18n";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
@@ -33,10 +37,12 @@ const DOT_STYLE = {
  * rulings 134, 135): with the card, the only two places that speak while
  * it runs; the header says nothing then.
  *
- * The row has no top margin: the reply that takes its place stands right
- * under the row above (`assistantRowGap` gives it `mt-0` under either
- * bar row — your bubble's 30px, or the last reply's action bar), so the
+ * Its top margin is the IM gap under the conversation's last row
+ * (`ASSISTANT_TAIL_GAP`, ruling 199): 16px under your bubble, 4px under
+ * the last reply (a woken round) or a line it told mid-run. The reply
+ * that takes its place gets the same gap (`assistantRowGap`), so the
  * bubble opens where the dots were (hooks/useTypingBubbleHandoff.ts).
+ * Until ruling 199 it had none and stood under the hover row's 30px.
  */
 export function TypingBubble({
   ref,
@@ -50,7 +56,12 @@ export function TypingBubble({
 }) {
   const copy = useCopy();
   return (
-    <div ref={ref} data-role="assistant-typing" role="status">
+    <div
+      ref={ref}
+      data-role="assistant-typing"
+      role="status"
+      className={ASSISTANT_TAIL_GAP}
+    >
       <span className="sr-only">{copy.assistant.typingLabel}</span>
       <div
         data-role="assistant-typing-bubble"

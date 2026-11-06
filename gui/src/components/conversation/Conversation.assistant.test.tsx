@@ -179,7 +179,14 @@ function buttons(html: string, label: string): string[] {
     .filter((tag) => tag.includes(`aria-label="${label}"`));
 }
 
-const BAR = 'class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1';
+/** A reply's action bar in the assistant's conversation: beside its
+ * bubble, out of flow (ruling 199). */
+const BAR = 'class="absolute bottom-0 left-full flex w-max items-center pl-1.5';
+/** The workbench's: under its answer, in flow. */
+const WORKBENCH_BAR =
+  'class="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1';
+/** The reply bubble's cap (AssistantParts `ASSISTANT_BUBBLE_MAX`). */
+const CAP = "max-w-[calc(100%-134px)]";
 const HIDDEN =
   "pointer-events-none opacity-0 group-hover/answer:pointer-events-auto group-hover/answer:opacity-100";
 const INPUT = `aria-label="${zhCopy.conversation.telemetryInputTip("33k")}"`;
@@ -216,6 +223,61 @@ describe("the assistant's conversation: only where asked", () => {
   });
 });
 
+// Ruling 199 is the main chat's alone: the workbench keeps every gap and
+// both hover rows where they were.
+describe("the workbench: spacing and hover rows untouched by ruling 199", () => {
+  it("keeps 30px under each bubble of yours and each reply, the bars under them, in flow", () => {
+    const turns: Turn[] = [
+      ...conversation().slice(1),
+      user("晚上好", at(21)),
+      answer("晚上好。", 1),
+    ];
+    const html = render(turns, { messageMenu: MENU });
+    // Your rows: 20px above, the copy row's 30px under (mb-7.5), the
+    // rail's inset; the copy under the bubble, its hit band over the
+    // margin; nothing beside the bubble.
+    const rows = [...html.matchAll(/<div class="group relative ([^"]*)"/g)].map(
+      (m) => m[1].replace(/ mr-\[.*$/, ""),
+    );
+    expect(rows).toHaveLength(6);
+    for (const row of rows) expect(row).toBe("mt-5 mb-7.5");
+    expect(count(html, WORKBENCH_CHIP_ROW)).toBe(6);
+    expect(
+      count(
+        html,
+        '<span aria-hidden="true" class="absolute inset-x-0 top-full h-7.5"></span>',
+      ),
+    ).toBe(6);
+    expect(html).not.toContain(CHIP_ROW);
+    // The replies' bars: under the answer, in flow, the numbers after
+    // them; none beside anything, no bubble, no cap.
+    expect(count(html, WORKBENCH_BAR)).toBe(5);
+    expect(html).not.toContain(BAR);
+    expect(html).not.toContain("left-full");
+    expect(html).not.toContain("right-full");
+    expect(html).not.toContain(CAP);
+    expect(html).not.toContain('data-role="assistant-bubble"');
+    // Each bar the last thing of its answer's row, after the prose.
+    const answers = html.split('class="group/answer"').slice(1);
+    expect(answers).toHaveLength(5);
+    for (const row of answers) {
+      const bar = row.indexOf(WORKBENCH_BAR);
+      expect(bar).toBeGreaterThan(row.indexOf("<p"));
+      expect(row.indexOf("<p")).toBeGreaterThan(-1);
+    }
+    // No IM gaps and no tail mark.
+    expect(html).not.toMatch(/class="group\/answer mt-/);
+    expect(html).not.toContain("data-last-side");
+    expect(html).not.toContain('class="peer"');
+    // A time line right under a reply adds nothing above: the bar's
+    // 30px is the gap.
+    const lines = [
+      ...html.matchAll(/data-role="message-time-divider" class="([^"]*)"/g),
+    ].map((m) => m[1]);
+    expect(lines[lines.length - 1]).toBe("flex justify-center mb-4");
+  });
+});
+
 describe("the assistant's conversation: bubbles", () => {
   it("puts the user's words on the right and every reply, the question and the greeting in a left bubble", () => {
     const html = assistant(conversation());
@@ -224,13 +286,14 @@ describe("the assistant's conversation: bubbles", () => {
     expect(count(html, "ml-auto max-w-[min(80%,560px)]")).toBe(5);
     // The greeting, four answers and the answered question.
     expect(count(html, 'data-role="assistant-bubble"')).toBe(6);
-    expect(html).toContain("max-w-[88%]");
+    expect(html).toContain(CAP);
+    expect(html).not.toContain("max-w-[88%]");
     expect(html).toContain("bg-assistant-tint");
     const first = html.indexOf('data-role="assistant-bubble"');
     expect(html.indexOf("你好。以后有什么事")).toBeGreaterThan(first);
     // Each of the user's bubbles is still a selection-copy scope (ruling
-    // 73's floating copy stays beside its hover row, ruling 105), and
-    // nothing rides beside it.
+    // 73's floating copy stays beside its hover row, ruling 105); ticket
+    // 20's chip beside it (ruling 73 took it away) does not come back.
     expect(count(html, 'data-selection-copy-scope="user-message"')).toBe(5);
     expect(html).not.toContain("right-full ml-0 mr-1.5");
     expect(html).not.toContain("left-full bottom-[calc(10px");
@@ -243,39 +306,50 @@ describe("the assistant's conversation: bubbles", () => {
     expect(count(html, "absolute top-full right-0 z-10 mt-1.5")).toBe(5);
     expect(html).not.toContain("left-full bottom-[calc(10px");
     expect(html).not.toContain('data-selection-copy-scope="user-message"');
-    // The assistant's bubbles have the same row (ruling 105, ticket 53)
-    // but not the inset the question rail asks for (it has no rail).
+    // The assistant's bubbles have their chips beside them since ruling
+    // 199 (under them before, ruling 105), and not the inset the question
+    // rail asks for (it has no rail).
     const im = assistant(conversation());
-    expect(count(im, "absolute top-full right-0 z-10 mt-1.5")).toBe(5);
+    expect(count(im, "absolute top-full right-0 z-10 mt-1.5")).toBe(0);
+    expect(count(im, CHIP_ROW)).toBe(5);
     expect(im).not.toContain("100cqw");
   });
 
-  it("keeps 30px under each of your bubbles, its row the gap, and under each reply", () => {
+  it("spaces the bubbles as an IM: 4px within a side, 16px across (ruling 199)", () => {
+    const told: AgentTurn = {
+      role: "agent",
+      turnIndex: 2,
+      finalAnswer: "小票看清了，在记。",
+      tools: [],
+      interim: true,
+      messageId: "t-小票",
+    };
     const turns: Turn[] = [
       user("这张小票帮我记一下账", at(8)),
       user("还有打车 46", at(8, 1)),
       user("午饭 32", at(8, 1)),
-      answer("记好了。", 1),
+      step("我先看小票。", 1),
+      told,
+      step("我记一下打车。", 3),
+      answer("记好了。", 4),
       user("谢谢", at(8, 3)),
     ];
     const html = assistant(turns);
     const rows = [...html.matchAll(/class="group relative ([^"]*)"/g)].map(
       (m) => m[1],
     );
-    // Each of your rows keeps its 30px under the bubble, for its chips
-    // (ruling 105): three in a row are 30px apart too, no 4px group (the
-    // first under its centred time); after the reply, its action row is
-    // the gap.
-    expect(rows).toEqual([
-      "mt-5 mb-7.5",
-      "mt-0 mb-7.5",
-      "mt-0 mb-7.5",
-      "mt-0 mb-7.5",
-    ]);
-    // The reply right under your bubble adds nothing either: you → it is
-    // the row's 30px, as it → you is the bar's.
-    expect(html).toContain('class="group/answer mt-0"');
-    expect(html).not.toContain('class="group/answer mt-5"');
+    // Your rows: the first under its centred time (20px), two of yours
+    // 4px apart, then 16px after its reply. No bottom margin: the chips
+    // beside the bubble reserve nothing under it.
+    expect(rows).toEqual(["mt-5", "mt-1", "mt-1", "mt-4"]);
+    expect(html).not.toContain("mb-7.5");
+    // Its rows: 16px under your bubble, then 4px — the line it told
+    // mid-run, the reply after it.
+    const answers = [...html.matchAll(/class="group\/answer ([^"]*)"/g)].map(
+      (m) => m[1],
+    );
+    expect(answers).toEqual(["mt-4", "mt-1"]);
+    expect(html).not.toContain('class="group/answer mt-0"');
   });
 
   it("draws an answered question as a bubble with its candidates listed under it", () => {
@@ -290,16 +364,21 @@ describe("the assistant's conversation: bubbles", () => {
     expect(html).not.toContain(zhCopy.conversation.askedYou);
   });
 
-  it("holds the subtask cards right under the reply bubble, at its width, before the action row", () => {
+  it("holds the subtask cards right under the reply bubble, at its width, the action row beside the bubble", () => {
     const html = assistant(conversation(), { renderAfterAnswer: cards });
     const at = html.indexOf('data-role="subtask-cards"');
     expect(at).toBeGreaterThan(html.indexOf("排好了。"));
-    // Inside the reply's group, before its action row.
+    // Inside the reply's group, after its bubble — and the bubble's
+    // action row, which hangs beside the bubble (ruling 199).
     const group = html.lastIndexOf('class="group/answer', at);
     expect(group).toBeGreaterThan(-1);
-    expect(html.slice(group, at)).toContain("排好了。");
-    expect(html.slice(group, at)).not.toContain(zhCopy.conversation.copy);
-    expect(html.slice(at - 80, at)).toContain("max-w-[88%]");
+    const reply = html.slice(group, at);
+    expect(reply).toContain("排好了。");
+    expect(reply.indexOf(BAR)).toBeGreaterThan(reply.indexOf("排好了。"));
+    expect(reply.lastIndexOf('data-role="assistant-bubble"')).toBeLessThan(
+      reply.indexOf(BAR),
+    );
+    expect(html.slice(at - 80, at)).toContain(CAP);
     // The workbench hangs them after the whole reply, action row and all.
     const today = render(conversation(), { renderAfterAnswer: cards });
     expect(
@@ -311,7 +390,7 @@ describe("the assistant's conversation: bubbles", () => {
   });
 });
 
-// ---- The row under your bubble (ticket 53, PRD ruling 105) --------------
+// ---- The chips beside your bubble (ticket 53, PRD rulings 105, 199) -----
 
 /** The main chat's message menu, as MainView hands it over. */
 const MENU = {
@@ -322,7 +401,12 @@ const MENU = {
   onDelete: () => {},
 };
 
+/** Your bubble's chips in the assistant's conversation: beside it on its
+ * left, out of flow (ruling 199). */
 const CHIP_ROW =
+  'class="absolute right-full bottom-0 flex w-max items-center gap-0.5 pr-1.5"';
+/** The workbench's copy: under the bubble, in the row's bottom margin. */
+const WORKBENCH_CHIP_ROW =
   'class="absolute top-full right-0 z-10 mt-1.5 flex h-6 items-center gap-1"';
 
 /** The whole row (MessageUser's outer div) holding `content`. */
@@ -343,20 +427,44 @@ function rowOf(html: string, content: string): string {
 
 /** The `<button>` tags of a row's chips, in order. */
 function chipTags(row: string): string[] {
-  const chips = row.slice(row.indexOf(CHIP_ROW));
+  const at = row.indexOf(CHIP_ROW);
+  const chips = row.slice(at > -1 ? at : row.indexOf(WORKBENCH_CHIP_ROW));
   return [...chips.matchAll(/<button[^>]*>/g)].map((m) => m[0]);
+}
+
+/** The bubble (`data-role="user-msg"`…) inside a row, whole. */
+function bubbleOf(row: string): string {
+  const start = row.indexOf("<div data-role=");
+  expect(start).toBeGreaterThan(-1);
+  let depth = 0;
+  const tags = /<div\b|<\/div>/g;
+  tags.lastIndex = start;
+  for (let m = tags.exec(row); m; m = tags.exec(row)) {
+    depth += m[0] === "</div>" ? -1 : 1;
+    if (depth === 0) return row.slice(start, m.index + 6);
+  }
+  throw new Error("unbalanced bubble");
 }
 
 const label = (tag: string) => /aria-label="([^"]*)"/.exec(tag)?.[1];
 
-describe("the assistant's conversation: the row under your bubble", () => {
+describe("the assistant's conversation: the chips beside your bubble", () => {
   const words = zhCopy.conversation;
 
-  it("puts copy · quote · ⋯ under your bubble, right edges flush, hidden but in its place", () => {
+  it("puts copy · quote · ⋯ beside your bubble on its left, out of flow, hidden but in its place", () => {
     const html = assistant(conversation(), { messageMenu: MENU });
     const row = rowOf(html, "帮我排个行程");
-    // After the bubble, inside the row, in its bottom margin.
-    expect(row.indexOf(CHIP_ROW)).toBeGreaterThan(row.indexOf("帮我排个行程"));
+    // The bubble's last child, after its words: off its left edge, its
+    // bottom edge on the bubble's, 6px off (its own right padding).
+    const bubble = bubbleOf(row);
+    expect(bubble.indexOf(CHIP_ROW)).toBeGreaterThan(
+      bubble.indexOf("帮我排个行程"),
+    );
+    expect(CHIP_ROW).toContain("absolute right-full bottom-0");
+    expect(CHIP_ROW).toContain("pr-1.5");
+    // Nothing of them under the bubble any more.
+    expect(row).not.toContain(WORKBENCH_CHIP_ROW);
+    expect(row).not.toContain("top-full");
     const tags = chipTags(row);
     // The menu's order, ⋯ last (ruling 99).
     expect(tags.map(label)).toEqual([
@@ -373,12 +481,9 @@ describe("the assistant's conversation: the row under your bubble", () => {
     }
     // ⋯ is the menu's trigger, closed.
     expect(tags[2]).toContain('aria-haspopup="menu"');
-    // 2px apart, as on a reply's bar.
-    const chips = row.slice(row.indexOf(CHIP_ROW));
-    expect(chips).toContain(
-      '<div data-hover-row="" class="flex items-center gap-0.5">',
-    );
-    // Every bubble of yours has one, your answer to its question too.
+    // 2px apart, as on a reply's bar; the row a deleted copy hides.
+    expect(row).toContain(`<div data-hover-row="" ${CHIP_ROW}>`);
+    // Every bubble of yours has them, your answer to its question too.
     expect(count(html, CHIP_ROW)).toBe(5);
   });
 
@@ -428,38 +533,39 @@ describe("the assistant's conversation: the row under your bubble", () => {
     expect(chipTags(rowOf(fresh, "刚发出去")).map(label)).toEqual([words.copy]);
   });
 
-  it("keeps the workbench's single hover copy, whatever it is handed", () => {
+  it("keeps the workbench's single hover copy under the bubble, whatever it is handed", () => {
     const html = render(conversation(), { messageMenu: MENU });
     const row = rowOf(html, "帮我排个行程");
     expect(chipTags(row).map(label)).toEqual([words.copy]);
     expect(row).not.toContain(zhCopy.common.more);
-    expect(row).not.toContain(
-      '<div data-hover-row="" class="flex items-center gap-0.5">',
-    );
+    expect(row).not.toContain(CHIP_ROW);
+    expect(row).toContain(WORKBENCH_CHIP_ROW);
+    expect(row).toMatch(/^<div class="group relative mt-5 mb-7\.5 mr-\[/);
+    expect(bubbleOf(row)).not.toContain("<button");
   });
 
-  it("makes the 30px under your bubble part of its hover region, in both conversations (ruling 109)", () => {
+  it("makes the 30px under your bubble part of its hover region in the workbench only (ruling 109)", () => {
     const BAND =
       '<span aria-hidden="true" class="absolute inset-x-0 top-full h-7.5"></span>';
-    for (const html of [
-      assistant(conversation(), { messageMenu: MENU }),
-      render(conversation()),
-    ]) {
-      // Every bubble of yours, your answer to its question too.
-      expect(count(html, BAND)).toBe(5);
-      const row = rowOf(html, "帮我排个行程");
-      // A child of the row (the hover region), over exactly its bottom
-      // margin: out of flow, as tall as `mb-7.5`, the whole row wide.
-      expect(row).toMatch(/^<div class="group relative [^"]*mb-7\.5/);
-      expect(count(row, BAND)).toBe(1);
-      // Before the chips, which paint over it (z-10) and stay clickable.
-      expect(row.indexOf(BAND)).toBeLessThan(row.indexOf(CHIP_ROW));
-      expect(row.indexOf(BAND)).toBeGreaterThan(row.indexOf("帮我排个行程"));
-      expect(CHIP_ROW).toContain("z-10");
-    }
+    const today = render(conversation());
+    // Every bubble of yours, your answer to its question too.
+    expect(count(today, BAND)).toBe(5);
+    const row = rowOf(today, "帮我排个行程");
+    // A child of the row (the hover region), over exactly its bottom
+    // margin: out of flow, as tall as `mb-7.5`, the whole row wide.
+    expect(row).toMatch(/^<div class="group relative [^"]*mb-7\.5/);
+    expect(count(row, BAND)).toBe(1);
+    // Before the chip, which paints over it (z-10) and stays clickable.
+    expect(row.indexOf(BAND)).toBeLessThan(row.indexOf(WORKBENCH_CHIP_ROW));
+    expect(row.indexOf(BAND)).toBeGreaterThan(row.indexOf("帮我排个行程"));
+    // The assistant's row has no bottom margin to cover (ruling 199): the
+    // chips are beside the bubble, inside the row, the column wide.
+    const im = assistant(conversation(), { messageMenu: MENU });
+    expect(count(im, BAND)).toBe(0);
+    expect(rowOf(im, "帮我排个行程")).not.toContain("mb-7.5");
   });
 
-  it("puts a long message's toggle in the same row, outermost on the right", () => {
+  it("puts a long message's toggle under the bubble, on the right, in flow and always there", () => {
     const long = Array.from({ length: 9 }, (_, i) => `第 ${i + 1} 行`).join(
       "\n",
     );
@@ -467,17 +573,33 @@ describe("the assistant's conversation: the row under your bubble", () => {
       messageMenu: MENU,
     });
     const row = rowOf(html, "第 1 行");
-    const chips = row.slice(row.indexOf(CHIP_ROW));
-    const more = chips.indexOf(`aria-label="${zhCopy.common.more}"`);
-    const toggle = chips.indexOf(words.expandLines(9));
+    // The chips first, then the toggle's button.
     expect(chipTags(row).slice(0, 3).map(label)).toEqual([
       words.copy,
       words.quoteSelection,
       zhCopy.common.more,
     ]);
-    expect(toggle).toBeGreaterThan(more);
-    // One row under the bubble, not a toggle row of its own.
-    expect(row).not.toContain('<div class="mt-1 flex justify-end">');
+    // Not with the chips: a row of its own under the bubble, 6px down,
+    // right-aligned, in flow (the next message measures from its foot).
+    const toggleRow = '<div class="mt-1.5 flex justify-end"><button';
+    expect(bubbleOf(row)).not.toContain(words.expandLines(9));
+    expect(row.indexOf(toggleRow)).toBeGreaterThan(
+      row.indexOf(bubbleOf(row)) + bubbleOf(row).length - 1,
+    );
+    expect(row.slice(row.indexOf(toggleRow))).toContain(words.expandLines(9));
+    // The toggle is no hover chip: no reveal on it.
+    const toggle = row.slice(row.indexOf(toggleRow) + toggleRow.length - 7);
+    expect(toggle.slice(0, toggle.indexOf(">"))).not.toContain("opacity-0");
+    // The workbench keeps it in the chip's row, outermost on the right.
+    const today = rowOf(
+      render([user(long, at(9)), answer("好。", 1)]),
+      "第 1 行",
+    );
+    const chips = today.slice(today.indexOf(WORKBENCH_CHIP_ROW));
+    expect(chips.indexOf(words.expandLines(9))).toBeGreaterThan(
+      chips.indexOf(`aria-label="${words.copy}"`),
+    );
+    expect(today).not.toContain(toggleRow);
   });
 
   it("gives a message through Galley CLI on the right the same row", () => {
@@ -497,13 +619,15 @@ describe("the assistant's conversation: the row under your bubble", () => {
     ]);
   });
 
-  it("adds nothing above a time line right under your bubble, as under a reply", () => {
+  it("keeps a time line's 16px above it right under your bubble or a reply (ruling 199)", () => {
     // Two of yours hours apart with nothing between: the second's time
-    // line sits right under the first's row.
+    // line sits right under the first's row; then a reply, and yours
+    // again hours later.
     const turns: Turn[] = [
       user("早", at(9)),
       user("下午好", at(15)),
       answer("下午好。", 1),
+      user("晚上好", at(20)),
     ];
     const lines = [
       ...assistant(turns).matchAll(
@@ -512,9 +636,11 @@ describe("the assistant's conversation: the row under your bubble", () => {
     ].map((m) => m[1]);
     expect(lines).toEqual([
       "flex justify-center my-4",
-      "flex justify-center mb-4",
+      "flex justify-center my-4",
+      "flex justify-center my-4",
     ]);
-    // The workbench's stays as it was.
+    // The workbench's stays as it was: nothing above it right under a
+    // reply, whose action row is the gap.
     const today = [
       ...render(turns).matchAll(
         /data-role="message-time-divider" class="([^"]*)"/g,
@@ -523,18 +649,20 @@ describe("the assistant's conversation: the row under your bubble", () => {
     expect(today).toEqual([
       "flex justify-center my-4",
       "flex justify-center my-4",
+      "flex justify-center mb-4",
     ]);
   });
 });
 
 describe("the assistant's conversation: the process", () => {
-  it("shows nothing under a reply at rest: its bar comes in on hover, icons only, no numbers", () => {
+  it("shows nothing beside a reply at rest: its bar comes in on hover, icons only, no numbers", () => {
     const html = assistant(conversation());
-    // Every reply's bar (the greeting's and four answers') holds its place,
-    // hidden.
+    // Every reply's bar (the greeting's and four answers') is there,
+    // hidden, beside its bubble (ruling 199) — none under it.
     const bars = html.split(BAR).slice(1);
     expect(bars.length).toBe(5);
     for (const bar of bars) expect(bar.startsWith(` ${HIDDEN}"`)).toBe(true);
+    expect(html).not.toContain(WORKBENCH_BAR);
     // No step count, no duration, no tokens, no context.
     expect(text(html)).not.toMatch(/\d+ 步/);
     expect(text(html)).not.toContain("用时");
@@ -723,9 +851,8 @@ describe("the assistant's conversation: a run without an answer", () => {
     // No bubble ground, no menu (no row id to right-click).
     expect(line).not.toContain("bg-assistant-tint");
     expect(line).not.toContain("data-message-id");
-    // After your message, on its side: nothing between them (your row
-    // under the bubble is the gap), the same place the typing bubble
-    // stood.
+    // After your message, on its side: 16px, the change of side (ruling
+    // 199), where the typing bubble stood.
     expect(html.indexOf("看看 Tailscale 为什么连不上")).toBeLessThan(
       html.indexOf('data-role="assistant-stopped"'),
     );
@@ -740,6 +867,52 @@ describe("the assistant's conversation: a run without an answer", () => {
     expect(html).not.toContain('data-role="process-card"');
     // The reply before it is its only left bubble.
     expect(count(html, 'data-role="assistant-bubble"')).toBe(1);
+  });
+
+  it("takes its side's gaps above and below, and nothing of its own under it (ruling 199)", () => {
+    /** The line's row: the wrapper right around the line. */
+    const rowTag = (html: string) => {
+      const line = html.lastIndexOf(
+        "<div",
+        html.indexOf('data-role="assistant-stopped"'),
+      );
+      const start = html.lastIndexOf("<div", line - 1);
+      return html.slice(start, html.indexOf(">", start) + 1);
+    };
+    // Under your bubble: 16px; no 24px under it where a reply's bar was.
+    const html = assistant([
+      ...stoppedRun(),
+      user("那先别动它", at(16, 1)),
+      user("等我回来", at(16, 1)),
+    ]);
+    expect(rowTag(html)).toMatch(/^<div (data-at="\d+" )?class="mt-4">$/);
+    expect(html).not.toContain("pb-6");
+    expect(html).not.toContain("transition-[padding-bottom]");
+    // Your next bubble 16px under it, the one after 4px under that.
+    const rows = [...html.matchAll(/class="group relative ([^"]*)"/g)].map(
+      (m) => m[1],
+    );
+    expect(rows.slice(-2)).toEqual(["mt-4", "mt-1"]);
+    // Right after a reply of its own (a woken round that stopped): 4px.
+    const woken = assistant([
+      ...stoppedRun().slice(0, 2),
+      {
+        role: "user",
+        content: "[Galley — not a message from the user] …",
+        messageId: "u-report",
+        origin: { via: "system", supervisor: "galley-report", reason: "s-2" },
+        createdAt: at(9, 30),
+      },
+      did("我先看一下进程。", 1, tool("code_run", { script: "ps aux" })),
+      did("再看安装日志。", 2, tool("code_run", { script: "log show" })),
+    ]);
+    expect(rowTag(woken)).toMatch(/^<div (data-at="\d+" )?class="mt-1">$/);
+    // Opened, its card comes in 4px under it, nothing of its own below.
+    expand.cards = true;
+    const opened = assistant(stoppedRun());
+    expect(opened).toContain(
+      'opacity-100 mt-1"><div class="overflow-hidden"><div data-role="process-card"',
+    );
   });
 
   it("opens the reply's process card under it: one row a step, no first line (the line is its heading)", () => {
@@ -1108,13 +1281,16 @@ describe("the assistant's conversation: the process card", () => {
     );
     const open = tag.slice(0, tag.indexOf(">") + 1);
     expect(open).toContain("rounded-md border border-line bg-app");
-    expect(open).toContain("max-w-[88%]");
+    expect(open).toContain(CAP);
     expect(open).not.toContain("shadow");
     expect(cardOf(html)).not.toContain("w-[3px]");
-    // 6px under the action row, 20px of its own under it.
+    // 4px under the reply, as one thing of its side after another
+    // (ruling 199), and nothing of its own under it: the next row's IM
+    // gap is measured from its foot.
     expect(html).toContain(
-      'class="grid transition-[grid-template-rows,margin-top,opacity] duration-(--motion-slow) ease-firm motion-reduce:transition-none grid-rows-[1fr] opacity-100 mt-1.5"><div class="overflow-hidden"><div class="pb-5">',
+      'class="grid transition-[grid-template-rows,margin-top,opacity] duration-(--motion-slow) ease-firm motion-reduce:transition-none grid-rows-[1fr] opacity-100 mt-1"><div class="overflow-hidden"><div data-role="process-card"',
     );
+    expect(html).not.toContain('<div class="pb-5">');
   });
 
   it("holds eight rows and scrolls the rest inside, the fade only while more is below", () => {
@@ -1277,9 +1453,10 @@ describe("the assistant's conversation: subtask reports", () => {
     expect(lines).toHaveLength(2);
     expect(lines[1]).toBeLessThan(reply);
     expect(text(html.slice(lines[1], reply))).toContain("14:00");
-    // Right under the earlier reply, whose action row is the gap above.
+    // Right under the earlier reply: its 16px above (ruling 199; nothing
+    // reserved under the reply any more).
     expect(html.slice(lines[1], reply)).toContain(
-      'class="flex justify-center mb-4"',
+      'class="flex justify-center my-4"',
     );
     expect(html.slice(reply, html.indexOf("那就订第二家"))).not.toContain(
       'data-role="message-time-divider"',

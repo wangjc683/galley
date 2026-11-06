@@ -163,11 +163,22 @@ function findBubble(
 }
 
 /**
+ * What fades in for `element`: itself, or, when its own opacity is a
+ * hover reveal (a reply's action row, hidden until hovered), its
+ * contents, so the reveal stays its own.
+ */
+function fadeParts(element: Element): Element[] {
+  return Number.parseFloat(getComputedStyle(element).opacity) < 1
+    ? Array.from(element.children)
+    : [element];
+}
+
+/**
  * What comes in with the bubble and must not show ahead of it: what
  * hangs under it in its row (the subtask, to-do and reminder cards; the
- * question's candidates; the action row, whose own opacity is its hover
- * reveal, so its contents fade instead), and a report round's time line
- * right above its row, which appears with its first reply.
+ * question's candidates), and a report round's time line right above
+ * its row, which appears with its first reply. The reply's action row
+ * is the bubble's own child since ruling 199, and fades with its words.
  */
 function followersOf(bubble: HTMLElement, column: Element): Element[] {
   const followers: Element[] = [];
@@ -176,11 +187,7 @@ function followersOf(bubble: HTMLElement, column: Element): Element[] {
     sibling;
     sibling = sibling.nextElementSibling
   ) {
-    if (Number.parseFloat(getComputedStyle(sibling).opacity) < 1) {
-      followers.push(...Array.from(sibling.children));
-    } else {
-      followers.push(sibling);
-    }
+    followers.push(...fadeParts(sibling));
   }
   let row: Element = bubble;
   while (
@@ -369,7 +376,10 @@ function playTypingHandoff(
         { duration: timing.growMs, easing: timing.easing },
       ),
     );
-    for (const words of Array.from(bubble.children)) fadeIn(words);
+    // The words, and the action row beside them (`fadeParts`).
+    for (const words of Array.from(bubble.children)) {
+      for (const part of fadeParts(words)) fadeIn(part);
+    }
     if (lift !== 0) {
       // The column moved up at once (a conversation shorter than the
       // viewport): held where it was and let up on the growth's curve.

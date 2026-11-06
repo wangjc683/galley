@@ -29,11 +29,11 @@ const MESSAGE_TIME_TEXT =
 
 /**
  * 16px above it, 20px under it (the message after it keeps its own
- * 20px, collapsing with this); right under a reply, whose reserved
- * action row already leaves 30px, it adds nothing above, nor right
- * under your message in the assistant's conversation, whose row of
- * chips does the same (ruling 105). The tooltip gives the full date
- * with the weekday.
+ * 20px, collapsing with this); right under the workbench's reply, whose
+ * reserved action row already leaves 30px, it adds nothing above. The
+ * assistant's conversation reserves nothing under a bubble since ruling
+ * 199 (its hover rows hang beside the bubbles), so there it always has
+ * its 16px above. The tooltip gives the full date with the weekday.
  */
 export function MessageTimeDivider({
   label,
@@ -46,9 +46,8 @@ export function MessageTimeDivider({
   full?: string;
   /** ISO timestamp, the `<time>`'s `dateTime`. */
   iso?: string;
-  /** Right under a row whose action row is the gap above: a reply's,
-   * or your message's in the assistant's conversation
-   * (lib/assistant-conversation `endsWithActionRow`). */
+  /** Right under a row whose action row is the gap above: the
+   * workbench's reply (lib/assistant-conversation `endsWithActionRow`). */
   afterActionRow?: boolean;
 }) {
   const time = (

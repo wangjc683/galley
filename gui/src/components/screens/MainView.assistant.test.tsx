@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RunElapsedHud } from "@/components/conversation/RunElapsedHud";
 import { zhCopy } from "@/i18n/locales/zh";
+import { ASSISTANT_TAIL_GAP } from "@/lib/assistant-conversation";
 import { dropComposerDraft, saveComposerDraft } from "@/lib/composer-draft";
 import { ASSISTANT_BUBBLE_TEXT_CLASS } from "@/lib/conversation-font-size";
 import { LocalFilesContext } from "@/lib/local-files";
@@ -507,10 +508,10 @@ describe("the main chat is the assistant's conversation", () => {
     expect(all).toContain('data-role="subtask-cards" class="flex flex-col"');
     expect(all).toContain('data-role="reminder-cards" class="flex flex-col"');
     // One frame per reply: the process card's, as wide as its widest
-    // line, up to the bubble's cap, 12px off the bubble.
+    // line, up to the bubble's cap, 4px off the bubble (ruling 199).
     expect(count(all, 'data-role="reply-cards"')).toBe(1);
     expect(all).toContain(
-      'data-role="reply-cards" class="mt-3 w-fit max-w-full rounded-md border border-line bg-app p-1',
+      'data-role="reply-cards" class="mt-1 w-fit max-w-full rounded-md border border-line bg-app p-1',
     );
     const frame = all.indexOf('data-role="reply-cards"');
     expect(frame).toBeLessThan(all.indexOf('data-role="file-cards"'));
@@ -663,6 +664,63 @@ describe("the assistant's typing bubble", () => {
     });
     expect(asked).not.toContain(TYPING);
     expect(asked).toContain('data-role="ask-user-bubble"');
+  });
+
+  // Ruling 199: what MainView draws right after the conversation takes
+  // the IM gap from its last row, read off the root it follows (`peer`).
+  it("stands under the conversation's last row at its IM gap, as the bubble that takes its place", () => {
+    /** The conversation root's opening tag. */
+    const rootTag = (html: string) => {
+      const at = html.indexOf('data-role="conversation"');
+      return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+    };
+    const tagOf = (html: string, needle: string) => {
+      const at = html.indexOf(needle);
+      return html.slice(html.lastIndexOf("<", at), html.indexOf(">", at) + 1);
+    };
+    // Sent: your bubble is the last row, 16px above the dots.
+    const waiting = render({ isMainChat: true, isRunning: true, turns: sent });
+    expect(rootTag(waiting)).toContain('data-last-side="user"');
+    expect(rootTag(waiting)).toContain('class="peer"');
+    expect(tagOf(waiting, TYPING)).toContain(`class="${ASSISTANT_TAIL_GAP}"`);
+    // The live question it asks right after your bubble takes the same.
+    const asked = render({
+      isMainChat: true,
+      isRunning: true,
+      turns: [...sent, ask("订哪一班？", ["8:30"], 1)],
+      pendingAskUser: { question: "订哪一班？", candidates: ["8:30"] },
+    });
+    expect(rootTag(asked)).toContain('data-last-side="user"');
+    expect(tagOf(asked, 'data-role="ask-user-bubble"')).toContain(
+      ASSISTANT_TAIL_GAP,
+    );
+    // A woken round, under its last reply: its side, 4px.
+    live.slice = { inFlightContent: "查好了，" };
+    const woken = render({
+      isMainChat: true,
+      isRunning: true,
+      turns: [
+        ...sent,
+        answer("还有票。", 1),
+        {
+          role: "user",
+          content: "[Galley — not a message from the user] …",
+          messageId: "u-report",
+          origin: { via: "system", supervisor: "galley-report", reason: "s-2" },
+        },
+      ],
+    });
+    expect(count(woken, TYPING)).toBe(1);
+    expect(rootTag(woken)).toContain('data-last-side="agent"');
+    // A workbench session: no mark, no gap of the main chat's.
+    const other = render({
+      isMainChat: false,
+      turns: [...sent, ask("订哪一班？", ["8:30"], 1)],
+      pendingAskUser: { question: "订哪一班？", candidates: ["8:30"] },
+    });
+    expect(rootTag(other)).not.toContain("data-last-side");
+    expect(rootTag(other)).not.toContain("peer");
+    expect(other).not.toContain("peer-data-");
   });
 
   it("keeps the time to the line under the dots: no clock in the corner", () => {
@@ -851,7 +909,7 @@ describe("the line under the dots, in a round you started", () => {
     const row = typingRow(mainView({}))!;
     // The row is the typing bubble's, the line after the bubble inside it.
     expect(row).toMatch(
-      /^<div data-role="assistant-typing" role="status"><span class="sr-only">Galley 正在输入<\/span><div data-role="assistant-typing-bubble"/,
+      /^<div data-role="assistant-typing" role="status" class="[^"]*"><span class="sr-only">Galley 正在输入<\/span><div data-role="assistant-typing-bubble"/,
     );
     const line = progressLine(row)!;
     expect(row.endsWith(`${line}</div>`)).toBe(true);
@@ -867,7 +925,7 @@ describe("the line under the dots, in a round you started", () => {
       "leading-[18px]",
       "text-ink-soft",
       "tabular-nums",
-      "max-w-[88%]",
+      "max-w-[calc(100%-134px)]",
     ]) {
       expect([cls, box.includes(cls)]).toEqual([cls, true]);
     }

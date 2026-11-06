@@ -11,16 +11,20 @@ import { cn } from "@/lib/utils";
  * it drew first is both conversations' now (MessageTimeDivider).
  */
 
-/** The reply bubble's width cap: wider than the user's (its content is
- * markdown, lists and tables), but always leaving a visible margin on
- * the right (12% of a 760px column is 91px) so it still reads as the
- * left side. No pixel stop (ruling 79): the reply is what the wide
+/** The reply bubble's width cap: the column less the room its action
+ * row takes beside it (lib/assistant-conversation.ts
+ * `ASSISTANT_BAR_ROOM_PX`, ruling 199), so the row always fits on its
+ * right, inside the column: 626px in the 760px column, 1066 in the
+ * 1200px wide mode. Wider than the user's (its content is markdown,
+ * lists and tables), and the margin on its right keeps it reading as
+ * the left side. No pixel stop (ruling 79): the reply is what the wide
  * reading width is for (code blocks, tables), so it grows with the
- * column, to 1056 in the 1200px wide mode; the compact column never
- * reached the old 680 stop (88% of 760 is 669), so it only cancelled
- * the wide mode. The subtask cards under a reply and its process card
- * take the same cap. */
-export const ASSISTANT_BUBBLE_MAX = "max-w-[88%]";
+ * column. Until ruling 199 it was 88% of the column (669 / 1056), the
+ * bar under it. The cards under a reply, its process card and the line
+ * under the typing bubble take the same cap. Tailwind reads class names
+ * as written, so the number is spelled out; the tests pin it to
+ * `ASSISTANT_BAR_ROOM_PX`. */
+export const ASSISTANT_BUBBLE_MAX = "max-w-[calc(100%-134px)]";
 
 /*
  * The neutral ground is its own token, `--color-assistant-tint` (light
@@ -40,9 +44,15 @@ export const ASSISTANT_BUBBLE_MAX = "max-w-[88%]";
  * drops the paper patch (`bg-surface`, lighter than the bubble) and
  * sits on the bubble; its weight still marks it. `!` because
  * MarkdownView's and CodeBlock's own rules have the same specificity.
+ *
+ * `relative`: a reply's action row hangs off the bubble's right edge,
+ * out of flow (MessageActions, ruling 199). It is a child of the bubble,
+ * not of a wrapper, so the bubble keeps its own cap and its place in its
+ * row (the hand-off and the anchors find it by `data-role`); a block
+ * among the bubble's block children, outside the text's own lines.
  */
 const BUBBLE = cn(
-  "w-fit rounded-md bg-assistant-tint px-3.5 py-2.5",
+  "relative w-fit rounded-md bg-assistant-tint px-3.5 py-2.5",
   ASSISTANT_BUBBLE_MAX,
   "[&_:not(pre)>code]:bg-line!",
   "[&_.bg-code-surface]:border-transparent! [&_.bg-code-surface]:bg-line!",
@@ -50,7 +60,8 @@ const BUBBLE = cn(
 );
 
 /** The assistant's side of the conversation: a reply, a question it
- * asked (live or answered), the greeting. */
+ * asked (live or answered), the greeting. A reply's action row comes
+ * in after its words (MessageAgent). */
 export function AssistantBubble({ children }: { children: ReactNode }) {
   return (
     <div data-role="assistant-bubble" className={BUBBLE}>

@@ -37,8 +37,9 @@ import { cn } from "@/lib/utils";
 import type { MessageTelemetry } from "@/types/conversation";
 
 /**
- * Per-reply action bar — sits below the agent's final answer
- * (DESIGN.md §4.3 Message Actions).
+ * Per-reply action bar — sits below the agent's final answer in the
+ * workbench, beside the bubble in the assistant's conversation
+ * (DESIGN.md §4.3 Message Actions; below).
  *
  * V0.1 actions:
  *
@@ -79,11 +80,24 @@ import type { MessageTelemetry } from "@/types/conversation";
  *
  * The assistant's replies take this bar their own way (`assistant`;
  * conversation.md 「助手的对话」, main chat PRD rulings 68, 99): icons
- * only — copy, quote, save, and under a reply of two steps or more the
+ * only — copy, quote, save, and for a reply of two steps or more the
  * process button, then ⋯ — and no numbers: no tokens (they head the
  * opened steps) and no context percentage (not drawn in the assistant's
  * conversation at all). While the steps are open the whole bar stays
  * visible, the process button pressed.
+ *
+ * And not under the reply but beside it (ruling 199): out of flow, off
+ * the bubble's right edge (MessageAgent puts it in the bubble, or in
+ * the capped box of a notice without one), its bottom edge on the
+ * bubble's, 6px off. That 6px is the bar's own left padding, so the
+ * pointer crossing it from the bubble is already on the bar; the
+ * reply's row, the hover region, spans the column anyway. The bubble's
+ * cap leaves the bar its room (AssistantParts `ASSISTANT_BUBBLE_MAX`),
+ * and one line it stays (`w-max`, no wrap). It takes no height: the
+ * IM gaps are measured from the bubble (lib/assistant-conversation.ts
+ * `assistantRowGap`). Until then it sat 6px under the bubble, and its
+ * hidden 30px was the gap to the next message. The workbench's bar is
+ * still under its answer, in flow.
  *
  * Quote (main chat ticket 47, PRD ruling 99) is the menu's 引用 one click
  * away and runs the menu's own action (MessageQuoteButton): the whole
@@ -195,7 +209,9 @@ export function MessageActions({
       // A deleted reply's leaving copy hides it (lib/bubble-motion-play).
       data-hover-row=""
       className={cn(
-        "mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1",
+        assistant
+          ? "absolute bottom-0 left-full flex w-max items-center pl-1.5"
+          : "mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1",
         hidden,
       )}
     >

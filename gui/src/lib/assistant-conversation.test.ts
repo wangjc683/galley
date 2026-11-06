@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { ASSISTANT_BUBBLE_MAX } from "@/components/conversation/AssistantParts";
 import {
+  ASSISTANT_BAR_ROOM_PX,
+  ASSISTANT_TAIL_GAP,
   assistantFirstLine,
   assistantFollowBottom,
   assistantFollowTop,
+  assistantLastSide,
   assistantLinePlan,
   assistantRowGap,
   assistantScrollToBottom,
@@ -114,32 +118,83 @@ function conversation(): Turn[] {
 }
 
 describe("assistantRowGap", () => {
-  it("groups one side's messages 4px apart, 20px across sides, nothing under a reply's action row", () => {
-    expect(assistantRowGap("user", "user")).toBe("mt-1");
+  // Ruling 199: an IM in two steps, measured from the row above's last
+  // box; no hover row reserves room under a bubble any more.
+  it("groups one side's rows 4px apart: it → it, you → you", () => {
     expect(assistantRowGap("agent", "agent")).toBe("mt-1");
-    expect(assistantRowGap("user", "agent")).toBe("mt-5");
-    expect(assistantRowGap("agent", "user")).toBe("mt-5");
+    expect(assistantRowGap("user", "user")).toBe("mt-1");
+  });
+
+  it("puts 16px between the sides: it → you, you → it", () => {
+    expect(assistantRowGap("agent", "user")).toBe("mt-4");
+    expect(assistantRowGap("user", "agent")).toBe("mt-4");
+  });
+
+  it("starts from 20px when something else sits in between: a run drawn flat, a system line, nothing", () => {
+    // Under a time line the callers give the row `mt-5` themselves.
     expect(assistantRowGap(null, "user")).toBe("mt-5");
-    // The reply's reserved 30px action row already is the gap.
-    expect(assistantRowGap("agent-bar", "user")).toBe("mt-0");
-    expect(assistantRowGap("agent-bar", "agent")).toBe("mt-0");
+    expect(assistantRowGap(null, "agent")).toBe("mt-5");
   });
 
-  it("adds nothing under your message's row of chips either (ruling 105): 30px both ways, two of yours included", () => {
-    // You → it: the row's 30px, no longer 20px.
-    expect(assistantRowGap("user-bar", "agent")).toBe("mt-0");
-    // Two of yours in a row: 30px, no 4px group.
-    expect(assistantRowGap("user-bar", "user")).toBe("mt-0");
+  it("counts the 「中途停下」 line, a question and a line told mid-run as its side, as a reply", () => {
+    // All of them are recorded as `agent` (Conversation's `prevSide`):
+    // the line after a reply or under your bubble, and what follows it.
+    expect(assistantRowGap("agent", "agent")).toBe("mt-1");
+    expect(assistantRowGap("user", "agent")).toBe("mt-4");
+    expect(assistantRowGap("agent", "user")).toBe("mt-4");
   });
 
-  it("names the rows whose action row is the gap: a reply's, your message's", () => {
+  it("reads the workbench's reply as its side, though only a time line ever reads that row", () => {
+    expect(assistantRowGap("agent-bar", "agent")).toBe("mt-1");
+    expect(assistantRowGap("agent-bar", "user")).toBe("mt-4");
+  });
+
+  it("names the one row whose action row is the gap: the workbench's reply", () => {
     expect(endsWithActionRow("agent-bar")).toBe(true);
-    expect(endsWithActionRow("user-bar")).toBe(true);
-    // A question ends at its candidates; the workbench's user message
-    // as the time line reads it; nothing above.
+    // The assistant's rows reserve nothing under them (ruling 199).
     expect(endsWithActionRow("agent")).toBe(false);
     expect(endsWithActionRow("user")).toBe(false);
     expect(endsWithActionRow(null)).toBe(false);
+  });
+});
+
+describe("the conversation's tail: the typing bubble and the live question", () => {
+  /** The class `ASSISTANT_TAIL_GAP` gives under a last row of `side`. */
+  const tailGap = (side: string) =>
+    new RegExp(`peer-data-\\[last-side=${side}\\]:(mt-\\S+)`).exec(
+      ASSISTANT_TAIL_GAP,
+    )?.[1];
+
+  it("takes the gap a reply would take there, so it opens where the dots stood", () => {
+    // Under your bubble 16px; under its last reply (a woken round), a
+    // line it told mid-run or the 「中途停下」 line 4px; else 20px.
+    expect(tailGap("user")).toBe(assistantRowGap("user", "agent"));
+    expect(tailGap("user")).toBe("mt-4");
+    expect(tailGap("agent")).toBe(assistantRowGap("agent", "agent"));
+    expect(tailGap("agent")).toBe("mt-1");
+    expect(tailGap("other")).toBe(assistantRowGap(null, "agent"));
+    expect(tailGap("other")).toBe("mt-5");
+    expect(ASSISTANT_TAIL_GAP.split(" ")).toHaveLength(3);
+  });
+
+  it("marks the conversation's last row by its side", () => {
+    expect(assistantLastSide("user")).toBe("user");
+    expect(assistantLastSide("agent")).toBe("agent");
+    expect(assistantLastSide("agent-bar")).toBe("agent");
+    expect(assistantLastSide(null)).toBe("other");
+  });
+});
+
+describe("the reply bubble's cap", () => {
+  it("leaves the action row its room on the right: five chips and the 6px", () => {
+    expect(ASSISTANT_BAR_ROOM_PX).toBe(5 * 24 + 4 * 2 + 6);
+    expect(ASSISTANT_BAR_ROOM_PX).toBe(134);
+    expect(ASSISTANT_BUBBLE_MAX).toBe(
+      `max-w-[calc(100%-${ASSISTANT_BAR_ROOM_PX}px)]`,
+    );
+    // 760 → 626, 1200 → 1066 (88% was 669 and 1056).
+    expect(760 - ASSISTANT_BAR_ROOM_PX).toBe(626);
+    expect(1200 - ASSISTANT_BAR_ROOM_PX).toBe(1066);
   });
 });
 

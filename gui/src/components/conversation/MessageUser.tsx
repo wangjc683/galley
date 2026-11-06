@@ -135,16 +135,20 @@ import type { MessageAttachment, Origin } from "@/types/conversation";
  *   copies the full text, a collapsed long message included: that is
  *   why the workbench keeps it (main chat ruling 73 item 4; the
  *   workbench is where long documents and prompts get pasted). The
- *   assistant's conversation (`assistant`) puts three chips in the same
- *   row since ruling 105 (ticket 53, overturning ruling 73 items 1–2,
- *   which had none there): copy · quote · ⋯, the bubble's message menu
- *   one hover away. Each wears the bare chip skin, as on a reply's bar.
- *   The hover region is the row plus the 30px band under it, so the
- *   pointer stays in it from the bubble to a chip, and leaving hides
- *   the row at once, as a reply's bar (main chat PRD ruling 109; until
+ *   assistant's conversation (`assistant`) has three chips since ruling
+ *   105 (ticket 53, overturning ruling 73 items 1–2, which had none):
+ *   copy · quote · ⋯, the bubble's message menu one hover away, each in
+ *   the bare chip skin, as on a reply's bar. Since ruling 199 they hang
+ *   beside the bubble on its left, out of flow, bottom edges flush, 6px
+ *   off — a reply's bar mirrored — and take no room; until then they
+ *   were the row under it, and its 30px the gap to the next message.
+ *   The hover region is the row, the column wide, so the pointer stays
+ *   in it from the bubble to a chip (in the workbench the row plus the
+ *   30px band under it, where its copy hangs), and leaving hides the
+ *   chips at once, as a reply's bar (main chat PRD ruling 109; until
  *   then the margin was outside it and the row waited 600ms). While a
- *   selection in the bubble has the selection toolbar up, the row
- *   yields to it (ruling 108; below).
+ *   selection in the bubble has the selection toolbar up, the chips
+ *   yield to it (ruling 108; below).
  *
  * `data-role="user-msg"` is a stable anchor that MainView's scroll
  * effect uses to find the just-submitted user message and snap its
@@ -201,23 +205,23 @@ export interface MessageUserProps {
   messageId?: string;
   /** The assistant's conversation (main chat PRD ruling 105, ticket 53;
    * it overturns ruling 73 items 1–2, which left this bubble with no
-   * hover button): the row under the bubble holds copy · quote · ⋯,
-   * the bubble's message menu in its order with ⋯ last (ruling 99) —
-   * copy only where the menu has 复制 (not under an image alone), quote
-   * and ⋯ only where the bubble has a menu (MessageQuoteButton,
-   * MessageMenuButton run its own). Ruling 73 had refused this place
-   * because a chip there would cover the next message of a burst, 4px
-   * below; your row now keeps its 30px at every change of side and
-   * between two of yours, and bursts hardly happen in the main chat.
-   * Selecting the bubble's text still brings up the floating copy and
-   * quote (SelectionCopyToolbar, scope `user-message`), and while it
-   * shows the row is down (ruling 108); the right-click menu stays.
-   * Off: the workbench's single hover copy, which has no selection
-   * toolbar to yield to. */
+   * hover button): copy · quote · ⋯ beside the bubble on its left
+   * (ruling 199), the bubble's message menu in its order with ⋯ last
+   * (ruling 99) — copy only where the menu has 复制 (not for an image
+   * alone), quote and ⋯ only where the bubble has a menu
+   * (MessageQuoteButton, MessageMenuButton run its own). Beside it they
+   * cover no neighbour, whatever sits 4px below (ruling 73 had refused
+   * the place under the bubble for that; ruling 105 took it with a 30px
+   * row). Selecting the bubble's text still brings up the floating copy
+   * and quote (SelectionCopyToolbar, scope `user-message`), and while it
+   * shows the chips are down (ruling 108); the right-click menu stays.
+   * Off: the workbench's single hover copy under the bubble, which has
+   * no selection toolbar to yield to. */
   assistant?: boolean;
   /** The assistant's conversation: the row's top margin in place of the
    * workbench's `mt-5` (the IM gaps, lib/assistant-conversation.ts
-   * `assistantRowGap`); the bottom one is the chip row's 30px in both. */
+   * `assistantRowGap`), and no bottom one (ruling 199); the workbench's
+   * is its chip row's 30px. */
   rowClassName?: string;
   /** When it was sent (ms), on the row as `data-at`: the main chat's
    * floating day reads the row at the top of the viewport by it
@@ -366,7 +370,7 @@ export const MessageUser = memo(function MessageUser({
       className={cn(
         "group relative",
         assistant
-          ? cn(rowClassName ?? "mt-5", "mb-7.5")
+          ? (rowClassName ?? "mt-5")
           : cn("mt-5 mb-7.5", RAIL_CLEARANCE),
       )}
       onMouseEnter={() => {
@@ -429,60 +433,45 @@ export const MessageUser = memo(function MessageUser({
         {attachments.length > 0 && (
           <UserImageAttachments attachments={attachments} />
         )}
-      </div>
-      {/* Under the bubble, right edges flush, 6px down: the reply's
-          action row (mt-1.5, 24px chips), mirrored. It sits in the
-          row's bottom margin (mb-7.5, 30px) rather than in flow, so
-          that row IS the gap to whatever comes next — a fold header,
-          the live row, a reply, a question — whose own top margin
-          (mt-6 at most) collapses into it; in flow it would stack on
-          top of theirs. The idea of the assistant's 「它 → 你 30px
-          由行动条占着」 (assistantRowGap), here on the user's side; in
-          the assistant's conversation that rule now reads both ways
-          (ruling 105: `user-bar`), and its typing bubble, which has
-          no top margin, stands right under these 30px. The chips hide
-          with opacity and keep their boxes, so nothing moves when
-          they show.
+        {/* The assistant's three (ruling 105): copy · quote · ⋯, in the
+            menu's order with ⋯ last, 2px apart as on a reply's bar, and
+            since ruling 199 beside the bubble on its left, out of flow:
+            6px off the bubble's left edge (the chips' own right padding,
+            so the pointer crossing it is already on them), bottom edges
+            flush, as a reply's bar hangs off its bubble's right. A child
+            of the bubble, so it follows the bubble's edges; the bubble
+            stays the row's child (the anchors read the row as its
+            parent). The row, the hover region, spans the column, so the
+            pointer never leaves it on the way from the bubble to a chip,
+            and leaving it hides them at once (ruling 109). A block among
+            the bubble's block children, outside the text's own lines.
+            It takes no height: the IM gaps are
+            measured from the bubble (lib/assistant-conversation.ts
+            `assistantRowGap`). Until ruling 199 the row sat 6px under
+            the bubble, right edges flush, in the row's 30px bottom
+            margin, and that margin was the gap to the next message.
 
-          A long message's 「展开 / 收起」 shares the row, outermost
-          on the right where the assistant puts it: always there, so
-          it keeps the bubble's edge, and the chips come in to its
-          left on hover. Two rows would make a long message's gap
-          58px; the chips outermost would leave the toggle hanging
-          short of the edge at rest.
+            Copy copies as the workbench chip does (the menu's 复制 takes
+            the same text, lib/message-menu) and flashes the check; quote
+            and ⋯ are the menu's own (MessageMenu).
 
-          The assistant's three (ruling 105): copy · quote · ⋯, in the
-          menu's order with ⋯ last, 2px apart as on a reply's bar. Copy
-          copies as the workbench chip does (the menu's 复制 takes the
-          same text, lib/message-menu) and flashes the check; quote and
-          ⋯ are the menu's own (MessageMenu).
+            While the selection toolbar serves this bubble the three are
+            down (ruling 108; MessageActions has the rule): hover, the ⋯
+            open or the copied flash alike, kept in their place as when
+            hidden; when it goes they are as they were.
 
-          While the selection toolbar serves this bubble the three are
-          down (ruling 108; MessageActions has the rule): hover, the ⋯
-          open or the copied flash alike, kept in their place as when
-          hidden; when it goes they are as they were. Not the 「展开 /
-          收起」, which is no hover action.
-
-          Bare chips: the armour (border, solid ground, shadow) is the
-          selection toolbar's shell's, which portals itself on top of
-          arbitrary text. This row sits in clean canvas margin and needs
-          none — and a bordered control box pressed against the user's
-          own words inverts the register (machine parts crisp, the
-          human voice plain). */}
-      {/* The hit band (ruling 109): the row's 30px bottom margin, where
-          the chips hang, inside the hover region, so the pointer does
-          not leave it crossing the 6px under the bubble and the row
-          can hide at once on leaving, as a reply's bar does. Out of
-          flow and empty: no layout, nothing to see; only in the
-          margin, so it covers no neighbour; under the chips (z-10). */}
-      <span aria-hidden="true" className="absolute inset-x-0 top-full h-7.5" />
-      <div className="absolute top-full right-0 z-10 mt-1.5 flex h-6 items-center gap-1">
-        {assistant ? (
+            Bare chips: the armour (border, solid ground, shadow) is the
+            selection toolbar's shell's, which portals itself on top of
+            arbitrary text. This row sits in clean canvas margin and needs
+            none — and a bordered control box pressed against the user's
+            own words inverts the register (machine parts crisp, the
+            human voice plain). */}
+        {assistant && (
           <div
             // A deleted message's leaving copy hides it (lib/bubble-motion-play).
             data-hover-row=""
             className={cn(
-              "flex items-center gap-0.5",
+              "absolute right-full bottom-0 flex w-max items-center gap-0.5 pr-1.5",
               yielded && "pointer-events-none opacity-0",
             )}
           >
@@ -515,19 +504,55 @@ export const MessageUser = memo(function MessageUser({
               )}
             </ChipRootsContext.Provider>
           </div>
-        ) : (
-          <ActionChip
-            active={copied}
-            idleIcon={<Copy size={14} weight="thin" />}
-            activeIcon={<Check size={14} weight="bold" />}
-            idleLabel={copy.conversation.copy}
-            activeLabel={copy.conversation.copied}
-            onClick={() => void handleCopy()}
-            revealed={chipsVisible}
-          />
         )}
-        {toggle}
       </div>
+      {assistant ? (
+        // A long message's 「展开 / 收起」 is no hover action: always
+        // there, under the bubble on its right, 6px down, in flow — the
+        // next message measures from its foot (ruling 199; it shared the
+        // chips' row until the chips went beside the bubble).
+        toggle && <div className="mt-1.5 flex justify-end">{toggle}</div>
+      ) : (
+        <>
+          {/* Under the bubble, right edges flush, 6px down: the reply's
+              action row (mt-1.5, 24px chips), mirrored. It sits in the
+              row's bottom margin (mb-7.5, 30px) rather than in flow, so
+              that row IS the gap to whatever comes next — a fold header,
+              the live row, a reply, a question — whose own top margin
+              (mt-6 at most) collapses into it; in flow it would stack on
+              top of theirs. The chips hide with opacity and keep their
+              boxes, so nothing moves when they show.
+
+              A long message's 「展开 / 收起」 shares the row, outermost
+              on the right: always there, so it keeps the bubble's edge,
+              and the copy chip comes in to its left on hover. Two rows
+              would make a long message's gap 58px; the chip outermost
+              would leave the toggle hanging short of the edge at rest. */}
+          {/* The hit band (ruling 109): the row's 30px bottom margin,
+              where the chip hangs, inside the hover region, so the
+              pointer does not leave it crossing the 6px under the bubble
+              and the chip can hide at once on leaving, as a reply's bar
+              does. Out of flow and empty: no layout, nothing to see;
+              only in the margin, so it covers no neighbour; under the
+              chip (z-10). */}
+          <span
+            aria-hidden="true"
+            className="absolute inset-x-0 top-full h-7.5"
+          />
+          <div className="absolute top-full right-0 z-10 mt-1.5 flex h-6 items-center gap-1">
+            <ActionChip
+              active={copied}
+              idleIcon={<Copy size={14} weight="thin" />}
+              activeIcon={<Check size={14} weight="bold" />}
+              idleLabel={copy.conversation.copy}
+              activeLabel={copy.conversation.copied}
+              onClick={() => void handleCopy()}
+              revealed={chipsVisible}
+            />
+            {toggle}
+          </div>
+        </>
+      )}
     </div>
   );
 });
