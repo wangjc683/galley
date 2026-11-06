@@ -1,6 +1,6 @@
 # 149 途中先说的话从三点大小的框长出来，三点被平滑推下去
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-06 rebase 到 `81cb83c5` 后快进合入 `0b1f5024`。主会话验收：读过放不放的规则（`toldLineAtEnd`、`toldLineGrows`：这一轮在跑、同一会话、末尾是新的先说的话、轮数只增）与 `rowPush`；worktree 复跑 typecheck、lint 过，`TZ=UTC` vitest 256 个文件 2,873 条全过，`check-docs-links` 494 个文件过，`git diff --check` 干净，新增行没有本机路径。Open risk 1（没在跟随时三点也平滑滑下去，不是瞬时推开）主会话认同：瞬时推开读作「三点长成这一句、又来新三点」，正是裁决 200 要避开的。要真机看：先说的话进来的第一帧三点不跳、底色从三点上沿往上长、连着 4 句的整体感觉；第一帧探针与票 150 合入后一起在 dev 真窗口量）
 
 来源：[主对话 PRD](../PRD.md) 裁决 200 第 2 条（JC 2026-11-06：「甲和乙都做」）。只改 GUI 与设计文档；只影响内置运行时的主对话（`MainView` 的 `isMainChat`）；工作台、从助手点开的子任务、外置运行时零变化（外置没有主对话）。不碰 Core、库、CLI、runner。乙（落地回弹）不在本票。
 
