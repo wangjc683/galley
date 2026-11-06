@@ -7,10 +7,22 @@
 // by however far that row moved — out of the runway above the loaded
 // turns while there is one, else by scrolling (lib/scroll-runway.ts).
 
+import { bubbleSpringShift } from "@/lib/bubble-spring";
 import { keepInPlace } from "@/lib/scroll-runway";
 
 /** The conversation's rows: the children of Conversation's root. */
 const ROWS_SELECTOR = '[data-role="conversation"]';
+
+/** Where `row` is in the layout (viewport px): its box less what the
+ * main chat's scroll spring has moved it (ruling 201), which changes
+ * from frame to frame without anything moving the layout — held across
+ * frames (a page settling), it would read as drift and be scrolled
+ * away. */
+function layoutBox(row: Element): { top: number; bottom: number } {
+  const rect = row.getBoundingClientRect();
+  const shift = bubbleSpringShift(row);
+  return { top: rect.top - shift, bottom: rect.bottom - shift };
+}
 
 /** A row and where it sat in the scroll container. */
 export interface ScrollAnchor {
@@ -67,14 +79,14 @@ export function captureScrollAnchor(
   const top = container.getBoundingClientRect().top;
   const index = firstRowBelow(
     rows.length,
-    (i) => rows[i].getBoundingClientRect().bottom,
+    (i) => layoutBox(rows[i]).bottom,
     top,
   );
   if (index < 0) return null;
   const el = rows[index];
   return {
     el,
-    offset: el.getBoundingClientRect().top - top,
+    offset: layoutBox(el).top - top,
     scrollTop: container.scrollTop,
   };
 }
@@ -87,8 +99,7 @@ export function scrollAnchorDrift(
 ): number | null {
   if (!anchor.el.isConnected) return null;
   const offsetNow =
-    anchor.el.getBoundingClientRect().top -
-    container.getBoundingClientRect().top;
+    layoutBox(anchor.el).top - container.getBoundingClientRect().top;
   return anchorCorrection(anchor, offsetNow, container.scrollTop);
 }
 
@@ -126,7 +137,7 @@ export function captureScrollAnchors(
   const top = container.getBoundingClientRect().top;
   const first = firstRowBelow(
     rows.length,
-    (i) => rows[i].getBoundingClientRect().bottom,
+    (i) => layoutBox(rows[i]).bottom,
     top,
   );
   if (first < 0) return [];
@@ -134,7 +145,7 @@ export function captureScrollAnchors(
   for (let i = first; i < rows.length && anchors.length < limit; i++) {
     anchors.push({
       el: rows[i],
-      offset: rows[i].getBoundingClientRect().top - top,
+      offset: layoutBox(rows[i]).top - top,
       scrollTop: container.scrollTop,
     });
   }

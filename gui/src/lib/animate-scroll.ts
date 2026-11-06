@@ -176,6 +176,15 @@ function isEditable(target: EventTarget | null): boolean {
   );
 }
 
+/** A key press that scrolls a focused page or scroller natively: a
+ * scroll key nobody handled, not typed into a field. The main chat's
+ * scroll spring reads it too (lib/bubble-spring-play.ts). */
+export function isUserScrollKey(event: Event): boolean {
+  const key = (event as KeyboardEvent).key;
+  if (!SCROLL_KEYS.has(key) || event.defaultPrevented) return false;
+  return !isEditable(event.target);
+}
+
 /** The animation running on each container, with its way to end it. */
 const running = new WeakMap<
   ScrollBox,
@@ -228,10 +237,7 @@ export function animateScroll(
     if (event.target === el) finish("interrupted");
   };
   const onKeyDown = (event: Event) => {
-    const key = (event as KeyboardEvent).key;
-    if (!SCROLL_KEYS.has(key) || event.defaultPrevented) return;
-    if (isEditable(event.target)) return;
-    finish("interrupted");
+    if (isUserScrollKey(event)) finish("interrupted");
   };
   const doc = el.ownerDocument;
 

@@ -626,6 +626,12 @@ state, not decoration”）。`prefers-reduced-motion` 下 A/B 动效一律退�
 设置要实时读，不缓存到启动时：对话的平滑滚动（`lib/animate-scroll.ts`）每次调用读
 `matchMedia`，CSS 侧本来就是实时的 `@media`。
 
+**滚动时的弹性是 A 类**（2026-11-06，[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 201，票 150）：
+主对话里你滚动时，离指针远的行略微落后（最远 6px），停下由弹簧拉回（见 [conversation](./conversation.md)
+「滚动时的弹性」）。它不是 B 类环境噪动：只由人的滚动触发（程序滚动不触发），只在滚动与回位的约
+350ms 里动，有始有终，静止时与没有它时逐像素相同，没有循环、没有自己走的部分；它说的是一件事：内容
+跟着你的手。减少动态下完全不动。
+
 **豁免一（2026-08-12）：in-flight 状态文字的 shimmer。** thinking 行的工作
 指示由三点改为状态文字上的扫光（`thinking-shimmer`），真机 A/B 裁决（见
 devlog [thinking 计时器与 shimmer 裁决](../devlog/2026-08-12-thinking-timer-and-shimmer-verdict.md)）。
@@ -716,6 +722,12 @@ namespace）、`ease-firm`（`--ease-*` 有 namespace，直接成为 utility）�
   写高度，所以在 JS 里按这条三次贝塞尔求值，数从 token 的定义读（`getComputedStyle`
   读根上的 `--ease-firm`），不另抄一份；见 `lib/composer-grow.ts` 与
   [conversation](./conversation.md)「会话里的输入框」的「长高的动画」。
+
+弹簧也不在这个刻度里（2026-11-06，[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 201，票 150、151）：
+主对话滚动时的弹性与新气泡的落地回弹是一根阻尼弹簧，不是「时长 + 曲线」：阻尼比 0.8，从 6px 放手
+350ms 内回到 0.5px 以内，最远落后 6px、相邻两行错位不超过 2px、落地最多冲过 1.5px。按真实帧间隔
+精确求解，走多久随起点与速度变；代码里的数值集中在 `lib/bubble-spring.ts`，见
+[conversation](./conversation.md)「滚动时的弹性」。
 
 内容形状的加载面用 `Skeleton`（ui/skeleton.tsx）：轻呼吸占位、非 shimmer
 （shimmer 是被禁的 B 类噪动），`prefers-reduced-motion` 下静止。只用于真实

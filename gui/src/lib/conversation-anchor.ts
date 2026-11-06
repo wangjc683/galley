@@ -1,3 +1,5 @@
+import { bubbleSpringShift } from "@/lib/bubble-spring";
+
 /**
  * The conversation's shared user-message anchor geometry.
  *
@@ -56,7 +58,9 @@ export function timeLineAbove(message: Element): Element | null {
  * USER_MSG_ANCHOR_TOLERANCE_PX it counts as parked, above that as
  * below the anchor, under it as above. Measures the time line right
  * above the message when there is one (TIME_LINE_ANCHOR_TOP_PX), the
- * bubble otherwise (USER_MSG_ANCHOR_TOP_PX).
+ * bubble otherwise (USER_MSG_ANCHOR_TOP_PX). Where it is in the layout:
+ * the main chat's scroll spring (ruling 201) moving its row is taken
+ * off, so a jump right after you scrolled lands on the line.
  */
 export function userMsgParkOffset(
   message: Element,
@@ -64,8 +68,12 @@ export function userMsgParkOffset(
 ): number {
   const line = timeLineAbove(message);
   return line
-    ? line.getBoundingClientRect().top - containerTop - TIME_LINE_ANCHOR_TOP_PX
+    ? line.getBoundingClientRect().top -
+        bubbleSpringShift(line) -
+        containerTop -
+        TIME_LINE_ANCHOR_TOP_PX
     : message.getBoundingClientRect().top -
+        bubbleSpringShift(message) -
         containerTop -
         USER_MSG_ANCHOR_TOP_PX;
 }

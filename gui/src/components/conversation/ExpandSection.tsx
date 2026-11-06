@@ -38,6 +38,7 @@ export function ExpandSection({
   openClassName,
   closedClassName,
   animateMount = false,
+  role,
 }: {
   open: boolean;
   children: ReactNode;
@@ -52,6 +53,10 @@ export function ExpandSection({
    * not play an entrance.
    */
   animateMount?: boolean;
+  /** Its `data-role`: a caller that finds the section from outside
+   * (the assistant's process card, which the main chat's scroll spring
+   * moves with its reply, lib/bubble-spring-play.ts). */
+  role?: string;
 }) {
   const [mounted, setMounted] = useState(open);
   const [expanded, setExpanded] = useState(open && !animateMount);
@@ -87,6 +92,7 @@ export function ExpandSection({
   if (!mounted) return null;
   return (
     <div
+      data-role={role}
       className={cn(
         "grid transition-[grid-template-rows,margin-top,opacity] duration-(--motion-slow) ease-firm motion-reduce:transition-none",
         expanded

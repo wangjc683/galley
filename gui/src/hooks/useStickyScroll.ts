@@ -13,6 +13,7 @@ import {
   assistantScrollToBottom,
 } from "@/lib/assistant-conversation";
 import { settleBubbleMotion } from "@/lib/bubble-motion";
+import { bubbleSpringShift } from "@/lib/bubble-spring";
 import { chaseBottom } from "@/lib/chase-bottom";
 import { altArrowBelongsToField } from "@/lib/composer-focus";
 import {
@@ -112,8 +113,11 @@ function startLanding(
   landingRef.current = null;
   previous?.animation?.cancel();
   const start = assistantReplyStart(el);
+  // Where it is in the layout: the scroll spring's offset off (ruling
+  // 201), as the follow reads it.
   const startY = start
     ? start.getBoundingClientRect().top -
+      bubbleSpringShift(start) -
       el.getBoundingClientRect().top +
       el.scrollTop
     : null;

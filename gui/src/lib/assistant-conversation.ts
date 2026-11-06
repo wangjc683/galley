@@ -1,3 +1,4 @@
+import { bubbleSpringShift } from "@/lib/bubble-spring";
 import {
   cleanPartialContent,
   extractLiveThinking,
@@ -673,7 +674,8 @@ export interface AssistantScrollBox {
  * 贴底's follow (useStickyScroll's follow-the-bottom paths): pin to the
  * bottom unless that pushes the reply's start above the anchor line;
  * then park the start on the line. True when it parked short of the
- * bottom — following should stop.
+ * bottom — following should stop. The start is read where it is in the
+ * layout (the scroll spring's offset off, ruling 201).
  */
 export function assistantFollowBottom(
   el: AssistantScrollBox & HTMLElement,
@@ -685,7 +687,9 @@ export function assistantFollowBottom(
     scrollHeight: el.scrollHeight,
     clientHeight: el.clientHeight,
     replyStartOffset: start
-      ? start.getBoundingClientRect().top - el.getBoundingClientRect().top
+      ? start.getBoundingClientRect().top -
+        bubbleSpringShift(start) -
+        el.getBoundingClientRect().top
       : null,
     anchor,
   });

@@ -42,6 +42,7 @@ import { useActiveMessages } from "@/hooks/useActiveSession";
 import { useBubbleMotion } from "@/hooks/useBubbleMotion";
 import { useEarlierTurns } from "@/hooks/useEarlierTurns";
 import { useRemovedTurnsAnchor } from "@/hooks/useRemovedTurnsAnchor";
+import { useScrollSpring } from "@/hooks/useScrollSpring";
 import { useStickyScroll } from "@/hooks/useStickyScroll";
 import { useSubtaskQuestionHolder } from "@/hooks/useSubtaskQuestionHolder";
 import { useMemosByMessage } from "@/hooks/useMemoCards";
@@ -623,6 +624,9 @@ function MainViewContent({
     scrollContainerRef,
     animate: isMainChat,
   });
+  // Your own scrolling: the rows lag a little and spring back (ruling
+  // 201, ticket 150). The main chat only.
+  useScrollSpring({ enabled: isMainChat, scrollContainerRef });
 
   // Unread-final-answer tracking for the scroll-to-bottom button's
   // static dot. Edge-triggered, not `!isRunning`: the dot means "a

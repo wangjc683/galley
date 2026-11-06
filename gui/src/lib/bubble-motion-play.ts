@@ -45,6 +45,7 @@ import {
   type RunningBubbleMotion,
   type SlideTiming,
 } from "@/lib/bubble-motion";
+import { clearBubbleSpringStyle } from "@/lib/bubble-spring";
 import { firstRowBelow } from "@/lib/scroll-anchor";
 import type { Box } from "@/lib/typing-bubble-handoff";
 import {
@@ -363,6 +364,8 @@ function copyOf(el: HTMLElement, role: string): HTMLElement {
   }
   copy.setAttribute("data-role", role);
   copy.removeAttribute("role");
+  // It stands where the row was seen, off the scroll spring (ruling 201).
+  clearBubbleSpringStyle(copy);
   return copy;
 }
 

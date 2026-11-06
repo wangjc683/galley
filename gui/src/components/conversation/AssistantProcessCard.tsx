@@ -138,7 +138,12 @@ export function AssistantProcessCard({
   numbers?: boolean;
 }) {
   return (
-    <ExpandSection open={open} openClassName="mt-1" closedClassName="mt-0">
+    <ExpandSection
+      open={open}
+      openClassName="mt-1"
+      closedClassName="mt-0"
+      role="assistant-process-card"
+    >
       <ProcessCard
         steps={steps}
         heading={
