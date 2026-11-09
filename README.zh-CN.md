@@ -105,7 +105,7 @@
 |---|---|
 | macOS Apple Silicon | 文件名包含 `macOS_aarch64.dmg` |
 | macOS Intel | 文件名包含 `macOS_x64.dmg` |
-| Windows x64 | 文件名包含 `Windows_x64-setup.exe` |
+| Windows x64（Windows 10 及以上） | 文件名包含 `Windows_x64-setup.exe` |
 
 <details>
 <summary>安装提示</summary>

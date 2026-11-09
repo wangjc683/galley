@@ -105,7 +105,7 @@ Decide how you'll connect a model first. Presets for ChatGPT, OpenAI, Anthropic,
 |---|---|
 | macOS Apple Silicon | filename contains `macOS_aarch64.dmg` |
 | macOS Intel | filename contains `macOS_x64.dmg` |
-| Windows x64 | filename contains `Windows_x64-setup.exe` |
+| Windows x64 (Windows 10 or later) | filename contains `Windows_x64-setup.exe` |
 
 <details>
 <summary>Install notes</summary>
