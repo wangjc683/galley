@@ -16,6 +16,17 @@ describe("telemetry formatting", () => {
     expect(formatCompactCount(1_500_000)).toBe("1.5m");
   });
 
+  it("moves to the next unit when rounding reaches it", () => {
+    expect(formatCompactCount(999.4)).toBe("999");
+    expect(formatCompactCount(999.6)).toBe("1k");
+    expect(formatCompactCount(1_000)).toBe("1k");
+    expect(formatCompactCount(99_960)).toBe("100k");
+    expect(formatCompactCount(999_499)).toBe("999k");
+    expect(formatCompactCount(999_500)).toBe("1m");
+    expect(formatCompactCount(999_999)).toBe("1m");
+    expect(formatCompactCount(1_000_000)).toBe("1m");
+  });
+
   it("adds cache tokens to the displayed input total", () => {
     expect(
       telemetryInputTotal({

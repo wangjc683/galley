@@ -4,9 +4,12 @@ export function formatCompactCount(value: number | null | undefined): string | n
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
     return null;
   }
-  if (value < 1000) return `${Math.round(value)}`;
-  if (value < 1_000_000) {
-    const k = value / 1000;
+  // Each unit's range is tested on the rounded figure, so a value that
+  // rounds up to the next unit's first figure reads in that unit
+  // (999.6 → "1k", 999,500 → "1m"), never as "1000" / "1000k".
+  if (Math.round(value) < 1000) return `${Math.round(value)}`;
+  const k = value / 1000;
+  if (Math.round(k) < 1000) {
     const text = k >= 100 ? `${Math.round(k)}` : k.toFixed(1).replace(/\.0$/, "");
     return `${text}k`;
   }
