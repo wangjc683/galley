@@ -30,7 +30,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/en/hero-dark.png">
-    <img src="docs/screenshots/en/hero.png" alt="Galley's main chat: to-dos the personal assistant noted, and a job it handed off and reported back on" width="800" />
+    <img src="docs/screenshots/en/hero.png" alt="Your chat with Galley: to-dos the personal assistant noted, and a job it handed off and reported back on" width="800" />
   </picture>
   <br/>
   <sub>Follows your system appearance — light or dark.</sub>
@@ -48,9 +48,10 @@
 
 ### One assistant who always reports back
 
-- 💬 **Main chat** — one conversation that's always there: just say what you need, as in a messaging app. Its face in the sidebar moves, so you can tell at a glance whether it's busy or free.
+- 💬 **Your chat with Galley** — one conversation that's always there: just say what you need, as in a messaging app. Its face in the sidebar moves, so you can tell at a glance whether it's busy or free.
 - 🧑‍💼 **Hands off, checks, reports back** — longer jobs go to subtasks in the workbench. When one finishes or gets stuck, the assistant wakes up to check the result against what was asked, sends it back if it falls short, and tells you in a line or two once it's good. A subtask's questions come to the assistant first, and it answers the ones it can.
 - 📝 **To-dos and reminders it sets itself** — mention that "the materials are due next Wednesday," and it decides whether to make that a to-do and when to remind you; say "no need" and it's cancelled. The to-do panel opens beside any conversation: you just tick things off, and tell the assistant the rest.
+- 📌 **Memos about you** — what it learns about you (say, that you don't eat cilantro) it notes as a memo, and it rereads its memos at the start of every segment of the conversation. They're on the Memos tab of the to-do panel.
 - 🗂️ **Runs Galley for you** — it starts conversations, creates projects, tidies up into the archive, and sets one-off reminders on its own, then tells you how to undo it. API keys, sign-ins, and the browser extension stay yours; it tells you where to fill them in.
 - 📱 **iPhone app (in development)** — talk to the same assistant from your phone. It keeps working on your computer; the phone connects back through an end-to-end encrypted relay that only ever sees ciphertext.
 
@@ -99,7 +100,7 @@ Decide how you'll connect a model first. Presets for ChatGPT, OpenAI, Anthropic,
 
 1. **Download Galley** — the macOS / Windows installer from [Releases](https://github.com/wangjc683/galley/releases).
 2. **Configure a model** — on first launch, pick a provider and paste your API Key (or sign in with ChatGPT); the connection is tested automatically.
-3. **Start using it** — click "Start using Galley" to open the main chat (a ChatGPT sign-in takes you straight there), and just tell it what you need.
+3. **Start using it** — click "Start using Galley" to open your chat with Galley (a ChatGPT sign-in takes you straight there), and just tell it what you need.
 
 | Platform | Installer |
 |---|---|
@@ -118,7 +119,7 @@ xattr -dr com.apple.quarantine /Applications/Galley.app
 
 On Windows, when SmartScreen says the publisher is unknown, choose "More info" → "Run anyway".
 
-If you already have a [GenericAgent](https://github.com/lsdefine/GenericAgent) environment, choose the GA folder from **Settings → Runtime → More → Connect external GA**. Once attached, Galley stays strictly read-only and never touches your external GA's code, memory, SOP, or `mykey.py`. The main chat (the assistant and its to-dos), Browser Control, and Channels run on the bundled engine only, and the providers under **Settings → Models** serve the bundled engine; an external GA keeps using its own `mykey.py`.
+If you already have a [GenericAgent](https://github.com/lsdefine/GenericAgent) environment, choose the GA folder from **Settings → Runtime → More → Connect external GA**. Once attached, Galley stays strictly read-only and never touches your external GA's code, memory, SOP, or `mykey.py`. Your chat with Galley (the assistant, its to-dos and memos), Browser Control, and Channels run on the bundled engine only, and the providers under **Settings → Models** serve the bundled engine; an external GA keeps using its own `mykey.py`.
 
 </details>
 
@@ -185,13 +186,13 @@ Full command reference, JSON schemas, and exit codes live in the [Agent API docs
 
 ## Architecture
 
-The GUI and the CLI are **peer frontends** — not a GUI wrapping a CLI, but two equals each talking directly to the same **Rust Core**: the GUI from inside the app, the CLI over a local socket. Core is the single authority, owning the main chat, session / Project state, to-dos and scheduled tasks, SQLite writes, and every Python process Galley runs; by default those run on the bundled engine, ready out of the box.
+The GUI and the CLI are **peer frontends** — not a GUI wrapping a CLI, but two equals each talking directly to the same **Rust Core**: the GUI from inside the app, the CLI over a local socket. Core is the single authority, owning your chat with Galley, session / Project state, to-dos, memos and scheduled tasks, SQLite writes, and every Python process Galley runs; by default those run on the bundled engine, ready out of the box.
 
 ```mermaid
 flowchart TB
   GUI["Galley GUI<br/>Tauri · React"] -- in-process --> Core
   CLI["Galley CLI<br/>Rust"] -- "local socket · named pipe<br/>no TCP · no token" --> Core
-  Core["Galley Core<br/>Rust<br/>main chat<br/>sessions<br/>projects<br/>to-dos<br/>scheduled tasks<br/>SQLite"]
+  Core["Galley Core<br/>Rust<br/>chat with Galley<br/>sessions<br/>projects<br/>to-dos · memos<br/>scheduled tasks<br/>SQLite"]
   Core --> R["Session runners<br/>one per session"]
   Core --> IM["IM channels<br/>one per app"]
   Core --> BB["Browser bridge<br/>resident"]
@@ -214,7 +215,7 @@ A few design choices that aren't in the feature list but shape Galley's engineer
 <details>
 <summary>Show the six design choices</summary>
 
-- **Peer frontends, not a GUI wrapping a CLI.** The GUI and CLI each reach the Rust Core on their own, so neither depends on the other. Closing the window leaves Core, its sessions, and the CLI running in the background. Neither the assistant nor the chat apps needed a protocol of their own: the main chat's assistant and each IM channel hand off work and check progress through the same CLI an outside Supervisor uses.
+- **Peer frontends, not a GUI wrapping a CLI.** The GUI and CLI each reach the Rust Core on their own, so neither depends on the other. Closing the window leaves Core, its sessions, and the CLI running in the background. Neither the assistant nor the chat apps needed a protocol of their own: the assistant and each IM channel hand off work and check progress through the same CLI an outside Supervisor uses.
 
 - **The Rust Core is the single authority.** The state machines for sessions / Projects, scheduled tasks, SQLite writes, and every child process converge in one place. Frontends read projections and send intents; they hold no writable state, which removes multi-end state drift at the root.
 

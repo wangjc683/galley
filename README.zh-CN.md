@@ -30,7 +30,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/zh/hero-dark.png">
-    <img src="docs/screenshots/zh/hero.png" alt="Galley 主对话：私人助理记下的待办，派出去又回来交代的活" width="800" />
+    <img src="docs/screenshots/zh/hero.png" alt="和 Galley 的对话：私人助理记下的待办，派出去又回来交代的活" width="800" />
   </picture>
   <br/>
   <sub>跟随系统外观，浅色深色各一套。</sub>
@@ -48,9 +48,10 @@
 
 ### 一个助理，事事有交代
 
-- 💬 **主对话**——一条一直在的对话，有事直接说，像在聊天软件里一样；侧栏里它那张会动的脸，告诉你它在忙还是闲着。
+- 💬 **和 Galley 的对话**——一条一直在的对话，有事直接说，像在聊天软件里一样；侧栏里它那张会动的脸，告诉你它在忙还是闲着。
 - 🧑‍💼 **派活、验收、交代**——费时间的活它派给工作台里的子任务，跑完或卡住时它被叫醒：对照要求看结果，不够就打回去，够了用一两句告诉你。子任务的提问先到它这里，它答得了就替你答。
 - 📝 **待办与主动提醒**——「下周三交材料」这样的话，它自己判断要不要记成待办、什么时候提醒你；说一声「不用」就取消。每条对话旁边都能打开待办面板，你在上面只管勾掉，其余跟它说。
+- 📌 **记着关于你的事**——比如「我不吃香菜」，它记成备忘，每段对话开头都会重读一遍；备忘在待办面板的「备忘」页里看。
 - 🗂️ **替你管 Galley**——开会话、建项目、整理归档、设一次性提醒，它自己动手，做完告诉你怎么撤；API Key、登录、浏览器插件只能你来，它会告诉你去哪填。
 - 📱 **iPhone App（开发中）**——在手机上和同一个它说话。它照旧在你的电脑上干活，手机经端到端加密中转连回来，中转只见密文。
 
@@ -99,7 +100,7 @@
 
 1. **下载 Galley**——从 [Releases](https://github.com/wangjc683/galley/releases) 下载 macOS / Windows 安装包。
 2. **配置模型**——首次启动选择服务商、粘贴 API Key（或登录 ChatGPT），连接自动测试。
-3. **开始使用**——点击「开始使用 Galley」，进入主对话（登录 ChatGPT 的会直接进入），有事直接跟它说。
+3. **开始使用**——点击「开始使用 Galley」，进入和 Galley 的对话（登录 ChatGPT 的会直接进入），有事直接跟它说。
 
 | 平台 | 安装包 |
 |---|---|
@@ -118,7 +119,7 @@ xattr -dr com.apple.quarantine /Applications/Galley.app
 
 Windows SmartScreen 提示「发布者未知」时，点「更多信息」→「仍要运行」。
 
-已有 [GenericAgent](https://github.com/lsdefine/GenericAgent) 环境，可在 **设置 → 运行环境 → 更多 → 接入外部 GA** 选择 GA 目录。接入后 Galley 严格只读，不改动外部 GA 的代码、memory、SOP 或 `mykey.py`。主对话（助理与待办）、浏览器控制与聊天软件只在内置内核下可用，**设置 → 模型** 里的服务商也只供内置内核使用；外部 GA 继续用它自己的 `mykey.py`。
+已有 [GenericAgent](https://github.com/lsdefine/GenericAgent) 环境，可在 **设置 → 运行环境 → 更多 → 接入外部 GA** 选择 GA 目录。接入后 Galley 严格只读，不改动外部 GA 的代码、memory、SOP 或 `mykey.py`。和 Galley 的对话（助理、待办与备忘）、浏览器控制与聊天软件只在内置内核下可用，**设置 → 模型** 里的服务商也只供内置内核使用；外部 GA 继续用它自己的 `mykey.py`。
 
 </details>
 
@@ -185,13 +186,13 @@ galley session restore <id>
 
 ## 架构
 
-GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自直连同一个 **Rust Core**：GUI 在应用内部直连，CLI 走本地 socket。Core 是唯一权威层，掌管主对话、session / Project 状态、待办与定时任务、SQLite 写入，以及 Galley 运行的每一个 Python 进程；默认都跑在内置内核上，开箱即用。
+GUI 和 CLI 是**对等前端**——不是 GUI 套壳 CLI，而是两端各自直连同一个 **Rust Core**：GUI 在应用内部直连，CLI 走本地 socket。Core 是唯一权威层，掌管和 Galley 的对话、session / Project 状态、待办、备忘与定时任务、SQLite 写入，以及 Galley 运行的每一个 Python 进程；默认都跑在内置内核上，开箱即用。
 
 ```mermaid
 flowchart TB
   GUI["Galley GUI<br/>Tauri · React"] -- in-process --> Core
   CLI["Galley CLI<br/>Rust"] -- "local socket · named pipe<br/>no TCP · no token" --> Core
-  Core["Galley Core<br/>Rust<br/>main chat<br/>sessions<br/>projects<br/>to-dos<br/>scheduled tasks<br/>SQLite"]
+  Core["Galley Core<br/>Rust<br/>chat with Galley<br/>sessions<br/>projects<br/>to-dos · memos<br/>scheduled tasks<br/>SQLite"]
   Core --> R["Session runners<br/>one per session"]
   Core --> IM["IM channels<br/>one per app"]
   Core --> BB["Browser bridge<br/>resident"]
@@ -214,7 +215,7 @@ flowchart TB
 <details>
 <summary>展开六条设计选择</summary>
 
-- **对等前端，不是 GUI 套壳 CLI。** GUI 和 CLI 各自直连 Rust Core，互不依赖。关掉窗口，Core、正在跑的 session 和 CLI 都照常在后台工作。助理和聊天软件也没有另起一套协议：主对话里的助理和每个聊天软件渠道，派活、查进度用的都是外部 Supervisor 用的那套 CLI。
+- **对等前端，不是 GUI 套壳 CLI。** GUI 和 CLI 各自直连 Rust Core，互不依赖。关掉窗口，Core、正在跑的 session 和 CLI 都照常在后台工作。助理和聊天软件也没有另起一套协议：助理和每个聊天软件渠道，派活、查进度用的都是外部 Supervisor 用的那套 CLI。
 
 - **Rust Core 是唯一权威。** session / Project 的状态机、定时任务、SQLite 写入和所有子进程全部收敛到 Core 一处。前端只读投影、发意图，不持有可写状态，从根上避免了多端状态漂移。
 
