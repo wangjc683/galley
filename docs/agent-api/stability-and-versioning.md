@@ -76,6 +76,8 @@ is stable; the text after it is not.
 | `assistant_unavailable:` | `schedule create` / `update` / `run`, target `assistant`; every `todo` and `memo` write | The active runtime is the external one, or the managed runtime has no main chat (additive 2026-10-16; `todo` 2026-10-17; `memo` 2026-10-26) |
 | `main_chat_protected:`   | `session rename` / `pin` / `unpin` / `delete`      | The session is the main chat, which takes none of these (additive 2026-10-16) |
 | `managed_runtime_only:`  | `llm set-default`                                 | The active runtime is the external one: its default model is GenericAgent's own config (additive 2026-10-16) |
+| `repeat_needs_due:`      | `todo add` / `update` with a rule flag; `todo update --no-due` | A repeating to-do needs a due date: a rule given with none, or a repeating one's taken away (additive 2026-11-10) |
+| `not_repeating:`         | `todo skip`; `todo update --series` / `--no-repeat` | The to-do does not repeat, or its rule ended (additive 2026-11-10) |
 
 #### Status enums
 
@@ -90,6 +92,7 @@ is stable; the text after it is not.
 | `ScheduledTask.lastWake`   | `pending / delivered / notified` (2026-10-16) |
 | `Todo.status`              | `open / done / cancelled` (2026-10-17, [todo-commands](./todo-commands.md)) |
 | `Todo.reminder.state`      | `scheduled / paused / fired` (2026-10-17) |
+| `Todo.repeat.kind`         | `daily / weekly / monthly / yearly` (2026-11-10, [todo-commands](./todo-commands.md)) |
 
 Retired in `3` (§7.1): `GoalBrief.status` (`active / paused / blocked /
 completed / budget_limited / stopped / failed`), with the rest of the
@@ -334,6 +337,20 @@ and error discriminants unchanged):
   the example in §5.5b of [session-commands.md](./session-commands.md)
   that showed them is corrected. No documented command, flag, field,
   exit code or error changed.
+- 2026-11-10 — Repeating to-dos (main chat ticket 154): `todo skip`
+  (socket `todo.skip`, `{todoId}`); on `todo add` / `todo update` the rule
+  flags `--daily` / `--weekly=<days>` / `--monthly=<days>` / `--yearly` with
+  `--every=<n>` (socket `repeat`), and on `todo update` `--no-repeat` and
+  `--series` (socket `noRepeat`, `series`); on `Todo` the optional `repeat`
+  (`{kind, weekdays?, monthdays?, every?, remind?}`), `seriesId` and
+  `skipped`; on what `todo done` and `todo skip` print, the optional `next`
+  beside `todo`; the `repeat_needs_due:` and `not_repeating:` prefixes. A
+  to-do that does not repeat prints the same bytes as before, and `todo
+  done` on one prints `{"todo": …}` alone. `todo cancel` on a period of a
+  rule now also ends the rule (no to-do repeated before). New commands,
+  flags, fields and prefixes only; no existing field, exit code or error
+  changed. Also served under `--schema=1` and `--schema=2`. See
+  [todo-commands.md](./todo-commands.md) §5.28, §5.31–§5.34, §5.34f.
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 
