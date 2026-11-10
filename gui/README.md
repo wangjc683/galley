@@ -17,10 +17,12 @@ pnpm dev            # 仅 Vite frontend，浏览器调试用
 ```bash
 pnpm typecheck      # tsc --noEmit
 pnpm lint           # ESLint flat config，0 warning
-pnpm format         # Prettier 写入
+pnpm test           # vitest run
 pnpm build          # tsc + vite build（不打 Tauri bundle）
 pnpm tauri build    # 打 .app / .dmg
 ```
+
+`src/` 不是 prettier-clean，没有对整个目录跑的 format 脚本。新文件可以整篇格式化，既有文件只格式化自己改的部分；格式化单个文件用 `pnpm --dir gui exec prettier --write <file>`。
 
 ## 设计 tokens
 

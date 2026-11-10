@@ -9,7 +9,6 @@
     "preview": "vite preview",
     "tauri": "cd ../core && tauri",
     "lint": "eslint src --max-warnings 0",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
