@@ -1,5 +1,11 @@
 # Galley PRD v0.3
 
+> **2026-11-10 说明**：本文件只做过事实小修，没有整篇重写。§17 路线图停在
+> `v0.2.0`（2026-05-31），是 v0.2 之前的历史记录；现状（版本、发版、各线进度）
+> 看 [project status](./project-status.md)，助理与主对话的产品定义看
+> [助手 PRD](../.scratch/assistant/PRD.md)。全面重写暂缓，启动信号：下次 minor
+> 发版，或要对外介绍产品时。
+
 > 创建时间：2026-05-15 CST
 > 状态：Active
 > 作者：JC + Hermes
@@ -110,7 +116,7 @@ Galley CLI 输出的 JSON schema 是 Galley 对 agent 生态的公开承诺：
 
 - 详细规范见 [docs/agent-api.md](./agent-api.md)（v0.2 ship 时 publish）
 - schema_version 内 additive-only（只加字段不删 / 不改语义）
-- breaking change = schema_version bump，旧版 SOP 仍可用 `?schema=N` 拿老格式
+- breaking change = schema_version bump，旧版 SOP 仍可用 `--schema=N` 拿老格式
 - exit code 分类稳定，错误码 enum stable
 
 ## 5. 目标用户
@@ -142,7 +148,7 @@ V1.0 优先服务：
 
 继承自 v0.1（v0.2 必须仍然成立）：
 
-- v0.1 七件事的所有 acceptance criteria 仍然必须通过（multi-session / Tool Timeline / Approval / Session 历史 / Session 状态展示 / LLM 切换 / GA Attach）
+- v0.1 七件事的所有 acceptance criteria 仍然必须通过（multi-session / Tool Timeline / Approval / Session 历史 / Session 状态展示 / LLM 切换 / GA Attach）。Approval 已于 `v0.6.0` 移除（2026-10-05，见 [发版 devlog](./devlog/2026-10-05-v0.6.0-release.md)），不再是验收项
 
 > **2026-08-12 校准**：下面两份清单原本以 v0.2 为锚点写就，到 `v0.4.6` 已
 > 出现漂移——`Follow-up Queue` 早已发运，`自动安装 / 升级 / GA` 在 managed
@@ -170,9 +176,8 @@ V1.0 优先服务：
   Rule 1 兜底（不碰用户自己的 GA checkout）。**managed runtime 不在此列**：
   Galley 自 v0.2.0 起就随包发运并升级自己的内置 GA，那是产品引擎，见
   [managed GA runtime](./managed-ga-runtime/README.md)
-- 完整 IDE（文件树、编辑器、git diff）——tool call 的 `PatchView` diff 不算，
+- 完整 IDE（文件树、编辑器）——tool call 的 `PatchView` diff 不算，
   它是工具结果的呈现，不是文件浏览 / 编辑面
-- Context Window 占用展示
 - Artifacts 一等公民
 - 完整 tracing / 多人审批 / 复杂 policy / RBAC
 
@@ -184,6 +189,8 @@ V1.0 优先服务：
 | 原非目标 | 发运版本 | 实际形态 |
 |---|---|---|
 | Follow-up Queue | `v0.4.6`（2026-08-12） | 会话消息队列：运行中 / stopping 中发送默认排队，`run_complete` 自动发出，chips 可取消或取回编辑，一键插队；CLI 增 `dispatch: "queued"` 与 `--jump`（additive）。见 [devlog](./devlog/2026-08-12-session-message-queue.md) |
+| Context Window 占用展示 | `v0.2.15`（2026-06-25） | 工作台每条回复的悬停行里有这一轮的上下文占用百分比，悬停给「上下文 约 已用 / 上限 tokens」（`6437162e`）；顶栏不显示，助手的对话也不画（主聊天 PRD 裁决 68）。2026-08-12 的核对只查了顶栏与模型 pill，漏了这一处 |
+| 完整 IDE 里的 git diff | `v0.4.12`（2026-09-08） | 只读的 Git 工作区改动审阅：右侧面板列出仓库相对基线的净改动并逐文件看 diff，不编辑。文件树与编辑器仍是非目标。见 [devlog](./devlog/2026-09-08-git-worktree-review.md) |
 
 ### 6.4 Goal 模式定位（已退役）
 
@@ -336,12 +343,16 @@ code）以 [docs/agent-api/](./agent-api/README.md) 为唯一来源；本节曾�
 
 ### 12.1 默认（agent 用）
 
-CLI binary bundled 进 .app（macOS）/ Program Files（Windows）：
+CLI binary bundled 进 .app（macOS）/ 安装目录（Windows，与主程序同一目录）：
 
 ```
 macOS:   /Applications/Galley.app/Contents/MacOS/galley
-Windows: C:\Program Files\Galley\galley.exe
+Windows: %LOCALAPPDATA%\Galley\galley.exe
 ```
+
+Windows 的 NSIS 安装包按当前用户安装（`core/tauri.conf.json` 的
+`installMode: "currentUser"`），不要管理员权限，默认装进用户目录，不进
+Program Files。
 
 **首启不弹 PATH install 提示**——agent 不用 PATH，认绝对路径。
 
@@ -361,7 +372,9 @@ Supervisor SOP 第一步读这个文件拿 CLI 路径，跨 OS 统一。
 Settings → Agent → "安装 galley 命令" 按钮：
 
 - macOS：弹 sudo 创建 `/usr/local/bin/galley` → CLI 绝对路径 symlink
-- Windows：写用户级 PATH（不需 admin）
+- Windows：没有这个按钮。页面写着暂不支持一键安装，并给出 CLI 所在目录，
+  要在终端里直接用 `galley` 就自己把它加进 PATH。一键写用户级 PATH 暂缓，见
+  [deferred](./devlog/deferred.md)「Windows 上一键安装 `galley` 命令（用户级 PATH）」
 
 ### 12.4 v0.6+ 候选
 
@@ -539,10 +552,10 @@ migration 失败 → app 拒绝启动 + 显示错误页面：
 | 前端 | Galley GUI + Galley CLI 对等 |
 | 权威层 | Galley Core (Rust) |
 | Agent runtime | GA only (v0.2)，架构允许将来扩展 |
-| 远程支持 | 不直接支持，由 Supervisor 在外部传输层 |
-| Auth | filesystem permission only (localhost) |
+| 远程支持 | 只经 Galley 自己的远程模块：桌面向外连中转、端到端加密、只与桌面上配对过的设备通话；IM 渠道、SSH 等外部传输照旧支持（宪法 Rule 2，见 §4.2） |
+| Auth | 本机控制只靠文件系统权限（AF_UNIX socket / named pipe，不开 TCP）；远程只认配对过的设备，没有登录 token（宪法 Rule 2） |
 | Supervisor 身份 | freeform string, 不校验不注册 |
-| CLI 输出 | JSON / NDJSON default, --pretty escape hatch |
+| CLI 输出 | JSON / NDJSON，没有 human-readable 模式（`--pretty` 从未落地，见 §11） |
 | Background mode | menubar daemon (default ON 关窗时) |
 | Telemetry | no |
 | 设计哲学 | dual-native (first-class for both human and agent) |
