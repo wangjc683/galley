@@ -28,6 +28,7 @@
 - 审计 2026-11-10 票 10 改了 `w-long` 自己的上限、说明交法、固定数据与字数上限，标成只记录（`wake/cases.json` 的 `tool_cap`、`inline_note`、`record_only`），见「`w-long` 为什么一直不过（审计 2026-11-10 票 10）」一节。
 - 票 153 在 `todo/` 加了六条「下一步在谁手里」的用例，跑今天的主对话提示词（`v9`，提供 `tell_user`），两条复用原有用例的内容；拿掉手册新段落的对照在 `todo/results.json` 的 `meta.ticket153w_control`（见「下一步在谁手里（票 153）」一节）。
 - 票 155 在 `todo/` 加了十四条「重复的待办」用例（`v9`，提供 `tell_user`），假 CLI 照票 154 的 Core 存重复规则、勾掉或跳过时生出下一期（日子的算法 `run.py` 的 `REPEAT_PY`，假 CLI 与脚本共用一份）；`schedule/rust-samples.json` 的「In Hand」加了一组重复的待办，`schedule/cli-help.json` 的 `todo` 一族重抓、加了 `todo skip`；拿掉手册两处的对照在 `todo/results.json` 的 `meta.ticket155w_control`（见「重复的待办（票 155）」一节）。
+- 票 158 在 `todo/` 加了一条「只改规则的提醒」的用例（这一期明天到期时 `--series` 给已过的提醒时刻），`rep-overdue-ring` 换成 Core 新的叫醒说明重跑；Core 叫醒说明的镜像补上规则、逾期几天与没勾的子项，`schedule/rust-samples.json` 加 `todo_wake`（Core 写出的原文）；假 CLI 跟上 `--series` 的新分界（见「重复的待办收尾（票 158）」一节）。
 
 ## 怎么跑
 
@@ -1654,3 +1655,56 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite memo --cases <备忘套�
 - **回归**：待办 64/68 → 65/68。由不过变过的两条：`progress-review-done`（上一次撞上工具调用上限，这次 11 次请求走到了回复）、`review-look-again-later`（上一次停在浏览器）；由过变不过的一条：`half-done`，记对了不带日子的待办，回复「好，先吃饭。回来接着查……」没说记下了（`mentions_any` 的「记」），与重复的待办无关。定时 18/18 → 18/18。备忘可比的 15 条 13/15 → 15/15；`interest-stock`、`interest-show` 这一次才有第 1 遍，前者不过（记下的兴趣没写「看你……常问」，票 98 的规矩），后者过。
 - **用量**：153 次运行，536 次模型调用（WITH 42 次 136 次调用、对照 8 次 30 次、待办回归 68 次 261 次、定时回归 18 次 54 次、备忘回归 17 次 55 次）；`--dry-test` 不连模型。
 - **没测到的**：「以后都提前两天提醒」时这一期离到期不到两天（`--series` 要靠这一期挂一个还没过的提醒，`time_in_past:` 会拒，用例特意放在下周五）；用户取消勾、两期并存；`--yearly`；每期带子项的规则；带时刻的规则（每周一 9 点前交）；对照只跑了四条各两遍。
+
+## 重复的待办收尾（票 158）
+
+主聊天 PRD 裁决 204 第 8、12 条，接票 154、155（票 155 回报「没验证到的」前两条）。Core 改了两处，手册各补半句：
+
+- **只改规则的提醒**：`todo update --series` 给的 `--remind-at` 已经过了（「以后周报都提前两天提醒我」时这一期明天就到期）不再整条 `time_in_past:`。规则的提醒偏移照这个时刻相对这一期的到期日算、存进规则；这一期自己的提醒改挂到规则后面第一个还没过的提醒时刻（`next_reminder_ahead`，从这一期的到期日数起，先看它自己的那一个；同一条命令给了 `--due` 的，规则从新的到期日数）；一个都没有就不挂、原来那个由 Core 放掉。不带 `--series` 的过去时刻照旧 `time_in_past:`，不重复的待办带 `--series` 照旧 `not_repeating:`。Agent API §5.32 写明。
+- **叫醒说明写明重复与逾期**：待办的提醒到点时，到期日在提醒响的那天之前的写「It was due …, local time, N days ago.」（代替「It is due …」）；规则没结束的写一句规则（「It repeats weekly on Tue.」，口径照 `repeat_words`）；重复又逾期、且提醒计划的那天在这一期自己的提醒（照规则）那天之后的，规则那句接着写「this one was left unticked, and its reminder came again at a later one's time.」。不重复、没逾期的一字不变（Core 的测试逐字钉住）。逾期按天算（这台机器的时区，到期日与提醒响的那天相减）。
+- **手册**：`todos-change.md` 重复的那一条补「Give this one's reminder time even when it has already passed (this one is due too soon): Galley still changes the rule, and this one's reminder moves to the first later one's time still ahead.」；`wake.md` 逾期的重复待办那一条把「(`todo show` has its `repeat`)」换成「(the note says it repeats and how many days ago it was due, so you need not `todo show` it for that)」，先问做了没有的规矩不变。
+- **镜像**：`run.py` 的 `due_paragraph` 跟上 Core 的新写法，顺带补上票 111 的「Its items not ticked yet」那一段（票 155 的票外发现）；新增 `due_todo_of`，照 `DueTodo::from_todo` 从 `todo show` 的形状、提醒计划的时刻与响的时刻算出规则、逾期几天、是不是后面一期的时刻在响；`sched_note` 改用它（规则与子项一起读）。`REPEAT_PY` 加 `r_next_reminder_ahead`。`schedule/rust-samples.json` 加 `todo_wake` 六条：Core 的 `DueTodo::from_todo` 与 `report_text` 写出的原文（一个临时 Rust 测试写出，跑完删掉），`--dry-test` 逐字对。换了叫醒说明的只有 `rep-overdue-ring`（拿新旧两版 `run.py` 在同一时刻拼待办、定时、备忘三套全部带叫醒的用例，只有它变了）。
+- **假 CLI**：`todo update --series` 照 Core 收下已过的时刻（同上）；不带 `--series` 的照旧拒。报错与不报错的分界、输出的形状（`reminder` 是挂上的那个、同一个任务，`repeat.remind` 是新偏移）用一个临时测试在内存库上对 Core 抓过（跑完删掉）：明天（周三）到期、`--remind-at` 前天 09:00 加 `--series`，Core 回的是下周一 09:00、`{"daysBefore":2,"time":"09:00"}`，假 CLI 一样。假 CLI 被拒的调用另记在状态的 `errors` 里（给「一次成」的判定用）。
+- **判定加的**（写法见 `todo/cases.json` 的 `_note`）：`expect.series_remind.once`：没有被拒的 `todo update`、`todo update` 只用了一次；`expect.record_todo_show`：只记录这一轮去没去 `todo show`（注出来，不判）。`rep-overdue-ring` 加了后者。
+- **用例**：组名「重复的待办收尾（票 158）」，`v9`，提供 `tell_user`。
+
+| # | 用例 | 用户这句或情形 | 该 | 不该 |
+| --- | --- | --- | --- | --- |
+| 83 | `rep-remind-two-days-near` | 清单里有每周重复的「交周报」，明天到期，每期提前一天早上 9 点提醒（今天早上那一响响过，提醒已挂到下一期的时刻）；「以后周报都提前两天提醒我」 | `todo update --remind-at=<这一期到期前两天，已经过了> --series` 一次成，规则记成提前 2 天，回复说清以后怎么提醒 | 报错后放弃；另建一条 |
+| 81 | `rep-overdue-ring`（重跑） | 上周这一期没勾，它的提醒今天又到点；叫醒说明换成新的 | 先问做了没有，不把提醒再说一遍，不勾；记下它还去不去 `todo show` | 直接勾掉；另记一件 |
+
+- **`--dry-test` 加的**（`dry_test_series_near`、`dry_test_series_past_cli`）：`todo_wake` 六条逐字对 Core（`due_todo_of` 对 `DueTodo::from_todo`，`reminder_note` 对 `report_text`），覆盖重复又逾期在后面一期的时刻响、逾期但是它自己的提醒晚响、重复没逾期、不重复逾期一天（西八区、带时刻）、不重复没逾期带子项；`rep-overdue-ring` 的叫醒说明；新用例的固定数据与「In Hand」；`r_next_reminder_ahead` 一组；判定：一次成过，先被拒再改、被拒后放弃、另记一件、回复没说规则都不过；`rep-overdue-ring` 去没去 `todo show` 注出来；票 158 一节的表。假 CLI 在新用例的固定数据上走一遍：不带 `--series` 拒、带了改规则并把同一个任务挪到下一期到期前两天（这一期到期后五天）09:00、不重复的拒且不挂提醒、两次被拒都记下。原有那条 `rep-overdue-ring` 的脚本检查改成新措辞（它原来用「回复里没有 " late"」判按时，新措辞里的「later」会撞上，改成判「 late (the computer」）。
+- **怎么跑**：
+
+```bash
+PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
+export PYTHONDONTWRITEBYTECODE=1
+$PY .scratch/main-chat/entry-layer-eval/run.py --dry-test
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases rep-remind-two-days-near --repeats 3 --parallel 3
+REP=rep-weekly-report,rep-rent-monthly,rep-tax-quarterly,rep-daily-words,rep-quarterly-hint,rep-nudge-sleep,rep-payslip-last-workday,rep-done-report,rep-skip-week,rep-stop-weekly,rep-every-two-weeks,rep-remind-two-days,rep-overdue-ring,rep-already-there
+# 回归（rep-overdue-ring 的第 1 遍也在这里）：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases $REP --repeats 1 --first-repeat 1 --parallel 7 --supersede "票 158 回归：……"
+# rep-overdue-ring 新的叫醒说明，第 2、3 遍：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases rep-overdue-ring --repeats 2 --first-repeat 2 --parallel 2 --supersede "票 158：……"
+# 叫醒套件回归，同审计票 11 的跑法：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite wake --variant draft --cases done-evidence,done-no-proof,ask-known,ask-sms,ask-pay,error,step-limit,two-at-once,third-round,file-handover --repeats 1 --first-repeat 1 --parallel 5 --supersede "票 158 回归（draft）：……"
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite wake --variant v2 --cases step-limit --repeats 1 --first-repeat 1 --supersede "票 158 回归（v2）：……"
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite wake --variant core --cases w-table,w-long,w-merge-three,w-two-of-three,w-third-back --repeats 1 --first-repeat 1 --parallel 5 --supersede "票 158 回归（core）：……"
+```
+
+### 结果（2026-11-10，gpt-6.1-sol，推理强度 high）
+
+模型 `mm_1792576875658`（API key 接入的 gpt-6.1-sol，同票 73）。先 `--dry-test`（不连模型，1,586 项全过）。手册用的是票面那两句，一轮跑完，没改措辞。
+
+| 用例 | 这一票 | 上一次 |
+| --- | --- | --- |
+| `rep-remind-two-days-near`（新） | 3/3 | — |
+| `rep-overdue-ring`（新的叫醒说明） | 3/3，三遍都去了 `todo show` | 2/3（旧说明），三遍都去了 `todo show` |
+| 组「重复的待办（票 155）」14 条各第 1 遍（回归） | 13/14 | 12/14 |
+| 叫醒套件 16 次（回归：15 条各第 1 遍，`step-limit` 两种措辞各一遍） | 16/16（`w-long` 只记录，这一遍过） | 16/16 |
+
+- **只改规则的提醒**：三遍都是 `todo show` 之后一条 `todo update … --remind-at=<这一期到期前两天 09:00，已经过了> --series`，一次成，规则记成提前 2 天 09:00，没有报错、没有另建一条；回复都说清了以后怎么提醒，也说了这一期的那一下已经过了、下一次是哪天，如「改好了，以后每周三交的周报，都在周一上午9点提醒你。这周的提前两天时间已过，下次提醒是 11月16日（周一）上午9点；明天（11月11日）的周报仍要交。」（`--reason` 写着「保留上午9点」：它从规则里读出了 09:00）。判定第一版只认「两天 / 2 天」几个字，第 3 遍说的是「都在周一上午9点提醒你」被判不过（2/3）；那是把规则说清了的另一种说法，判定改成也认提醒现在落在的星期几（`series_remind.says_any`，`--dry-test` 加了说周日过、说错星期几不过），`--render-only` 重判 3/3。
+- **逾期的又响**：三遍都先问做了没有，没有复述提醒、没有勾、没说晚了（「上周那份周报已经发到部门群、抄送组长了吗？可能只是交了还没勾掉，我先确认一下。」）。叫醒说明里已经写着它在重复、7 天前到期，三遍仍都 `todo show` 了这一件，和旧说明下的三遍一样；其中两遍（新旧都是两遍）是在读 `wake.md` 的同一步里一起查的，不多一轮；模型调用新旧都是 7 次（3 遍合计）。手册这半句说的是不必为此再查，没有说不许查；要它不查得另写规矩，这一票没有。上一次不过的那一遍是票 155 记过的评测排队晚了 3 分钟。
+- **回归**：由不过变过的两条：`rep-done-report`（上一次回复只写进了 `<summary>`）、`rep-overdue-ring`（同上）；由过变不过的一条：`rep-quarterly-hint`，记对了这一次的季报（周五到期、周四 9 点提醒、不设规则），回复「记下了：本周五（11 月 13 日）前交季报，周四上午 9 点提醒你，留一天收尾。」没问以后每季度记不记；这条走的是 `todos.md` 的「A to-do that repeats」，这一票没动那一节，同组第 2、3 遍都问了。`rep-remind-two-days`（下周五到期、时刻还没过的那条）照旧过，新的分界没碰到它。叫醒套件十六次与上一次一样全过（同审计票 11 的跑法，`w-merge-two-long` 只经 `--t147` 跑，没重跑）；它们是子任务的回报，不经过待办的叫醒说明，读 `wake.md` 时读到的是改过的那一条。
+- **用量**：35 次运行，107 次模型调用（新用例 3 次 9 次、待办回归 14 次 44 次、`rep-overdue-ring` 第 2、3 遍 2 次 5 次、叫醒回归 16 次 49 次）；`--dry-test` 不连模型。被替换的运行在两套 `meta.superseded_runs` 里以「票 158」开头的几组，`todo/results.md` 的「票 158」一节与它后面的重跑表对比。
+- **没测到的**：规则一个提醒时刻都给不出来（实际上碰不到）时放掉原来那个提醒；同一条命令既给 `--due` 又 `--series` 加已过的时刻（Core 的测试覆盖了，评测没有用例）；叫醒说明的「不重复、逾期」与「重复、逾期但是它自己的提醒晚响」两种只在 Core 的测试与 `--dry-test` 的样本里，评测没有用例；`rep-overdue-ring` 只在手册改后跑，没有拿掉 `wake.md` 那半句的对照。

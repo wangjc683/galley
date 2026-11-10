@@ -2248,5 +2248,360 @@
       "text": "### Memo\n\nAs of 2026-10-26 09:05, local time (it may have changed since: `memo list` reads it now; `memo add`, `memo update` and `memo delete` change it).\n\nWhat you noted about the user, oldest first, each with the day you last noted or changed it:\n- `memo_0000000000000000` 2026-10-01: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000001` 2026-10-02: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000002` 2026-10-03: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000003` 2026-10-04: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000004` 2026-10-05: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000005` 2026-10-06: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000006` 2026-10-07: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000007` 2026-10-08: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000008` 2026-10-09: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000009` 2026-10-10: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_000000000000000a` 2026-10-11: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_000000000000000b` 2026-10-12: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_000000000000000c` 2026-10-13: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_000000000000000d` 2026-10-14: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_000000000000000e` 2026-10-15: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_000000000000000f` 2026-10-16: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000010` 2026-10-17: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000011` 2026-10-18: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000012` 2026-10-19: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- `memo_0000000000000013` 2026-10-20: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十\n- and 3 more, past the 2000 characters this section holds: `memo list`",
       "tz_offset_minutes": 480
     }
+  ],
+  "todo_wake": [
+    {
+      "fired": "2026-11-10T01:00:20+00:00",
+      "name": "weekly, a week overdue, rung again at the next one's time; notes, items",
+      "planned": "2026-11-10T01:00:00+00:00",
+      "reports": [
+        {
+          "due_local": "2026-11-10 09:00 (Tue)",
+          "fired_local": "2026-11-10 09:00 (Tue)",
+          "late": null,
+          "once": true,
+          "prompt": "交周报",
+          "rule": "one-off",
+          "task_id": "sched_6b2f8d4c0e3a5f71",
+          "todo": {
+            "due": "2026-11-03 (Tue)",
+            "id": "todo_5a1e7c3b9d2f4e60",
+            "notes": "发到部门群里，抄送组长",
+            "open_items": [
+              "画图表"
+            ],
+            "overdue_days": 7,
+            "rang_again": true,
+            "repeat": "repeats weekly on Tue",
+            "title": "交周报"
+          }
+        }
+      ],
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_6b2f8d4c0e3a5f71` on the user's to-do `todo_5a1e7c3b9d2f4e60` came due. Planned for 2026-11-10 09:00 (Tue), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n交周报\n发到部门群里，抄送组长\n>>>\nIts items not ticked yet:\n<<<\n画图表\n>>>\nIt was due 2026-11-03 (Tue), local time, 7 days ago. It repeats weekly on Tue: this one was left unticked, and its reminder came again at a later one's time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "todo_wire": {
+        "createdAt": "2026-10-01T00:00:00+00:00",
+        "due": {
+          "date": "2026-11-03",
+          "hasTime": false
+        },
+        "id": "todo_5a1e7c3b9d2f4e60",
+        "items": [
+          {
+            "createdAt": "2026-10-01T00:00:00+00:00",
+            "done": true,
+            "id": "item_1",
+            "text": "汇总数据"
+          },
+          {
+            "createdAt": "2026-10-01T00:00:00+00:00",
+            "done": false,
+            "id": "item_2",
+            "text": "画图表"
+          }
+        ],
+        "notes": "发到部门群里，抄送组长",
+        "origin": {
+          "supervisor": "galley-assistant",
+          "via": "supervisor"
+        },
+        "repeat": {
+          "kind": "weekly",
+          "remind": {
+            "daysBefore": 0,
+            "time": "09:00"
+          },
+          "weekdays": [
+            2
+          ]
+        },
+        "seriesId": "series_5a1e7c3b9d2f4e60",
+        "status": "open",
+        "title": "交周报",
+        "updatedAt": "2026-10-01T00:00:00+00:00"
+      },
+      "tz_offset_minutes": 480
+    },
+    {
+      "fired": "2026-11-05T03:30:00+00:00",
+      "name": "weekly, its own reminder gone off two days late",
+      "planned": "2026-11-03T01:00:00+00:00",
+      "reports": [
+        {
+          "due_local": "2026-11-03 09:00 (Tue)",
+          "fired_local": "2026-11-05 11:30 (Thu)",
+          "late": "2 days 2 hours",
+          "once": true,
+          "prompt": "交周报",
+          "rule": "one-off",
+          "task_id": "sched_6b2f8d4c0e3a5f71",
+          "todo": {
+            "due": "2026-11-03 (Tue)",
+            "id": "todo_5a1e7c3b9d2f4e60",
+            "notes": null,
+            "open_items": [],
+            "overdue_days": 2,
+            "rang_again": false,
+            "repeat": "repeats weekly on Tue",
+            "title": "交周报"
+          }
+        }
+      ],
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_6b2f8d4c0e3a5f71` on the user's to-do `todo_5a1e7c3b9d2f4e60` came due. Planned for 2026-11-03 09:00 (Tue), local time; it went off at 2026-11-05 11:30 (Thu), 2 days 2 hours late (the computer was asleep or Galley was closed). The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n交周报\n>>>\nIt was due 2026-11-03 (Tue), local time, 2 days ago. It repeats weekly on Tue. Act on it now, and say in the reply itself (the user does not see your summary) that it comes 2 days 2 hours late: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "todo_wire": {
+        "createdAt": "2026-10-01T00:00:00+00:00",
+        "due": {
+          "date": "2026-11-03",
+          "hasTime": false
+        },
+        "id": "todo_5a1e7c3b9d2f4e60",
+        "items": [],
+        "origin": {
+          "supervisor": "galley-assistant",
+          "via": "supervisor"
+        },
+        "repeat": {
+          "kind": "weekly",
+          "remind": {
+            "daysBefore": 0,
+            "time": "09:00"
+          },
+          "weekdays": [
+            2
+          ]
+        },
+        "seriesId": "series_5a1e7c3b9d2f4e60",
+        "status": "open",
+        "title": "交周报",
+        "updatedAt": "2026-10-01T00:00:00+00:00"
+      },
+      "tz_offset_minutes": 480
+    },
+    {
+      "fired": "2026-11-15T12:00:00+00:00",
+      "name": "every two weeks with a time, not overdue",
+      "planned": "2026-11-15T12:00:00+00:00",
+      "reports": [
+        {
+          "due_local": "2026-11-15 20:00 (Sun)",
+          "fired_local": "2026-11-15 20:00 (Sun)",
+          "late": null,
+          "once": true,
+          "prompt": "交双周报",
+          "rule": "one-off",
+          "task_id": "sched_1111111111111111",
+          "todo": {
+            "due": "2026-11-16 09:00 (Mon)",
+            "id": "todo_2b3c4d5e6f7a8b9c",
+            "notes": null,
+            "open_items": [],
+            "overdue_days": null,
+            "rang_again": false,
+            "repeat": "repeats every 2 weeks on Mon, Thu",
+            "title": "交双周报"
+          }
+        }
+      ],
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_1111111111111111` on the user's to-do `todo_2b3c4d5e6f7a8b9c` came due. Planned for 2026-11-15 20:00 (Sun), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n交双周报\n>>>\nIt is due 2026-11-16 09:00 (Mon), local time. It repeats every 2 weeks on Mon, Thu. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "todo_wire": {
+        "createdAt": "2026-10-01T00:00:00+00:00",
+        "due": {
+          "at": "2026-11-16T01:00:00+00:00",
+          "date": "2026-11-16",
+          "hasTime": true,
+          "time": "09:00"
+        },
+        "id": "todo_2b3c4d5e6f7a8b9c",
+        "items": [],
+        "origin": {
+          "supervisor": "galley-assistant",
+          "via": "supervisor"
+        },
+        "repeat": {
+          "every": 2,
+          "kind": "weekly",
+          "remind": {
+            "daysBefore": 1,
+            "time": "20:00"
+          },
+          "weekdays": [
+            1,
+            4
+          ]
+        },
+        "seriesId": "series_2b3c4d5e6f7a8b9c",
+        "status": "open",
+        "title": "交双周报",
+        "updatedAt": "2026-10-01T00:00:00+00:00"
+      },
+      "tz_offset_minutes": 480
+    },
+    {
+      "fired": "2027-01-14T12:00:00+00:00",
+      "name": "quarterly on the 15th, a quarter overdue, rung again at the next one's time",
+      "planned": "2027-01-14T12:00:00+00:00",
+      "reports": [
+        {
+          "due_local": "2027-01-14 20:00 (Thu)",
+          "fired_local": "2027-01-14 20:00 (Thu)",
+          "late": null,
+          "once": true,
+          "prompt": "交季报",
+          "rule": "one-off",
+          "task_id": "sched_2222222222222222",
+          "todo": {
+            "due": "2026-10-15 (Thu)",
+            "id": "todo_8b9c0d1e2f3a4b5c",
+            "notes": null,
+            "open_items": [],
+            "overdue_days": 91,
+            "rang_again": true,
+            "repeat": "repeats every 3 months on the 15th",
+            "title": "交季报"
+          }
+        }
+      ],
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_2222222222222222` on the user's to-do `todo_8b9c0d1e2f3a4b5c` came due. Planned for 2027-01-14 20:00 (Thu), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n交季报\n>>>\nIt was due 2026-10-15 (Thu), local time, 91 days ago. It repeats every 3 months on the 15th: this one was left unticked, and its reminder came again at a later one's time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "todo_wire": {
+        "createdAt": "2026-10-01T00:00:00+00:00",
+        "due": {
+          "date": "2026-10-15",
+          "hasTime": false
+        },
+        "id": "todo_8b9c0d1e2f3a4b5c",
+        "items": [],
+        "origin": {
+          "supervisor": "galley-assistant",
+          "via": "supervisor"
+        },
+        "repeat": {
+          "every": 3,
+          "kind": "monthly",
+          "monthdays": [
+            15
+          ],
+          "remind": {
+            "daysBefore": 1,
+            "time": "20:00"
+          }
+        },
+        "seriesId": "series_8b9c0d1e2f3a4b5c",
+        "status": "open",
+        "title": "交季报",
+        "updatedAt": "2026-10-01T00:00:00+00:00"
+      },
+      "tz_offset_minutes": 480
+    },
+    {
+      "fired": "2026-11-10T16:00:00+00:00",
+      "name": "not repeating, a day overdue in its zone, with a time",
+      "planned": "2026-11-10T16:00:00+00:00",
+      "reports": [
+        {
+          "due_local": "2026-11-10 08:00 (Tue)",
+          "fired_local": "2026-11-10 08:00 (Tue)",
+          "late": null,
+          "once": true,
+          "prompt": "交材料",
+          "rule": "one-off",
+          "task_id": "sched_3333333333333333",
+          "todo": {
+            "due": "2026-11-09 23:30 (Mon)",
+            "id": "todo_3c4d5e6f7a8b9c0d",
+            "notes": null,
+            "open_items": [],
+            "overdue_days": 1,
+            "rang_again": false,
+            "repeat": null,
+            "title": "交材料"
+          }
+        }
+      ],
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_3333333333333333` on the user's to-do `todo_3c4d5e6f7a8b9c0d` came due. Planned for 2026-11-10 08:00 (Tue), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n交材料\n>>>\nIt was due 2026-11-09 23:30 (Mon), local time, 1 day ago. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "todo_wire": {
+        "createdAt": "2026-10-01T00:00:00+00:00",
+        "due": {
+          "at": "2026-11-10T07:30:00+00:00",
+          "date": "2026-11-09",
+          "hasTime": true,
+          "time": "23:30"
+        },
+        "id": "todo_3c4d5e6f7a8b9c0d",
+        "items": [],
+        "origin": {
+          "supervisor": "galley-assistant",
+          "via": "supervisor"
+        },
+        "status": "open",
+        "title": "交材料",
+        "updatedAt": "2026-10-01T00:00:00+00:00"
+      },
+      "tz_offset_minutes": -480
+    },
+    {
+      "fired": "2026-11-17T12:05:00+00:00",
+      "name": "not repeating, not overdue, items",
+      "planned": "2026-11-17T12:00:00+00:00",
+      "reports": [
+        {
+          "due_local": "2026-11-17 20:00 (Tue)",
+          "fired_local": "2026-11-17 20:05 (Tue)",
+          "late": "5 minutes",
+          "once": true,
+          "prompt": "上海出差前的准备",
+          "rule": "one-off",
+          "task_id": "sched_4444444444444444",
+          "todo": {
+            "due": "2026-11-18 (Wed)",
+            "id": "todo_4d5e6f7a8b9c0d1e",
+            "notes": null,
+            "open_items": [
+              "订机票",
+              "换港币"
+            ],
+            "overdue_days": null,
+            "rang_again": false,
+            "repeat": null,
+            "title": "上海出差前的准备"
+          }
+        }
+      ],
+      "text": "[Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.\n\nReminder `sched_4444444444444444` on the user's to-do `todo_4d5e6f7a8b9c0d1e` came due. Planned for 2026-11-17 20:00 (Tue), local time; it went off at 2026-11-17 20:05 (Tue), 5 minutes late (the computer was asleep or Galley was closed). The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n上海出差前的准备\n>>>\nIts items not ticked yet:\n<<<\n订机票\n换港币\n>>>\nIt is due 2026-11-18 (Wed), local time. Act on it now, and say in the reply itself (the user does not see your summary) that it comes 5 minutes late: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.",
+      "todo_wire": {
+        "createdAt": "2026-10-01T00:00:00+00:00",
+        "due": {
+          "date": "2026-11-18",
+          "hasTime": false
+        },
+        "id": "todo_4d5e6f7a8b9c0d1e",
+        "items": [
+          {
+            "createdAt": "2026-10-01T00:00:00+00:00",
+            "done": true,
+            "id": "item_3",
+            "text": "订酒店"
+          },
+          {
+            "createdAt": "2026-10-01T00:00:00+00:00",
+            "done": false,
+            "id": "item_4",
+            "text": "订机票"
+          },
+          {
+            "createdAt": "2026-10-01T00:00:00+00:00",
+            "done": false,
+            "id": "item_5",
+            "text": "换港币"
+          }
+        ],
+        "origin": {
+          "supervisor": "galley-assistant",
+          "via": "supervisor"
+        },
+        "status": "open",
+        "title": "上海出差前的准备",
+        "updatedAt": "2026-10-01T00:00:00+00:00"
+      },
+      "tz_offset_minutes": 480
+    }
   ]
 }
