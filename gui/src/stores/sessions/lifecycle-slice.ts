@@ -20,6 +20,8 @@ import {
   briefRuntimeKind,
   forgetDeletedSessions,
   patchSessionInList,
+  rollBackSessionWrites,
+  rowUndo,
   sessionFromBrief,
   type SessionBriefWire,
   type SessionsSliceCreator,
@@ -190,8 +192,11 @@ export interface SessionLifecycleSlice {
     projectId?: string,
     title?: string,
   ) => Promise<string>;
-  renameSession: (sessionId: string, newTitle: string) => void;
-  togglePinSession: (sessionId: string) => void;
+  /** Rename, pin and the effort override below move the row first; when
+   * Core refuses, the row goes back and an error toast says so
+   * (2026-11-10 audit, A7). They resolve either way. */
+  renameSession: (sessionId: string, newTitle: string) => Promise<void>;
+  togglePinSession: (sessionId: string) => Promise<void>;
   /**
    * Set or clear (null) the per-session reasoning-effort override and
    * persist it. The GUI sends NO bridge command for this:
@@ -202,7 +207,10 @@ export interface SessionLifecycleSlice {
    * `picked` is what the user clicked — normalised against the model's
    * configured tier so picking the configured value clears the override.
    */
-  setSessionReasoningEffort: (sessionId: string, picked: string | null) => void;
+  setSessionReasoningEffort: (
+    sessionId: string,
+    picked: string | null,
+  ) => Promise<void>;
   /** In-memory mirror of Core's session bump on turn_end (turn_count /
    * summary / last activity — Core writes those to SQLite itself,
    * core/src/turn_persistence). Unread is this page's call: only it
@@ -560,59 +568,62 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     return id;
   },
 
-  renameSession: (sessionId, newTitle) => {
+  renameSession: async (sessionId, newTitle) => {
     const cleaned = newTitle.trim();
     const finalTitle = cleaned === "" ? DEFAULT_NEW_SESSION_TITLE : cleaned;
-    const now = new Date().toISOString();
-    let changedAny = false;
-    set((state) => {
-      const { sessions, changed } = patchSessionInList(
-        state.sessions,
-        sessionId,
-        (s) => {
-          if (s.title === finalTitle) return s;
-          changedAny = true;
-          return { ...s, title: finalTitle, updatedAt: now };
-        },
-      );
-      return changed ? { sessions } : {};
-    });
-    if (!changedAny) return;
-    void invoke("rename_session", {
-      id: sessionId,
+    const prev = get().sessions.find((s) => s.id === sessionId);
+    if (!prev || prev.title === finalTitle) return;
+    const undo = rowUndo(prev, {
       title: finalTitle,
-      origin: GUI_ORIGIN,
-    }).catch((e) =>
-      console.debug("[sessions] rename_session invoke failed.", e),
-    );
-  },
-
-  togglePinSession: (sessionId) => {
-    const now = new Date().toISOString();
-    let nextPinned: boolean | null = null;
+      updatedAt: new Date().toISOString(),
+    });
     set((state) => {
       const { sessions, changed } = patchSessionInList(
         state.sessions,
         sessionId,
-        (s) => {
-          if (s.status === "archived") return s;
-          nextPinned = !s.pinned;
-          return { ...s, pinned: nextPinned, updatedAt: now };
-        },
+        undo.after,
       );
       return changed ? { sessions } : {};
     });
-    if (nextPinned === null) return;
-    void invoke("set_session_pinned", {
-      id: sessionId,
-      pinned: nextPinned,
-      origin: GUI_ORIGIN,
-    }).catch((e) =>
-      console.debug("[sessions] set_session_pinned invoke failed.", e),
-    );
+    try {
+      await invoke("rename_session", {
+        id: sessionId,
+        title: finalTitle,
+        origin: GUI_ORIGIN,
+      });
+    } catch (e) {
+      rollBackSessionWrites(set, [undo], "renameSession", e);
+    }
   },
 
-  setSessionReasoningEffort: (sessionId, picked) => {
+  togglePinSession: async (sessionId) => {
+    const prev = get().sessions.find((s) => s.id === sessionId);
+    if (!prev || prev.status === "archived") return;
+    const nextPinned = !prev.pinned;
+    const undo = rowUndo(prev, {
+      pinned: nextPinned,
+      updatedAt: new Date().toISOString(),
+    });
+    set((state) => {
+      const { sessions, changed } = patchSessionInList(
+        state.sessions,
+        sessionId,
+        undo.after,
+      );
+      return changed ? { sessions } : {};
+    });
+    try {
+      await invoke("set_session_pinned", {
+        id: sessionId,
+        pinned: nextPinned,
+        origin: GUI_ORIGIN,
+      });
+    } catch (e) {
+      rollBackSessionWrites(set, [undo], "togglePinSession", e);
+    }
+  },
+
+  setSessionReasoningEffort: async (sessionId, picked) => {
     // Override = DEVIATION: picking the tier the model configuration
     // already carries writes NULL, so switching away and back leaves
     // no pinned residue. The configured
@@ -621,33 +632,31 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       useRuntimeStore.getState().byId[sessionId]?.configuredReasoningEffort ??
       null;
     const normalized = normalizeEffortOverride(picked, configured);
-    const now = new Date().toISOString();
-    let applied = false;
+    const prev = get().sessions.find((s) => s.id === sessionId);
+    if (!prev || prev.status === "archived") return;
+    const undo = rowUndo(prev, {
+      reasoningEffort: normalized,
+      updatedAt: new Date().toISOString(),
+    });
     set((state) => {
       const { sessions, changed } = patchSessionInList(
         state.sessions,
         sessionId,
-        (s) => {
-          if (s.status === "archived") return s;
-          applied = true;
-          return { ...s, reasoningEffort: normalized, updatedAt: now };
-        },
+        undo.after,
       );
       return changed ? { sessions } : {};
     });
-    if (!applied) return;
     // Core persists and forwards to the live runner in one command —
     // the GUI must not talk to the bridge for this.
-    void invoke("set_session_reasoning_effort", {
-      id: sessionId,
-      value: normalized,
-      origin: GUI_ORIGIN,
-    }).catch((e) =>
-      console.debug(
-        "[sessions] set_session_reasoning_effort invoke failed.",
-        e,
-      ),
-    );
+    try {
+      await invoke("set_session_reasoning_effort", {
+        id: sessionId,
+        value: normalized,
+        origin: GUI_ORIGIN,
+      });
+    } catch (e) {
+      rollBackSessionWrites(set, [undo], "setSessionReasoningEffort", e);
+    }
   },
 
   bumpSessionAfterTurn: (sessionId, summary, stepNumber, markUnread = true) => {

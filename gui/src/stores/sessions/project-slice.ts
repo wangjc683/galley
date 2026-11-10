@@ -6,8 +6,13 @@ import {
   GUI_ORIGIN,
   patchSessionInList,
   projectFromBrief,
+  pushWriteFailedToast,
+  rollBackSessionWrites,
+  rowUndo,
+  undoRowWrites,
   type ProjectBriefWire,
   type SessionsSliceCreator,
+  type SessionsState,
 } from "./shared";
 
 interface CreateProjectInputWire {
@@ -23,6 +28,10 @@ export interface SessionProjectSlice {
   projects: Project[];
   activeProjectFilter: string | undefined;
 
+  // The writes below change memory first. When Core refuses, what they
+  // changed goes back and an error toast says so (2026-11-10 audit, A7);
+  // create, update and assign then reject, so a dialog can stay open and
+  // a caller can skip what it does next on success. Delete resolves.
   createProject: (input: {
     name: string;
     rootPath?: string;
@@ -61,7 +70,7 @@ export interface SessionProjectSlice {
 
 export const createSessionProjectSlice: SessionsSliceCreator<
   SessionProjectSlice
-> = (set) => ({
+> = (set, get) => ({
   projects: [],
   activeProjectFilter: undefined,
 
@@ -92,41 +101,43 @@ export const createSessionProjectSlice: SessionsSliceCreator<
       });
     } catch (e) {
       console.debug("[sessions] create_project invoke failed.", e);
+      set((state) => ({
+        projects: state.projects.filter((p) => p.id !== id),
+      }));
+      pushWriteFailedToast("createProject", e);
+      throw e;
     }
     return next;
   },
 
   updateProject: async (id, partial) => {
     const now = new Date().toISOString();
-    let updated: Project | null = null;
+    const prev = get().projects.find((p) => p.id === id);
+    if (!prev) return;
+    const nextRootPath =
+      partial.rootPath !== undefined
+        ? partial.rootPath?.trim() || undefined
+        : prev.rootPath;
+    const rootPathWasPatched = Object.prototype.hasOwnProperty.call(
+      partial,
+      "rootPath",
+    );
+    const undo = rowUndo(prev, {
+      ...partial,
+      rootPath: nextRootPath,
+      workspaceEnabled: rootPathWasPatched
+        ? !!nextRootPath
+        : partial.workspaceEnabled !== undefined
+          ? partial.workspaceEnabled && !!nextRootPath
+          : prev.workspaceEnabled,
+      name: partial.name !== undefined ? partial.name.trim() : prev.name,
+      updatedAt: now,
+    });
     set((state) => ({
-      projects: state.projects.map((p) => {
-        if (p.id !== id) return p;
-        const nextRootPath =
-          partial.rootPath !== undefined
-            ? partial.rootPath?.trim() || undefined
-            : p.rootPath;
-        const rootPathWasPatched = Object.prototype.hasOwnProperty.call(
-          partial,
-          "rootPath",
-        );
-        updated = {
-          ...p,
-          ...partial,
-          rootPath: nextRootPath,
-          workspaceEnabled:
-            rootPathWasPatched
-              ? !!nextRootPath
-              : partial.workspaceEnabled !== undefined
-              ? partial.workspaceEnabled && !!nextRootPath
-              : p.workspaceEnabled,
-          name: partial.name !== undefined ? partial.name.trim() : p.name,
-          updatedAt: now,
-        };
-        return updated;
-      }),
+      projects: state.projects.map((p) =>
+        p.id === id ? { ...p, ...undo.after } : p,
+      ),
     }));
-    if (!updated) return;
     try {
       // Translate front-end Partial<Project> into Rust ProjectPatch:
       //   - name: Option<String>           (single Option — empty rejected server-side)
@@ -154,10 +165,23 @@ export const createSessionProjectSlice: SessionsSliceCreator<
       });
     } catch (e) {
       console.debug("[sessions] update_project invoke failed.", e);
+      set((state) => {
+        const projects = undoRowWrites(state.projects, [undo]);
+        return projects ? { projects } : {};
+      });
+      pushWriteFailedToast("updateProject", e);
+      throw e;
     }
   },
 
   deleteProject: async (id) => {
+    const before = get();
+    const index = before.projects.findIndex((p) => p.id === id);
+    const project = before.projects[index];
+    const detachedIds = new Set(
+      before.sessions.filter((s) => s.projectId === id).map((s) => s.id),
+    );
+    const wasFilter = before.activeProjectFilter === id;
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== id),
       // FK SET NULL on sessions.project_id; mirror in memory.
@@ -173,24 +197,45 @@ export const createSessionProjectSlice: SessionsSliceCreator<
       await invoke("delete_project", { id, origin: GUI_ORIGIN });
     } catch (e) {
       console.debug("[sessions] delete_project invoke failed.", e);
+      // Back where it was: the project, its sessions' link to it, and
+      // the filter, each unless something has moved it since.
+      set((state) => {
+        const out: Partial<SessionsState> = {
+          sessions: state.sessions.map((s) =>
+            detachedIds.has(s.id) && s.projectId === undefined
+              ? { ...s, projectId: id }
+              : s,
+          ),
+        };
+        if (project && !state.projects.some((p) => p.id === id)) {
+          const projects = state.projects.slice();
+          projects.splice(Math.min(index, projects.length), 0, project);
+          out.projects = projects;
+        }
+        if (wasFilter && state.activeProjectFilter === undefined) {
+          out.activeProjectFilter = id;
+        }
+        return out;
+      });
+      pushWriteFailedToast("deleteProject", e);
     }
   },
 
   assignSessionToProject: async (sessionId, projectId) => {
-    const now = new Date().toISOString();
-    let didUpdate = false;
+    const prev = get().sessions.find((s) => s.id === sessionId);
+    if (!prev) return;
+    const undo = rowUndo(prev, {
+      projectId: projectId ?? undefined,
+      updatedAt: new Date().toISOString(),
+    });
     set((state) => {
       const { sessions, changed } = patchSessionInList(
         state.sessions,
         sessionId,
-        (s) => {
-          didUpdate = true;
-          return { ...s, projectId: projectId ?? undefined, updatedAt: now };
-        },
+        undo.after,
       );
       return changed ? { sessions } : {};
     });
-    if (!didUpdate) return;
     try {
       await invoke("assign_session_to_project", {
         sessionId,
@@ -198,7 +243,8 @@ export const createSessionProjectSlice: SessionsSliceCreator<
         origin: GUI_ORIGIN,
       });
     } catch (e) {
-      console.debug("[sessions] assign_session_to_project invoke failed.", e);
+      rollBackSessionWrites(set, [undo], "assignSessionToProject", e);
+      throw e;
     }
   },
 

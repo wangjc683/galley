@@ -80,4 +80,14 @@ describe("useProjectNavigation · assignSessionToProjectWithToast", () => {
     await vi.waitFor(() => expect(pushToast).toHaveBeenCalled());
     expect(pushToast.mock.calls[0][0].title).toBe("已加入 新项目");
   });
+
+  it("shows no receipt when Core refuses the move", async () => {
+    // The store has put the row back and toasted the refusal (A7).
+    const { nav, pushToast, assignSessionToProject } = setup();
+    assignSessionToProject.mockRejectedValueOnce("database is locked");
+    nav.assignSessionToProjectWithToast("other", "a");
+    await vi.waitFor(() => expect(assignSessionToProject).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(pushToast).not.toHaveBeenCalled();
+  });
 });

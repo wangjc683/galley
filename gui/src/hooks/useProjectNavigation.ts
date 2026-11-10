@@ -5,6 +5,10 @@ import { makeAppError, type AppError } from "@/types/app-error";
 import type { Project, Session } from "@/types/session";
 import type { Screen } from "@/stores/ui";
 
+/** A refused write: the store has put the row back and said so, and
+ * there is nothing to confirm. */
+const refusedAndToasted = () => {};
+
 export function useProjectNavigation({
   activeProjectFilter,
   activeSessionBusy,
@@ -129,6 +133,7 @@ export function useProjectNavigation({
       : undefined;
     const sessionTitle = session?.title ?? copy.toasts.conversationUpdated;
 
+    // The receipt waits for Core (2026-11-10 audit, A7).
     void assignSessionToProject(sessionId, projectId).then(() => {
       if (projectId) {
         const projectName =
@@ -173,7 +178,7 @@ export function useProjectNavigation({
           autoDismissMs: 3000,
         }),
       );
-    });
+    }, refusedAndToasted);
   };
 
   return {

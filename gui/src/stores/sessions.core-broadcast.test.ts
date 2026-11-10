@@ -436,9 +436,9 @@ describe("the broadcast of this page's own write changes nothing", () => {
     expect(useSessionsStore.getState().activeSessionId).toBe("a");
   });
 
-  it("archive: one toast, the open session stays closed, no second write", () => {
+  it("archive: one toast, the open session stays closed, no second write", async () => {
     seed([hydrated({ id: "a" }), hydrated({ id: "b" })], "a");
-    useSessionsStore.getState().archiveSession("a");
+    await useSessionsStore.getState().archiveSession("a");
     expect(useUiStore.getState().toasts).toHaveLength(1);
     expect(useSessionsStore.getState().activeSessionId).toBeUndefined();
     expectEchoIsNoop(() =>
@@ -448,9 +448,9 @@ describe("the broadcast of this page's own write changes nothing", () => {
     );
   });
 
-  it("bulk archive: one toast for the batch, one broadcast per session", () => {
+  it("bulk archive: one toast for the batch, one broadcast per session", async () => {
     seed([hydrated({ id: "a" }), hydrated({ id: "b" })], "b");
-    useSessionsStore.getState().archiveSessionsBulk(["a", "b"]);
+    await useSessionsStore.getState().archiveSessionsBulk(["a", "b"]);
     expect(useUiStore.getState().toasts).toHaveLength(1);
     expectEchoIsNoop(() => {
       useSessionsStore

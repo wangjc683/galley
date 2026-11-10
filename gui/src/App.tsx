@@ -627,7 +627,8 @@ function App() {
             onCreateProjectForSession={openCreateProjectForSession}
             onTogglePinProject={(id) => {
               const p = projects.find((x) => x.id === id);
-              if (p) void updateProject(id, { pinned: !p.pinned });
+              // A refusal is put back and toasted by the store.
+              if (p) updateProject(id, { pinned: !p.pinned }).catch(() => {});
             }}
             onEditProject={(id) => setEditingProjectId(id)}
             onDeleteProject={(id) => setDeletingProjectId(id)}

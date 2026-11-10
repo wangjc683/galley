@@ -11,16 +11,21 @@ import {
   forgetDeletedSessions,
   patchSessionInList,
   pushDeleteFailedToast,
+  rollBackSessionWrites,
+  rowUndo,
   type SessionsSliceCreator,
   type SessionsState,
 } from "./shared";
 
+/** The archive writes move the row first and confirm after: when Core
+ * refuses, the row goes back and an error toast says so (2026-11-10
+ * audit, A7); the 已归档 toast waits for Core. They resolve either way. */
 export interface SessionArchiveSlice {
-  archiveSession: (sessionId: string) => void;
-  unarchiveSession: (sessionId: string) => void;
+  archiveSession: (sessionId: string) => Promise<void>;
+  unarchiveSession: (sessionId: string) => Promise<void>;
   deleteSessionPermanently: (sessionId: string) => Promise<void>;
-  archiveSessionsBulk: (sessionIds: string[]) => void;
-  unarchiveSessionsBulk: (sessionIds: string[]) => void;
+  archiveSessionsBulk: (sessionIds: string[]) => Promise<void>;
+  unarchiveSessionsBulk: (sessionIds: string[]) => Promise<void>;
   deleteSessionsPermanentlyBulk: (sessionIds: string[]) => Promise<void>;
   emptyArchive: () => Promise<number>;
 }
@@ -28,17 +33,18 @@ export interface SessionArchiveSlice {
 export const createSessionArchiveSlice: SessionsSliceCreator<
   SessionArchiveSlice
 > = (set, get) => ({
-  archiveSession: (sessionId) => {
-    const now = new Date().toISOString();
-    let archivedTitle: string | null = null;
+  archiveSession: async (sessionId) => {
+    const prev = get().sessions.find((s) => s.id === sessionId);
+    if (!prev) return;
+    const undo = rowUndo(prev, {
+      status: "archived",
+      updatedAt: new Date().toISOString(),
+    });
     set((state) => {
       const { sessions, changed } = patchSessionInList(
         state.sessions,
         sessionId,
-        (s) => {
-          archivedTitle = s.title;
-          return { ...s, status: "archived", updatedAt: now };
-        },
+        undo.after,
       );
       if (!changed) return {};
       const out: Partial<SessionsState> = { sessions };
@@ -47,10 +53,13 @@ export const createSessionArchiveSlice: SessionsSliceCreator<
       }
       return out;
     });
-    if (archivedTitle === null) return;
-    void invoke("archive_session", { id: sessionId, origin: GUI_ORIGIN }).catch(
-      (e) => console.debug("[sessions] archive_session invoke failed.", e),
-    );
+    try {
+      await invoke("archive_session", { id: sessionId, origin: GUI_ORIGIN });
+    } catch (e) {
+      // The row comes back; the open session stays closed.
+      rollBackSessionWrites(set, [undo], "archiveSession", e);
+      return;
+    }
     // UX feedback: archiving makes the row vanish from the sidebar —
     // a short info toast confirms the action.
     const copy = currentCopy();
@@ -59,7 +68,7 @@ export const createSessionArchiveSlice: SessionsSliceCreator<
         category: "business",
         severity: "info",
         title: copy.toasts.archived,
-        message: archivedTitle,
+        message: prev.title,
         hint: null,
         retryable: false,
         context: "archiveSession",
@@ -68,28 +77,26 @@ export const createSessionArchiveSlice: SessionsSliceCreator<
     );
   },
 
-  unarchiveSession: (sessionId) => {
-    const now = new Date().toISOString();
-    let changedAny = false;
+  unarchiveSession: async (sessionId) => {
+    const prev = get().sessions.find((s) => s.id === sessionId);
+    if (prev?.status !== "archived") return;
+    const undo = rowUndo(prev, {
+      status: "idle",
+      updatedAt: new Date().toISOString(),
+    });
     set((state) => {
       const { sessions, changed } = patchSessionInList(
         state.sessions,
         sessionId,
-        (s) => {
-          if (s.status !== "archived") return s;
-          changedAny = true;
-          return { ...s, status: "idle", updatedAt: now };
-        },
+        undo.after,
       );
       return changed ? { sessions } : {};
     });
-    if (!changedAny) return;
-    void invoke("unarchive_session", {
-      id: sessionId,
-      origin: GUI_ORIGIN,
-    }).catch((e) =>
-      console.debug("[sessions] unarchive_session invoke failed.", e),
-    );
+    try {
+      await invoke("unarchive_session", { id: sessionId, origin: GUI_ORIGIN });
+    } catch (e) {
+      rollBackSessionWrites(set, [undo], "unarchiveSession", e);
+    }
   },
 
   deleteSessionPermanently: async (sessionId) => {
@@ -116,40 +123,48 @@ export const createSessionArchiveSlice: SessionsSliceCreator<
     forgetDeletedSessions(set, [sessionId]);
   },
 
-  archiveSessionsBulk: (sessionIds) => {
+  archiveSessionsBulk: async (sessionIds) => {
     if (sessionIds.length === 0) return;
     const now = new Date().toISOString();
     const idSet = new Set(sessionIds);
-    let archivedCount = 0;
-    set((state) => {
-      const sessions = state.sessions.map((s) => {
-        if (!idSet.has(s.id) || s.status === "archived") return s;
-        archivedCount++;
-        return {
-          ...s,
+    // Core archives the batch in one transaction: all or none.
+    const undos = get()
+      .sessions.filter((s) => idSet.has(s.id) && s.status !== "archived")
+      .map((s) =>
+        rowUndo(s, {
           status: "archived" as DurableSessionStatus,
           updatedAt: now,
-        };
-      });
+        }),
+      );
+    if (undos.length === 0) return;
+    const archivedIds = new Set(undos.map((undo) => undo.id));
+    set((state) => {
+      const sessions = state.sessions.map((s) =>
+        archivedIds.has(s.id)
+          ? { ...s, status: "archived" as DurableSessionStatus, updatedAt: now }
+          : s,
+      );
       const out: Partial<SessionsState> = { sessions };
       if (state.activeSessionId && idSet.has(state.activeSessionId)) {
         out.activeSessionId = undefined;
       }
       return out;
     });
-    if (archivedCount === 0) return;
-    void invoke("bulk_archive_sessions", {
-      ids: sessionIds,
-      origin: GUI_ORIGIN,
-    }).catch((e) =>
-      console.debug("[sessions] bulk_archive_sessions invoke failed.", e),
-    );
+    try {
+      await invoke("bulk_archive_sessions", {
+        ids: sessionIds,
+        origin: GUI_ORIGIN,
+      });
+    } catch (e) {
+      rollBackSessionWrites(set, undos, "archiveSessionsBulk", e);
+      return;
+    }
     const copy = currentCopy();
     useUiStore.getState().pushToast(
       makeAppError({
         category: "business",
         severity: "info",
-        title: copy.toasts.archivedCount(archivedCount),
+        title: copy.toasts.archivedCount(undos.length),
         message: "",
         hint: null,
         retryable: false,
@@ -159,25 +174,32 @@ export const createSessionArchiveSlice: SessionsSliceCreator<
     );
   },
 
-  unarchiveSessionsBulk: (sessionIds) => {
+  unarchiveSessionsBulk: async (sessionIds) => {
     if (sessionIds.length === 0) return;
     const now = new Date().toISOString();
     const idSet = new Set(sessionIds);
-    let unarchivedCount = 0;
+    const undos = get()
+      .sessions.filter((s) => idSet.has(s.id) && s.status === "archived")
+      .map((s) =>
+        rowUndo(s, { status: "idle" as DurableSessionStatus, updatedAt: now }),
+      );
+    if (undos.length === 0) return;
+    const restoredIds = new Set(undos.map((undo) => undo.id));
     set((state) => ({
-      sessions: state.sessions.map((s) => {
-        if (!idSet.has(s.id) || s.status !== "archived") return s;
-        unarchivedCount++;
-        return { ...s, status: "idle" as DurableSessionStatus, updatedAt: now };
-      }),
+      sessions: state.sessions.map((s) =>
+        restoredIds.has(s.id)
+          ? { ...s, status: "idle" as DurableSessionStatus, updatedAt: now }
+          : s,
+      ),
     }));
-    if (unarchivedCount === 0) return;
-    void invoke("bulk_unarchive_sessions", {
-      ids: sessionIds,
-      origin: GUI_ORIGIN,
-    }).catch((e) =>
-      console.debug("[sessions] bulk_unarchive_sessions invoke failed.", e),
-    );
+    try {
+      await invoke("bulk_unarchive_sessions", {
+        ids: sessionIds,
+        origin: GUI_ORIGIN,
+      });
+    } catch (e) {
+      rollBackSessionWrites(set, undos, "unarchiveSessionsBulk", e);
+    }
   },
 
   deleteSessionsPermanentlyBulk: async (sessionIds) => {

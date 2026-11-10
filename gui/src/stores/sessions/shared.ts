@@ -142,6 +142,92 @@ export function pushDeleteFailedToast(context: string, error: unknown) {
   );
 }
 
+/**
+ * The error toast for a session or project write Core refused
+ * (2026-11-10 audit, A7): the generic title (`errors.businessTitle`)
+ * over Core's own message.
+ */
+export function pushWriteFailedToast(context: string, error: unknown) {
+  useUiStore.getState().pushToast(
+    makeAppError({
+      category: "business",
+      severity: "error",
+      message: errorMessage(error),
+      hint: null,
+      retryable: false,
+      context,
+      traceback: null,
+    }),
+  );
+}
+
+/**
+ * One row's optimistic write, kept so it can be undone when Core refuses
+ * it: the fields the write set (`after`) and what they held before
+ * (`before`, the same keys).
+ */
+export interface RowUndo<T> {
+  id: string;
+  before: Partial<T>;
+  after: Partial<T>;
+}
+
+/** The undo of writing `after` onto `row`. */
+export function rowUndo<T extends { id: string }>(
+  row: T,
+  after: Partial<T>,
+): RowUndo<T> {
+  const before: Partial<T> = {};
+  for (const key of Object.keys(after) as (keyof T)[]) {
+    before[key] = row[key];
+  }
+  return { id: row.id, before, after };
+}
+
+/**
+ * `rows` with each undo applied, or `null` when none puts anything back.
+ * A field goes back while it still holds what the write set; one that
+ * something else changed since (another write, a Core broadcast) keeps
+ * the newer value.
+ */
+export function undoRowWrites<T extends { id: string }>(
+  rows: T[],
+  undos: readonly RowUndo<T>[],
+): T[] | null {
+  const byId = new Map(undos.map((undo) => [undo.id, undo]));
+  let changed = false;
+  const next = rows.map((row) => {
+    const undo = byId.get(row.id);
+    if (!undo) return row;
+    const back: Partial<T> = {};
+    let any = false;
+    for (const key of Object.keys(undo.after) as (keyof T)[]) {
+      if (row[key] !== undo.after[key]) continue;
+      back[key] = undo.before[key];
+      any = true;
+    }
+    if (!any) return row;
+    changed = true;
+    return { ...row, ...back };
+  });
+  return changed ? next : null;
+}
+
+/** Undo optimistic session-row writes Core refused, and say so. */
+export function rollBackSessionWrites(
+  set: (fn: (state: SessionsState) => Partial<SessionsState>) => void,
+  undos: readonly RowUndo<Session>[],
+  context: string,
+  error: unknown,
+): void {
+  console.debug(`[sessions] ${context} failed; rolled back.`, error);
+  set((state) => {
+    const sessions = undoRowWrites(state.sessions, undos);
+    return sessions ? { sessions } : {};
+  });
+  pushWriteFailedToast(context, error);
+}
+
 export function errorMessage(error: unknown): string {
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;
