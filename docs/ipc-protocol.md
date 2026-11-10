@@ -220,7 +220,7 @@ GUI 要知道「此刻正在调哪个工具」时（侧栏助理卡片那张脸�
 - `summary`：直接复用 GA 在 `turn_end_callback` 中提取的 `<summary>` 标签内容（GA 已 smart_format 截断到 100 字符）
 - `toolCalls / toolResults`：当 turn 中所有工具调用与结果
 - `toolCalls[].resolvedPath`：可选（增量字段，2026-09-17）。仅 `file_write` / `file_patch` 携带：bridge 在 turn 落定时按 GA `GenericAgentHandler._get_abs_path` 的规则（`abspath(join(handler.cwd, args.path))`）算出的**绝对路径**，即文件实际写到的位置；`args.path` 仍是模型原样的相对写法。Core 原样持久化进 `messages.tool_calls`。GUI 用它把过程区的写入步骤做成可打开的文件引用，并把回复正文里与之精确匹配的相对路径 / 裸文件名解析到该绝对路径（`gui/src/lib/written-files.ts`）。`code_run` 产出的文件不在此列。
-- `exitReason`：当且仅当 agent_runner_loop 决定退出（或到达轮数上限，见下）时非 null（结构与 GA 内部 `exit_reason` 一致：`{"result": "CURRENT_TASK_DONE" | "EXITED" | "MAX_TURNS_EXCEEDED", "data": ...}`）。GA 自己从不上报 `MAX_TURNS_EXCEEDED`：最后一轮以空 `exit_reason` 跑完 `while turn < handler.max_turns` 后，循环后的那次回调被跳过，返回值又被 `agentmain.run()` 丢弃。因此 bridge 在 turn-end hook 里只读 `handler.max_turns`，`turn >= max_turns` 且 GA 未给出退出时，就在这个 final `turn_end` 上合成 `{"result": "MAX_TURNS_EXCEEDED", "data": {"maxTurns": N}}`，随后照常发 `run_complete`（galley#29；用 `>=` 是因为计划模式会中途把上限降到 100）。两种运行时模式都适用（只读属性，符合 attach 边界）。
+- `exitReason`：当且仅当 agent_runner_loop 决定退出（或到达轮数上限，见下）时非 null（结构与 GA 内部 `exit_reason` 一致：`{"result": "CURRENT_TASK_DONE" | "EXITED" | "MAX_TURNS_EXCEEDED", "data": ...}`）。GA 自己从不上报 `MAX_TURNS_EXCEEDED`：最后一轮以空 `exit_reason` 跑完 `while turn < handler.max_turns` 后，循环后的那次回调被跳过，返回值又被 `agentmain.run()` 丢弃。因此 bridge 在 turn-end hook 里只读 `handler.max_turns`，`turn >= max_turns` 且 GA 未给出退出时，就在这个 final `turn_end` 上合成 `{"result": "MAX_TURNS_EXCEEDED", "data": {"maxTurns": N}}`，随后照常发 `run_complete`（galley#29）。用 `>=` 而不是 `==`：上游 GA 在 `5205f40` 删掉计划模式之前，计划模式会在运行中途把 `handler.max_turns` 降到当前步数以下；内置内核现在固定是 180，外置 GA 的上限以它自己的版本为准。两种运行时模式都适用（只读属性，符合 attach 边界）。
 - `responseContent`：完整 LLM 响应文本（含 thinking / summary 标签），用于 desktop 自行解析展示
 - `telemetry`：可选。只在带 `exitReason` 的 final `turn_end` 上发送，用于最终回答 footer。字段均可缺失：`elapsedMs`、`inputTokens`、`outputTokens`、`cacheCreateTokens`、`cacheReadTokens`、`requestCount`、`contextUsedChars`、`contextLimitChars`。Managed GA 可通过 Galley-owned runtime hook 统计 token；external GA 不安装 token hook，只做 elapsed 与只读 context snapshot 的 best-effort 降级。
 - `nextSuggestion`：可选（增量字段）。用户口吻的下一步建议，bridge 从最终回答的 `<next-suggestion>` 标签正则提取（标签指令来自 managed runtime prompt profile，`core/src/managed_prompt.rs`）。只在带 `exitReason` 的 final `turn_end` 上非 null；模型未输出标签则缺失。External GA 不会输出该标签——attach 模式自然无此字段。Desktop 渲染为 composer ghost text（`.scratch/composer-next-suggestion/`），并在所有展示路径 strip 该标签（同 `<summary>` 处理）。
@@ -315,19 +315,19 @@ agent 主动调用 `ask_user` 工具时发出。bridge 此时 agent_runner_loop 
 字段说明：
 
 - `message`：用户可读的错误简要（一句话，≤200 字符）
-- `category`：`"bridge" | "runtime" | "business"` —— 决定 desktop 显示位置
-  - `"bridge"`：bridge 自身故障（IPC 协议 mismatch、handler 崩溃）→ desktop 渲染为 toast
-  - `"runtime"`：GA / LLM / tool 执行错误 → desktop 渲染为 conversation inline message bubble
-  - `"business"`：Galley 业务错误（attach 路径非法、SQLite 损坏、历史恢复失败）→ desktop 渲染为 toast
+- `category`：`"bridge" | "runtime" | "business"` —— 错误出在哪一层。desktop 不分 category，每条都显示为一条 toast（`gui/src/lib/ipc-handlers.ts`），category 只决定没有 `hint` 时的默认标题（[Error Card](./design/onboarding-and-cards.md#62-error-card)）
+  - `"bridge"`：bridge 自身故障（IPC 协议 mismatch、handler 崩溃）
+  - `"runtime"`：GA / LLM / tool 执行错误
+  - `"business"`：Galley 业务错误（attach 路径非法、SQLite 损坏、历史恢复失败）
 - `severity`：`"error" | "warning" | "info"` —— 决定颜色与 icon（详见 DESIGN.md §6.2）
-- `retryable`：是否值得让用户重试。`true` 时 desktop 显示 Retry button；点击 = 触发新的 `user_message`（参数复用上次）。**bridge 自身不主动 retry**
-- `hint`：可选；bridge 端检测错误类型后给出的引导线索，desktop 用于渲染专用引导卡片：
+- `retryable`：是否值得让用户重试。bridge 照常填写，desktop 目前不读它：toast 上没有重试按钮，用户要重试就再发一次。**bridge 自身不主动 retry**
+- `hint`：可选；bridge 端检测错误类型后给出的引导线索，desktop 用它换掉 toast 的标题和那一行说明，给出专用引导：
   - `"check_llm_config"`：LLM 认证 / 配置类错误（401/403/`api_key`/`unauthorized` 关键字命中）
   - `"network"`：网络层错误（超时、DNS、connection refused）
   - `"quota_exceeded"`：API 配额耗尽（429 / quota 关键字）
   - 未命中分类时省略此字段
 - `context`：错误发生时正在处理的命令名或阶段（debug 用）
-- `traceback`：完整 Python traceback（power user / debug 用，desktop 默认折叠）
+- `traceback`：完整 Python traceback（power user / debug 用）。desktop 不显示它，toast 上的「复制详情」连同 `context` 一起复制
 
 Core 收到 `severity: "error"` 的 `error` 时，往自己的标准错误打一行 `[runner error <会话>] <category>/<context>: <message>`（`message` 脱敏、单行、截到 500 字符，`core/src/log_excerpt.rs`；主对话票 122），并把 `message` 留在内存里给子任务回报和巡看日志用；`warning` / `info` 不打。
 

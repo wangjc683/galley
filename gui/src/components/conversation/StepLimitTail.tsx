@@ -8,9 +8,9 @@ import { useCopy } from "@/lib/i18n";
  * (12px, ink-muted, the bold 12px Pause in the leading slot), not a
  * closing marker. Shown only while the session is idle (MainView
  * owns the predicate, `lib/step-limit.ts`); nothing is running, so
- * there is no stop control. The copy carries no number: plan mode's
- * cap differs, and the last step's numeral already says how far the
- * run got.
+ * there is no stop control. The copy carries no number: an external
+ * GA's cap need not be the bundled engine's 180, and the last step's
+ * numeral already says how far the run got.
  */
 export function StepLimitTail() {
   const conv = useCopy().conversation;

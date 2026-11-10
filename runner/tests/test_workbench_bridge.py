@@ -1482,8 +1482,9 @@ def test_final_loop_iteration_reports_max_turns_and_closes_run(turn: int, max_tu
     """galley#29: GA's loop leaves `while turn < handler.max_turns` with an
     empty exit_reason, skips its post-loop callback and drops the
     MAX_TURNS_EXCEEDED it returns. The bridge reports that exit on the
-    last turn_end and closes the run (plan mode can lower the cap below
-    the current turn, hence `>=`)."""
+    last turn_end and closes the run. The bundled engine's cap is a fixed
+    180; GA before upstream `5205f40` could lower it below the current
+    turn in plan mode, hence `>=`."""
     bridge = _new_test_bridge()
     bridge.agent = SimpleNamespace()
     bridge._open_run()

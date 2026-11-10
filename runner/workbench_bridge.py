@@ -1611,8 +1611,10 @@ class Bridge:
             # exit_reason, so this in-loop callback is the last one — the
             # post-loop callback is skipped and the MAX_TURNS_EXCEEDED it
             # returns is discarded by `agentmain.run()`. Report that exit
-            # here so the run closes like any finish. `>=` because plan
-            # mode lowers the cap mid-run. Read-only on the live handler.
+            # here so the run closes like any finish. The bundled engine's
+            # cap is a fixed 180; an external GA's is its version's own.
+            # `>=` because GA before upstream `5205f40` lowered the cap
+            # mid-run in plan mode. Read-only on the live handler.
             if not exit_reason:
                 max_turns = getattr(ctx.get("self"), "max_turns", None)
                 if isinstance(max_turns, int) and turn >= max_turns:

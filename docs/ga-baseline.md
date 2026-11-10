@@ -393,9 +393,10 @@ New in the `f308ee7` -> `5205f40` range:
   chain on 2026-07-22. `memory/plan_sop.md` (deprecated since then) still
   ships and stays in existing managed state; a model that follows it into
   `handler.enter_plan_mode` now gets an `AttributeError` in its tool
-  output, nothing worse. The GUI comments on plan mode's lower cap
-  (`gui/src/lib/step-limit.ts`, `StepLimitTail.tsx`) stay true for older
-  external GA.
+  output, nothing worse. The step-limit comments in the GUI
+  (`gui/src/lib/step-limit.ts`, `StepLimitTail.tsx`) and the runner
+  (`_on_turn_end`) give 180 for the bundled engine and leave an external
+  GA's cap to its own version.
 - `ga.py` — turn-end cadence (`5205f40`): the checkpoint nudge every 17
   turns (was 13), the write-to-a-file nudge every 41 (was 31), and the
   periodic global-memory re-injection every 15 (was 10), now wrapped in

@@ -1,9 +1,10 @@
 import type { ExitReason } from "@/types/ipc";
 
 /**
- * GA's per-run step cap (#29). When one run reaches it (180 steps, 100
- * in plan mode) GA stops the loop mid-work — usually right after a
- * tool step — and the bridge ends the run with
+ * GA's per-run step cap (#29). When one run reaches it (180 steps in the
+ * bundled engine; an external GA's own version sets its cap) GA stops
+ * the loop mid-work — usually right after a tool step — and the bridge
+ * ends the run with
  * `exitReason.result === "MAX_TURNS_EXCEEDED"` on the final turn_end
  * and on run_complete. That end is a pause, not a finished reply: the
  * GUI swaps the "回复完成" notification title, offers "继续" as the
