@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-16
 **Status**: Decided, documentation checkpoint
-**Related**: [Galley Native](../galley-native/README.md), [managed GA runtime](../managed-ga-runtime.md), [GA baseline](../ga-baseline.md), [Galley Goal V1](./2026-06-04-galley-goal-v1.md)
+**Related**: [Galley Native](../archive/galley-native/README.md), [managed GA runtime](../managed-ga-runtime.md), [GA baseline](../ga-baseline.md), [Galley Goal V1](./2026-06-04-galley-goal-v1.md)
 
 ## Context
 
@@ -108,31 +108,31 @@ task-help updates.
 
 - Exact Rust model-adapter shape for OpenAI-compatible, Anthropic-compatible,
   Responses-style tool calls, usage accounting, retry, and history. Seeded by
-  [RFC 2: Model And Tool Loop](../galley-native/rfc-2-model-tool-loop.md), but
+  [RFC 2: Model And Tool Loop](../archive/galley-native/rfc-2-model-tool-loop.md), but
   not yet implementation-ready.
 - Runtime boundary details for `galley_native` entry, event ownership, API
   compatibility, and migration gates. Seeded by
-  [RFC 1: Runtime Boundary](../galley-native/rfc-1-runtime-boundary.md), but
+  [RFC 1: Runtime Boundary](../archive/galley-native/rfc-1-runtime-boundary.md), but
   still needs implementation design before code.
 - Capability-pack file format, validation, upgrade behavior, and user-facing
   inspection/approval flow. Seeded by
-  [RFC 4: Capability Packs](../galley-native/rfc-4-capability-packs.md), but
+  [RFC 4: Capability Packs](../archive/galley-native/rfc-4-capability-packs.md), but
   still needs implementation design before code.
 - Native memory UI: how to inspect, edit, diff, approve, and delete L1-L4
   material without making memory noisy. Seeded by
-  [RFC 3: Native Memory](../galley-native/rfc-3-native-memory.md), but still
+  [RFC 3: Native Memory](../archive/galley-native/rfc-3-native-memory.md), but still
   needs product/UI design before code.
 - Project workspace UX: where users bind a workspace, how native sessions
   inherit it, and how GUI file mentions should work. Seeded by
-  [RFC 5: Workspace And Session Continuity](../galley-native/rfc-5-workspace-session-continuity.md),
+  [RFC 5: Workspace And Session Continuity](../archive/galley-native/rfc-5-workspace-session-continuity.md),
   but still needs implementation design before code.
 - Session continuity policy: in-place continue, copy continue, occupied native
   sessions, and Supervisor-driven follow-ups. Seeded by
-  [RFC 5: Workspace And Session Continuity](../galley-native/rfc-5-workspace-session-continuity.md),
+  [RFC 5: Workspace And Session Continuity](../archive/galley-native/rfc-5-workspace-session-continuity.md),
   but still needs implementation design before code.
 - Parity harness: how to compare `managed_ga` and `galley_native` on the same
   tasks while accounting for model non-determinism. Seeded by
-  [RFC 7: Parity Harness And Default Switch](../galley-native/rfc-7-parity-harness-default-switch.md).
+  [RFC 7: Parity Harness And Default Switch](../archive/galley-native/rfc-7-parity-harness-default-switch.md).
 - Migration path: when new users default to native, what happens to existing
   managed sessions, and whether "copy to native" is a first-party action.
 - Safety policy for native tool scopes, YOLO, workspace-bound approvals, and
@@ -153,9 +153,9 @@ task-help updates.
    runtime router skeleton, native loop skeleton, tool control plane, local
    file/code tools, Browser Control tools, memory/capability substrate,
    workspace/continuity, Goal/Morphling, and parity gates.
-   Seeded by [Implementation Slices](../galley-native/implementation-slices.md).
+   Seeded by [Implementation Slices](../archive/galley-native/implementation-slices.md).
 3. Settle the pre-freeze decisions in
-   [Open Decisions](../galley-native/open-decisions.md) before Slice 1 code.
+   [Open Decisions](../archive/galley-native/open-decisions.md) before Slice 1 code.
 4. Keep `managed_ga` stable while designing native; no code, schema, or runtime
    behavior changes are implied by this checkpoint.
 5. If implementation starts later, begin with a native runtime skeleton behind

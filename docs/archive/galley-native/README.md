@@ -1,5 +1,15 @@
 # Galley Native
 
+> **ARCHIVED 2026-11-10** — The native runtime these documents planned was
+> abandoned on 2026-06-17 and never shipped on `main`. Migration
+> `025_restore_managed_runtime_default.sql` (commit `81418db6`, 2026-06-17)
+> calls it "the abandoned Galley Native experiment" and moves any persisted
+> `galley_native` runtime back to `managed`; the compatibility note in
+> [code state and patches](../../managed-ga-runtime/code-state-and-patches.md)
+> says why migrations `021`–`024` stay. No rule here is current: the bundled
+> managed GA runtime is Galley's engine
+> ([managed GA runtime](../../managed-ga-runtime/README.md)).
+
 Design documents for `galley_native`: GenericAgent's Rust semantic port plus
 Galley's product-owned native runtime kernel.
 

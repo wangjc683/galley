@@ -4,7 +4,7 @@
 关联：[PRD 与八张票](../../.scratch/goal-simplify/PRD.md)、
 [agent-api §5.19](../agent-api/goal-commands.md)、
 [stability §7](../agent-api/stability-and-versioning.md)、
-[PRD §6.4](../PRD.md)、[RFC-6（已被取代）](../galley-native/rfc-6-goal-hive-morphling.md)、
+[PRD §6.4](../PRD.md)、[RFC-6（已被取代）](../archive/galley-native/rfc-6-goal-hive-morphling.md)、
 前史：[goal v1](./2026-06-04-galley-goal-v1.md)、
 [solo 打磨轮二](./2026-07-09-goal-solo-dogfood-round-two.md)、
 [派发装门](./2026-08-23-goal-dispatch-gate-and-run-state.md)

@@ -27,7 +27,6 @@ subset of the task table below; when the two disagree, this index wins and
 | Change the Core ↔ runner wire protocol | [IPC protocol](./ipc-protocol.md) — change docs first, then code |
 | Change remote access (phone ↔ relay ↔ Core) | [remote protocol design](../.scratch/ios-client/issues/05-remote-protocol-design.md), then the [remote-protocol](../remote-protocol/README.md), [relay](../relay/README.md) and [GalleyRemote](../ios/GalleyRemote/README.md) READMEs — Rule 2; the Rust golden fixtures are the contract |
 | Change Supervisor / Agent integration | [Supervisor SOP](./integrations/galley-supervisor-sop.md), then [Supervisor reference](./integrations/galley-supervisor-reference.md) |
-| Plan or design Galley Native runtime | [Galley Native](./galley-native/README.md) — charter, RFC set, implementation slices |
 | Check architecture invariants | [architecture demo](./architecture-demo.md) — code-level proofs and grep gates; hard engineering invariants (I3/I5/I6/I9/I11) are in [engineering workflow](./engineering-workflow.md) |
 | Prepare or update a release | [release / update SOP](./release-update-sop.md) (runbook), then [release workflow](./release-workflow.md) (background) |
 | Write GitHub Release notes | [release notes guide](./release-notes-guide.md) — writing rules and bilingual templates |
