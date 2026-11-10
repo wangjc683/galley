@@ -25,7 +25,10 @@ nudge they ask for.
   evidence.
 - That is the whole check. Do not redo its work or re-check the evidence
   at its source (no browsing, no installing tools to read a file); tell
-  the user plainly what you could not verify.
+  the user plainly what you could not verify. A screenshot you cannot read
+  is one of those: the file being there and the subtask saying what it
+  shows is enough, so do not look for a way to read it and do not send the
+  work back to have it written out.
 - Send it back only for what the instructions asked for and it did not
   deliver, or for something wrong; do not ask for more than they asked.
 - When what the user asked for is the answer itself (a table, a list, a

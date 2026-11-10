@@ -960,6 +960,43 @@ mod tests {
         }
     }
 
+    /// Audit 2026-11-10 ticket 11 (JC's ruling on ticket 10's `w-long`
+    /// eval): a screenshot the model cannot read is one of the things it
+    /// could not verify. The file being there and the subtask saying what
+    /// it shows is enough; it does not look for a way to read it (it went
+    /// looking for OCR three to five steps a run) and does not send the
+    /// work back to have it written out. Part of "That is the whole check",
+    /// before the send-back rule. Single-line fragments only (CRLF on
+    /// Windows).
+    #[test]
+    fn manual_takes_a_screenshot_it_cannot_read_as_unverified() {
+        let subtasks = part("subtasks.md");
+        let section = subtasks
+            .find("## Checking a result and reporting it")
+            .unwrap();
+        let send_back = subtasks
+            .find("- Send it back only for what the instructions asked for and it did not")
+            .unwrap();
+        let mut at = Vec::new();
+        for rule in [
+            "- That is the whole check. Do not redo its work or re-check the evidence",
+            "the user plainly what you could not verify. A screenshot you cannot read",
+            "is one of those: the file being there and the subtask saying what it",
+            "shows is enough, so do not look for a way to read it and do not send the",
+            "work back to have it written out.",
+        ] {
+            let found = subtasks
+                .find(rule)
+                .unwrap_or_else(|| panic!("subtasks.md lost: {rule}"));
+            assert!(
+                section < found && found < send_back,
+                "{rule} is not in the whole-check rule"
+            );
+            at.push(found);
+        }
+        assert!(at.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+
     /// Main chat PRD ruling 184 point 9 (ticket 134's third round) sent a
     /// reminder's check that needed the web to a subtask, the main chat not
     /// going online. Ruling 186 (ticket 139) took that back: the check is
