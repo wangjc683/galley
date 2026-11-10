@@ -1381,6 +1381,134 @@
         }
       },
       "tz_offset_minutes": 480
+    },
+    {
+      "name": "repeat",
+      "now": "2026-10-16T06:05:00Z",
+      "text": "### In Hand\n\nAs of 2026-10-16 14:05, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).\n\nThe user's to-dos (not done):\n- `todo_8b9c0d1e2f3a4b5c` due 2026-10-15 (Thu), overdue, repeats every 3 months on the 15th: 交季报\n- `todo_1c2d3e4f5a6b7c8d` due 2026-10-16 (Fri), repeats daily: 背 20 个单词\n- `todo_9c0d1e2f3a4b5c6d` due 2026-10-17 (Sat): 浇花\n- `todo_7a8b9c0d1e2f3a4b` due 2026-10-19 (Mon), repeats weekly on Mon, reminder 2026-10-18 20:00 (Sun): 交周报\n- `todo_2d3e4f5a6b7c8d9e` due 2026-10-19 19:00 (Mon), repeats every 2 weeks on Mon, Thu, 1 of 2 items done: 健身",
+      "todo": {
+        "assistant": [],
+        "done": [],
+        "doneOmitted": 0,
+        "routine": [],
+        "todayCount": 0,
+        "yours": {
+          "anytime": [],
+          "later": [
+            {
+              "createdBy": "assistant",
+              "due": {
+                "date": "2026-10-17",
+                "hasTime": false
+              },
+              "id": "todo_9c0d1e2f3a4b5c6d",
+              "kind": "todo",
+              "seriesId": "series_3",
+              "state": "open",
+              "text": "浇花"
+            },
+            {
+              "createdBy": "assistant",
+              "due": {
+                "date": "2026-10-19",
+                "hasTime": false
+              },
+              "id": "todo_7a8b9c0d1e2f3a4b",
+              "kind": "todo",
+              "reminder": {
+                "at": "2026-10-18T12:00:00+00:00",
+                "state": "scheduled",
+                "taskId": "sched_of_todo_7a8b9c0d1e2f3a4b"
+              },
+              "seriesId": "series_4",
+              "state": "open",
+              "text": "交周报",
+              "todoRepeat": {
+                "kind": "weekly",
+                "remind": {
+                  "daysBefore": 1,
+                  "time": "20:00"
+                },
+                "weekdays": [
+                  1
+                ]
+              }
+            },
+            {
+              "createdBy": "assistant",
+              "due": {
+                "at": "2026-10-19T11:00:00+00:00",
+                "date": "2026-10-19",
+                "hasTime": true,
+                "time": "19:00"
+              },
+              "id": "todo_2d3e4f5a6b7c8d9e",
+              "items": [
+                {
+                  "done": true,
+                  "id": "item_1",
+                  "text": "带毛巾"
+                },
+                {
+                  "done": false,
+                  "id": "item_2",
+                  "text": "带水"
+                }
+              ],
+              "kind": "todo",
+              "seriesId": "series_5",
+              "state": "open",
+              "text": "健身",
+              "todoRepeat": {
+                "every": 2,
+                "kind": "weekly",
+                "weekdays": [
+                  1,
+                  4
+                ]
+              }
+            }
+          ],
+          "today": [
+            {
+              "createdBy": "assistant",
+              "due": {
+                "date": "2026-10-15",
+                "hasTime": false
+              },
+              "id": "todo_8b9c0d1e2f3a4b5c",
+              "kind": "todo",
+              "overdue": true,
+              "seriesId": "series_1",
+              "state": "open",
+              "text": "交季报",
+              "todoRepeat": {
+                "every": 3,
+                "kind": "monthly",
+                "monthdays": [
+                  15
+                ]
+              }
+            },
+            {
+              "createdBy": "assistant",
+              "due": {
+                "date": "2026-10-16",
+                "hasTime": false
+              },
+              "id": "todo_1c2d3e4f5a6b7c8d",
+              "kind": "todo",
+              "seriesId": "series_2",
+              "state": "open",
+              "text": "背 20 个单词",
+              "todoRepeat": {
+                "kind": "daily"
+              }
+            }
+          ]
+        }
+      },
+      "tz_offset_minutes": 480
     }
   ],
   "lateness_words": [

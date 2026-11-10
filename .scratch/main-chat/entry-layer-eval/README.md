@@ -27,6 +27,7 @@
 - 票 147 在 `wake/` 加了 `w-merge-two-long`（接近 v0.7.6 冒烟 S3 的两块长结果合成）与 `--t147`（合成那一轮改前改后的几种改法，三个模型各跑，结果在 `wake/results.json` 的 `meta.ticket147_runs`）；截断那一行跟着 Core 换成只指剩下那段（`CUT_MARKER`），`schedule/rust-samples.json` 里带截断的那条叫醒样本由临时 Rust 测试重新写出（跑完删掉）。见「合成那一轮读几步（票 147）」一节。
 - 审计 2026-11-10 票 10 改了 `w-long` 自己的上限、说明交法、固定数据与字数上限，标成只记录（`wake/cases.json` 的 `tool_cap`、`inline_note`、`record_only`），见「`w-long` 为什么一直不过（审计 2026-11-10 票 10）」一节。
 - 票 153 在 `todo/` 加了六条「下一步在谁手里」的用例，跑今天的主对话提示词（`v9`，提供 `tell_user`），两条复用原有用例的内容；拿掉手册新段落的对照在 `todo/results.json` 的 `meta.ticket153w_control`（见「下一步在谁手里（票 153）」一节）。
+- 票 155 在 `todo/` 加了十四条「重复的待办」用例（`v9`，提供 `tell_user`），假 CLI 照票 154 的 Core 存重复规则、勾掉或跳过时生出下一期（日子的算法 `run.py` 的 `REPEAT_PY`，假 CLI 与脚本共用一份）；`schedule/rust-samples.json` 的「In Hand」加了一组重复的待办，`schedule/cli-help.json` 的 `todo` 一族重抓、加了 `todo skip`；拿掉手册两处的对照在 `todo/results.json` 的 `meta.ticket155w_control`（见「重复的待办（票 155）」一节）。
 
 ## 怎么跑
 
@@ -1576,3 +1577,80 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite schedule --cases <定时�
 - **用量**：146 次运行，531 次模型调用（WITH 三轮 54 次运行 190 次调用、WITHOUT 12 次 47 次、待办回归 62 次 243 次、定时回归 18 次 51 次）；`--dry-test` 不连模型。
 - **没测到的**：用户说「帮我…」但其中有只有用户能做的一步（「帮我把报价发给周经理」：发出要用户点头）没有用例；它把差事办完后不在「已完成」留一行（裁决 203 第 5 条）是界面与 Core 的事，评测不经界面；「交给它、要等」只测了查物流一种，到时要用户点头的（比价后下单）没有；WITHOUT 每条只跑了两遍，报销那条的差别是 1/2 对 3/3，样本小；两条复用的用例在 v9 下跑，原来那两条在回归里跑的是待办套件自己的提示词。
 - **顺带发现**：`run.py` 跑完当场写的 `results.md` 与之后 `--render-only` 从 `results.json` 重出的不一样：当场那份的「读手册字节」按还没换成 `$TMPDIR` 的真实临时目录路径算（每条路径长几十个字节），重出的那份按换过的算。仓库里此前的 `todo/results.md` 有 43 行、`schedule/results.md` 有 2 行就是当场写的数，这一票提交的两份都是 `--render-only` 重出的，那几行的字节数跟着变了，判定没变。另一处：待办与定时套件的判定写「没走到最终回复」时用的是 `STOP_LABELS["cap_reached"]`，那句话按派活套件的上限写死成「第 9 次工具调用，达到 8 次上限」，而这两套的上限是 `SCHED_TOOL_CAP` 的 10（运行记录里的原文是「not run: cap of 10 tool calls reached」）；只是文案，没改。
+
+## 重复的待办（票 155）
+
+主聊天 PRD 裁决 204、205，接票 154 的 Core（规则单独存，清单上只有「这一期」，勾掉或跳过时 Core 生出下一期）。手册改了七份：`todos.md` 开头那句说用户在清单上还能改日子、时刻、提醒、让它重复或不再重复、跳过这一次，「改之前先读这件事现在的样子」扩到日子与提醒，「Noting a to-do」之后加「A to-do that repeats」一小节（每次都要办完的是重复的待办，规则旗标、`--due` 必给、下一期由 Galley 按规则生出、`--remind-at` 定每期提前几天几点、每天的事没说几点不挂提醒、说出周期的直接设并说清、只带出周期的记这一次并问、Core 表达不了的记这一期再给自己挂提醒）；`todos-change.md` 第一条改成「A change the user tells you」，加重复的待办一条（`todo skip`、`todo cancel`、`--no-repeat`、换周期、`--series`、勾掉时说下一次）；`wake.md` 加逾期的重复待办又响时先问做了没有；`memo.md`、`reminders.md`、`authority.md` 各补一句分界，`cli.md` 补 `skip`。入口层、Core 的叫醒说明、`galley-prompt/` 没动。
+
+- **跟着换的输入**：`schedule/rust-samples.json` 的「In Hand」加一组 `repeat`（Rust 的 `in_hand_section` 写出的原文：逾期的每季度、每天、规则已结束的、每周一带提醒、每两周一四带时刻与子项；用一个临时测试写出，跑完删掉）；`schedule/cli-help.json` 的 `todo` 一族十五条重抓、加 `todo skip`（开发版 `galley` 二进制、假 HOME，只跑 `--help`；这一族里每一条都变了，`--schema` 那一行多了半句）。`wake/cli-help.json` 里没有 `todo` 的条目，没动。
+- **镜像**：`run.py` 的 `REPEAT_PY` 照 `core/src/todo_repeat.rs` 写下一期的日子（`next_after`、`next_due_day`、`period_on`、`remind_offset`、`repeat_words`），假 CLI 把它原样贴进去，脚本自己也用它（「In Hand」那一行的 `repeats …`、用例的规则、判定）；`--dry-test` 拿 Rust 单测里的期望逐条对过。`in_hand_block` 的待办一行在到期、逾期之后、提醒之前加规则，`in_hand_todo` 带上 `todoRepeat`。
+- **假 CLI**：`todo add / update` 认 `--daily`、`--weekly`、`--monthly`、`--yearly`、`--every`，`update` 另认 `--no-repeat`、`--series`；新命令 `todo skip`；`done` 与 `skip` 的输出带 `next`；`list` / `show` 带 `repeat`、`seriesId`、`skipped`；删掉一期规则跟着结束；下一期带规则的标题、备注、子项（没勾），提醒照规则挂、时刻已过不挂，记成 Core 建的（`galley-repeat`），不挂在哪一轮上。clap 与 CLI 的报错用开发版二进制在假 HOME 下抓；Core 的报错（`repeat_needs_due:`、`not_repeating:`、星期与几号的范围、`every` 的范围、勾掉的不能跳过、勾掉的不能 `--series`）开发版 CLI 没有 Core 跑不出来，用一个临时的 Core 测试在内存库上调同一组函数抓的原文（跑完删掉）。clap 报错里那行 `Usage:` 随给的参数变，假 CLI 只照着前缀写。
+- **用例**（组名「重复的待办（票 155）」，`todo/cases.json` 第 69–82 条，都带 `prompt: "v9"`，提供 `tell_user`）：
+
+| # | 用例 | 用户这句或情形 | 该 | 不该 |
+| --- | --- | --- | --- | --- |
+| 69 | `rep-weekly-report` | 「每周一要交周报」 | 重复的待办，`--weekly=1`，到期下一个周一；回复说清规则，挂了提醒就说出几点 | 记成自己的重复提醒；先问要不要重复 |
+| 70 | `rep-rent-monthly` | 「房租每月 15 号交，提前一天晚上提醒我」 | `--monthly=15`，提醒在到期前一天晚上，规则记成提前 1 天 | 每期各记一件；没挂提醒 |
+| 71 | `rep-tax-quarterly` | 「每季度报一次税，下次是 1 月 15 号」 | `--monthly=15 --every=3`，到期 1 月 15 日 | 漏掉 `--every` |
+| 72 | `rep-daily-words` | 「以后每天要背 20 个单词」 | `--daily`，不挂提醒 | 每天一个提醒 |
+| 73 | `rep-quarterly-hint` | 「又该交季报了，周五前」 | 只记这一次，同一句里问以后每季度记不记 | 直接设规则；只问不记 |
+| 74 | `rep-nudge-sleep` | 「每天晚上 10 点提醒我睡觉」 | 它自己的重复提醒，`schedule create --daily --time=22:00` | 记成重复的待办 |
+| 75 | `rep-payslip-last-workday` | 「每个月最后一个工作日要发工资条」 | 这一期的普通待办，另给自己挂一个提醒到时记下一期，告诉用户 | 设成每月固定某一号；不说明 |
+| 76 | `rep-done-report` | 清单里有每周重复的「交周报」（今天到期），「周报交了」 | `todo done`，回复说下一次的日子 | `todo cancel`；另记下一期 |
+| 77 | `rep-skip-week` | 清单里有每周五的「交周报」，「这周的周报不用交了」 | `todo skip` | `todo cancel`；`todo done` |
+| 78 | `rep-stop-weekly` | 同上，「以后不用每周交周报了」 | `todo cancel`（`--no-repeat` 也算过，注出来） | `todo skip` |
+| 79 | `rep-every-two-weeks` | 同上，「周报以后改成每两周交一次」 | `todo update --weekly=5 --every=2`，规则原地改 | 删了重建 |
+| 80 | `rep-remind-two-days` | 同上（下周五到期，提前一天晚上提醒），「以后周报都提前两天提醒我」 | `todo update --remind-at=… --series`，规则记成提前 2 天 | 不带 `--series` |
+| 81 | `rep-overdue-ring` | 上周这一期没勾，它的提醒今天又到点 | 先问做了没有，不把提醒再说一遍，不勾 | 直接勾掉；另记一件 |
+| 82 | `rep-already-there` | 清单里有每周一的「交周报」，「下周一要交周报」 | 不再记，说已经有了、是哪天 | 再记一件 |
+
+- **判定加的**（写法见 `todo/cases.json` 的 `_note`）：`expect.repeat`（规则的种类、星期或几号、间隔、带不带提醒、提前几天几点，回复说清规则的词，`says_remind` 是挂了提醒要说出：日子加钟点，或钟点加「前一天」「每周」一类）、`no_rule`、`skip`、`end_rule`、`rule_change`、`series_remind`、`mentions_next`（Core 生出的下一期的日子）、`mentions_day_of`，`schedule` 还可以是 `{repeat, time}`。Core 生出的下一期不算这一轮记的待办。用例的固定数据：`todos` 里的 `repeat` 是这件待办所在的规则；时间多了 `next_monthday` 与 `month_end`。
+- **对照**：WITH 是这一票的手册；对照是同一份手册只拿掉 `todos.md` 的「A to-do that repeats」一小节与 `todos-change.md` 新加的那一条（别的改动留着：开头那句、`reminders.md`、`memo.md`、`authority.md`、`wake.md`、`cli.md`），跑 69、70、77、76 四条各两遍，存在 `todo/results.json` 的 `meta.ticket155w_control`。跑之前把两份备份到临时目录，跑完拷回，校验和对过。
+- **回归**：待办套件原有 68 条、定时套件 18 条、备忘套件 17 条各重跑第 1 遍（WITH），被替换的在三套 `meta.superseded_runs` 的「票 155 回归」一组，三套 `results.md` 的「票 155 重跑」表对比。
+- **顺带修的**（票 153 报的两处）：跑完当场写的 `results.md` 改成从写进去的 `results.json`（换过占位的）重出，与 `--render-only` 同一个算法（`write_results`）；待办、定时套件撞上工具调用上限时，判定与「结束」一栏改读各自的上限（`stop_label`，原来写死成派活套件的「第 9 次，达到 8 次上限」），备忘套件的「结束」一栏同样改了。`--render-only` 重出这三套，只有待办套件那一条（`progress-review-done` 上一次的运行）的文案从 8 次变成 10 次。
+- **`--dry-test` 加的**（`dry_test_repeat`、`dry_test_repeat_cli`）：日子的算法逐条对 Rust 单测；新的时间写法；`says_day`；十四条的固定数据与「In Hand」；每条判定造了过与不过；`rep-skip-week` 的固定数据上用一段脚本把假 CLI 的每种报错、勾掉与跳过生出的下一期（日子、提醒、谁建的）、换周期、`--series`、`--no-repeat`、删掉一期结束规则、每季度带提醒走一遍；`rep-overdue-ring` 的「In Hand」与叫醒消息。
+- **怎么跑**：
+
+```bash
+PY=/Library/Frameworks/Python.framework/Versions/3.14/bin/python3
+export PYTHONDONTWRITEBYTECODE=1
+NEW=rep-weekly-report,rep-rent-monthly,rep-tax-quarterly,rep-daily-words,rep-quarterly-hint,rep-nudge-sleep,rep-payslip-last-workday,rep-done-report,rep-skip-week,rep-stop-weekly,rep-every-two-weeks,rep-remind-two-days,rep-overdue-ring,rep-already-there
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases $NEW --repeats 3 --parallel 7
+# todos.md 拿掉「### A to-do that repeats」到文件末尾、todos-change.md 拿掉「- A repeating to-do.」那一条之后（跑完拷回）：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases rep-weekly-report,rep-rent-monthly,rep-skip-week,rep-done-report --repeats 2 --parallel 8 --control 155w
+# 回归：
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite todo --cases <第 1–68 条的 id，逗号隔开> --repeats 1 --first-repeat 1 --parallel 8 --supersede "票 155 回归：……"
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite schedule --cases <定时套件 18 条的 id> --repeats 1 --first-repeat 1 --parallel 5 --supersede "票 155 回归：……"
+$PY .scratch/main-chat/entry-layer-eval/run.py --suite memo --cases <备忘套件 17 条的 id> --repeats 1 --first-repeat 1 --parallel 5 --supersede "票 155 回归：……"
+```
+
+### 结果（2026-11-10，gpt-6.1-sol，推理强度 high）
+
+模型 `mm_1792576875658`（API key 接入的 gpt-6.1-sol，同票 73）。先 `--dry-test`（不连模型，全过）。手册用的是起点措辞改过几处之后的版本，一轮就跑完，没有改措辞重跑。
+
+| 用例 | WITH | 对照 |
+| --- | --- | --- |
+| `rep-weekly-report` | 3/3 | 2/2 |
+| `rep-rent-monthly` | 3/3 | 2/2 |
+| `rep-tax-quarterly` | 3/3 | — |
+| `rep-daily-words` | 3/3 | — |
+| `rep-quarterly-hint` | 3/3 | — |
+| `rep-nudge-sleep` | 3/3 | — |
+| `rep-payslip-last-workday` | 3/3 | — |
+| `rep-done-report` | 2/3 | 2/2 |
+| `rep-skip-week` | 3/3 | 2/2 |
+| `rep-stop-weekly` | 3/3 | — |
+| `rep-every-two-weeks` | 3/3 | — |
+| `rep-remind-two-days` | 3/3 | — |
+| `rep-overdue-ring` | 2/3 | — |
+| `rep-already-there` | 3/3 | — |
+| 待办套件原有 68 条（回归） | 65/68（上一次 64/68；两条只记录不算过） | — |
+| 定时套件 18 条（回归） | 18/18（上一次 18/18） | — |
+| 备忘套件 17 条（回归） | 16/17（可比的 15 条：上一次 13/15，这一次 15/15） | — |
+
+- **WITH 没过的两遍**：`rep-done-report` 第 1 遍勾对了，「已勾掉、下一次是哪天」只写进了 `<summary>`，正文是空的（同票 36 以来见过的那种）；`rep-overdue-ring` 第 1 遍问对了（「上周那份周报已经发到部门群、抄送组长了吗？可能只是交了还没勾掉。」），但开头说「比预定时间晚了约 3 分钟」：叫醒消息说按时，它自己看了钟，那一遍在固定数据定下的时刻之后三分钟才开跑，是评测排队造成的，判定照 `forbid_any` 的「晚了」算不过，没改判定。
+- **分法都对**：每周、每月带提醒、每季度都设成了规则，回复说清规则与提醒（每季度那条三遍里两遍自己定了提前一周提醒）；每天背单词三遍都没挂提醒；只带出周期的三遍都只记这一次并问「以后每季度都记吗？」；睡觉三遍都是 `schedule create --daily` 22:00；工资条三遍都记了 11 月 30 日（周一）的普通待办、另给自己挂了 12 月 1 日上午的提醒去记下个月的，还说明了节假日调休要按实际调整；勾掉、跳过、删掉、换周期、`--series` 各用对了命令，跳过与换周期的回复说出了下一期是哪天（换周期三遍都说清「这次仍是 11 月 13 日，之后是 11 月 27 日」，与 Core 的算法一致：间隔从这一期的到期日数）；已经有了的三遍都没再记，说出了是下周一（11 月 16 日）、几点提醒。
+- **WITH 与对照的差别**：对照的 8 遍也全过，分法没有差别。差在怎么知道旗标：对照里记规则、跳过的 6 遍都先跑了 `todo add --help` 或 `todo --help` 再写（CLI 帮助里有规则旗标与 `todo skip`，手册别的几份也还说着重复的待办），WITH 这四条的 12 遍里只有 2 遍跑了帮助；平均请求次数 WITH 3.0–3.7、对照 3.0–4.0。勾掉的那条两组都没看帮助，回复都说了下一次的日子（对照一遍说「下周二上午 9 点照常提醒你」）。
+- **回归**：待办 64/68 → 65/68。由不过变过的两条：`progress-review-done`（上一次撞上工具调用上限，这次 11 次请求走到了回复）、`review-look-again-later`（上一次停在浏览器）；由过变不过的一条：`half-done`，记对了不带日子的待办，回复「好，先吃饭。回来接着查……」没说记下了（`mentions_any` 的「记」），与重复的待办无关。定时 18/18 → 18/18。备忘可比的 15 条 13/15 → 15/15；`interest-stock`、`interest-show` 这一次才有第 1 遍，前者不过（记下的兴趣没写「看你……常问」，票 98 的规矩），后者过。
+- **用量**：153 次运行，536 次模型调用（WITH 42 次 136 次调用、对照 8 次 30 次、待办回归 68 次 261 次、定时回归 18 次 54 次、备忘回归 17 次 55 次）；`--dry-test` 不连模型。
+- **没测到的**：「以后都提前两天提醒」时这一期离到期不到两天（`--series` 要靠这一期挂一个还没过的提醒，`time_in_past:` 会拒，用例特意放在下周五）；用户取消勾、两期并存；`--yearly`；每期带子项的规则；带时刻的规则（每周一 9 点前交）；对照只跑了四条各两遍。

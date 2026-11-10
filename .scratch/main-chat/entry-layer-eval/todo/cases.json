@@ -1,5 +1,5 @@
 {
- "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。票 73：tasks 里 review 为真的是早上的巡看（Galley 建的每天一条，origin 是 system + galley-review；time 是钟点，不写就取运行那一分钟，好让叫醒按时；fired 表示这一次到点、等着叫醒，叫醒消息照 Core 的巡看措辞拼）。expect.subtasks_max 是回复里最多几个 <subtask>（不写就一个都不许）；expect.no_offer 是回复和末尾的建议里不能有「要不要我」「需要的话我可以」一类（run.py 的 OFFER_RE；不判的用例只注出来）；expect.allow_web_stop 是停在浏览器工具只注出来、不算没走到最终回复（它在做一步只读的事，沙盒里看不到结果）；expect.review_advance 是巡看有事可推进：不出声时得派了子任务，开口时得做成了事。票 75：开口时不要固定开头，改判说了是哪件事（names_any 里任一个词）、做了什么（REVIEW_DID_RE），说的是「没什么要推进」「看了一下没有新进展」一类空话（REVIEW_EMPTY_RE）判不过；没说是早上做的（REVIEW_MORNING_RE）只注出来；expect.disable 是该 schedule disable 那一条，用了 delete 或没停都算不过。票 78：wake 里还可以写 {\"kind\": \"done\", \"subtask\": <id>, \"send_backs\": n}，是 subtasks 里（写法同叫醒套件）一件刚做完的子任务的回报，照 Core 的措辞（subtask_report 的 Done 一段）拼进同一次叫醒；几件的次序就是 wake 列的次序（Core 按到达的先后，同一分钟到点的定时任务按 id 排）。expect.review_mixed 是巡看与另一件事在同一次叫醒：整条不出声（只有 <no-reply/> 或只有标签）、开口了却没提那件事（names_any 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事，提了巡看（run.py 的 REVIEW_TALK_RE、REVIEW_EMPTY_RE）判不过；开口了又写了 <no-reply/> 只注出来；no_recite、max_chars 同上。票 98：expect.memo 是对备忘的判定，写法同 ../memo/cases.json 的 _note（optional 是可以记一条、记了只注出来），只对手册里有 memo.md 的运行（票 96 起）判，票 96 之前的运行没有这个命令，照旧不判。票 108：expect.progress 是进展那一行（id 是哪一件；groups 每组至少一个词在那一行里；forbid 是备注里不许出现的字，即用户删掉的；when_done 是巡看用：这一轮做成了东西才该补，只派了子任务或停在浏览器时备注不动；判法见 run.py 的 progress_facts：新的一行在上、日子打头，原来的备注一字不差在下，做了文件就写它的绝对路径，先读过这一件再改，别的待办的备注不动）；expect.notes_same 是不许动任何待办的备注；expect.schedule 为 optional 是可以给自己挂提醒（记下个数，不判）；review_advance.did_any 是这条用例自己算「做了什么」的词；files 同叫醒套件，放进假 HOME 的 ~/Downloads；待办备注里的 {{HOME}} 换成那次运行的假 HOME。票 110：carried 为真的用例 history 是从上一段带过来的轮次（hours_ago 是最后一轮、first_hours_ago 是第一轮在几小时前），可以有子任务交回的那一轮（Core 的措辞，干跑测试对过）；subtasks 里的 started_minutes_ago、ended_minutes_ago 是它几分钟前开始、几分钟前结束（不写是 35 − 3k 到 1 分钟前）；todos 里的 created、changed 是几小时前记下、几小时前改过的（hours_ago；不写照旧，改过的时刻同记下的）；expect.no_files 是这一轮不许在假 HOME 里做新文件；expect.no_redo 是新文件名与派出的子任务里不许有这些词；expect.quiet_or_file 是只回 <no-reply/>，或开口时只为交出文件（带 [FILE:…]，注出来）；expect.progress.path 是那一行要写这份 ~/Downloads 下的文件的绝对路径（文件不是这一轮做的也要），progress.days_back 是那一行打头的日子可以早到几天前；review_advance.may_rest 是巡看可以什么都不做（不出声也不派子任务，注出来）。票 111：todos 里的 items 是这件待办下面已有的子项（text、done，done 为真的是分段开始后不久用户在面板上勾的，via 可写成 assistant；id 可写，不写按待办 id 生成），假 CLI 照真实 CLI 与 Core 回答 `todo add --item`、`todo item add / done / reopen / update / remove`，`todo show` 带 items 与 itemCount，`todo list` 只带 itemCount，「In Hand」那一行末尾是「N of M items done」。expect.items 为 none 是这一轮不许动任何子项（加、勾、改、删）；为 {id, groups} 是那一件（made 是这一轮记的那一件）这一轮加的子项正好一组一项（组里一个词在那一项的字里），都没勾，原有的不动，别的待办的子项不动。expect.items_done 是 [{id, text_any}]：那一件里字里有这些词的子项这一轮被勾上（记成 Galley 勾的），别的子项的框、字都不动，不加不删。expect.notes_after 是 {id, keep, drop}：那一件的备注里 keep 每一行一字不差、各成一行、次序不变，以 drop 打头的那一行没了，别的新行只注出来。expect.todo 还可以是 {count, each}：这一轮记了 count 件，each 里每一项按 title_any 认一件，截止在 due 的窗口里，挂了提醒要在截止之前（没挂只注出来）。别的用例动了子项只注出来，item 写命令照「多余的写命令」判。票 111 第二轮（裁决 157 第 12 条：子项只来自用户）：expect.no_items 是用户没说出几样东西，这一轮不许 `todo add --item`、不许 `todo item add`，记下的待办不许带子项；不过就是不过，只记录的用例也判不过。票 112：子项挪次序（主对话 PRD 裁决 158 第 1 条）。假 CLI 照真实 CLI 与 Core 回答 `todo item move <item-id> --to=<n>`（`--to` 必给、是整数，负数过得了 clap；Core 先拒小于 1 的，再找子项；大于项数放到最后；已在那个位置的什么都不写、不改 updatedAt）。别的用例里子项换了次序也算动了子项（items 为 none 的不过）。expect.items_move 是 {id, text_any, to}：那一件里字里有这些词的那一项最后排在第 to 位（从 1 起，超出放到最后），别的项次序不变，每项的字与方框不变，不加不删；第一次 todo item move 之前 todo show 过这一件；挪了不止一次只注出来。备注里的路径（裁决 158 第 3 条）：手册是票 112 起的（不在 run.py 的 MANUALS_BEFORE_112 里）运行，进展那一行写的文件路径要放进反引号，反引号里正好是那个绝对路径；之前手册的运行照旧判，干跑测试自己造的运行不带手册版本，也照旧判。票 153：prompt 为 v9 的用例跑今天的主对话提示词（../dispatch-criterion/galley-prompt/main_chat.v9.txt），并照主对话的 runner 提供 tell_user（v7 起的提示词才提供，v4、v5 下的用例照旧不提供）；expect.due 可以带 optional：不写截止只注出来，写了就要在窗口里；expect.errand 是交给它、现在就能办的差事（names_any、min_names）：这一轮派了子任务，或在假 HOME 里做了文件，或回复里有 names_any 中至少 min_names 个词，才算办了；只问一句（ask_user）或只说要办都算不过；停在浏览器（allow_web_stop）的运行不判回复里有没有说出提醒时间（回复看不到）。",
+ "_note": "待办评测用例（票 41）。history 是主对话当前段里已有的轮次；todos 是假 CLI 里已有的待办：due 是时间（next_weekday 是今天之后第一个星期几，days 是今天之后第几天，in_minutes 是几分钟后，带 date_only 的只有日期），reminder 是挂在它上面的提醒（fired 表示已经到点、等着叫醒），in_hand 默认为真，即分段开始时就有、写在提示词的「In Hand」一节（为假的是这一段里刚记的），done_since 表示分段开始后用户在面板上勾掉了（快照里还是没做）；tasks 是它自己的定时任务（同 schedule/cases.json）；message 是用户这句，wake 列出这次叫醒里到点的提醒，run.py 照 Core 的措辞拼成叫醒消息；expect 是自动判定的规则，expect_text 是写给人看的期望。票 44：expect.reminder.clock 是提醒必须落在的钟点（用户说了几点提醒）。票 60：时间还可以写成一年里的某天（month、day，day 可为 \"last\"；带 year_offset 是今年之后第几年，不带是今天起最近的那一天）或下周的星期几（week_after，周一起算的下一周）；cancelled 表示假 CLI 起始就已取消（days_ago，via 为 supervisor 是 Galley 照用户的话、gui 是用户在桌面上，reason），它的提醒随之由 Core 取消（system），分段开始前取消的写进「In Hand」的「最近不要的跟进」。expect.follow_up 是该设 1 个跟进（via：todo、assistant 或 either；prefer 是期望的那种，另一种也算过但标出来；window 是提醒时间），expect.todo 为 optional 是可以记 1 件（reminder 为 null 时不许挂提醒），expect.cancel 是这次运行里该由 Galley 照用户的话取消其中之一、原因里写明是哪一类（reason_any），expect.asks_or_any 是回复要问一句或给出其中一个下一步，expect.record_only 是两可的、只记录不判。票 63：clock 是消息里说的今天的钟点（tonight 取 hours 里第一个离运行时刻还有 lead_minutes 的整点，写成「今晚 H 点」；afternoon 取今天的 hour，离运行时刻不足 lead_minutes 就改成「明天下午 H 点」），填进 message 的 {{clock}}；时间写法 {\"stated\": true, \"minutes\": k} 是那个钟点加 k 分钟。expect.follow_up.windows 是几个窗口里任一个，follow_up.clock 是提醒必须落在的钟点；expect.reminder.optional 是可以不挂提醒（挂了就要在窗口里）；expect.no_recite 是回复不能是这些原话（或「提醒」加原话），也不能以「提醒：」开头。每条都判：回复里有「记下了 / 记住了 / 记好了 / 已记」时，这一轮必须有写（改动了假 CLI 的清单或提醒，或写了 GA 记忆）。票 64：expect.no_retract 是什么都不该设的用例（不记待办、不设它自己的提醒；reno-no-remind 可以记一件不挂提醒的）：最终回复（去掉 <summary>、<next-suggestion>）不能提改口，正则是 run.py 的 RETRACT_RE（「刚才说」「多此一举」「多余」「本来要」「就不加了」「不特意设」一类）；第一轮（不是最后一轮时）的正文与 <summary> 里有没有「记到待办」「设个提醒」一类的表态，按 STANCE_RE 只记录、不判。火锅两条的 hours 加了 23（「今晚 11 点」，夜宵），21:15 到 22:15 也能跑。票 73：tasks 里 review 为真的是早上的巡看（Galley 建的每天一条，origin 是 system + galley-review；time 是钟点，不写就取运行那一分钟，好让叫醒按时；fired 表示这一次到点、等着叫醒，叫醒消息照 Core 的巡看措辞拼）。expect.subtasks_max 是回复里最多几个 <subtask>（不写就一个都不许）；expect.no_offer 是回复和末尾的建议里不能有「要不要我」「需要的话我可以」一类（run.py 的 OFFER_RE；不判的用例只注出来）；expect.allow_web_stop 是停在浏览器工具只注出来、不算没走到最终回复（它在做一步只读的事，沙盒里看不到结果）；expect.review_advance 是巡看有事可推进：不出声时得派了子任务，开口时得做成了事。票 75：开口时不要固定开头，改判说了是哪件事（names_any 里任一个词）、做了什么（REVIEW_DID_RE），说的是「没什么要推进」「看了一下没有新进展」一类空话（REVIEW_EMPTY_RE）判不过；没说是早上做的（REVIEW_MORNING_RE）只注出来；expect.disable 是该 schedule disable 那一条，用了 delete 或没停都算不过。票 78：wake 里还可以写 {\"kind\": \"done\", \"subtask\": <id>, \"send_backs\": n}，是 subtasks 里（写法同叫醒套件）一件刚做完的子任务的回报，照 Core 的措辞（subtask_report 的 Done 一段）拼进同一次叫醒；几件的次序就是 wake 列的次序（Core 按到达的先后，同一分钟到点的定时任务按 id 排）。expect.review_mixed 是巡看与另一件事在同一次叫醒：整条不出声（只有 <no-reply/> 或只有标签）、开口了却没提那件事（names_any 里一个词都没有）算吞掉，判不过；巡看没做成值得说的事，提了巡看（run.py 的 REVIEW_TALK_RE、REVIEW_EMPTY_RE）判不过；开口了又写了 <no-reply/> 只注出来；no_recite、max_chars 同上。票 98：expect.memo 是对备忘的判定，写法同 ../memo/cases.json 的 _note（optional 是可以记一条、记了只注出来），只对手册里有 memo.md 的运行（票 96 起）判，票 96 之前的运行没有这个命令，照旧不判。票 108：expect.progress 是进展那一行（id 是哪一件；groups 每组至少一个词在那一行里；forbid 是备注里不许出现的字，即用户删掉的；when_done 是巡看用：这一轮做成了东西才该补，只派了子任务或停在浏览器时备注不动；判法见 run.py 的 progress_facts：新的一行在上、日子打头，原来的备注一字不差在下，做了文件就写它的绝对路径，先读过这一件再改，别的待办的备注不动）；expect.notes_same 是不许动任何待办的备注；expect.schedule 为 optional 是可以给自己挂提醒（记下个数，不判）；review_advance.did_any 是这条用例自己算「做了什么」的词；files 同叫醒套件，放进假 HOME 的 ~/Downloads；待办备注里的 {{HOME}} 换成那次运行的假 HOME。票 110：carried 为真的用例 history 是从上一段带过来的轮次（hours_ago 是最后一轮、first_hours_ago 是第一轮在几小时前），可以有子任务交回的那一轮（Core 的措辞，干跑测试对过）；subtasks 里的 started_minutes_ago、ended_minutes_ago 是它几分钟前开始、几分钟前结束（不写是 35 − 3k 到 1 分钟前）；todos 里的 created、changed 是几小时前记下、几小时前改过的（hours_ago；不写照旧，改过的时刻同记下的）；expect.no_files 是这一轮不许在假 HOME 里做新文件；expect.no_redo 是新文件名与派出的子任务里不许有这些词；expect.quiet_or_file 是只回 <no-reply/>，或开口时只为交出文件（带 [FILE:…]，注出来）；expect.progress.path 是那一行要写这份 ~/Downloads 下的文件的绝对路径（文件不是这一轮做的也要），progress.days_back 是那一行打头的日子可以早到几天前；review_advance.may_rest 是巡看可以什么都不做（不出声也不派子任务，注出来）。票 111：todos 里的 items 是这件待办下面已有的子项（text、done，done 为真的是分段开始后不久用户在面板上勾的，via 可写成 assistant；id 可写，不写按待办 id 生成），假 CLI 照真实 CLI 与 Core 回答 `todo add --item`、`todo item add / done / reopen / update / remove`，`todo show` 带 items 与 itemCount，`todo list` 只带 itemCount，「In Hand」那一行末尾是「N of M items done」。expect.items 为 none 是这一轮不许动任何子项（加、勾、改、删）；为 {id, groups} 是那一件（made 是这一轮记的那一件）这一轮加的子项正好一组一项（组里一个词在那一项的字里），都没勾，原有的不动，别的待办的子项不动。expect.items_done 是 [{id, text_any}]：那一件里字里有这些词的子项这一轮被勾上（记成 Galley 勾的），别的子项的框、字都不动，不加不删。expect.notes_after 是 {id, keep, drop}：那一件的备注里 keep 每一行一字不差、各成一行、次序不变，以 drop 打头的那一行没了，别的新行只注出来。expect.todo 还可以是 {count, each}：这一轮记了 count 件，each 里每一项按 title_any 认一件，截止在 due 的窗口里，挂了提醒要在截止之前（没挂只注出来）。别的用例动了子项只注出来，item 写命令照「多余的写命令」判。票 111 第二轮（裁决 157 第 12 条：子项只来自用户）：expect.no_items 是用户没说出几样东西，这一轮不许 `todo add --item`、不许 `todo item add`，记下的待办不许带子项；不过就是不过，只记录的用例也判不过。票 112：子项挪次序（主对话 PRD 裁决 158 第 1 条）。假 CLI 照真实 CLI 与 Core 回答 `todo item move <item-id> --to=<n>`（`--to` 必给、是整数，负数过得了 clap；Core 先拒小于 1 的，再找子项；大于项数放到最后；已在那个位置的什么都不写、不改 updatedAt）。别的用例里子项换了次序也算动了子项（items 为 none 的不过）。expect.items_move 是 {id, text_any, to}：那一件里字里有这些词的那一项最后排在第 to 位（从 1 起，超出放到最后），别的项次序不变，每项的字与方框不变，不加不删；第一次 todo item move 之前 todo show 过这一件；挪了不止一次只注出来。备注里的路径（裁决 158 第 3 条）：手册是票 112 起的（不在 run.py 的 MANUALS_BEFORE_112 里）运行，进展那一行写的文件路径要放进反引号，反引号里正好是那个绝对路径；之前手册的运行照旧判，干跑测试自己造的运行不带手册版本，也照旧判。票 153：prompt 为 v9 的用例跑今天的主对话提示词（../dispatch-criterion/galley-prompt/main_chat.v9.txt），并照主对话的 runner 提供 tell_user（v7 起的提示词才提供，v4、v5 下的用例照旧不提供）；expect.due 可以带 optional：不写截止只注出来，写了就要在窗口里；expect.errand 是交给它、现在就能办的差事（names_any、min_names）：这一轮派了子任务，或在假 HOME 里做了文件，或回复里有 names_any 中至少 min_names 个词，才算办了；只问一句（ask_user）或只说要办都算不过；停在浏览器（allow_web_stop）的运行不判回复里有没有说出提醒时间（回复看不到）。票 155：组名「重复的待办（票 155）」，prompt 为 v9。todos 里的 repeat 是这件待办所在的重复规则（kind；weekdays / monthdays 是数组，或 \"due\" 取到期日的、\"today\" 取今天的；every；remind 是每期的提醒，{days_before, time}，time 为 \"reminder\" 取这件待办提醒的钟点，或 \"auto\" 照 Core 从提醒与到期日算出），假 CLI 照 Core 存规则、勾掉或跳过时生出下一期；时间还可以写成下一个某号（next_monthday，可带 back_days 往前几天）或某月月底（month_end 是从这个月起第几个月，back_days 往前几天）。expect.repeat 是记下的那一件是规则的第一期（kind、weekdays 为 \"due\" 时取到期日的星期、monthdays、every 默认 1、no_remind 是规则不带提醒、remind 是{days_before, from, to}、says_any 是回复里说清规则的词、says_remind 是挂了提醒就要在回复里说出：日子加钟点，或钟点加「前一天」「每周」一类相对到期日的说法）；expect.no_rule 是这一轮不许设新规则；expect.skip 是这一轮该跳过这几件（todo skip，删了或勾了都不过）；expect.end_rule 是 {id}：那一件的规则这一轮结束（todo cancel，或 --no-repeat 只注出来；跳过不过）；expect.rule_change 是 {id, kind, every, days: \"same\"}：规则原地改；expect.series_remind 是 {id, days_before}：规则的提醒改成提前几天（只改这一期、没带 --series 不过）；expect.mentions_next 是回复里说出 Core 生出的下一期是哪天；expect.mentions_day_of 是回复里说出那一件的到期日；expect.schedule 还可以是 {repeat, time}：一个它自己的重复提醒（schedule create 的规则与钟点）。Core 生出的下一期不算这一轮记的待办。",
  "cases": [
   {
    "id": "note-report",
@@ -3276,6 +3276,669 @@
    ],
    "mentions_time": true,
    "max_chars": 300
+  }
+ },
+ {
+  "id": "rep-weekly-report",
+  "no": 69,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "说出周期，每周：「每周一要交周报」→ 一件重复的待办（`--weekly=1`，到期是下一个周一，可以挂提醒）；回复里说清规则；不该记成自己的重复提醒（schedule create），不该先问要不要重复",
+  "history": [],
+  "message": "每周一要交周报",
+  "expect": {
+   "todo": "one",
+   "title_any": [
+    "周报"
+   ],
+   "due": {
+    "window": {
+     "from": {
+      "days": 0,
+      "time": "00:00"
+     },
+     "to": {
+      "next_weekday": 1,
+      "time": "23:59"
+     }
+    }
+   },
+   "reminder": {
+    "optional": true,
+    "window": {
+     "from": {
+      "now": true
+     },
+     "to": {
+      "next_weekday": 1,
+      "time": "23:59"
+     }
+    }
+   },
+   "repeat": {
+    "kind": "weekly",
+    "weekdays": [
+     1
+    ],
+    "says_any": [
+     "每周",
+     "每个周一",
+     "每星期",
+     "每礼拜"
+    ],
+    "says_remind": true
+   },
+   "max_chars": 150
+  }
+ },
+ {
+  "id": "rep-rent-monthly",
+  "no": 70,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "说出周期，带提醒：「房租每月 15 号交，提前一天晚上提醒我」→ 一件重复的待办（`--monthly=15`，到期是下一个 15 号），提醒挂在到期前一天晚上（规则记成提前 1 天、晚上的钟点）；回复说清规则与提醒；不该每期各记一件，不该没挂提醒",
+  "history": [],
+  "message": "房租每月 15 号交，提前一天晚上提醒我",
+  "expect": {
+   "todo": "one",
+   "title_any": [
+    "房租"
+   ],
+   "due": {
+    "window": {
+     "from": {
+      "next_monthday": 15,
+      "time": "00:00"
+     },
+     "to": {
+      "next_monthday": 15,
+      "time": "23:59"
+     }
+    }
+   },
+   "reminder": {
+    "window": {
+     "from": {
+      "next_monthday": 15,
+      "back_days": 1,
+      "time": "17:00"
+     },
+     "to": {
+      "next_monthday": 15,
+      "back_days": 1,
+      "time": "23:59"
+     }
+    }
+   },
+   "repeat": {
+    "kind": "monthly",
+    "monthdays": [
+     15
+    ],
+    "remind": {
+     "days_before": 1,
+     "from": "17:00",
+     "to": "23:59"
+    },
+    "says_any": [
+     "每月",
+     "每个月"
+    ],
+    "says_remind": true
+   },
+   "max_chars": 150
+  }
+ },
+ {
+  "id": "rep-tax-quarterly",
+  "no": 71,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "每季度：「每季度报一次税，下次是 1 月 15 号」→ 一件重复的待办，`--monthly=15 --every=3`，到期 1 月 15 日；回复说清规则；不该漏掉 `--every`（记成每月）",
+  "history": [],
+  "message": "每季度报一次税，下次是 1 月 15 号",
+  "expect": {
+   "todo": "one",
+   "title_any": [
+    "税"
+   ],
+   "due": {
+    "window": {
+     "from": {
+      "month": 1,
+      "day": 15,
+      "time": "00:00"
+     },
+     "to": {
+      "month": 1,
+      "day": 15,
+      "time": "23:59"
+     }
+    }
+   },
+   "reminder": {
+    "optional": true,
+    "window": {
+     "from": {
+      "now": true
+     },
+     "to": {
+      "month": 1,
+      "day": 15,
+      "time": "23:59"
+     }
+    }
+   },
+   "repeat": {
+    "kind": "monthly",
+    "monthdays": [
+     15
+    ],
+    "every": 3,
+    "says_any": [
+     "每季度",
+     "每个季度",
+     "每三个月",
+     "每 3 个月",
+     "每3个月"
+    ],
+    "says_remind": true
+   },
+   "max_chars": 150
+  }
+ },
+ {
+  "id": "rep-daily-words",
+  "no": 72,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "每天，没说几点：「以后每天要背 20 个单词」→ 一件重复的待办（`--daily`），不挂提醒（规则也不带提醒）；回复说清是每天；不该每天一个提醒",
+  "history": [],
+  "message": "以后每天要背 20 个单词",
+  "expect": {
+   "todo": "one",
+   "title_any": [
+    "单词"
+   ],
+   "due": {
+    "window": {
+     "from": {
+      "days": 0,
+      "time": "00:00"
+     },
+     "to": {
+      "days": 1,
+      "time": "23:59"
+     }
+    }
+   },
+   "repeat": {
+    "kind": "daily",
+    "no_remind": true,
+    "says_any": [
+     "每天"
+    ]
+   },
+   "max_chars": 150
+  }
+ },
+ {
+  "id": "rep-quarterly-hint",
+  "no": 73,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "带出周期没明说：「又该交季报了，周五前」→ 只记这一次（不设规则），同一句里问以后每季度记不记；不该直接设规则，不该只问不记",
+  "history": [],
+  "message": "又该交季报了，周五前",
+  "expect": {
+   "todo": "one",
+   "title_any": [
+    "季报"
+   ],
+   "due": {
+    "window": {
+     "from": {
+      "days": 0,
+      "time": "00:00"
+     },
+     "to": {
+      "next_weekday": 5,
+      "time": "23:59"
+     }
+    }
+   },
+   "reminder": {
+    "optional": true,
+    "window": {
+     "from": {
+      "now": true
+     },
+     "to": {
+      "next_weekday": 5,
+      "time": "23:59"
+     }
+    }
+   },
+   "no_rule": true,
+   "asks": true,
+   "mentions_groups": [
+    [
+     "以后",
+     "每季度",
+     "每个季度",
+     "每次"
+    ]
+   ],
+   "mentions_time": true,
+   "max_chars": 160
+  }
+ },
+ {
+  "id": "rep-nudge-sleep",
+  "no": 74,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "只是提醒：「每天晚上 10 点提醒我睡觉」→ 它自己的重复提醒（`schedule create --daily --time=22:00 --target=assistant`，照 `reminders.md` 原有的规矩）；回复说出每天几点；不该记成重复的待办",
+  "history": [],
+  "message": "每天晚上 10 点提醒我睡觉",
+  "expect": {
+   "todo": "none",
+   "schedule": {
+    "repeat": "daily",
+    "time": "22:00"
+   },
+   "no_rule": true,
+   "mentions_groups": [
+    [
+     "每天",
+     "每晚"
+    ],
+    [
+     "10 点",
+     "10点",
+     "十点",
+     "22:00",
+     "22 点",
+     "22点"
+    ]
+   ],
+   "max_chars": 120
+  }
+ },
+ {
+  "id": "rep-payslip-last-workday",
+  "no": 75,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "Core 表达不了：「每个月最后一个工作日要发工资条」→ 记这一期的普通待办（不设规则，到期是这个月最后一个工作日），另给自己挂一个一次性提醒（这一期之后、下个月底之前）到时记下一期，回复告诉用户会每期到时再记；不该设成每月固定某一号，不该不说明",
+  "history": [],
+  "message": "每个月最后一个工作日要发工资条",
+  "expect": {
+   "todo": "one",
+   "title_any": [
+    "工资条"
+   ],
+   "due": {
+    "window": {
+     "from": {
+      "month_end": 0,
+      "back_days": 4,
+      "time": "00:00"
+     },
+     "to": {
+      "month_end": 0,
+      "time": "23:59"
+     }
+    }
+   },
+   "reminder": {
+    "optional": true,
+    "window": {
+     "from": {
+      "now": true
+     },
+     "to": {
+      "month_end": 0,
+      "time": "23:59"
+     }
+    }
+   },
+   "no_rule": true,
+   "schedule": "one",
+   "window": {
+    "from": {
+     "month_end": 0,
+     "back_days": 4,
+     "time": "00:00"
+    },
+    "to": {
+     "month_end": 1,
+     "time": "23:59"
+    }
+   },
+   "words_any": [
+    "工资条"
+   ],
+   "mentions_any": [
+    "下个月",
+    "每个月",
+    "每月",
+    "下一期",
+    "下次",
+    "到时"
+   ],
+   "max_chars": 200
+  }
+ },
+ {
+  "id": "rep-done-report",
+  "no": 76,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "办完了：清单里有每周重复的「交周报」（今天到期），用户说「周报交了」→ `todo done` 那一件（Core 随之生出下一期）；回复里说下一次的日子；不该 `todo cancel`，不该另记下一期",
+  "history": [],
+  "todos": [
+   {
+    "id": "todo_5a1e7c3b9d2f4e60",
+    "title": "交周报",
+    "notes": "发到部门群里，抄送组长",
+    "due": {
+     "days": 0,
+     "date_only": true
+    },
+    "reminder": {
+     "id": "sched_6b2f8d4c0e3a5f71",
+     "at": {
+      "days": 7,
+      "time": "09:00"
+     }
+    },
+    "repeat": {
+     "kind": "weekly",
+     "weekdays": "today",
+     "remind": {
+      "days_before": 0,
+      "time": "09:00"
+     }
+    }
+   }
+  ],
+  "message": "周报交了",
+  "expect": {
+   "todo": "none",
+   "done": [
+    "todo_5a1e7c3b9d2f4e60"
+   ],
+   "mentions_next": "todo_5a1e7c3b9d2f4e60",
+   "max_chars": 80
+  }
+ },
+ {
+  "id": "rep-skip-week",
+  "no": 77,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "这次不用：清单里有每周五重复的「交周报」（这周五到期），用户说「这周的周报不用交了」→ `todo skip` 那一件（这一期不做，下一期照常）；不该 `todo cancel`（规则跟着没了），不该 `todo done`",
+  "history": [],
+  "todos": [
+   {
+    "id": "todo_5a1e7c3b9d2f4e60",
+    "title": "交周报",
+    "notes": "发到部门群里，抄送组长",
+    "due": {
+     "next_weekday": 5,
+     "date_only": true
+    },
+    "reminder": {
+     "id": "sched_6b2f8d4c0e3a5f71",
+     "at": {
+      "next_weekday": 4,
+      "time": "20:00"
+     }
+    },
+    "repeat": {
+     "kind": "weekly",
+     "weekdays": "due",
+     "remind": "auto"
+    }
+   }
+  ],
+  "message": "这周的周报不用交了",
+  "expect": {
+   "todo": "none",
+   "skip": [
+    "todo_5a1e7c3b9d2f4e60"
+   ],
+   "max_chars": 100
+  }
+ },
+ {
+  "id": "rep-stop-weekly",
+  "no": 78,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "以后不用：清单里有每周五重复的「交周报」，用户说「以后不用每周交周报了」→ `todo cancel` 那一件（这一期与规则都不要了）；`--no-repeat`（这一期留着）也算过、注出来；不该 `todo skip`（规则还在）",
+  "history": [],
+  "todos": [
+   {
+    "id": "todo_5a1e7c3b9d2f4e60",
+    "title": "交周报",
+    "notes": "发到部门群里，抄送组长",
+    "due": {
+     "next_weekday": 5,
+     "date_only": true
+    },
+    "reminder": {
+     "id": "sched_6b2f8d4c0e3a5f71",
+     "at": {
+      "next_weekday": 4,
+      "time": "20:00"
+     }
+    },
+    "repeat": {
+     "kind": "weekly",
+     "weekdays": "due",
+     "remind": "auto"
+    }
+   }
+  ],
+  "message": "以后不用每周交周报了",
+  "expect": {
+   "todo": "none",
+   "end_rule": {
+    "id": "todo_5a1e7c3b9d2f4e60"
+   },
+   "max_chars": 100
+  }
+ },
+ {
+  "id": "rep-every-two-weeks",
+  "no": 79,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "换周期：清单里有每周五重复的「交周报」，用户说「周报以后改成每两周交一次」→ `todo update` 那一件带 `--weekly=5 --every=2`（规则原地改，还是周五）；不该删了重建",
+  "history": [],
+  "todos": [
+   {
+    "id": "todo_5a1e7c3b9d2f4e60",
+    "title": "交周报",
+    "notes": "发到部门群里，抄送组长",
+    "due": {
+     "next_weekday": 5,
+     "date_only": true
+    },
+    "reminder": {
+     "id": "sched_6b2f8d4c0e3a5f71",
+     "at": {
+      "next_weekday": 4,
+      "time": "20:00"
+     }
+    },
+    "repeat": {
+     "kind": "weekly",
+     "weekdays": "due",
+     "remind": "auto"
+    }
+   }
+  ],
+  "message": "周报以后改成每两周交一次",
+  "expect": {
+   "todo": "none",
+   "rule_change": {
+    "id": "todo_5a1e7c3b9d2f4e60",
+    "kind": "weekly",
+    "every": 2,
+    "days": "same"
+   },
+   "max_chars": 120
+  }
+ },
+ {
+  "id": "rep-remind-two-days",
+  "no": 80,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "以后都这样：清单里有每周五重复的「交周报」（下周五到期，提前一天晚上 8 点提醒），用户说「以后周报都提前两天提醒我」→ `todo update --remind-at=<到期前两天> --series`（规则记成提前 2 天）；不该不带 `--series`（只改了这一期）",
+  "history": [],
+  "todos": [
+   {
+    "id": "todo_5a1e7c3b9d2f4e60",
+    "title": "交周报",
+    "notes": "发到部门群里，抄送组长",
+    "due": {
+     "week_after": 5,
+     "date_only": true
+    },
+    "reminder": {
+     "id": "sched_6b2f8d4c0e3a5f71",
+     "at": {
+      "week_after": 4,
+      "time": "20:00"
+     }
+    },
+    "repeat": {
+     "kind": "weekly",
+     "weekdays": "due",
+     "remind": "auto"
+    }
+   }
+  ],
+  "message": "以后周报都提前两天提醒我",
+  "expect": {
+   "todo": "none",
+   "series_remind": {
+    "id": "todo_5a1e7c3b9d2f4e60",
+    "days_before": 2
+   },
+   "max_chars": 120
+  }
+ },
+ {
+  "id": "rep-overdue-ring",
+  "no": 81,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "逾期的又响：每周重复的「交周报」上周的这一期没勾（到期在 7 天前），它的提醒今天又到点（Core 的待办叫醒措辞）→ 先问做了没有，不把同一句提醒再说一遍；用户没说做了就不勾；不该直接勾掉，不该另记一件",
+  "history": [],
+  "todos": [
+   {
+    "id": "todo_5a1e7c3b9d2f4e60",
+    "title": "交周报",
+    "notes": "发到部门群里，抄送组长",
+    "due": {
+     "days": -7,
+     "date_only": true
+    },
+    "reminder": {
+     "id": "sched_6b2f8d4c0e3a5f71",
+     "at": {
+      "minutes_ago": 0
+     },
+     "fired": {
+      "late_minutes": 0
+     }
+    },
+    "repeat": {
+     "kind": "weekly",
+     "weekdays": "today",
+     "remind": {
+      "days_before": 0,
+      "time": "reminder"
+     }
+    }
+   }
+  ],
+  "wake": [
+   "sched_6b2f8d4c0e3a5f71"
+  ],
+  "expect": {
+   "todo": "none",
+   "asks": true,
+   "mentions_any": [
+    "周报"
+   ],
+   "no_recite": [
+    "交周报",
+    "该交周报了",
+    "记得交周报",
+    "别忘了交周报"
+   ],
+   "forbid_any": [
+    "已勾",
+    "勾掉了",
+    "晚了",
+    "迟了"
+   ],
+   "max_chars": 120
+  }
+ },
+ {
+  "id": "rep-already-there",
+  "no": 82,
+  "group": "重复的待办（票 155）",
+  "prompt": "v9",
+  "expect_text": "已经有了：清单里有每周一重复的「交周报」（下周一到期，前一天晚上 8 点提醒），用户说「下周一要交周报」→ 不再记，说已经有了、这一期是下周一；不该再记一件",
+  "history": [],
+  "todos": [
+   {
+    "id": "todo_5a1e7c3b9d2f4e60",
+    "title": "交周报",
+    "due": {
+     "next_weekday": 1,
+     "date_only": true
+    },
+    "reminder": {
+     "id": "sched_6b2f8d4c0e3a5f71",
+     "at": {
+      "next_weekday": 7,
+      "time": "20:00"
+     }
+    },
+    "repeat": {
+     "kind": "weekly",
+     "weekdays": [
+      1
+     ],
+     "remind": "auto"
+    }
+   }
+  ],
+  "message": "下周一要交周报",
+  "expect": {
+   "todo": "none",
+   "allow": [
+    "todo update"
+   ],
+   "mentions_day_of": "todo_5a1e7c3b9d2f4e60",
+   "mentions_any": [
+    "已经",
+    "已有",
+    "记着",
+    "有了",
+    "在清单",
+    "记过"
+   ],
+   "max_chars": 120
   }
  }
  ]

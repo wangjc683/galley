@@ -244,7 +244,8 @@ SCHEDULE_WRITES = ("schedule create", "schedule update", "schedule delete", "sch
 HAND_WRITES = ("session rename", "session pin", "session unpin", "session delete", "project update",
                "project pin", "project unpin", "project archive-sessions", "llm set-default")
 # Ticket 41: the user's to-dos (`galley todo`, ticket 40).
-TODO_WRITES = ("todo add", "todo update", "todo done", "todo reopen", "todo cancel")
+# Ticket 155: ticket 154's `todo skip`.
+TODO_WRITES = ("todo add", "todo update", "todo done", "todo reopen", "todo cancel", "todo skip")
 # Ticket 111: the items under a to-do (`galley todo item`); ticket 112's move.
 TODO_ITEM_WRITES = ("todo item add", "todo item done", "todo item reopen", "todo item update", "todo item remove",
                     "todo item move")
@@ -673,6 +674,129 @@ out({{"schemaVersion": 2, "ok": False, "error": {{"code": "unknown_command",
     "message": "unknown command: " + " ".join(argv)}}}}, 1)
 '''
 
+# Ticket 155: a repeating to-do's dates (main chat ticket 154), as Core
+# computes them (core/src/todo_repeat.rs: RepeatRule::next_after,
+# next_due_day, period_on, remind_offset, repeat_words). One source, run
+# in two places: the fake galley pastes it in (build_sandbox fills
+# __REPEAT_PY__), and run.py runs it below (the In Hand port, the
+# fixtures, the judge, and the dry test, which checks it against the
+# expectations of the Rust unit tests). A zone is a fixed offset, as the
+# fake galley's is.
+REPEAT_PY = r'''
+import datetime as _rdt
+
+R_EVERY_MAX = 365
+R_WEEKDAY_WORDS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+
+def r_monday_of(day):
+    return day - _rdt.timedelta(days=day.weekday())
+
+
+def r_last_day(year, month):
+    first_next = _rdt.date(year + 1, 1, 1) if month == 12 else _rdt.date(year, month + 1, 1)
+    return (first_next - _rdt.timedelta(days=1)).day
+
+
+def r_next_after(rule, after):
+    """RepeatRule::next_after: the rule's first day strictly after `after`.
+    `rule`: kind, every, days (weekly: ISO weekdays; monthly: days of the
+    month), anchor (a date: the every-N phase counts from it)."""
+    n = min(max(int(rule.get("every") or 1), 1), R_EVERY_MAX)
+    anchor, kind = rule["anchor"], rule["kind"]
+    if kind == "daily":
+        k = (after - anchor).days // n + 1
+        return anchor + _rdt.timedelta(days=k * n)
+    if kind == "weekly":
+        days = list(rule.get("days") or []) or [anchor.isoweekday()]
+        anchor_week = r_monday_of(anchor)
+        day = after + _rdt.timedelta(days=1)
+        while True:
+            weeks = (r_monday_of(day) - anchor_week).days // 7
+            if weeks % n == 0 and day.isoweekday() in days:
+                return day
+            day += _rdt.timedelta(days=1)
+    if kind == "monthly":
+        days = list(rule.get("days") or []) or [anchor.day]
+        anchor_month = anchor.year * 12 + anchor.month - 1
+        year, month = after.year, after.month
+        while True:
+            if (year * 12 + month - 1 - anchor_month) % n == 0:
+                last = r_last_day(year, month)
+                found = [d for d in (_rdt.date(year, month, min(x, last)) for x in days) if d > after]
+                if found:
+                    return min(found)
+            year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    year = after.year
+    while True:
+        if (year - anchor.year) % n == 0:
+            day = _rdt.date(year, anchor.month, min(anchor.day, r_last_day(year, anchor.month)))
+            if day > after:
+                return day
+        year += 1
+
+
+def r_next_due_day(rule, today, period_days):
+    """next_due_day: the rule's first day after the later of today and
+    every period's due day so far."""
+    after = today
+    for d in period_days:
+        after = max(after, d)
+    return r_next_after(rule, after)
+
+
+def r_period_on(day, time_of_day, remind, tz):
+    """period_on: the period due on `day` (at `time_of_day` "HH:MM" there,
+    or the day alone) and its reminder (`remind`: (days_before, "HH:MM"),
+    or None). Returns (due, remind_at): due {"dueAt": iso} or {"dueDate":
+    "YYYY-MM-DD"}, remind_at an aware instant or None."""
+    def at(d, hhmm):
+        h, m = (int(x) for x in hhmm.split(":"))
+        return _rdt.datetime(d.year, d.month, d.day, h, m, tzinfo=tz)
+    if time_of_day:
+        due = {"dueAt": at(day, time_of_day).astimezone(_rdt.timezone.utc).isoformat(timespec="seconds")}
+    else:
+        due = {"dueDate": day.isoformat()}
+    remind_at = None
+    if remind is not None:
+        remind_at = at(day - _rdt.timedelta(days=int(remind[0])), remind[1])
+    return due, remind_at
+
+
+def r_remind_offset(due_day, remind_at, tz):
+    """remind_offset: a reminder at `remind_at` on a period due `due_day`,
+    as (days before the due day, local "HH:MM")."""
+    local = remind_at.astimezone(tz)
+    return (due_day - local.date()).days, local.strftime("%H:%M")
+
+
+def r_ordinal(d):
+    suffix = "th" if 11 <= d % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(d % 10, "th")
+    return str(d) + suffix
+
+
+def r_repeat_words(rule):
+    """repeat_words: the rule as the wire gives it (kind, weekdays,
+    monthdays, every), in In Hand's words."""
+    every = max(int(rule.get("every") or 1), 1)
+    one, many = {"daily": ("daily", "days"), "weekly": ("weekly", "weeks"), "monthly": ("monthly", "months"),
+                 "yearly": ("yearly", "years")}[rule["kind"]]
+    words = "repeats " + one if every == 1 else "repeats every %d %s" % (every, many)
+    if rule["kind"] == "weekly" and rule.get("weekdays"):
+        words += " on " + ", ".join(R_WEEKDAY_WORDS[d - 1] for d in rule["weekdays"] if 1 <= d <= 7)
+    if rule["kind"] == "monthly" and rule.get("monthdays"):
+        words += " on the " + ", ".join(r_ordinal(d) for d in rule["monthdays"])
+    return words
+'''
+_REPEAT_NS: dict[str, Any] = {}
+exec(REPEAT_PY, _REPEAT_NS)
+r_monday_of = _REPEAT_NS["r_monday_of"]
+r_next_after = _REPEAT_NS["r_next_after"]
+r_next_due_day = _REPEAT_NS["r_next_due_day"]
+r_period_on = _REPEAT_NS["r_period_on"]
+r_remind_offset = _REPEAT_NS["r_remind_offset"]
+r_repeat_words = _REPEAT_NS["r_repeat_words"]
+
 # The wake suite's fake galley: answers from the run's fixture (sessions,
 # transcripts, projects, models; the real CLI's --help texts), keeps a
 # little state (sends, archives, moves) so a later read sees them, and
@@ -695,12 +819,16 @@ try:
 except (OSError, ValueError):
     state = {"sent": [], "status": {}, "project": {}, "projects": [], "llm": {}}
 for key, empty in (("tasks", None), ("todos", None), ("titles", {}), ("pins", {}), ("deleted", []),
-                   ("project_edits", {}), ("default_llm", None), ("memos", None), ("memo_events", [])):
+                   ("project_edits", {}), ("default_llm", None), ("memos", None), ("memo_events", []),
+                   ("series", None)):
     state.setdefault(key, empty)
 if state["tasks"] is None:
     state["tasks"] = [dict(t) for t in fx.get("tasks") or []]
 if state["todos"] is None:
     state["todos"] = [dict(t) for t in fx.get("todos") or []]
+# Ticket 155: the rules of the repeating to-dos (main chat ticket 154).
+if state["series"] is None:
+    state["series"] = [dict(s) for s in fx.get("series") or []]
 if state["memos"] is None:
     state["memos"] = [dict(m) for m in fx.get("memos") or []]
 
@@ -722,7 +850,7 @@ def fail(code, message, exit_code):
 VALUE = {"tail", "around", "context", "since", "until", "supervisor", "reason", "to", "project",
          "runtime", "status", "timeout", "poll", "after-turn", "llm", "session", "root-path",
          "icon", "color", "schema", "at", "weekly", "monthly", "time", "target", "prompt", "name",
-         "due", "remind-at", "notes", "title", "text", "item"}
+         "due", "remind-at", "notes", "title", "text", "item", "every"}
 # Ticket 111: `todo add --item=<text>` repeats, in order (clap's Vec).
 items_given = []
 words, flags, i = [], {}, 0
@@ -798,10 +926,14 @@ ALLOWED = {
     ("llm", "set-default"): {"supervisor", "reason"},
     # Ticket 40: the to-dos.
     ("todo", "list"): {"all"}, ("todo", "show"): set(),
-    ("todo", "add"): {"notes", "due", "remind-at", "item", "supervisor", "reason"},
-    ("todo", "update"): {"title", "notes", "due", "no-due", "remind-at", "no-remind", "supervisor", "reason"},
+    # Ticket 155: ticket 154's rule flags, `--no-repeat`, `--series` and
+    # `todo skip`.
+    ("todo", "add"): {"notes", "due", "remind-at", "item", "daily", "weekly", "monthly", "yearly", "every",
+                      "supervisor", "reason"},
+    ("todo", "update"): {"title", "notes", "due", "no-due", "remind-at", "no-remind", "daily", "weekly", "monthly",
+                         "yearly", "every", "no-repeat", "series", "supervisor", "reason"},
     ("todo", "done"): {"supervisor", "reason"}, ("todo", "reopen"): {"supervisor", "reason"},
-    ("todo", "cancel"): {"supervisor", "reason"},
+    ("todo", "cancel"): {"supervisor", "reason"}, ("todo", "skip"): {"supervisor", "reason"},
     # Ticket 111: the items under a to-do, `todo item …`.
     ("todo", "item", "add"): {"supervisor", "reason"},
     ("todo", "item", "done"): {"supervisor", "reason"},
@@ -1006,8 +1138,12 @@ def apply_rule(t, creating):
         fail("invalid_args", "scheduled task: a task that wakes the assistant takes no project or model", 2)
 
 # ---- to-dos (ticket 40), Core's rules (core/src/db/todo.rs, api/todo.rs) ----
-TODO_USAGE = ("Usage: galley todo update <--title <TITLE>|--notes <NOTES>|--due <DATE|TIME>|--no-due|"
-              "--remind-at <TIME>|--no-remind> <TODO_ID>")
+# Ticket 155: the change group took ticket 154's rule flags (captured from
+# the dev binary).
+TODO_CHANGES = ("<--title <TITLE>|--notes <NOTES>|--due <DATE|TIME>|--no-due|--remind-at <TIME>|--no-remind|"
+                "--daily|--weekly <DAYS>|--monthly <DAYS>|--yearly|--no-repeat|--series>")
+TODO_USAGE = "Usage: galley todo update " + TODO_CHANGES + " <TODO_ID>"
+TODO_ADD_USAGE = "Usage: galley todo add [OPTIONS] <TITLE>"
 
 def value_flag(k, shown):
     """clap's NonEmptyStringValueParser: `--due=` / a bare `--due` is refused."""
@@ -1074,6 +1210,15 @@ def todo_wire(t, listed=False):
         w["items"] = [item_wire(x) for x in items]
     if items:
         w["itemCount"] = {"done": sum(1 for x in items if x.get("done")), "total": len(items)}
+    # Ticket 155 (main chat ticket 154): the rule while it has not ended,
+    # on every period of it; the rule's id; a period skipped.
+    s = live_series(t)
+    if s:
+        w["repeat"] = repeat_wire(s)
+    if t.get("seriesId"):
+        w["seriesId"] = t["seriesId"]
+    if t.get("skipped"):
+        w["skipped"] = True
     for k in ("createdAt", "updatedAt"):
         if t.get(k):
             w[k] = t[k]
@@ -1116,7 +1261,7 @@ def find_todo(tid, live=True):
             return t
     fail("not_found", "todo " + tid + " not found", 3)
 
-def set_reminder(t, at):
+def set_reminder(t, at, origin=None):
     task = reminder_task(t["id"])
     if task:
         task.update(fireAt=iso(at), timeOfDay=at.astimezone(TZ).strftime("%H:%M"), prompt=t["title"],
@@ -1127,7 +1272,7 @@ def set_reminder(t, at):
     state["tasks"].append({
         "id": "sched_7e4a%012x" % (0x5c0000000000 + n), "prompt": t["title"], "repeat": {"kind": "once"},
         "timeOfDay": at.astimezone(TZ).strftime("%H:%M"), "fireAt": iso(at), "target": "assistant",
-        "enabled": True, "origin": origin_of(), "todoId": t["id"],
+        "enabled": True, "origin": origin or origin_of(), "todoId": t["id"],
         "createdAt": iso(now_utc()), "updatedAt": iso(now_utc())})
 
 def release_reminder(t):
@@ -1165,6 +1310,201 @@ def todo_order(rows):
     ordered += sorted(done, key=lambda t: t["doneAt"], reverse=True)
     ordered += sorted(gone, key=lambda t: t["cancelledAt"], reverse=True)
     return ordered
+
+# ---- repeating to-dos (ticket 155: main chat ticket 154), Core's rules
+# (core/src/db/todo.rs, core/src/todo_repeat.rs; the messages captured from
+# the dev binary under a throwaway HOME where clap or the CLI answers, and
+# from Core itself where it does) ----
+__REPEAT_PY__
+REPEAT_ORIGIN = {"via": "system", "supervisor": "galley-repeat"}
+RULE_KINDS = ("daily", "weekly", "monthly", "yearly")
+RULE_ARGS = {"daily": "--daily", "weekly": "--weekly <DAYS>", "monthly": "--monthly <DAYS>", "yearly": "--yearly"}
+RULE_GROUP = "<--daily|--weekly <DAYS>|--monthly <DAYS>|--yearly>"
+
+def find_series(sid):
+    return next((s for s in state["series"] if s["id"] == sid), None) if sid else None
+
+def live_series(t):
+    """The rule a to-do is a period of, while it has not ended."""
+    s = find_series(t.get("seriesId"))
+    return s if s and not s.get("endedAt") else None
+
+def due_day(t):
+    """The to-do's due day in this machine's zone (StoredDue::local_date)."""
+    if t.get("dueAt"):
+        return _dt.datetime.fromisoformat(t["dueAt"]).astimezone(TZ).date()
+    if t.get("dueDate"):
+        return _dt.date.fromisoformat(t["dueDate"])
+    return None
+
+def repeat_wire(s):
+    """Todo.repeat: kind, weekdays / monthdays, every (absent when 1), remind."""
+    w = {"kind": s["kind"]}
+    if s["kind"] == "weekly":
+        w["weekdays"] = list(s["days"])
+    if s["kind"] == "monthly":
+        w["monthdays"] = list(s["days"])
+    if int(s.get("every") or 1) != 1:
+        w["every"] = int(s["every"])
+    if s.get("remindTime") is not None:
+        w["remind"] = {"daysBefore": s["remindDaysBefore"], "time": s["remindTime"]}
+    return w
+
+def series_rule(s):
+    return {"kind": s["kind"], "every": s["every"], "days": s["days"], "anchor": _dt.date.fromisoformat(s["anchor"])}
+
+def rule_given(sub):
+    """The rule the flags name, or None: clap's checks (one kind, a value
+    where one is needed, `--every` a u32 and only with a kind, `--no-repeat`
+    alone), then the CLI's day list (cli/src/schedule.rs day_list)."""
+    usage = TODO_ADD_USAGE if sub == "add" else TODO_USAGE
+    more = "\n\n" + usage + "\n\nFor more information, try '--help'.\n"
+    for k in ("daily", "yearly", "no-repeat", "series"):
+        if k in flags and flags[k] is not True:
+            fail("invalid_args", "error: unexpected value '" + str(flags[k]) + "' for '--" + k
+                 + "' found; no more were expected" + more, 2)
+    kinds = [k for k in RULE_KINDS if k in flags]
+    if len(kinds) > 1:
+        fail("invalid_args", "error: the argument '" + RULE_ARGS[kinds[0]] + "' cannot be used with '"
+             + RULE_ARGS[kinds[1]] + "'" + more, 2)
+    if "no-repeat" in flags:
+        if kinds:
+            fail("invalid_args", "error: the argument '--no-repeat' cannot be used with:\n  "
+                 + "\n  ".join(RULE_ARGS[k] for k in RULE_KINDS) + more, 2)
+        if "every" in flags:
+            fail("invalid_args", "error: the argument '--no-repeat' cannot be used with '--every <N>'" + more, 2)
+        if "series" in flags:
+            fail("invalid_args", "error: the argument '--no-repeat' cannot be used with '--series'" + more, 2)
+    if "every" in flags and not kinds:
+        fail("invalid_args", "error: the following required arguments were not provided:\n  " + RULE_GROUP
+             + "\n\nUsage: galley todo " + sub + " --every <N> " + RULE_GROUP + " "
+             + ("<TITLE>" if sub == "add" else "<TODO_ID>") + "\n\nFor more information, try '--help'.\n", 2)
+    for k, shown in (("weekly", "DAYS"), ("monthly", "DAYS")):
+        value_flag(k, shown)
+    every = 1
+    if "every" in flags:
+        raw = flags["every"]
+        if raw is True:
+            fail("invalid_args", "error: a value is required for '--every <N>' but none was supplied\n\n"
+                 "For more information, try '--help'.\n", 2)
+        raw = str(raw)
+        digits = raw[1:] if raw[:1] in ("+", "-") else raw
+        if not (digits.isascii() and digits.isdigit()):
+            why = "cannot parse integer from empty string" if raw == "" else "invalid digit found in string"
+            fail("invalid_args", "error: invalid value '" + raw + "' for '--every <N>': " + why
+                 + "\n\nFor more information, try '--help'.\n", 2)
+        every = int(raw)
+        if not 0 <= every <= 4294967295:
+            fail("invalid_args", "error: invalid value '" + raw + "' for '--every <N>': " + raw
+                 + " is not in 0..=4294967295\n\nFor more information, try '--help'.\n", 2)
+    if not kinds:
+        return None
+    kind = kinds[0]
+    days = []
+    if kind in ("weekly", "monthly"):
+        raw = str(flags[kind])
+        for d in (x.strip() for x in raw.split(",")):
+            if not d:
+                continue
+            ok = d.lstrip("+").isascii() and d.lstrip("+").isdigit() and d.count("+") <= 1 and int(d) <= 255
+            if not ok:
+                fail("invalid_args", "--" + kind + ": days are comma-separated numbers, got "
+                     + json.dumps(raw, ensure_ascii=False), 2)
+            days.append(int(d))
+    return {"kind": kind, "every": every, "days": days}
+
+def rule_checked(given, context):
+    """RepeatRule::checked: every 1 to 365; weekly days 1-7, monthly 1-31,
+    at least one, sorted, no repeats."""
+    if not 1 <= given["every"] <= 365:
+        fail("invalid_args", context + ": a repeat's every is 1 to 365, got " + str(given["every"]), 2)
+    days = sorted(set(given["days"]))
+    if given["kind"] in ("weekly", "monthly"):
+        top = 7 if given["kind"] == "weekly" else 31
+        if not days:
+            fail("invalid_args", context + ": a " + given["kind"] + " repeat needs at least one day", 2)
+        if any(d < 1 or d > top for d in days):
+            fail("invalid_args", context + ": " + given["kind"] + " repeat days are 1 to " + str(top) + ", got ["
+                 + ", ".join(str(d) for d in days) + "]", 2)
+    return {"kind": given["kind"], "every": given["every"], "days": days}
+
+def repeat_needs_due(context):
+    fail("invalid_args", "repeat_needs_due: " + context + ": a repeating to-do needs a due date (--due)", 2)
+
+def not_repeating(context, tid):
+    fail("invalid_args", "not_repeating: " + context + ": todo " + tid
+         + " does not repeat (it has no rule, or its rule ended)", 2)
+
+def series_take(s, t, reminder_at):
+    """What a rule carries of a period: its title, its items' words, its due
+    time, its reminder's offset from its due day (none, none)."""
+    day = due_day(t)
+    s["title"] = t["title"]
+    s["items"] = [x["text"] for x in t.get("items") or []]
+    s["timeOfDay"] = (_dt.datetime.fromisoformat(t["dueAt"]).astimezone(TZ).strftime("%H:%M")
+                      if t.get("dueAt") else None)
+    if reminder_at is not None and day is not None:
+        s["remindDaysBefore"], s["remindTime"] = r_remind_offset(day, reminder_at, TZ)
+    else:
+        s["remindDaysBefore"] = s["remindTime"] = None
+    s["updatedAt"] = iso(now_utc())
+
+def new_series(t, rule, reminder_at):
+    """A rule made with its first period (todo add) or given to one
+    (todo update): counted from its due day, carrying it as it is now."""
+    s = {"id": "series_%016x" % (0x5e41e5eed0000000 + len(state["series"])), "notes": t.get("notes"),
+         "kind": rule["kind"], "every": rule["every"], "days": rule["days"], "anchor": due_day(t).isoformat(),
+         "origin": origin_of(), "createdAt": iso(now_utc())}
+    series_take(s, t, reminder_at)
+    state["series"].append(s)
+    t["seriesId"] = s["id"]
+    return s
+
+def end_series(t):
+    s = live_series(t)
+    if s:
+        s["endedAt"] = s["updatedAt"] = iso(now_utc())
+        s["endedBy"] = origin_of()
+
+def make_next(settled):
+    """Settling a period of a rule that has not ended, with no other period
+    of it open, makes the next (db/todo.rs make_next_period): due on the
+    rule's first day after the later of today and every period's due day,
+    the rule's title, notes and items (unticked), made by Core in no turn.
+    Returns it and its reminder's time (hung by the caller after the
+    settled one's reminder is let go; none when that time has passed)."""
+    s = live_series(settled)
+    if not s:
+        return None, None
+    if any(x.get("seriesId") == s["id"] and x["id"] != settled["id"] and not x.get("doneAt")
+           and not x.get("cancelledAt") for x in state["todos"]):
+        return None, None
+    days = [d for d in (due_day(x) for x in state["todos"] if x.get("seriesId") == s["id"]) if d]
+    today = now_utc().astimezone(TZ).date()
+    day = r_next_due_day(series_rule(s), today, days)
+    remind = (s["remindDaysBefore"], s["remindTime"]) if s.get("remindTime") is not None else None
+    due, remind_at = r_period_on(day, s.get("timeOfDay"), remind, TZ)
+    n = {"id": "todo_%016x" % (0x7d0d5eed00000000 + len(state["todos"])), "title": s["title"]}
+    if s.get("notes"):
+        n["notes"] = s["notes"]
+    n.update(due)
+    n["origin"] = dict(REPEAT_ORIGIN)
+    n["createdAt"] = n["updatedAt"] = iso(now_utc())
+    n["seriesId"] = s["id"]
+    state["todos"].append(n)
+    if s.get("items"):
+        add_items(n, s["items"])
+    if remind_at is not None and remind_at.replace(microsecond=0) <= now_utc():
+        remind_at = None
+    return n, remind_at
+
+def settled_out(t, nxt, remind_at):
+    if nxt is not None and remind_at is not None:
+        set_reminder(nxt, remind_at, dict(REPEAT_ORIGIN))
+    w = {"todo": todo_wire(t)}
+    if nxt is not None:
+        w["next"] = todo_wire(nxt)
+    out(w)
 
 # ---- memos (ticket 95), Core's rules (core/src/api/memo.rs, db/memo.rs) ----
 MEMO_UPDATE_USAGE = "Usage: galley memo update <--text <TEXT>|--until <DATE>|--no-until> <MEMO_ID>"
@@ -1392,6 +1732,8 @@ if cmd == ("todo", "add"):
     need(1, "<TITLE>")
     value_flag("due", "DATE|TIME")
     value_flag("remind-at", "TIME")
+    # Ticket 155: clap's and the CLI's checks on the rule come first.
+    given = rule_given("add")
     if not rest[0].strip():
         fail("invalid_args", "create_todo: a to-do needs a title", 2)
     due = parse_due(flags["due"]) if "due" in flags else {}
@@ -1399,6 +1741,11 @@ if cmd == ("todo", "add"):
     texts = [item_words(x) for x in items_given]
     if any(not x for x in texts):
         fail("invalid_args", "create_todo: an item needs words", 2)
+    rule = None
+    if given is not None:
+        if not due:
+            repeat_needs_due("create_todo")
+        rule = rule_checked(given, "create_todo")
     t = {"id": "todo_%016x" % (0x7d0d5eed00000000 + len(state["todos"])), "title": rest[0].strip()}
     if text_flag("notes").strip():
         t["notes"] = text_flag("notes").strip()
@@ -1410,23 +1757,38 @@ if cmd == ("todo", "add"):
     state["todos"].append(t)
     if texts:
         add_items(t, texts)
+    if rule is not None:
+        new_series(t, rule, at)
     if at is not None:
         set_reminder(t, at)
     out({"todo": todo_wire(t)})
 if cmd == ("todo", "update"):
-    changes = [k for k in ("title", "notes", "due", "no-due", "remind-at", "no-remind") if k in flags]
+    changes = [k for k in ("title", "notes", "due", "no-due", "remind-at", "no-remind", "daily", "weekly", "monthly",
+                           "yearly", "no-repeat", "series") if k in flags]
     if not changes:
-        fail("invalid_args", "error: the following required arguments were not provided:\n  <--title <TITLE>|"
-             "--notes <NOTES>|--due <DATE|TIME>|--no-due|--remind-at <TIME>|--no-remind>\n\n" + TODO_USAGE
-             + "\n\nFor more information, try '--help'.\n", 2)
+        missing = TODO_CHANGES + ("\n  " + RULE_GROUP if "every" in flags else "")
+        usage = ("Usage: galley todo update --every <N> " + TODO_CHANGES + " " + RULE_GROUP + " <TODO_ID>"
+                 if "every" in flags else TODO_USAGE)
+        fail("invalid_args", "error: the following required arguments were not provided:\n  " + missing + "\n\n"
+             + usage + "\n\nFor more information, try '--help'.\n", 2)
     for a, b, shown in (("due", "no-due", "DATE|TIME"), ("remind-at", "no-remind", "TIME")):
         if a in flags and b in flags:
             fail("invalid_args", "error: the argument '--" + a + " <" + shown + ">' cannot be used with '--" + b
                  + "'\n\n" + TODO_USAGE + "\n\nFor more information, try '--help'.\n", 2)
     value_flag("due", "DATE|TIME")
     value_flag("remind-at", "TIME")
+    # Ticket 155: the rule flags, `--no-repeat`, `--series` (clap's and the
+    # CLI's checks), then Core's, in update_todo's order.
+    given = rule_given("update")
     need(1, "<TODO_ID>")
     t = find_todo(rest[0])
+    s = live_series(t)
+    no_repeat, take = "no-repeat" in flags, "series" in flags
+    if (no_repeat or (take and given is None)) and s is None:
+        not_repeating("update_todo", t["id"])
+    if take and t.get("doneAt"):
+        fail("invalid_args", "update_todo: todo " + t["id"] + " is done; take the open period into the rule, or "
+             "untick this one first", 2)
     title = t["title"]
     if "title" in flags:
         title = text_flag("title").strip()
@@ -1438,6 +1800,23 @@ if cmd == ("todo", "update"):
         if t.get("doneAt"):
             fail("invalid_args", "update_todo: todo " + t["id"] + " is done; untick it before giving it a reminder", 2)
         at = future_at(flags["remind-at"], "update_todo")
+    due_after = (due if due is not None else {} if "no-due" in flags
+                 else {k: t[k] for k in ("dueDate", "dueAt") if t.get(k)})
+    if not no_repeat and (given is not None or s is not None) and not due_after:
+        repeat_needs_due("update_todo")
+    if given is not None and s is None and t.get("doneAt"):
+        fail("invalid_args", "update_todo: todo " + t["id"] + " is done; untick it before making it repeat", 2)
+    rule = rule_checked(given, "update_todo") if given is not None else None
+    # The reminder once this change is made: the rule keeps its offset.
+    if at is not None:
+        reminder_after = at
+    elif "no-remind" in flags:
+        reminder_after = None
+    elif rule is not None or take:
+        task = reminder_task(t["id"])
+        reminder_after = _dt.datetime.fromisoformat(task["fireAt"]) if task and task.get("fireAt") else None
+    else:
+        reminder_after = None
     renamed = title != t["title"]
     t["title"] = title
     if "notes" in flags:
@@ -1449,6 +1828,23 @@ if cmd == ("todo", "update"):
         t.pop("dueAt", None)
         t.update(due or {})
     t["updatedAt"] = iso(now_utc())
+    if no_repeat:
+        end_series(t)
+    elif rule is not None:
+        if s is None:
+            s = new_series(t, rule, reminder_after)
+        else:
+            # A new rule, counted from this period's day; the rest stays.
+            s.update(kind=rule["kind"], every=rule["every"], days=rule["days"], anchor=due_day(t).isoformat(),
+                     updatedAt=iso(now_utc()))
+    if take:
+        s = live_series(t)
+        if s is not None and due_day(t) is not None:
+            series_take(s, t, reminder_after)
+            if "notes" in flags:
+                s["notes"] = t.get("notes")
+            if due is not None:
+                s["anchor"] = due_day(t).isoformat()
     if at is not None:
         set_reminder(t, at)
     elif "no-remind" in flags:
@@ -1465,7 +1861,11 @@ if cmd in (("todo", "done"), ("todo", "reopen"), ("todo", "cancel")):
     if cmd[1] == "done" and not t.get("doneAt"):
         t["doneAt"] = t["updatedAt"] = iso(now_utc())
         t["doneBy"] = origin_of()
+        # Ticket 155: a period of a rule makes the next, printed as `next`.
+        nxt, remind_at = make_next(t)
         release_reminder(t)
+        if t.get("seriesId"):
+            settled_out(t, nxt, remind_at)
     elif cmd[1] == "reopen" and t.get("doneAt"):
         t.pop("doneAt", None)
         t.pop("doneBy", None)
@@ -1473,8 +1873,25 @@ if cmd in (("todo", "done"), ("todo", "reopen"), ("todo", "cancel")):
     elif cmd[1] == "cancel":
         t["cancelledAt"] = t["updatedAt"] = iso(now_utc())
         t["cancelledBy"] = origin_of()
+        # Ticket 155: deleting a period ends its rule, no next.
+        end_series(t)
         release_reminder(t)
     out({"todo": todo_wire(t)})
+if cmd == ("todo", "skip"):
+    # Ticket 155 (main chat ticket 154 §5.34f): this period cancelled,
+    # marked skipped, its reminder let go; the next made as a tick makes it.
+    need(1, "<TODO_ID>")
+    t = find_todo(rest[0])
+    if live_series(t) is None:
+        not_repeating("skip_todo", t["id"])
+    if t.get("doneAt"):
+        fail("invalid_args", "skip_todo: todo " + t["id"] + " is done; untick it before skipping it", 2)
+    t["cancelledAt"] = t["updatedAt"] = iso(now_utc())
+    t["cancelledBy"] = origin_of()
+    t["skipped"] = True
+    nxt, remind_at = make_next(t)
+    release_reminder(t)
+    settled_out(t, nxt, remind_at)
 # Ticket 111: the items, Core's rules (core/src/db/todo.rs): words checked
 # before the to-do or item is looked up; every write stamps the to-do's
 # updatedAt; a write that changes nothing changes nothing.
@@ -2283,6 +2700,10 @@ def in_hand_block(todo: dict[str, Any], now: datetime, tz: Any,
         facts = [f"due {words}" if words else "no due date"]
         if it.get("overdue"):
             facts.append("overdue")
+        # Ticket 155 (main chat ticket 154): a repeating one's rule, after
+        # the due date (todo_repeat::repeat_words).
+        if it.get("todoRepeat"):
+            facts.append(r_repeat_words(it["todoRepeat"]))
         rem = it.get("reminder")
         at = in_hand_time(rem["at"], tz) if rem else None
         if rem and at:
@@ -2405,6 +2826,12 @@ def in_hand_todo(todos: list[dict[str, Any]], tasks: list[dict[str, Any]], at: d
         # Ticket 111: the list's rows carry the items (ListedSubitem).
         if t.get("items"):
             item["items"] = [{"id": x["id"], "text": x["text"], "done": bool(x.get("done"))} for x in t["items"]]
+        # Ticket 155: a repeating one's rule (TodoItem.todoRepeat, from the
+        # `todo show` shape's `repeat`) and its id.
+        if t.get("repeat"):
+            item["todoRepeat"] = t["repeat"]
+        if t.get("seriesId"):
+            item["seriesId"] = t["seriesId"]
         due = t.get("due")
         if not due:
             anytime.append(((t["createdAt"], t["id"]), item))
@@ -2574,6 +3001,18 @@ def sched_time(spec: dict[str, Any], now: datetime, started: datetime | None = N
         day = on(now.year + int(spec.get("year_offset", 0)))
         if "year_offset" not in spec and day < now.date():
             day = on(now.year + 1)
+    elif "next_monthday" in spec:
+        # Ticket 155: the first day after today on that day of the month
+        # (「每月 15 号」), skipping a month without it.
+        day = now.date() + timedelta(days=1)
+        while day.day != int(spec["next_monthday"]):
+            day += timedelta(days=1)
+        day -= timedelta(days=int(spec.get("back_days", 0)))
+    elif "month_end" in spec:
+        # Ticket 155: the last day of this month (`month_end` 0) or of a
+        # later one, `back_days` before it.
+        y, m = divmod(now.year * 12 + now.month - 1 + int(spec["month_end"]), 12)
+        day = date(y, m + 1, calendar.monthrange(y, m + 1)[1]) - timedelta(days=int(spec.get("back_days", 0)))
     else:
         day = now.date() + timedelta(days=int(spec["days"]))
     h, m = (int(x) for x in spec["time"].split(":"))
@@ -2681,6 +3120,9 @@ def todo_stored(t: dict[str, Any], now: datetime, k: int) -> dict[str, Any]:
     todo["origin"] = {"via": "supervisor", "supervisor": "galley-assistant", "reason": "user mentioned it"}
     todo["createdIn"] = {"sessionId": SESSION_ID,
                          "turnIndex": SEGMENT_START_TURN - 3 if t.get("in_hand", True) else SEGMENT_START_TURN}
+    # Ticket 155: a period of a repeating rule (series_stored).
+    if t.get("repeat"):
+        todo["seriesId"] = t["repeat"].get("id") or "series_" + t["id"][len("todo_"):]
     # Ticket 110: when it was noted and last changed, hours ago.
     if t.get("created"):
         made = now - timedelta(hours=float(t["created"]["hours_ago"]))
@@ -2710,6 +3152,67 @@ def todo_stored(t: dict[str, Any], now: datetime, k: int) -> dict[str, Any]:
     return todo
 
 
+def series_stored(t: dict[str, Any], now: datetime) -> dict[str, Any] | None:
+    """Ticket 155: the rule of a case's repeating to-do (todo/cases.json
+    `_note`, `repeat`), as the fake galley keeps it: kind, every, days
+    (`weekdays` / `monthdays`; "due" takes the due day's, "today" today's),
+    counted from the to-do's due day (`anchor` overrides), its due time,
+    and the reminder each period gets (`remind`: {days_before, time}, the
+    time "reminder" being the to-do's reminder's; "auto": the offset of
+    the to-do's reminder from its due day, as Core reads it)."""
+    rep = t.get("repeat")
+    if not rep:
+        return None
+    todo = todo_stored(t, now, 0)
+    tz = now.tzinfo
+    day = (datetime.fromisoformat(todo["dueAt"]).astimezone(tz).date() if todo.get("dueAt")
+           else date.fromisoformat(todo["dueDate"]))
+    kind = rep["kind"]
+    days = rep.get("weekdays") if kind == "weekly" else rep.get("monthdays") if kind == "monthly" else []
+    if days == "due":
+        days = [day.isoweekday() if kind == "weekly" else day.day]
+    elif days == "today":
+        days = [now.isoweekday()]
+    rem = t.get("reminder")
+    rem_at = sched_time(rem["at"], now) if rem else None
+    remind = rep.get("remind")
+    if remind == "auto" and rem_at is not None:
+        before, at_time = r_remind_offset(day, rem_at, tz)
+    elif isinstance(remind, dict):
+        before = int(remind["days_before"])
+        at_time = rem_at.strftime("%H:%M") if remind["time"] == "reminder" and rem_at else remind["time"]
+    else:
+        before, at_time = None, None
+    made = datetime.fromisoformat(todo["createdAt"])
+    return {"id": todo["seriesId"], "title": rep.get("title", t["title"]), "notes": rep.get("notes", t.get("notes")),
+            "items": [x["text"] for x in t.get("items") or []], "kind": kind, "every": int(rep.get("every", 1)),
+            "days": sorted(days or []), "anchor": rep.get("anchor") or day.isoformat(),
+            "timeOfDay": datetime.fromisoformat(todo["dueAt"]).astimezone(tz).strftime("%H:%M")
+            if todo.get("dueAt") else None,
+            "remindDaysBefore": before, "remindTime": at_time,
+            "origin": {"via": "supervisor", "supervisor": "galley-assistant", "reason": "user mentioned it"},
+            "createdAt": iso_utc(made), "updatedAt": iso_utc(made)}
+
+
+def series_wire(s: dict[str, Any]) -> dict[str, Any]:
+    """Ticket 155: `Todo.repeat` from a stored rule (the fake galley's
+    repeat_wire)."""
+    w: dict[str, Any] = {"kind": s["kind"]}
+    if s["kind"] == "weekly":
+        w["weekdays"] = list(s["days"])
+    if s["kind"] == "monthly":
+        w["monthdays"] = list(s["days"])
+    if int(s.get("every") or 1) != 1:
+        w["every"] = int(s["every"])
+    if s.get("remindTime") is not None:
+        w["remind"] = {"daysBefore": s["remindDaysBefore"], "time": s["remindTime"]}
+    return w
+
+
+def case_series(case: dict[str, Any], now: datetime) -> list[dict[str, Any]]:
+    return [s for s in (series_stored(t, now) for t in todo_specs(case)) if s]
+
+
 def todo_reminder_task(t: dict[str, Any], now: datetime) -> dict[str, Any] | None:
     """A case's to-do's reminder, as `schedule show` prints it."""
     rem = t.get("reminder")
@@ -2726,10 +3229,11 @@ def todo_reminder_task(t: dict[str, Any], now: datetime) -> dict[str, Any] | Non
 
 
 def todo_wire_at(todo: dict[str, Any], tasks: list[dict[str, Any]], tz: Any,
-                 as_of: datetime | None = None) -> dict[str, Any]:
+                 as_of: datetime | None = None, series: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """The fake galley's todo_wire, in this process (`todo show`'s shape),
     as it stood at `as_of` (status open, reminder not yet gone off, when
-    those came later)."""
+    those came later); since ticket 155 with its rule (`series`, the
+    case's rules) while that has not ended."""
     w: dict[str, Any] = {"id": todo["id"], "title": todo["title"]}
     if todo.get("notes"):
         w["notes"] = todo["notes"]
@@ -2755,6 +3259,11 @@ def todo_wire_at(todo: dict[str, Any], tasks: list[dict[str, Any]], tz: Any,
         w["items"] = [{k: x[k] for k in ("id", "text", "done", "doneAt", "doneBy", "createdAt") if k in x}
                       for x in items]
         w["itemCount"] = {"done": sum(1 for x in items if x.get("done")), "total": len(items)}
+    rule = next((s for s in series or [] if s["id"] == todo.get("seriesId") and not s.get("endedAt")), None)
+    if rule:
+        w["repeat"] = series_wire(rule)
+    if todo.get("seriesId"):
+        w["seriesId"] = todo["seriesId"]
     w["createdAt"] = todo["createdAt"]
     return w
 
@@ -2804,7 +3313,7 @@ def sched_in_hand(case: dict[str, Any], now: datetime) -> str | None:
             row["nextFireAt"] = row["lastDueAt"]
             tasks.append(row)
     reminders = [r for r in (todo_reminder_task(t, now) for t in todo_specs(case)) if r]
-    todos = [todo_wire_at(todo_stored(t, now, k), reminders, now.tzinfo, as_of)
+    todos = [todo_wire_at(todo_stored(t, now, k), reminders, now.tzinfo, as_of, case_series(case, now))
              for k, t in enumerate(todo_specs(case)) if t.get("in_hand", True)]
     # Ticket 61: the follow-ups turned down, from every to-do and task the
     # fake galley starts with, cancelled by the time of the snapshot
@@ -2906,6 +3415,8 @@ def sched_fixture(case: dict[str, Any], now: datetime) -> dict[str, Any]:
     fx["tasks"] = [sched_task(t, now) for t in case.get("tasks") or []]
     fx["tasks"] += [r for r in (todo_reminder_task(t, now) for t in todo_specs(case)) if r]
     fx["todos"] = [todo_stored(t, now, k) for k, t in enumerate(todo_specs(case))]
+    # Ticket 155: the rules of its repeating to-dos.
+    fx["series"] = case_series(case, now)
     fx["memos"] = [memo_stored(m, now, k) for k, m in enumerate(memo_specs(case))]
     fx["tz_minutes"] = int(now.utcoffset().total_seconds() // 60) if now.utcoffset() else 0
     fx["main_chat_id"] = SESSION_ID
@@ -3375,6 +3886,57 @@ A2="$("$G" todo show $T | python3 -c "$J"'print(t["items"][0]["doneAt"])')"
 "$G" todo item move --help | head -1
 '''
 
+# Ticket 155: a repeating to-do through the fake galley, as the dev binary
+# (clap, the CLI) and Core answer: the refusals (two kinds, `--every` alone,
+# an empty or bad day list, a bad `--every`, a value on `--daily`, a rule
+# without `--due`, a weekday out of range, every 0, `--no-repeat` with a
+# rule, `--no-due` on a period, skip / `--series` / `--no-repeat` on a
+# to-do that does not repeat, skipping a done period or one skipped
+# before); the list's fields; ticking off (the next made, its reminder, by
+# Core; again: nothing), skipping (the next after that), a new cycle,
+# `--series` with a reminder two days before, `--no-repeat`, a rule ended by
+# a delete; a monthly one with its reminder; the help page.
+TODO_REPEAT_DRY_BASH = r'''G="$(sed -n '1p' "${XDG_CONFIG_HOME:-$HOME/.config}/galley/cli-path")"
+T=todo_5a1e7c3b9d2f4e60
+J='import json, sys; d = json.load(sys.stdin); t = d.get("todo", d); n = d.get("next") or {}; '
+D="$(date -v+3d +%Y-%m-%d)"
+"$G" todo add "x" --due="$D" --weekly=1 --monthly=15 --supervisor=galley-assistant; echo "twokinds=$?"
+"$G" todo add "x" --due="$D" --every=2 --supervisor=galley-assistant; echo "everyalone=$?"
+"$G" todo add "x" --due="$D" --weekly= --supervisor=galley-assistant; echo "weeklyempty=$?"
+"$G" todo add "x" --due="$D" --weekly=a --supervisor=galley-assistant; echo "weeklybad=$?"
+"$G" todo add "x" --due="$D" --daily --every=x --supervisor=galley-assistant; echo "everybad=$?"
+"$G" todo add "x" --due="$D" --daily=1 --supervisor=galley-assistant; echo "dailyvalue=$?"
+"$G" todo add "x" --weekly=1 --supervisor=galley-assistant; echo "needsdue=$?"
+"$G" todo add "x" --due="$D" --weekly=8,1 --supervisor=galley-assistant; echo "weekly8=$?"
+"$G" todo add "x" --due="$D" --daily --every=0 --supervisor=galley-assistant; echo "every0=$?"
+"$G" todo update $T --no-repeat --weekly=1 --supervisor=galley-assistant; echo "norepeatrule=$?"
+"$G" todo update $T --every=2 --supervisor=galley-assistant; echo "everyonly=$?"
+"$G" todo update $T --no-due --supervisor=galley-assistant; echo "noduePeriod=$?"
+"$G" todo list | wc -l | sed 's/ //g; s/^/listed=/'
+P="$("$G" todo add "买营养土" --supervisor=galley-assistant | python3 -c "$J"'print(t["id"])')"
+"$G" todo skip $P --supervisor=galley-assistant; echo "skipplain=$?"
+"$G" todo update $P --series --title=y --supervisor=galley-assistant; echo "seriesplain=$?"
+"$G" todo update $P --no-repeat --supervisor=galley-assistant; echo "norepeatplain=$?"
+"$G" todo show $T | python3 -c "$J"'print("show_repeat=%s series=%s" % (json.dumps(t["repeat"], sort_keys=True), t["seriesId"]))'
+"$G" todo done $T --supervisor=galley-assistant --reason="user handed it in" | python3 -c "$J"'print("done=%s next_due=%s next_by=%s next_rem=%s next_repeat=%s next_same=%s next_in=%s" % (t["status"], n["due"]["date"], n["origin"]["supervisor"], n.get("reminder", {}).get("at", "none"), "repeat" in n, n["seriesId"] == t["seriesId"], "createdIn" in n))'
+N="$("$G" todo list | python3 -c 'import json, sys; print([t["id"] for t in map(json.loads, sys.stdin) if t["title"] == "交周报"][0])')"
+"$G" todo done $T --supervisor=galley-assistant | python3 -c "$J"'print("done2_next=%s" % ("next" in d))'
+"$G" todo skip $T --supervisor=galley-assistant; echo "skipdone=$?"
+"$G" todo skip $N --supervisor=galley-assistant --reason="not this week" | python3 -c "$J"'print("skipped=%s status=%s skip_next_due=%s" % (t.get("skipped"), t["status"], n["due"]["date"]))'
+"$G" todo skip $N --supervisor=galley-assistant; echo "skip2=$?"
+M="$("$G" todo list | python3 -c 'import json, sys; print([t["id"] for t in map(json.loads, sys.stdin) if t["title"] == "交周报"][0])')"
+"$G" todo update $M --weekly=5 --every=2 --supervisor=galley-assistant | python3 -c "$J"'print("cycle=%s" % json.dumps(t["repeat"], sort_keys=True))'
+MD="$("$G" todo show $M | python3 -c "$J"'print(t["due"]["date"])')"
+R="$(python3 -c 'import datetime, sys; print((datetime.date.fromisoformat(sys.argv[1]) - datetime.timedelta(days=2)).isoformat())' "$MD")"
+"$G" todo update $M --remind-at="${R}T18:00" --series --supervisor=galley-assistant | python3 -c "$J"'print("series=%s" % json.dumps(t["repeat"], sort_keys=True))'
+"$G" todo update $M --no-repeat --supervisor=galley-assistant | python3 -c "$J"'print("norepeat=%s keeps=%s" % ("repeat" in t, "seriesId" in t))'
+"$G" todo skip $M --supervisor=galley-assistant; echo "skipended=$?"
+W="$("$G" todo add "背单词" --due="$(date +%Y-%m-%d)" --daily --supervisor=galley-assistant | python3 -c "$J"'print(t["id"])')"
+"$G" todo cancel $W --supervisor=galley-assistant | python3 -c "$J"'print("cancelled=%s rule_kept=%s" % (t["status"], "repeat" in t))'
+"$G" todo add "交房租" --due="$D" --monthly=15 --every=3 --remind-at="${D}T09:00" --notes="转给房东" --supervisor=galley-assistant | python3 -c "$J"'print("monthly=%s" % json.dumps(t["repeat"], sort_keys=True))'
+"$G" todo skip --help | head -1
+'''
+
 # Ticket 61: who cancelled, as the real Core records it — `todo cancel`
 # with its label and reason, the reminder Core takes along (`system`),
 # `todo update --no-remind` (the caller's own), `schedule delete` with no
@@ -3603,6 +4165,11 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
         "todo-items-cli": [
             call("<summary>Items</summary>\n动一下子项。", ("code_run", {"type": "bash", "script": TODO_ITEMS_DRY_BASH})),
             call("<summary>Done</summary>\n已勾上。")],
+        # Ticket 155: a repeating to-do's commands through the fake galley.
+        "todo-repeat-cli": [
+            call("<summary>Repeat</summary>\n动一下重复的待办。",
+                 ("code_run", {"type": "bash", "script": TODO_REPEAT_DRY_BASH})),
+            call("<summary>Done</summary>\n好了。")],
         "todo-tick": [
             call("<summary>Tick it</summary>\n勾掉。", ("code_run", {"type": "bash", "script":
                  'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" todo list >/dev/null; '
@@ -3668,6 +4235,8 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  'printf \'\\n- 公司成立日：2019-11-20\\n\' >> "$GALLEY_GA_STATE_ROOT/memory/global_mem.txt"; echo ok'})),
             call("<summary>Noted</summary>\n记下了：你们公司 2019 年 11 月 20 日成立。")],
         "todo-offer-ask": [call("<summary>Ask</summary>\nHR 今天该给 offer 答复了，结果怎么样？")],
+        # Ticket 155: an overdue repeating to-do rang again: asked.
+        "todo-overdue-ask": [call("<summary>Ask</summary>\n上周的周报交了吗？交了我就勾掉。")],
         "todo-put-to-use": [call("<summary>Remind</summary>\n905 装修预计今天完工，完了吗？要不要约个时间验收？")],
         # Ticket 78: the review and a subtask's result in one wake, the
         # result checked through the fake galley and passed on.
@@ -4557,7 +5126,9 @@ def build_sandbox(run_dir: Path, python: str, wake: dict[str, Any] | None = None
         galley.write_text(FAKE_GALLEY_WAKE.replace("__PYTHON__", py_real)
                           .replace("__FIXTURE__", str(data / "fixture.json"))
                           .replace("__STATE__", str(data / "state.json"))
-                          .replace("__LOG__", str(log)).replace("__HELP__", str(data / "help.json")),
+                          .replace("__LOG__", str(log)).replace("__HELP__", str(data / "help.json"))
+                          # Ticket 155: Core's dates for a repeating to-do.
+                          .replace("__REPEAT_PY__", REPEAT_PY),
                           encoding="utf-8")
         pybin = root / "pybin"
         pybin.mkdir()
@@ -4675,6 +5246,8 @@ def run_job(job: dict[str, Any], python: str, workdir: Path) -> dict[str, Any]:
         result["fixture_todos"] = json.loads(json.dumps(job["wake"]["fixture"].get("todos") or [],
                                                         ensure_ascii=False).replace(HOME_MARK, sandbox["home"]))
         result["fixture_memos"] = job["wake"]["fixture"].get("memos") or []
+        # Ticket 155: the rules of the repeating to-dos it started with.
+        result["fixture_series"] = job["wake"]["fixture"].get("series") or []
     if sandbox:
         after = downloads_snapshot(Path(sandbox["home"]))
         result["downloads_changes"] = {
@@ -5511,7 +6084,7 @@ def render_sandbox_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
 CLI_VALUE_FLAGS = {"tail", "around", "context", "since", "until", "supervisor", "reason", "to", "project",
                    "runtime", "status", "timeout", "poll", "after-turn", "llm", "session", "root-path",
                    "icon", "color", "schema", "at", "weekly", "monthly", "time", "target", "prompt", "name",
-                   "due", "remind-at", "notes", "title", "item"}
+                   "due", "remind-at", "notes", "title", "item", "every"}
 NO_REPLY_RE = re.compile(r"<\s*no-reply\s*/\s*>", re.IGNORECASE)
 # Ticket 73: the file marker (gui/src/lib/ipc/ga-output-cleaning.ts
 # FILE_REF_PATTERN), its path.
@@ -5795,6 +6368,13 @@ def manual_column(calls: list[dict[str, Any]], write_at: int | None) -> tuple[st
 
 
 RERUN_INTROS = {
+    "155": "上一次是这一套原有各条最近一次的第 1 遍（待办、定时套件多为票 153 的回归，备忘套件多为票 96、98），这一次是票 155 "
+           "改了手册之后（`todos.md` 加「A to-do that repeats」一小节，开头那句说用户在清单上还能改日子、提醒、重复与跳过，"
+           "改之前先读这件事的范围扩到日子与提醒；`todos-change.md` 加重复的待办一条，第一条改成「A change the user tells you」；"
+           "`wake.md` 加逾期的重复待办又响时先问一条；`memo.md`、`reminders.md`、`authority.md` 各补一句分界，`cli.md` 补 `skip`），"
+           "同一个模型（API key 接入的 gpt-6.1-sol，`mm_1792576875658`）。`rust-samples.json` 的「In Hand」加了一组重复的待办，"
+           "`cli-help.json` 的 `todo` 一族重抓、加了 `todo skip`；入口层、Core 的叫醒说明、`galley-prompt/` 没动，原有用例照旧跑"
+           "各自的提示词。两次都用现在的判定重判。",
     "153": "上一次是这一套原有各条最近一次的第 1 遍（待办套件多为票 111、112 的回归，定时套件多为票 105，到点提醒几条是票 134、"
            "139），这一次是票 153 改了手册之后（`todos.md`「Noting a to-do」开头加一段：记之前问这件事里有没有只有用户能做的一步，"
            "没有、现在能办的是差事，没有、要等的是它自己的提醒，有才是带方框的待办，分不清时算用户的；`--notes` 一条改成用户点开"
@@ -6573,7 +7153,8 @@ def sched_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     if r.get("status") != "ok":
         reasons.append(f"运行失败：{r.get('status')}")
     if stop not in ("final_reply", "ask_user") and not self_check:
-        reasons.append("没走到最终回复：" + STOP_LABELS.get(stop, str(stop)))
+        # Ticket 155: the cap this suite's run hit (SCHED_TOOL_CAP).
+        reasons.append("没走到最终回复：" + stop_label(r))
     if held:
         reasons.append("用了会卡住主对话的命令：" + "、".join(sorted(set(held))))
     # Ticket 134's third round (ruling 184 point 9): a reminder that says to
@@ -6852,7 +7433,7 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     # line was not asked for before it); ticket 105's own says whether the
     # earlier rules went back, and its first lines have a section of their
     # own.
-    out += (rerun_section(data, cases, sched_facts, "153")
+    out += (rerun_section(data, cases, sched_facts, "155") + rerun_section(data, cases, sched_facts, "153")
             + rerun_section(data, cases, sched_facts_before_105, "105") + first_line_section(data, cases)
             + rerun_section(data, cases, sched_facts_before_105, "73")
             + rerun_section(data, cases, sched_facts_before_105, "63")
@@ -6930,7 +7511,7 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                             for t in f["made"]) or "无"
             if f["made_todos"]:
                 made += "；记下的待办：" + "；".join(todo_gist(t) for t in f["made_todos"])
-            out += [f"结束：{STOP_LABELS.get(f['stop'], f['stop'])}；读手册：{f['manual']}；建前查过：{f['listed']}；"
+            out += [f"结束：{stop_label(r)}；读手册：{f['manual']}；建前查过：{f['listed']}；"
                     f"手册版本：`{r.get('manual_sha', '?')}`。", "",
                     f"新建：{made}；删除：{'、'.join(f['cancelled']) or '无'}；改动：{'、'.join(f['changed']) or '无'}。", ""]
             if f["first_lines"]:
@@ -7433,6 +8014,235 @@ def progress_facts(r: dict[str, Any], exp: dict[str, Any], now: datetime, starte
     return dict(out, reasons=reasons, flags=flags)
 
 
+def says_day(text: str, day: date, today: date) -> bool:
+    """Ticket 155: whether a reply names a day: its month and day (「11 月 23
+    日」, 「23 号」, 「11/23」), its weekday as the week it falls in says it
+    (「周一」 within a week, 「下周一」 next week, 「下下周一」 the week after,
+    「这周一」 this week), or 明天 / 后天."""
+    text = text.replace("：", ":")
+    if re.search(rf"(?<![0-9]){day.month}\s*月\s*{day.day}(?![0-9])", text):
+        return True
+    if re.search(rf"(?<![0-9/.-]){day.day}\s*[号日]", text):
+        return True
+    if re.search(rf"(?<![0-9]){day.month}\s*[/.-]\s*0?{day.day}(?![0-9])", text):
+        return True
+    wd = "一二三四五六日"[day.weekday()]
+    names = [f"周{wd}", f"星期{wd}", f"礼拜{wd}"] + (["周天", "星期天", "礼拜天"] if wd == "日" else [])
+    week = (r_monday_of(day) - r_monday_of(today)).days // 7
+    ahead = (day - today).days
+    words: list[str] = []
+    if 0 < ahead <= 7:
+        words += names
+    if week == 0:
+        words += ["这" + n for n in names] + ["本" + n for n in names]
+    elif week == 1:
+        words += ["下" + n for n in names]
+    elif week == 2:
+        words += ["下下" + n for n in names] + ["再下" + n for n in names]
+    if ahead == 1:
+        words += ["明天", "明早", "明晚"]
+    if ahead == 2:
+        words.append("后天")
+    if week >= 1:
+        # 「周一」 in 「下周一」 is not this week's.
+        return any(w in text for w in words)
+    return any(re.search(r"(?<![下再])" + re.escape(w), text) for w in words)
+
+
+REPEAT_SUPERVISOR = "galley-repeat"
+# Ticket 155: words that place a repeating to-do's reminder against its
+# day rather than on a date (「前一天晚上 8 点」, 「每周日晚上 8 点」).
+REMIND_RELATIVE_WORDS = ("前一天", "前一晚", "前两天", "前三天", "提前", "当天", "那天", "每周", "每月", "每个月",
+                         "每季度", "每天", "到期", "头一天")
+
+
+def says_clock(text: str, at: datetime) -> bool:
+    """Ticket 155: the hour of `at` in a reply, as says_time reads it (24-
+    or 12-hour, digits or Chinese, `:mm`, 点, 半), the day aside."""
+    text = text.replace("：", ":")
+    h, m = at.hour, at.minute
+    for x in {h, h % 12 or 12}:
+        names = [str(x), f"{x:02d}", cn_number(x)] + (["两"] if x == 2 else [])
+        if f"{x}:{m:02d}" in text or f"{x:02d}:{m:02d}" in text:
+            return True
+        for name in names:
+            if m == 0:
+                pats = [f"{name}点", f"{name} 点", f"{name}时"]
+            elif m == 30:
+                pats = [f"{name}点半", f"{name} 点半", f"{name}点 30", f"{name} 点 30", f"{name}点30"]
+            else:
+                pats = [f"{name}点{m}", f"{name} 点 {m}", f"{name}点{cn_number(m)}"]
+            if any(p in text for p in pats):
+                return True
+    return False
+
+
+def repeat_facts(r: dict[str, Any], exp: dict[str, Any], log: list[list[str]], fx_todos: dict[str, dict[str, Any]],
+                 todo_by_id: dict[str, dict[str, Any]], made_todos: list[dict[str, Any]],
+                 core_made: list[dict[str, Any]], now: datetime, said: str) -> dict[str, Any]:
+    """Ticket 155 (main chat ticket 154, PRD rulings 204 and 205): the
+    repeating to-dos, against the rules the fake galley started with
+    (`fixture_series`) and ended with (`fake_state.series`).
+
+    - `repeat` (with `todo: one`): the to-do noted is the first period of a
+      rule: `kind`, `weekdays` (or "due": its due day's), `monthdays`,
+      `every` (default 1); `no_remind`: none for its periods; `remind`:
+      {days_before, from, to}: each period's reminder that many days before,
+      its time of day in [from, to]; `says_any`: the reply names the rule.
+    - `no_rule`: no rule set (a period noted alone, or none).
+    - `skip`: these to-dos skipped this run, by Galley (not cancelled, not
+      ticked off).
+    - `end_rule`: {id}: that to-do's rule ended this run, by deleting the
+      period (`todo cancel`), or by `--no-repeat` (noted, passes).
+    - `rule_change`: {id, kind, every, days: "same"}: that to-do's rule
+      changed in place, no to-do noted again.
+    - `series_remind`: {id, days_before}: that to-do's rule reminds that many
+      days before, taken in with `--series`.
+    - `mentions_next`: id: the reply names the day of the period Core made
+      when that one was settled.
+    - `mentions_day_of`: id: the reply names that to-do's due day."""
+    fx_series = {s["id"]: s for s in r.get("fixture_series") or []}
+    st = r.get("fake_state") or {}
+    series = st["series"] if st.get("series") is not None else list(fx_series.values())
+    by_id = {s["id"]: s for s in series}
+    tz = now.tzinfo
+    today = now.date()
+    reasons: list[str] = []
+    flags: list[str] = []
+    allowed: set[str] = set()
+    settled_ok: list[str] = []
+    new = [s for s in series if s["id"] not in fx_series]
+    changed = [s for s in series if s["id"] in fx_series and s != fx_series[s["id"]]]
+
+    def words_of(s: dict[str, Any]) -> str:
+        return r_repeat_words(series_wire(s))
+
+    def live(sid: str | None) -> dict[str, Any] | None:
+        s = by_id.get(sid or "")
+        return s if s and not s.get("endedAt") else None
+
+    def day_of(t: dict[str, Any]) -> date | None:
+        if t.get("dueAt"):
+            return datetime.fromisoformat(t["dueAt"]).astimezone(tz).date()
+        if t.get("dueDate"):
+            return date.fromisoformat(t["dueDate"])
+        return None
+
+    def wd(days: list[int]) -> str:
+        return "、".join("周" + "一二三四五六日"[d - 1] for d in days)
+
+    want = exp.get("repeat")
+    if want and len(made_todos) == 1:
+        t = made_todos[0]
+        s = live(t.get("seriesId"))
+        if s is None:
+            reasons.append("没设重复规则（记成了一次性的待办）")
+        else:
+            if s["kind"] != want["kind"]:
+                reasons.append(f"规则不对：{words_of(s)}（该是 {want['kind']}）")
+            days = want.get("weekdays") if want["kind"] == "weekly" else want.get("monthdays")
+            if days == "due" and day_of(t):
+                d = day_of(t)
+                days = [d.isoweekday() if want["kind"] == "weekly" else d.day]
+            if days is not None and sorted(s["days"]) != sorted(days):
+                reasons.append(f"规则的日子不对：{words_of(s)}（该是 "
+                               + (wd(days) if want["kind"] == "weekly" else "、".join(f"{d} 号" for d in days)) + "）")
+            if int(s.get("every") or 1) != int(want.get("every", 1)):
+                reasons.append(f"间隔不对：{words_of(s)}（该是每 {want.get('every', 1)} 个）")
+            if want.get("no_remind") and s.get("remindTime") is not None:
+                reasons.append(f"每天重复、没说几点的规则不该带提醒（提前 {s['remindDaysBefore']} 天 {s['remindTime']}）")
+            rem = want.get("remind")
+            if rem:
+                if s.get("remindTime") is None:
+                    reasons.append("规则没带提醒（每一期都不提醒）")
+                elif int(s["remindDaysBefore"]) != int(rem["days_before"]):
+                    reasons.append(f"提醒提前的天数不对：提前 {s['remindDaysBefore']} 天（该是 {rem['days_before']} 天）")
+                elif not rem.get("from", "00:00") <= s["remindTime"] <= rem.get("to", "23:59"):
+                    reasons.append(f"提醒的钟点不对：{s['remindTime']}（该在 {rem.get('from')}–{rem.get('to')}）")
+        if want.get("says_any") and not any(w in said for w in want["says_any"]):
+            reasons.append("回复没说清规则（没有：" + " / ".join(want["says_any"]) + "）")
+        # The reminder said: its date and time (says_time), or its time
+        # against the period's day (「前一天晚上 8 点」, 「每周日 8 点」).
+        task = next((x for x in st.get("tasks") or [] if x.get("todoId") == t["id"] and not x.get("cancelledAt")
+                     and x.get("fireAt")), None)
+        if want.get("says_remind") and task:
+            at = datetime.fromisoformat(task["fireAt"]).astimezone(tz)
+            if not (says_time(said, at, now, now)
+                    or (says_clock(said, at) and any(w in said for w in REMIND_RELATIVE_WORDS))):
+                reasons.append("回复没说出提醒时间（" + local_words(at) + "）")
+    if exp.get("no_rule") and new:
+        reasons.append("不该设重复规则却设了：" + "、".join(f"「{s['title']}」{words_of(s)}" for s in new))
+    for tid in exp.get("skip") or []:
+        allowed.add("todo skip")
+        settled_ok.append(tid)
+        t = todo_by_id.get(tid, {})
+        if t.get("skipped") and (t.get("cancelledBy") or {}).get("supervisor") == "galley-assistant":
+            continue
+        if t.get("cancelledAt"):
+            reasons.append("用了 todo cancel：这一期删了，规则也跟着没了（该 todo skip）")
+        elif t.get("doneAt"):
+            reasons.append("勾掉了（该跳过这一次，todo skip）")
+        else:
+            reasons.append(f"该跳过 {tid}，没跳过")
+    end = exp.get("end_rule")
+    if end:
+        allowed |= {"todo cancel", "todo update"}
+        settled_ok.append(end["id"])
+        t = todo_by_id.get(end["id"], {})
+        sid = fx_todos.get(end["id"], {}).get("seriesId")
+        s = by_id.get(sid or "")
+        if t.get("skipped"):
+            reasons.append("跳过了这一次（todo skip），规则还在")
+        elif s is None or not s.get("endedAt"):
+            reasons.append("规则没结束")
+        elif t.get("cancelledAt"):
+            pass
+        else:
+            flags.append("用了 --no-repeat：规则结束，这一期留成普通待办（也算过）")
+        if t.get("doneAt"):
+            reasons.append("勾掉了这一期")
+    change = exp.get("rule_change")
+    if change:
+        allowed.add("todo update")
+        t = todo_by_id.get(change["id"], {})
+        sid = fx_todos.get(change["id"], {}).get("seriesId")
+        s = live(t.get("seriesId"))
+        if t.get("cancelledAt") or t.get("seriesId") != sid or s is None:
+            reasons.append("没在原来的规则上改（删了重建，或规则没了）")
+        else:
+            if s["kind"] != change["kind"] or int(s.get("every") or 1) != int(change["every"]):
+                reasons.append(f"规则没改对：{words_of(s)}")
+            if change.get("days") == "same" and sorted(s["days"]) != sorted(fx_series[sid]["days"]):
+                reasons.append(f"日子变了：{words_of(s)}（原来是 {words_of(fx_series[sid])}）")
+    sr = exp.get("series_remind")
+    if sr:
+        allowed.add("todo update")
+        sid = fx_todos.get(sr["id"], {}).get("seriesId")
+        s = live(sid)
+        took = any(cli_name(a) == "todo update" and parse_cli(a)[1].get("series") for a in log)
+        if s is None:
+            reasons.append("规则没了")
+        elif s.get("remindTime") is None or int(s["remindDaysBefore"]) != int(sr["days_before"]):
+            before = "不提醒" if s.get("remindTime") is None else f"提前 {s['remindDaysBefore']} 天 {s['remindTime']}"
+            reasons.append(("只改了这一期（没带 --series），以后几期仍是" if not took else "规则里的提醒不对：")
+                           + before + f"（该提前 {sr['days_before']} 天）")
+    nxt_for = exp.get("mentions_next")
+    if nxt_for:
+        sid = fx_todos.get(nxt_for, {}).get("seriesId")
+        nxt = [t for t in core_made if t.get("seriesId") == sid and not t.get("cancelledAt")]
+        if not nxt:
+            reasons.append("没生出下一期")
+        elif day_of(nxt[0]) and not says_day(said, day_of(nxt[0]), today):
+            reasons.append(f"回复没说下一次是哪天（{day_of(nxt[0]):%m-%d}）")
+    day_for = exp.get("mentions_day_of")
+    if day_for:
+        d = day_of(fx_todos.get(day_for, {}))
+        if d and not says_day(said, d, today):
+            reasons.append(f"回复没说已有的那一期是哪天（{d:%m-%d}）")
+    return {"reasons": reasons, "flags": flags, "allowed": allowed, "settled_ok": settled_ok,
+            "series_new": new, "series_changed": changed}
+
+
 def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True) -> dict[str, Any]:
     """What a to-do run did, and whether it met the case's expectations
     (todo/cases.json `expect`). Commands from the fake galley's log; to-dos
@@ -7460,7 +8270,11 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
     todos = st["todos"] if st.get("todos") is not None else list(fx_todos.values())
     tasks = st["tasks"] if st.get("tasks") is not None else list(fx_tasks.values())
     todo_by_id = {t["id"]: t for t in todos}
-    made_todos = [t for t in todos if t["id"] not in fx_todos and not t.get("cancelledAt")]
+    # Ticket 155: a period Core made from a rule (ticking one off, skipping
+    # one) is not one the run noted.
+    core_made = [t for t in todos if t["id"] not in fx_todos
+                 and (t.get("origin") or {}).get("supervisor") == REPEAT_SUPERVISOR]
+    made_todos = [t for t in todos if t["id"] not in fx_todos and not t.get("cancelledAt") and t not in core_made]
     adds = [parse_cli(a) for a in log if cli_name(a) == "todo add"]
     standalone = [t for t in tasks if t["id"] not in fx_tasks and not t.get("todoId") and not t.get("cancelledAt")]
     # Ticket 60: cancelled in this run, not already cancelled when it began.
@@ -7543,7 +8357,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
         # the sandbox run; what it would have said is not seen.
         flags.append("停在浏览器工具：在做一步（只读），结果与回复看不到")
     elif stop not in ("final_reply", "ask_user"):
-        reasons.append("没走到最终回复：" + STOP_LABELS.get(stop, str(stop)))
+        # Ticket 155: the cap this suite's run hit (SCHED_TOOL_CAP), not
+        # the dispatch suite's.
+        reasons.append("没走到最终回复：" + stop_label(r))
     if held:
         reasons.append("用了会卡住主对话的命令：" + "、".join(sorted(set(held))))
     cap = exp.get("subtasks_max")
@@ -7680,7 +8496,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
             rem = reminder_of(t["id"])
             if exp.get("reminder") is None:
                 if rem:
-                    reasons.append("没时间的不该挂提醒：" + local_words(local(rem["fireAt"])))
+                    # Ticket 155: a daily one with no time named.
+                    reasons.append(("每天重复、没说几点的不该挂提醒：" if (exp.get("repeat") or {}).get("no_remind")
+                                    else "没时间的不该挂提醒：") + local_words(local(rem["fireAt"])))
             elif not rem:
                 if exp["reminder"].get("optional"):
                     flags.append("没挂提醒")
@@ -7713,6 +8531,22 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
                 reasons.append("时间不对：" + local_words(local(timed["fireAt"])))
             if exp.get("words_any") and not any(w in timed["prompt"] for w in exp["words_any"]):
                 reasons.append("记下的话里没有：" + " / ".join(exp["words_any"]))
+    elif isinstance(exp.get("schedule"), dict):
+        # Ticket 155: a nudge that comes round is its own repeating
+        # reminder (`schedule create --daily --time=…`, reminders.md).
+        want_rep = exp["schedule"]
+        allowed.add("schedule create")
+        if len(standalone) != 1:
+            reasons.append(f"该建 1 个它自己的重复提醒（schedule create --{want_rep['repeat']}），建了 {len(standalone)} 个")
+        else:
+            timed = standalone[0]
+            kind = (timed.get("repeat") or {}).get("kind")
+            if kind != want_rep["repeat"]:
+                reasons.append(f"该是 {want_rep['repeat']} 的重复提醒，建成了 {kind}")
+            elif want_rep.get("time") and timed.get("timeOfDay") != want_rep["time"]:
+                reasons.append(f"时刻不对：{timed.get('timeOfDay')}（该是 {want_rep['time']}）")
+            if timed.get("target") != "assistant":
+                reasons.append("建成了每次新开会话的任务（target 不是 assistant）")
     elif exp.get("schedule") == "optional":
         # Ticket 108: a reminder of its own may go with the news (to ask
         # after the budget next week); counted, not judged.
@@ -7786,10 +8620,17 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
         touched = ("schedule disable", "schedule delete", "schedule update", "schedule enable")
         if any(parse_cli(a)[0][2:3] != [dis["id"]] for a in log if cli_name(a) in touched):
             reasons.append("动了别的定时任务")
+    # Ticket 155: the repeating to-dos (their rules, a skip, the rule
+    # ended or changed, the next said).
+    rep_j = repeat_facts(r, exp, log, fx_todos, todo_by_id, made_todos, core_made, now, said)
+    allowed |= rep_j["allowed"]
+    reasons += rep_j["reasons"]
+    flags += rep_j["flags"]
     changed_status = [tid for tid, t in todo_by_id.items() if tid in fx_todos
                       and (bool(t.get("doneAt")) != bool(fx_todos[tid].get("doneAt"))
                            or bool(t.get("cancelledAt")) != bool(fx_todos[tid].get("cancelledAt")))
-                      and tid not in (exp.get("done") or []) and tid not in ((cx or {}).get("any_of") or [])]
+                      and tid not in (exp.get("done") or []) and tid not in ((cx or {}).get("any_of") or [])
+                      and tid not in rep_j["settled_ok"]]
     if changed_status:
         reasons.append("动了不该动的待办：" + "、".join(todo_by_id[x]["title"] for x in changed_status))
     if exp.get("reads_list"):
@@ -7988,7 +8829,8 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
         flags.append("写了备忘：" + "、".join(f"{e['action']}「{e['text']}」" for e in memo_events))
     wrote = bool([t for t in todos if t["id"] not in fx_todos] or [t for t in tasks if t["id"] not in fx_tasks]
                  or [t for t in todos if t["id"] in fx_todos and t != fx_todos[t["id"]]]
-                 or [t for t in tasks if t["id"] in fx_tasks and t != fx_tasks[t["id"]]] or mem or memo_events)
+                 or [t for t in tasks if t["id"] in fx_tasks and t != fx_tasks[t["id"]]] or mem or memo_events
+                 or rep_j["series_changed"])
     # Ticket 110: the words inside a <subtask> tag are the subtask's brief,
     # not said to the user (「备注已记录该消息」 in one is no claim).
     claim = unwritten_claim(SUBTASK_TAG_RE.sub("", body), wrote)
@@ -8030,6 +8872,10 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
         "retract": retract,
         "stance": first_turn_stance(r),
         "progress": progress,
+        # Ticket 155: the periods Core made, and the rules as the run left
+        # them (new, changed).
+        "core_made": core_made,
+        "repeat": rep_j,
         # Ticket 111 round 2: an item the user did not name fails even a
         # record-only case (items_facts' `hard`).
         "pass": False if items_j["hard"] else None if record else not reasons,
@@ -8264,6 +9110,113 @@ def whose_section(data: dict[str, Any], cases: list[dict[str, Any]]) -> list[str
     return out
 
 
+REPEAT_GROUP = "重复的待办（票 155）"
+REPEAT_SOURCES = (("WITH（新手册）", None), ("对照（拿掉新小节与新一条）", "ticket155w_control"))
+
+
+def repeat_gist(f: dict[str, Any], r: dict[str, Any]) -> str:
+    """Ticket 155: what one run did, in a line: the to-dos it noted (due,
+    reminder, rule), the rules it changed or ended, what it ticked off or
+    skipped and the period Core made, its own reminders, the reply."""
+    tz = datetime.fromisoformat(r["now"]).tzinfo
+    fx_series = {s["id"]: s for s in r.get("fixture_series") or []}
+    series = {s["id"]: s for s in (r.get("fake_state") or {}).get("series") or []}
+    tasks = f["made_tasks"]
+
+    def rule_words(sid: str | None) -> str:
+        s = series.get(sid or "")
+        if not s:
+            return "不重复"
+        words = r_repeat_words(series_wire(s))
+        if s.get("remindTime") is not None:
+            words += f"，每期提前 {s['remindDaysBefore']} 天 {s['remindTime']} 提醒"
+        return words + ("（已结束）" if s.get("endedAt") else "")
+
+    def when(iso: str | None) -> str:
+        if not iso:
+            return ""
+        if "T" not in iso:
+            return iso
+        return datetime.fromisoformat(iso).astimezone(tz).strftime("%Y-%m-%d %H:%M")
+
+    parts = []
+    for t in f["made_todos"]:
+        rem = next((x for x in tasks if x.get("todoId") == t["id"] and not x.get("cancelledAt")), None)
+        due = t.get("dueAt") or t.get("dueDate")
+        parts.append(f"记了待办「{t['title']}」（" + (f"到期 {when(due)}" if due else "没写到期")
+                     + (f"，提醒 {when(rem['fireAt'])}" if rem and rem.get("fireAt") else "，没挂提醒")
+                     + f"，{rule_words(t.get('seriesId'))}）")
+    for t in f["todos_after"]:
+        how = ("跳过了" if t.get("skipped") else "删了" if t.get("cancelledAt") else "勾掉了" if t.get("doneAt")
+               else "改了")
+        parts.append(f"{how}已有的「{t['title']}」（规则：{rule_words(t.get('seriesId'))}）")
+    for t in f["core_made"]:
+        parts.append(f"Core 生出下一期（到期 {when(t.get('dueAt') or t.get('dueDate'))}）")
+    for sid, s in series.items():
+        if sid in fx_series and s != fx_series[sid] and not any(t.get("seriesId") == sid for t in f["todos_after"]):
+            parts.append(f"规则改成 {rule_words(sid)}")
+    mine = [x for x in tasks if not x.get("todoId") and not x.get("cancelledAt")]
+    if mine:
+        parts.append("给自己挂了提醒 " + "、".join(
+            f"{when(x.get('fireAt')) or (x.get('repeat') or {}).get('kind', '') + ' ' + str(x.get('timeOfDay', ''))}"
+            f"「{one_line(first_line(x['prompt']))[:40]}」" for x in mine))
+    if f["stop"] == "ask_user":
+        parts.append("ask_user 问了一句")
+    elif f["stop"] not in ("final_reply", None):
+        parts.append(f"停在 {f['stop']}")
+    if not parts:
+        parts.append("什么都没记、没改")
+    said = one_line(SUBTASK_TAG_RE.sub("", f["body"]))
+    parts.append("回复 " + (f"「{said[:160]}{'…' if len(said) > 160 else ''}」" if said else "（正文空）"))
+    return "，".join(parts)
+
+
+def repeat_section(data: dict[str, Any], cases: list[dict[str, Any]]) -> list[str]:
+    """Ticket 155: the repeating to-do cases under the new manual (the
+    results) and, for four of them, the new manual without the new
+    subsection of todos.md and the new bullet of todos-change.md
+    (meta.ticket155w_control): passes per case, then what each run did."""
+    meta = data["meta"]
+    want = [c for c in cases if c.get("group") == REPEAT_GROUP]
+    if not want:
+        return []
+    by_id = {c["id"]: c for c in want}
+    sources = [(label, [r for r in (data["results"] if key is None else meta.get(key) or []) if r["id"] in by_id])
+               for label, key in REPEAT_SOURCES]
+    sources = [(label, runs) for label, runs in sources if runs]
+    if not sources:
+        return []
+    facts = {(label, r["id"], r["variant"]): todo_facts(r, by_id[r["id"]]) for label, runs in sources for r in runs}
+    out = ["## 票 155：重复的待办", "",
+           "主聊天 PRD 裁决 204、205（票 154 的 Core）：用户每次都要办完的事是重复的待办，说出了周期的直接设规则、回复说清；"
+           "只带出周期的只记这一次、同一句里问；只是提醒一下的仍是它自己的重复提醒；Core 表达不了的记这一期、给自己挂提醒到时记下一期；"
+           "跳过这一次、不再重复、删除、换周期、`--series` 改以后每一期；勾掉时说下一次的日子；逾期的又响时先问做了没有。"
+           "十四条都跑今天的主对话提示词（`v9`，提供 `tell_user`）。WITH 是这一票的手册；对照是同一份手册只拿掉 `todos.md` 的"
+           "「A to-do that repeats」一小节与 `todos-change.md` 新加的那一条（别的改动留着），只跑四条。两组用同一套判定。"
+           "每格是「过 / 运行」。", "",
+           "| # | 用例 | " + " | ".join(label for label, _ in sources) + " |",
+           "| --- | --- |" + " --- |" * len(sources)]
+    for case in want:
+        cells = []
+        for label, runs in sources:
+            mine = [r for r in runs if r["id"] == case["id"]]
+            ok = sum(1 for r in mine if facts[(label, r["id"], r["variant"])]["pass"])
+            cells.append(f"{ok} / {len(mine)}" if mine else "—")
+        out.append(f"| {case['no']} | {case['id']} | " + " | ".join(cells) + " |")
+    out += ["", "每一遍做了什么、判定：", ""]
+    for case in want:
+        out.append(f"- **{case['id']}**（{case['expect_text']}）：".replace("|", "/"))
+        for label, runs in sources:
+            for r in sorted((x for x in runs if x["id"] == case["id"]), key=lambda x: x.get("repeat", 0)):
+                f = facts[(label, r["id"], r["variant"])]
+                verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+                if f.get("flags"):
+                    verdict += "（注：" + "；".join(f["flags"]) + "）"
+                out.append(f"  - {label}第 {r.get('repeat', 1)} 遍：{repeat_gist(f, r)}；{verdict}".replace("|", "/"))
+    out.append("")
+    return out
+
+
 def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     meta = data["meta"]
     by_case: dict[str, list[dict[str, Any]]] = {}
@@ -8312,7 +9265,8 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += (whose_section(data, cases) + rerun_section(data, cases, todo_facts, "153")
+    out += (repeat_section(data, cases) + rerun_section(data, cases, todo_facts, "155")
+            + whose_section(data, cases) + rerun_section(data, cases, todo_facts, "153")
             + rerun_section(data, cases, todo_facts, "112") + rerun_section(data, cases, todo_facts, "111")
             + moved_section(data, cases) + rerun_section(data, cases, todo_facts, "110")
             + progress_section(data, cases) + rerun_section(data, cases, todo_facts, "108")
@@ -8407,7 +9361,7 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                              + ("（已取消）" if t.get("cancelledAt") else "") + f"：{t['prompt']}"
                              for t in f["made_tasks"]) or "无"
             after = "；".join(todo_gist(t) for t in f["todos_after"]) or "无"
-            out += [f"结束：{STOP_LABELS.get(f['stop'], f['stop'])}；读手册：{f['manual']}；写前读过清单：{f['listed']}；"
+            out += [f"结束：{stop_label(r)}；读手册：{f['manual']}；写前读过清单：{f['listed']}；"
                     f"手册版本：`{r.get('manual_sha', '?')}`。", "",
                     f"新记的待办：{made}；新建的提醒：{tasks}；改过的已有待办：{after}；"
                     f"取消的已有提醒：{'、'.join(f['cancelled_tasks']) or '无'}。", ""]
@@ -8736,6 +9690,8 @@ def render_memo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
+    # Ticket 155: the rerun against the runs it replaced.
+    out += rerun_section(data, cases, memo_facts, "155")
     # Each repeat in its own column: they may have run on different
     # wordings (meta.history_note).
     repeats = sorted({r.get("repeat", 0) for r in data["results"] if r["id"] in by_id})
@@ -8815,7 +9771,7 @@ def render_memo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                                                                      else f" target={t.get('target')}")
                              + ("（已取消）" if t.get("cancelledAt") else "") + f"：{t['prompt']}"
                              for t in f["made_tasks"]) or "无"
-            out += [f"结束：{STOP_LABELS.get(f['stop'], f['stop'])}；读手册：{f['manual']}；写备忘前查过：{f['memo_listed']}；"
+            out += [f"结束：{stop_label(r)}；读手册：{f['manual']}；写备忘前查过：{f['memo_listed']}；"
                     f"手册版本：`{r.get('manual_sha', '?')}`。", "",
                     f"备忘：{memo_writes_words(f)}；新记的待办：{made}；新建的提醒：{tasks}。", ""]
             if f["memory_writes"] or f["memory_changed"]:
@@ -10643,7 +11599,10 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                     "todo-mix-swallowed": ("review-with-reminder", "sched-no-reply"),
                     # Ticket 108.
                     "todo-progress-done": ("progress-review-done", "todo-progress-done"),
-                    "todo-progress-quiet": ("progress-review-unchanged", "todo-progress-quiet")}
+                    "todo-progress-quiet": ("progress-review-unchanged", "todo-progress-quiet"),
+                    # Ticket 155.
+                    "todo-repeat-cli": ("rep-skip-week", "todo-repeat-cli"),
+                    "todo-repeat-overdue": ("rep-overdue-ring", "todo-overdue-ask")}
     for run_id, (case_id, script) in todo_scripts.items():
         for job in make_sched_jobs([tcases[case_id]], snow, mykeys, ga_lang, set(), 1, script, suite="todo"):
             job["case_id"] = run_id
@@ -11619,8 +12578,9 @@ def synth_run(case: dict[str, Any], at: datetime, reply: str, todos: tuple[dict[
     fx = sched_fixture(clock_case(case, at), at)
     return {"now": at.isoformat(), "status": "ok", "stop_reason": "final_reply", "final_reply": reply,
             "galley_log": [{"argv": list(a)} for a in log], "calls": [],
-            "fixture_tasks": fx["tasks"], "fixture_todos": fx["todos"],
-            "fake_state": {"todos": fx["todos"] + list(todos), "tasks": fx["tasks"] + list(tasks)},
+            "fixture_tasks": fx["tasks"], "fixture_todos": fx["todos"], "fixture_series": fx["series"],
+            "fake_state": {"todos": fx["todos"] + list(todos), "tasks": fx["tasks"] + list(tasks),
+                           "series": fx["series"]},
             "memory_changes": memory or {"added": [], "changed": [], "removed": []}, "turns": turns or []}
 
 
@@ -12487,6 +13447,422 @@ def dry_test_progress(cases: dict[str, dict[str, Any]], mon: datetime, check: An
           f"an old case: a change of notes is noted, not judged ({f['flags']})")
 
 
+def dry_test_repeat_cli(r: dict[str, Any], f: dict[str, Any], system: str, check: Any) -> None:
+    """Ticket 155: TODO_REPEAT_DRY_BASH through the fake galley, on
+    rep-skip-week's fixture (a weekly period due next Friday, its reminder
+    the evening before): every refusal as the dev binary and Core word it,
+    and the dates Core would give, from this run's day."""
+    out = str((r["calls"][0].get("result") or {}).get("stdout", ""))
+    run_now = datetime.fromisoformat(r["now"])
+    fri = date.fromisoformat(r["fixture_todos"][0]["dueDate"])
+    check(fri.weekday() == 4 and "repeats weekly on Fri, reminder " in system
+          and f"`todo_5a1e7c3b9d2f4e60` due {fri:%Y-%m-%d} (Fri), repeats weekly on Fri" in system,
+          "In Hand: the period's line says its rule, before its reminder")
+    rule = {"kind": "weekly", "every": 1, "days": [5], "anchor": fri}
+    nxt = r_next_due_day(rule, run_now.date(), [fri])
+    after = r_next_due_day(rule, run_now.date(), [fri, nxt])
+    check(nxt == fri + timedelta(days=7) and after == fri + timedelta(days=14),
+          f"ticked off early, the Friday after its own; skipped, the one after that ({nxt}, {after})")
+    eve = datetime(nxt.year, nxt.month, nxt.day, 20, 0, tzinfo=run_now.tzinfo) - timedelta(days=1)
+    for piece in (
+            # clap and the CLI (the dev binary, a throwaway HOME).
+            "twokinds=2", "the argument '--weekly <DAYS>' cannot be used with '--monthly <DAYS>'",
+            "everyalone=2", "the following required arguments were not provided:\\n  "
+            "<--daily|--weekly <DAYS>|--monthly <DAYS>|--yearly>",
+            "weeklyempty=2", "a value is required for '--weekly <DAYS>' but none was supplied",
+            "weeklybad=2", '--weekly: days are comma-separated numbers, got \\"a\\"',
+            "everybad=2", "invalid value 'x' for '--every <N>': invalid digit found in string",
+            "dailyvalue=2", "unexpected value '1' for '--daily' found; no more were expected",
+            "norepeatrule=2", "the argument '--no-repeat' cannot be used with:\\n  --daily\\n  --weekly <DAYS>",
+            "everyonly=2",
+            # Core (its own messages).
+            "needsdue=2", "repeat_needs_due: create_todo: a repeating to-do needs a due date (--due)",
+            "weekly8=2", "create_todo: weekly repeat days are 1 to 7, got [1, 8]",
+            "every0=2", "create_todo: a repeat's every is 1 to 365, got 0",
+            "noduePeriod=2", "repeat_needs_due: update_todo: a repeating to-do needs a due date (--due)",
+            "listed=1\n",
+            "skipplain=2", "not_repeating: skip_todo: todo todo_",
+            "does not repeat (it has no rule, or its rule ended)",
+            "seriesplain=2", "not_repeating: update_todo: todo todo_", "norepeatplain=2",
+            'show_repeat={"kind": "weekly", "remind": {"daysBefore": 1, "time": "20:00"}, "weekdays": [5]} '
+            "series=series_5a1e7c3b9d2f4e60",
+            f"done=done next_due={nxt:%Y-%m-%d} next_by=galley-repeat next_rem={iso_utc(eve)} next_repeat=True "
+            "next_same=True next_in=False",
+            "done2_next=False",
+            "skipdone=2", "skip_todo: todo todo_5a1e7c3b9d2f4e60 is done; untick it before skipping it",
+            f"skipped=True status=cancelled skip_next_due={after:%Y-%m-%d}",
+            "skip2=3", "is cancelled",
+            'cycle={"every": 2, "kind": "weekly", "remind": {"daysBefore": 1, "time": "20:00"}, "weekdays": [5]}',
+            'series={"every": 2, "kind": "weekly", "remind": {"daysBefore": 2, "time": "18:00"}, "weekdays": [5]}',
+            "norepeat=False keeps=True",
+            "skipended=2",
+            "cancelled=cancelled rule_kept=False",
+            'monthly={"every": 3, "kind": "monthly", "monthdays": [15], "remind": {"daysBefore": 0, "time": "09:00"}}',
+            "Skip this period of a repeating to-do"):
+        check(piece in out, f"shell output has {piece!r}")
+    st = r.get("fake_state") or {}
+    made = [t for t in st.get("todos") or [] if (t.get("origin") or {}).get("supervisor") == REPEAT_SUPERVISOR]
+    check(len(made) == 2 and all("createdIn" not in t for t in made)
+          and [t.get("items") for t in made] == [None, None],
+          f"two periods made by Core, in no turn ({[t['id'] for t in made]})")
+    rems = [t for t in st.get("tasks") or [] if t.get("todoId") in {x["id"] for x in made}]
+    check(rems and all(t["origin"] == {"via": "system", "supervisor": REPEAT_SUPERVISOR} for t in rems),
+          f"their reminders are Core's ({[t.get('origin') for t in rems]})")
+    check(f["names"].count("todo skip") == 5 and "todo skip" in f["writes"],
+          f"fake galley logged `todo skip` as a write ({f['names']})")
+    check(not f["pass"] and any("多余的写命令" in x and "todo done" in x for x in f["reasons"])
+          and any("不该记待办" in x for x in f["reasons"]),
+          f"the judge flags the extra writes ({f['reasons']})")
+    check(len(f["core_made"]) == 2 and all(t not in f["made_todos"] for t in f["core_made"]),
+          "the periods Core made are not to-dos the run noted")
+
+
+def dry_test_repeat(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) -> None:
+    """Ticket 155: Core's dates (REPEAT_PY against the expectations of
+    core/src/todo_repeat.rs's unit tests), the new time specs, the fixtures
+    and In Hand of the fourteen cases, says_day, and the judge on runs left
+    by hand, each expectation passing and failing."""
+    from datetime import timezone
+
+    print("todo: repeating to-dos (ticket 155)")
+    d = date
+
+    def rule(kind: str, every: int, days: list[int], anchor: date) -> dict[str, Any]:
+        return {"kind": kind, "every": every, "days": days, "anchor": anchor}
+
+    def walk(ru: dict[str, Any], start: date, n: int) -> list[date]:
+        out, at = [], start
+        for _ in range(n):
+            at = r_next_after(ru, at)
+            out.append(at)
+        return out
+
+    every_day, every_three = rule("daily", 1, [], d(2026, 11, 10)), rule("daily", 3, [], d(2026, 11, 10))
+    mondays = rule("weekly", 1, [1], d(2026, 11, 16))
+    two = rule("weekly", 1, [1, 4], d(2026, 11, 16))
+    fortnight = rule("weekly", 2, [1, 5], d(2026, 11, 18))
+    sunday_anchor = rule("weekly", 2, [1], d(2026, 11, 22))
+    fifteenth, month_end = rule("monthly", 1, [15], d(2026, 11, 15)), rule("monthly", 1, [31], d(2027, 1, 31))
+    both, quarter = rule("monthly", 1, [30, 31], d(2027, 1, 30)), rule("monthly", 3, [15], d(2026, 11, 15))
+    twice = rule("monthly", 1, [1, 15], d(2026, 11, 1))
+    birthday, leap = rule("yearly", 1, [], d(2026, 3, 15)), rule("yearly", 1, [], d(2028, 2, 29))
+    every_two = rule("yearly", 2, [], d(2026, 6, 1))
+    check(r_next_after(every_day, d(2026, 11, 10)) == d(2026, 11, 11)
+          and r_next_after(every_day, d(2026, 12, 31)) == d(2027, 1, 1)
+          and walk(every_three, d(2026, 11, 10), 3) == [d(2026, 11, 13), d(2026, 11, 16), d(2026, 11, 19)]
+          and r_next_after(every_three, d(2026, 11, 14)) == d(2026, 11, 16)
+          and r_next_after(every_three, d(2026, 11, 5)) == d(2026, 11, 7)
+          and r_next_after(every_three, d(2026, 11, 9)) == d(2026, 11, 10),
+          "daily: as todo_repeat.rs's daily_every_n_days_from_the_anchor")
+    check(r_next_after(mondays, d(2026, 11, 16)) == d(2026, 11, 23)
+          and r_next_after(mondays, d(2026, 11, 19)) == d(2026, 11, 23)
+          and walk(mondays, d(2026, 12, 21), 2) == [d(2026, 12, 28), d(2027, 1, 4)]
+          and walk(two, d(2026, 11, 16), 3) == [d(2026, 11, 19), d(2026, 11, 23), d(2026, 11, 26)]
+          and walk(fortnight, d(2026, 11, 16), 4) == [d(2026, 11, 20), d(2026, 11, 30), d(2026, 12, 4), d(2026, 12, 14)]
+          and r_next_after(fortnight, d(2026, 11, 21)) == d(2026, 11, 30)
+          and r_next_after(fortnight, d(2026, 11, 8)) == d(2026, 11, 16)
+          and r_next_after(sunday_anchor, d(2026, 11, 22)) == d(2026, 11, 30),
+          "weekly: as weekly_on_a_set_of_weekdays_every_n_weeks")
+    check(r_next_after(fifteenth, d(2026, 11, 15)) == d(2026, 12, 15)
+          and r_next_after(fifteenth, d(2026, 12, 20)) == d(2027, 1, 15)
+          and walk(month_end, d(2027, 1, 31), 3) == [d(2027, 2, 28), d(2027, 3, 31), d(2027, 4, 30)]
+          and r_next_after(month_end, d(2028, 1, 31)) == d(2028, 2, 29)
+          and walk(both, d(2027, 1, 31), 2) == [d(2027, 2, 28), d(2027, 3, 30)]
+          and walk(quarter, d(2026, 11, 15), 3) == [d(2027, 2, 15), d(2027, 5, 15), d(2027, 8, 15)]
+          and r_next_after(quarter, d(2026, 12, 1)) == d(2027, 2, 15)
+          and r_next_after(quarter, d(2026, 7, 1)) == d(2026, 8, 15)
+          and walk(twice, d(2026, 11, 1), 3) == [d(2026, 11, 15), d(2026, 12, 1), d(2026, 12, 15)],
+          "monthly: as monthly_on_days_of_the_month_falls_on_the_last_day_of_a_short_month")
+    check(r_next_after(birthday, d(2026, 3, 15)) == d(2027, 3, 15)
+          and r_next_after(birthday, d(2026, 3, 14)) == d(2026, 3, 15)
+          and r_next_after(birthday, d(2026, 12, 31)) == d(2027, 3, 15)
+          and walk(leap, d(2028, 2, 29), 4) == [d(2029, 2, 28), d(2030, 2, 28), d(2031, 2, 28), d(2032, 2, 29)]
+          and r_next_after(every_two, d(2026, 6, 1)) == d(2028, 6, 1)
+          and r_next_after(every_two, d(2027, 1, 1)) == d(2028, 6, 1)
+          and r_next_after(every_two, d(2025, 1, 1)) == d(2026, 6, 1),
+          "yearly: as yearly_on_the_anchors_day_and_feb_29_in_a_common_year")
+    m2 = rule("weekly", 1, [1], d(2026, 11, 2))
+    check(r_next_due_day(m2, d(2026, 11, 16), [d(2026, 11, 9)]) == d(2026, 11, 23)
+          and r_next_due_day(m2, d(2026, 11, 12), [d(2026, 11, 16)]) == d(2026, 11, 23)
+          and r_next_due_day(rule("daily", 1, [], d(2026, 11, 1)), d(2026, 11, 10), [d(2026, 11, 9)]) == d(2026, 11, 11)
+          and r_next_due_day(m2, d(2026, 11, 17), [d(2026, 11, 16), d(2026, 11, 23)]) == d(2026, 11, 30),
+          "next due day: as the_next_day_comes_after_today_and_after_every_period_so_far")
+    shanghai = timezone(timedelta(hours=8))
+    due, rem = r_period_on(d(2026, 11, 23), "15:00", (1, "20:00"), shanghai)
+    check(due == {"dueAt": "2026-11-23T07:00:00+00:00"} and iso_utc(rem) == "2026-11-22T12:00:00+00:00"
+          and r_period_on(d(2026, 11, 23), None, None, shanghai) == ({"dueDate": "2026-11-23"}, None)
+          and r_remind_offset(d(2026, 11, 16), datetime(2026, 11, 15, 12, 0, tzinfo=timezone.utc), shanghai)
+          == (1, "20:00")
+          and r_remind_offset(d(2026, 11, 16), datetime(2026, 11, 17, 1, 0, tzinfo=timezone.utc), shanghai)[0] == -1,
+          "period_on and remind_offset, in Shanghai, as the Rust tests")
+    words = [("daily", [], [], 1, "repeats daily"), ("daily", [], [], 2, "repeats every 2 days"),
+             ("weekly", [1], [], 1, "repeats weekly on Mon"), ("weekly", [1, 4], [], 2, "repeats every 2 weeks on Mon, Thu"),
+             ("monthly", [], [15], 1, "repeats monthly on the 15th"),
+             ("monthly", [], [15], 3, "repeats every 3 months on the 15th"),
+             ("monthly", [], [1, 2, 3, 11, 21, 22, 31], 1,
+              "repeats monthly on the 1st, 2nd, 3rd, 11th, 21st, 22nd, 31st"),
+             ("yearly", [], [], 1, "repeats yearly"), ("yearly", [], [], 2, "repeats every 2 years")]
+    check(all(r_repeat_words({"kind": k, "weekdays": w, "monthdays": m, "every": e}) == want
+              for k, w, m, e, want in words), "repeat_words: as the_rule_in_words")
+    # The new time specs, on the fixed Monday 2026-10-19.
+    check(sched_time({"next_monthday": 15, "time": "00:00"}, mon).date() == d(2026, 11, 15)
+          and sched_time({"next_monthday": 15, "back_days": 1, "time": "20:00"}, mon) == datetime(
+              2026, 11, 14, 20, 0, tzinfo=mon.tzinfo)
+          and sched_time({"next_monthday": 31, "time": "00:00"}, mon).date() == d(2026, 10, 31)
+          and sched_time({"month_end": 0, "time": "23:59"}, mon).date() == d(2026, 10, 31)
+          and sched_time({"month_end": 0, "back_days": 4, "time": "00:00"}, mon).date() == d(2026, 10, 27)
+          and sched_time({"month_end": 3, "time": "00:00"}, mon).date() == d(2027, 1, 31),
+          "time specs: the next 15th, the month's end")
+    # says_day, from a Tuesday (2026-11-10).
+    tue = d(2026, 11, 10)
+    check(says_day("下一次是 11 月 23 日。", d(2026, 11, 23), tue) and says_day("下次 23 号交", d(2026, 11, 23), tue)
+          and says_day("下下周一", d(2026, 11, 23), tue) and says_day("下周一要交", d(2026, 11, 16), tue)
+          and says_day("周一交", d(2026, 11, 16), tue) and says_day("这周五", d(2026, 11, 13), tue)
+          and not says_day("下周一", d(2026, 11, 23), tue) and not says_day("13 号", d(2026, 11, 23), tue)
+          and not says_day("2023 年", d(2026, 11, 23), tue) and not says_day("下周一", d(2026, 11, 13), tue),
+          "says_day: the date, 号, the week's word for it; not another day")
+    # The fourteen cases, their fixtures and In Hand.
+    rep = [c for c in cases.values() if c.get("group") == REPEAT_GROUP]
+    check(len(rep) == 14 and all(c.get("prompt") == "v9" for c in rep)
+          and [c["no"] for c in rep] == list(range(69, 83)), "fourteen cases, numbered 69–82, under v9")
+    fx = sched_fixture(cases["rep-skip-week"], mon)
+    s = fx["series"][0]
+    check(len(fx["series"]) == 1 and fx["todos"][0]["seriesId"] == s["id"] == "series_5a1e7c3b9d2f4e60"
+          and s["kind"] == "weekly" and s["days"] == [5] and s["anchor"] == "2026-10-23"
+          and (s["remindDaysBefore"], s["remindTime"]) == (1, "20:00") and s["timeOfDay"] is None
+          and s["title"] == "交周报" and s["notes"] == "发到部门群里，抄送组长",
+          f"rep-skip-week: the rule as Core keeps it ({s})")
+    prompt = sched_prompt(cases["rep-skip-week"], mon)
+    check("`todo_5a1e7c3b9d2f4e60` due 2026-10-23 (Fri), repeats weekly on Fri, reminder 2026-10-22 20:00 (Thu): 交周报"
+          in prompt and "personal assistant, with a team behind you" in prompt, "rep-skip-week: In Hand under v9")
+    ring = sched_fixture(cases["rep-overdue-ring"], mon)["series"][0]
+    check(ring["days"] == [1] and (ring["remindDaysBefore"], ring["remindTime"]) == (0, mon.strftime("%H:%M"))
+          and ring["anchor"] == "2026-10-12", f"rep-overdue-ring: today's weekday, the reminder's time ({ring})")
+    done_fx = sched_fixture(cases["rep-done-report"], mon)
+    check(done_fx["series"][0]["days"] == [1] and done_fx["todos"][0]["dueDate"] == "2026-10-19"
+          and next(t for t in done_fx["tasks"] if t.get("todoId"))["fireAt"]
+          == iso_utc(datetime(2026, 10, 26, 9, 0, tzinfo=mon.tzinfo)),
+          "rep-done-report: due today, its reminder armed again for next week's 09:00")
+    there = sched_prompt(cases["rep-already-there"], mon)
+    check("due 2026-10-26 (Mon), repeats weekly on Mon, reminder 2026-10-25 20:00 (Sun): 交周报" in there,
+          "rep-already-there: In Hand")
+
+    def run(case_id: str, reply: str, todos: tuple[dict[str, Any], ...] = (), tasks: tuple[dict[str, Any], ...] = (),
+            log: tuple[Any, ...] = (), series: tuple[dict[str, Any], ...] = (),
+            edit: Any = None) -> dict[str, Any]:
+        r = synth_run(cases[case_id], mon, reply, todos=todos, tasks=tasks, log=log)
+        r["fixture_series"] = json.loads(json.dumps(r["fixture_series"]))
+        r["fake_state"]["series"] = json.loads(json.dumps(r["fake_state"]["series"])) + list(series)
+        r["fake_state"]["todos"] = json.loads(json.dumps(r["fake_state"]["todos"]))
+        if edit:
+            edit(r["fake_state"])
+        return todo_facts(r, cases[case_id])
+
+    tz = mon.tzinfo
+    upd = ("todo", "update", REPORT_ID_DRY, "--supervisor=galley-assistant")
+
+    def new_rule(title: str, kind: str, days: list[int], anchor: str, every: int = 1,
+                 remind: tuple[int, str] | None = None) -> dict[str, Any]:
+        return {"id": "series_dry0000000000001", "title": title, "kind": kind, "every": every, "days": days,
+                "anchor": anchor, "remindDaysBefore": remind[0] if remind else None,
+                "remindTime": remind[1] if remind else None}
+
+    def noted(title: str, due: str, sid: str | None = "series_dry0000000000001") -> dict[str, Any]:
+        t = synth_todo(title, due=due)
+        if sid:
+            t["seriesId"] = sid
+        return t
+
+    # 说出周期，每周
+    report = noted("交周报", "2026-10-26")
+    weekly = new_rule("交周报", "weekly", [1], "2026-10-26")
+    f = run("rep-weekly-report", "记下了：每周一交周报。", todos=(report,), series=(weekly,), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"weekly: the rule, said: passes ({f['reasons']})")
+    for reply, kw, why in (
+            ("记下了：周一交周报。", {"todos": (report,), "series": (weekly,)}, "回复没说清规则"),
+            ("记下了：每周一交周报。", {"todos": (noted("交周报", "2026-10-26", None),)}, "没设重复规则"),
+            ("记下了：每周一交周报。", {"todos": (report,), "series": (new_rule("交周报", "weekly", [2], "2026-10-26"),)},
+             "规则的日子不对"),
+            ("要每周都记吗？", {}, "该记 1 件待办，记了 0 件"),
+            ("好，每周一提醒你交周报。", {"tasks": ({"id": "sched_dry000000000002", "todoId": None, "repeat": {"kind": "weekly"},
+                                                   "timeOfDay": "09:00", "target": "assistant", "prompt": "交周报"},),
+                                       "log": (SYNTH_CREATE,)}, "不该建它自己的提醒")):
+        f = run("rep-weekly-report", reply, log=kw.pop("log", (SYNTH_ADD,)), **kw)
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"weekly: {why} fails ({f['reasons']})")
+    # 说出周期，带提醒
+    rent = noted("交房租", "2026-11-15")
+    eve = synth_reminder(datetime(2026, 11, 14, 20, 0, tzinfo=tz), todo_id=rent["id"])
+    f = run("rep-rent-monthly", "记下了：每月 15 号交房租，前一天晚上 8 点提醒你。", todos=(rent,), tasks=(eve,),
+            series=(new_rule("交房租", "monthly", [15], "2026-11-15", remind=(1, "20:00")),), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"rent: monthly on the 15th, the evening before: passes ({f['reasons']})")
+    f = run("rep-rent-monthly", "记下了：每月 15 号交房租，提醒设好了。", todos=(rent,), tasks=(eve,),
+            series=(new_rule("交房租", "monthly", [15], "2026-11-15", remind=(1, "20:00")),), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("回复没说出提醒时间" in x for x in f["reasons"]),
+          f"rent: the reminder's time not said fails ({f['reasons']})")
+    f = run("rep-rent-monthly", "记下了：每月 15 号交房租，11 月 14 日晚上 8 点提醒你。", todos=(rent,), tasks=(eve,),
+            series=(new_rule("交房租", "monthly", [15], "2026-11-15", remind=(1, "20:00")),), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"rent: the reminder's date and time said: passes ({f['reasons']})")
+    f = run("rep-rent-monthly", "记下了：每月 15 号交房租，前一天晚上 8 点提醒你。", todos=(rent,), tasks=(eve,),
+            series=(new_rule("交房租", "monthly", [15], "2026-11-15"),), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("规则没带提醒" in x for x in f["reasons"]),
+          f"rent: the rule without the reminder fails ({f['reasons']})")
+    f = run("rep-rent-monthly", "记下了：每月 15 号交房租。", todos=(rent,),
+            series=(new_rule("交房租", "monthly", [15], "2026-11-15"),), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("有截止却没挂提醒" in x for x in f["reasons"]), f"rent: no reminder fails ({f['reasons']})")
+    # 每季度
+    tax = noted("报税", "2027-01-15")
+    f = run("rep-tax-quarterly", "记下了：每季度报一次税，下次 1 月 15 日。", todos=(tax,),
+            series=(new_rule("报税", "monthly", [15], "2027-01-15", every=3),), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"tax: every 3 months: passes ({f['reasons']})")
+    f = run("rep-tax-quarterly", "记下了：每季度报一次税，下次 1 月 15 日。", todos=(tax,),
+            series=(new_rule("报税", "monthly", [15], "2027-01-15"),), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("间隔不对" in x for x in f["reasons"]), f"tax: monthly fails ({f['reasons']})")
+    # 每天，没说几点
+    words = noted("背 20 个单词", "2026-10-19")
+    f = run("rep-daily-words", "记下了：每天背 20 个单词。", todos=(words,),
+            series=(new_rule("背 20 个单词", "daily", [], "2026-10-19"),), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"words: daily, no reminder: passes ({f['reasons']})")
+    f = run("rep-daily-words", "记下了：每天背 20 个单词，晚上 9 点提醒你。", todos=(words,),
+            tasks=(synth_reminder(datetime(2026, 10, 19, 21, 0, tzinfo=tz), todo_id=words["id"]),),
+            series=(new_rule("背 20 个单词", "daily", [], "2026-10-19", remind=(0, "21:00")),), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("每天重复、没说几点的不该挂提醒" in x for x in f["reasons"])
+          and any("规则不该带提醒" in x for x in f["reasons"]), f"words: a daily reminder fails ({f['reasons']})")
+    # 带出周期没明说
+    q = noted("交季报", "2026-10-23", None)
+    f = run("rep-quarterly-hint", "记下了：周五前交季报。以后每季度都记吗？", todos=(q,), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"hint: this one, asked: passes ({f['reasons']})")
+    f = run("rep-quarterly-hint", "记下了：每季度交季报。", todos=(noted("交季报", "2026-10-23"),),
+            series=(new_rule("交季报", "monthly", [23], "2026-10-23", every=3),), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("不该设重复规则" in x for x in f["reasons"]), f"hint: a rule set fails ({f['reasons']})")
+    f = run("rep-quarterly-hint", "要我以后每季度都记吗？", log=())
+    check(f["pass"] is False and any("该记 1 件待办" in x for x in f["reasons"]), f"hint: asked only fails ({f['reasons']})")
+    # 只是提醒
+    sleep = {"id": "sched_dry000000000003", "todoId": None, "repeat": {"kind": "daily"}, "timeOfDay": "22:00",
+             "target": "assistant", "prompt": "该睡觉了", "cancelledAt": None}
+    f = run("rep-nudge-sleep", "好，每天晚上 10 点提醒你睡觉。", tasks=(sleep,), log=(SYNTH_CREATE,))
+    check(f["pass"] is True, f"sleep: its own daily reminder at 22:00: passes ({f['reasons']})")
+    f = run("rep-nudge-sleep", "好，每天晚上 10 点提醒你睡觉。", tasks=(dict(sleep, timeOfDay="21:30"),), log=(SYNTH_CREATE,))
+    check(f["pass"] is False and any("时刻不对" in x for x in f["reasons"]), f"sleep: 21:30 fails ({f['reasons']})")
+    f = run("rep-nudge-sleep", "记下了：每天睡觉，晚上 10 点提醒你。", todos=(noted("睡觉", "2026-10-19"),),
+            series=(new_rule("睡觉", "daily", [], "2026-10-19", remind=(0, "22:00")),), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("不该记待办" in x for x in f["reasons"]), f"sleep: a repeating to-do fails ({f['reasons']})")
+    # Core 表达不了
+    pay = noted("发工资条", "2026-10-30", None)
+    later = synth_reminder(datetime(2026, 10, 31, 10, 0, tzinfo=tz), prompt="记下个月发工资条")
+    ok = "记下了：10 月 30 日发工资条。每月最后一个工作日没法自动重复，我会到时再记下个月的。"
+    f = run("rep-payslip-last-workday", ok, todos=(pay,), tasks=(later,), log=(SYNTH_ADD, SYNTH_CREATE))
+    check(f["pass"] is True, f"payslip: this one and its own reminder: passes ({f['reasons']} {f['flags']})")
+    f = run("rep-payslip-last-workday", ok, todos=(noted("发工资条", "2026-10-30"),), tasks=(later,),
+            series=(new_rule("发工资条", "monthly", [30], "2026-10-30"),), log=(SYNTH_ADD, SYNTH_CREATE))
+    check(f["pass"] is False and any("不该设重复规则" in x for x in f["reasons"]),
+          f"payslip: a fixed day of the month fails ({f['reasons']})")
+    f = run("rep-payslip-last-workday", "记下了：10 月 30 日发工资条。", todos=(pay,), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("该建 1 个它自己的提醒" in x for x in f["reasons"]),
+          f"payslip: no reminder to note the next fails ({f['reasons']})")
+
+    # On a period of a rule: tick, skip, end, change, --series, the next.
+    def settle(how: str, by: str = "galley-assistant") -> Any:
+        def edit(st: dict[str, Any]) -> None:
+            t = next(x for x in st["todos"] if x["id"] == REPORT_ID_DRY)
+            stamp = iso_utc(mon)
+            if how == "done":
+                t.update(doneAt=stamp, doneBy={"via": "supervisor", "supervisor": by})
+            else:
+                t.update(cancelledAt=stamp, cancelledBy={"via": "supervisor", "supervisor": by})
+                if how == "skip":
+                    t["skipped"] = True
+            if how in ("done", "skip"):
+                fri = date.fromisoformat(t["dueDate"])
+                st["todos"].append({"id": "todo_dry0000000000009", "title": "交周报", "dueDate":
+                                    (fri + timedelta(days=7)).isoformat(), "seriesId": t["seriesId"],
+                                    "origin": {"via": "system", "supervisor": REPEAT_SUPERVISOR}})
+            if how == "cancel":
+                for s in st["series"]:
+                    if s["id"] == t["seriesId"]:
+                        s["endedAt"] = stamp
+        return edit
+
+    f = run("rep-done-report", "已勾掉，下一次是 10 月 26 日。", edit=settle("done"),
+            log=(("todo", "done", REPORT_ID_DRY, "--supervisor=galley-assistant"),))
+    check(f["pass"] is True and len(f["core_made"]) == 1, f"done: ticked, the next said: passes ({f['reasons']})")
+    f = run("rep-done-report", "已勾掉。", edit=settle("done"), log=(("todo", "done", REPORT_ID_DRY, "--supervisor=galley-assistant"),))
+    check(f["pass"] is False and any("回复没说下一次是哪天" in x for x in f["reasons"]), f"done: no next day fails ({f['reasons']})")
+    f = run("rep-done-report", "删掉了。", edit=settle("cancel"),
+            log=(("todo", "cancel", REPORT_ID_DRY, "--supervisor=galley-assistant"),))
+    check(f["pass"] is False and any("该勾掉" in x for x in f["reasons"]), f"done: cancelled fails ({f['reasons']})")
+    f = run("rep-skip-week", "好，这周的跳过，下周五照常。", edit=settle("skip"),
+            log=(("todo", "skip", REPORT_ID_DRY, "--supervisor=galley-assistant"),))
+    check(f["pass"] is True, f"skip: skipped: passes ({f['reasons']})")
+    for how, why in (("cancel", "用了 todo cancel"), ("done", "勾掉了")):
+        f = run("rep-skip-week", "好。", edit=settle(how), log=(("todo", how, REPORT_ID_DRY, "--supervisor=galley-assistant"),))
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"skip: {why} fails ({f['reasons']})")
+    f = run("rep-stop-weekly", "好，周报以后不提醒了，这条也删了。", edit=settle("cancel"),
+            log=(("todo", "cancel", REPORT_ID_DRY, "--supervisor=galley-assistant"),))
+    check(f["pass"] is True and not f["flags"], f"stop: deleted with its rule: passes ({f['reasons']})")
+
+    def no_repeat(st: dict[str, Any]) -> None:
+        st["series"][0]["endedAt"] = iso_utc(mon)
+
+    f = run("rep-stop-weekly", "好，以后不再重复，这一期还留着。", edit=no_repeat, log=(upd + ("--no-repeat",),))
+    check(f["pass"] is True and any("--no-repeat" in x for x in f["flags"]), f"stop: --no-repeat passes, noted ({f['flags']})")
+    f = run("rep-stop-weekly", "好，这周的跳过了。", edit=settle("skip"),
+            log=(("todo", "skip", REPORT_ID_DRY, "--supervisor=galley-assistant"),))
+    check(f["pass"] is False and any("跳过了这一次" in x for x in f["reasons"]), f"stop: skipped fails ({f['reasons']})")
+
+    def two_weeks(st: dict[str, Any]) -> None:
+        st["series"][0]["every"] = 2
+
+    f = run("rep-every-two-weeks", "好，周报改成每两周交一次。", edit=two_weeks, log=(upd + ("--weekly=5", "--every=2"),))
+    check(f["pass"] is True, f"cycle: changed in place: passes ({f['reasons']})")
+
+    def rebuilt(st: dict[str, Any]) -> None:
+        t = next(x for x in st["todos"] if x["id"] == REPORT_ID_DRY)
+        t.update(cancelledAt=iso_utc(mon), cancelledBy={"via": "supervisor", "supervisor": "galley-assistant"})
+        st["series"][0]["endedAt"] = iso_utc(mon)
+
+    f = run("rep-every-two-weeks", "好，改成每两周。", todos=(noted("交周报", "2026-10-23"),),
+            series=(new_rule("交周报", "weekly", [5], "2026-10-23", every=2),), edit=rebuilt,
+            log=(("todo", "cancel", REPORT_ID_DRY, "--supervisor=galley-assistant"), SYNTH_ADD))
+    check(f["pass"] is False and any("删了重建" in x for x in f["reasons"]), f"cycle: rebuilt fails ({f['reasons']})")
+
+    def two_days(series_too: bool) -> Any:
+        def edit(st: dict[str, Any]) -> None:
+            if series_too:
+                st["series"][0].update(remindDaysBefore=2, remindTime="20:00")
+        return edit
+
+    f = run("rep-remind-two-days", "好，以后周报都提前两天晚上 8 点提醒你。", edit=two_days(True),
+            log=(upd + ("--remind-at=2026-10-28T20:00", "--series"),))
+    check(f["pass"] is True, f"two days: taken into the rule: passes ({f['reasons']})")
+    f = run("rep-remind-two-days", "好，这次提前两天提醒你。", edit=two_days(False),
+            log=(upd + ("--remind-at=2026-10-28T20:00",),))
+    check(f["pass"] is False and any("没带 --series" in x for x in f["reasons"]), f"two days: this one only fails ({f['reasons']})")
+    # 逾期的又响；已经有了
+    f = run("rep-overdue-ring", "上周的周报交了吗？交了跟我说一声，我帮你勾掉。")
+    check(f["pass"] is True, f"overdue: asked: passes ({f['reasons']})")
+    f = run("rep-overdue-ring", "提醒：交周报", )
+    check(f["pass"] is False and any("复述了提醒的原话" in x for x in f["reasons"]), f"overdue: recited fails ({f['reasons']})")
+    f = run("rep-overdue-ring", "已勾掉，下周照常。", edit=settle("done"),
+            log=(("todo", "done", REPORT_ID_DRY, "--supervisor=galley-assistant"),))
+    check(f["pass"] is False and any("动了不该动的待办" in x for x in f["reasons"]), f"overdue: ticked off fails ({f['reasons']})")
+    f = run("rep-already-there", "已经记着了：下周一交周报，前一天晚上 8 点提醒你。")
+    check(f["pass"] is True, f"already there: said, its day: passes ({f['reasons']})")
+    f = run("rep-already-there", "已经记着了。")
+    check(f["pass"] is False and any("回复没说已有的那一期是哪天" in x for x in f["reasons"]),
+          f"already there: no day fails ({f['reasons']})")
+    f = run("rep-already-there", "记下了：下周一交周报。", todos=(noted("交周报", "2026-10-26"),),
+            series=(weekly,), log=(SYNTH_ADD,))
+    check(f["pass"] is False and any("不该记待办" in x for x in f["reasons"]), f"already there: noted again fails ({f['reasons']})")
+    # The section: WITH and the control side by side.
+    r1 = dict(synth_run(cases["rep-skip-week"], mon, "好。"), id="rep-skip-week", variant="r1", repeat=1)
+    text = "\n".join(repeat_section({"meta": {"ticket155w_control": [r1]}, "results": [r1]}, list(cases.values())))
+    check("| 77 | rep-skip-week | 0 / 1 | 0 / 1 |" in text and "WITH（新手册）第 1 遍：" in text
+          and "对照（拿掉新小节与新一条）第 1 遍：" in text, f"section: both sources ({text[-300:]})")
+
+
+REPORT_ID_DRY = "todo_5a1e7c3b9d2f4e60"
+
+
 def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, str]],
                   cases: dict[str, dict[str, Any]], now: datetime, check: Any) -> None:
     """To-do suite: the In Hand lines carry the case's to-dos as they stood
@@ -12805,6 +14181,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     dry_test_items(cases, mon, check)
     dry_test_item_move(cases, mon, check)
     dry_test_whose(cases, mon, check)
+    dry_test_repeat(cases, mon, check)
     for r in sorted(results, key=lambda r: r["id"]):
         case_id, script = scripts[r["id"]]
         case = cases[case_id]
@@ -13000,6 +14377,19 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   "the wake: mixed, the to-do's reminder and the review")
             check(f["pass"] is False and any("吞掉" in x for x in f["reasons"]),
                   f"<no-reply/> beside a reminder swallows it: fails ({f['reasons']})")
+        elif script == "todo-repeat-cli":
+            dry_test_repeat_cli(r, f, system, check)
+        elif r["id"] == "todo-repeat-overdue":
+            run_now = datetime.fromisoformat(r["now"])
+            wd = WEEKDAYS_EN[run_now.weekday()]
+            ago = (run_now - timedelta(days=7)).date()
+            check(f"`todo_5a1e7c3b9d2f4e60` due {ago:%Y-%m-%d} ({wd}), overdue, repeats weekly on {wd}, reminder "
+                  f"{run_now:%Y-%m-%d %H:%M} ({wd}): 交周报" in system,
+                  "In Hand: the period of last week, overdue, its rule, its reminder armed again for today")
+            check("on the user's to-do `todo_5a1e7c3b9d2f4e60` came due." in r["message"]
+                  and f"It is due {ago:%Y-%m-%d} ({wd}), local time." in r["message"]
+                  and " late" not in r["message"], "the wake note in Core's words: due a week ago, on time")
+            check(f["pass"] is True and not f["names"], f"asked whether it was done, nothing touched: passes ({f['reasons']})")
         else:
             check(f["pass"] and not f["names"] and "on the user's to-do" in r["message"],
                   f"a to-do's reminder: a sentence, nothing touched ({f['reasons']})")
@@ -14550,6 +15940,19 @@ def dry_test_dispatch(results: list[dict[str, Any]], scripts: dict[tuple[str, st
 # ======================================================================
 
 
+def write_results(results_json: Path, results_md: Path, data: dict[str, Any], render: Any,
+                  cases: list[dict[str, Any]]) -> None:
+    """Ticket 155 (a finding of ticket 153): the results and their summary.
+    The summary is rendered from the results exactly as written (scrubbed),
+    as `--render-only` renders it from the file: rendered from the runs as
+    they came back, the bytes a manual read handed the model were counted
+    on the run's real temp paths (a few dozen bytes each longer than
+    $TMPDIR), and the two summaries differed."""
+    text = scrub(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+    results_json.write_text(text, encoding="utf-8")
+    results_md.write_text(scrub(render(json.loads(text), cases)), encoding="utf-8")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
@@ -14785,8 +16188,7 @@ def main() -> int:
         order = {c["id"]: i for i, c in enumerate(all_cases)}
         previous["meta"][key] = sorted(kept + results, key=lambda r: (order.get(r["id"], 99), r.get("repeat", 0)))
         previous["meta"][key + "_at"] = now.strftime("%Y-%m-%d %H:%M")
-        results_json.write_text(scrub(json.dumps(previous, ensure_ascii=False, indent=2) + "\n"), encoding="utf-8")
-        results_md.write_text(scrub(render(previous, all_cases)), encoding="utf-8")
+        write_results(results_json, results_md, previous, render, all_cases)
         failed = [f"{r['id']}/{r['variant']}" for r in results if r["status"] != "ok"]
         print("failed: " + (", ".join(failed) if failed else "none"))
         return 1 if failed else 0
@@ -14917,7 +16319,10 @@ def main() -> int:
                       "judged on the backticks); rerun for ticket 153 (todos.md's \"Noting a to-do\" opens with whose step "
                       "it is: an errand, a reminder of its own, or the user's to-do, theirs when unclear; six cases under "
                       "today's main chat prompt v9 with tell_user offered, two of them earlier cases' content; the same "
-                      "manual without that paragraph in meta.ticket153w_control)"
+                      "manual without that paragraph in meta.ticket153w_control); rerun for ticket 155 (repeating to-dos, "
+                      "main chat ticket 154: todos.md's \"A to-do that repeats\", todos-change.md's bullet, wake.md's "
+                      "overdue one; fourteen cases under v9 with tell_user offered, the fake galley keeping the rules and "
+                      "making the next period as Core does; the manual without those two in meta.ticket155w_control)"
                       if todo else
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
                       "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "
@@ -15048,9 +16453,7 @@ def main() -> int:
                                      "facts' sources and the v7 measures")
     if v7_models:
         data["meta"]["v7_models"] = v7_models
-    results_json.write_text(scrub(json.dumps(data, ensure_ascii=False, indent=2) + "\n"),
-                            encoding="utf-8")
-    results_md.write_text(scrub(render(data, all_cases)), encoding="utf-8")
+    write_results(results_json, results_md, data, render, all_cases)
     failed = [f"{r['id']}/{r['variant']}" for r in results if r["status"] != "ok"]
     print(f"usage: {data['meta']['usage_total']}")
     print("failed: " + (", ".join(failed) if failed else "none"))
