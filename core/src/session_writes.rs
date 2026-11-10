@@ -822,6 +822,22 @@ impl<'a> Writes<'a> {
         self.todos_changed(result, true)
     }
 
+    /// [`SqliteGalley::update_todo_by_hand`] (main chat ticket 156): the
+    /// desktop's change of a to-do's words, due date, reminder and rule.
+    pub async fn update_todo_by_hand(
+        &self,
+        id: &TodoId,
+        words: TodoPatch,
+        when: crate::todo_by_hand::TodoWhenChange,
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        let result = self
+            .galley
+            .update_todo_by_hand(id, words, when, origin)
+            .await;
+        self.todos_changed(result, true)
+    }
+
     /// [`SqliteGalley::complete_todo`]: the desktop's tick, Galley's
     /// `todo done`.
     pub async fn complete_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {

@@ -233,28 +233,61 @@ pub(crate) async fn cancel_todo_reminder(
         .map_err(stringify_error)
 }
 
-/// Change a to-do's title or notes (main chat ticket 107, PRD ruling 153
-/// point 4): the to-do panel's edit in place, only what is given — the
-/// due date and the reminder are not taken (point 5: they are said to
-/// Galley). Empty notes take the notes away; an empty title is refused
-/// (`invalid_args`, the panel never sends one). Core's `update_todo`, the
-/// one Galley's `todo update` makes: a new title is carried to the
-/// reminder's task, and the reminder's wake reads both as they are then.
+/// Change a to-do in the to-do panel: only what is given. Since main chat
+/// ticket 107 (PRD ruling 153 point 4) its title or notes, edited in
+/// place: empty notes take the notes away; an empty title is refused
+/// (`invalid_args`, the panel never sends one); a new title is carried to
+/// the reminder's task, and the reminder's wake reads both as they are
+/// then. Since ticket 156 (PRD ruling 205, overturning ruling 153 point 5)
+/// also what the date popover picks:
+///
+/// - `due`: a day `YYYY-MM-DD` or a local `YYYY-MM-DDTHH:MM`; empty takes
+///   the due date away (as the socket's `todo.update` takes an empty one).
+/// - `remind`: the reminder `{daysBefore, time}` — days before the due day
+///   (0 the same day) at a local `HH:MM`; `noRemind` takes it away (the
+///   user's removal, `cancelled_via = 'gui'`). Neither: the reminder moves
+///   with the due day.
+/// - `repeat`: give it this rule, or change its rule (ticket 154's
+///   `repeat`), counted from its due date. 「不重复」 is `stop_todo_repeat`.
+///
+/// Core works out the reminder (`SqliteGalley::update_todo_by_hand`,
+/// `crate::todo_by_hand`): it moves with the day, a time already passed is
+/// not hung, and a repeating period's goes to the next time still ahead.
+/// A period's day, time and reminder are its own; its rule stays. The
+/// CLI's `todo update` is unchanged (its `--due` moves no reminder).
 /// Recorded as nothing more than the to-do's `updated_at` (`todos` keeps
 /// no `updated_via`).
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn update_todo(
     app: tauri::AppHandle,
     galley: State<'_, SqliteGalley>,
     id: crate::api::TodoId,
     title: Option<String>,
     notes: Option<String>,
+    due: Option<String>,
+    remind: Option<crate::api::TodoRepeatRemind>,
+    no_remind: Option<bool>,
+    repeat: Option<crate::api::TodoRepeatRule>,
 ) -> std::result::Result<crate::api::TodoBrief, String> {
+    let when = crate::todo_by_hand::TodoWhenChange {
+        due: due.map(|raw| {
+            let raw = raw.trim();
+            (!raw.is_empty()).then(|| raw.to_string())
+        }),
+        remind: if no_remind.unwrap_or(false) {
+            Some(None)
+        } else {
+            remind.map(Some)
+        },
+        repeat,
+    };
     let notifier = TauriNotifier::new(app);
     Writes::new(&galley, notifier.as_ref(), VIA_GUI)
-        .update_todo(
+        .update_todo_by_hand(
             &id,
             crate::api::TodoPatch::words(title, notes),
+            when,
             Origin::desktop(),
         )
         .await

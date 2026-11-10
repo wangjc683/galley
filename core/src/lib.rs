@@ -53,6 +53,7 @@ pub mod subtask;
 pub mod subtask_background;
 pub mod subtask_report;
 pub mod tell_user;
+pub mod todo_by_hand;
 pub mod todo_repeat;
 mod tray;
 pub mod turn_persistence;

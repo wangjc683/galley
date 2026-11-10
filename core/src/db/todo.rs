@@ -21,6 +21,7 @@ use crate::api::todo::{
     TodoRepeatKind, TodoRepeatRemind, TodoSettled, TodoStatus, TodoSubitem, TodoSubitemCount,
     TodoSubitemId, NOT_REPEATING, REPEAT_NEEDS_DUE, REPEAT_SUPERVISOR,
 };
+use crate::todo_by_hand::{when_write, TodoWhenChange, TodoWhenNow};
 use crate::todo_repeat::{
     due_time_of_day, hhmm, next_due_day, next_reminder_ahead, parse_hhmm, period_on, remind_offset,
     RemindOffset, RepeatRule,
@@ -1075,6 +1076,85 @@ impl SqliteGalley {
             None => {}
         }
         self.todo(id.as_str()).await
+    }
+
+    /// The desktop's change of a to-do (main chat ticket 156, PRD ruling
+    /// 205): its title and notes (`words`, [`TodoPatch::words`]), and its
+    /// due date, reminder and rule as picked in the to-do panel's date
+    /// popover (`when`). [`crate::todo_by_hand::when_write`] works out what
+    /// that writes from the to-do as read once here, before anything is
+    /// written: the reminder moves with the due day, a reminder whose time
+    /// has passed is not hung (a repeating period's goes to the next time
+    /// still ahead). One [`Self::update_todo`] then writes it all — the
+    /// to-do and its rule in one transaction, its reminder's task right
+    /// after, as `todo update --due --remind-at` does — and a reminder
+    /// that is not hung is let go after it, as Core's own
+    /// ([`Origin::system`]): the user did not turn it down. Every refusal
+    /// comes before the first write. A reminder time that passes between
+    /// working it out and `update_todo` checking it (`time_in_past:`) is
+    /// worked out once more from the same reading. With no `when`, the
+    /// title-and-notes change of ticket 107, unchanged.
+    ///
+    /// **Errors**: `update_todo`'s; `invalid_args` for a reminder days
+    /// before a due date when there is none.
+    pub async fn update_todo_by_hand(
+        &self,
+        id: &TodoId,
+        words: TodoPatch,
+        when: TodoWhenChange,
+        origin: Origin,
+    ) -> Result<TodoBrief> {
+        const CONTEXT: &str = "update_todo";
+        if when.is_empty() {
+            return self.update_todo(id, words, origin).await;
+        }
+        self.ensure_assistant_available(CONTEXT).await?;
+        let row = self.live_todo_row(id.as_str()).await?;
+        let reminder = self
+            .todo_reminder_task(id.as_str())
+            .await?
+            .as_ref()
+            .and_then(reminder_of)
+            .and_then(|reminder| DateTime::parse_from_rfc3339(&reminder.at).ok())
+            .map(|at| at.with_timezone(&Utc));
+        let rule = match row.series_id.as_deref() {
+            Some(series) => fetch_series(&self.pool, series)
+                .await?
+                .filter(|series| !series.ended())
+                .and_then(|series| series.rule().ok()),
+            None => None,
+        };
+        let before = TodoWhenNow {
+            due: StoredDue::from_columns(row.due_date.as_deref(), row.due_at.as_deref())?,
+            reminder,
+            rule,
+        };
+        let mut tries = 0;
+        loop {
+            tries += 1;
+            let write = when_write(&when, &before, Utc::now(), &Local, CONTEXT)?;
+            let patch = TodoPatch {
+                due: write.due,
+                remind_at: write.remind_at,
+                repeat: write.repeat,
+                ..words.clone()
+            };
+            match self.update_todo(id, patch, origin.clone()).await {
+                Err(GalleyError::InvalidArgs { message })
+                    if tries == 1 && message.starts_with(TIME_IN_PAST) => {}
+                Err(e) => return Err(e),
+                Ok(brief) => {
+                    if !write.let_reminder_go {
+                        return Ok(brief);
+                    }
+                    if let Some(task) = self.todo_reminder_task(id.as_str()).await? {
+                        self.cancel_scheduled_task(&task.id, &Origin::system())
+                            .await?;
+                    }
+                    return self.todo(id.as_str()).await;
+                }
+            }
+        }
     }
 
     /// Tick a to-do off: when, and who (the user at the desktop, Galley
