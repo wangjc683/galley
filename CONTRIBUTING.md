@@ -92,10 +92,15 @@ Windows builds follow the [windows-build-checklist](./docs/windows-build-checkli
 
 Keep these constraints intact:
 
-- Galley must not modify GenericAgent files, memory, venv, PATH, or runtime
-  internals.
-- Galley Core stays localhost-only: Unix socket on macOS/Linux, named pipe on
-  Windows. No TCP server or token auth.
+- Attach mode: Galley must not modify the user's own GenericAgent (files,
+  memory, venv, PATH, or runtime internals). Managed mode: Galley may patch and
+  configure only its own bundled runtime, under the rules in
+  [managed GA runtime](./docs/managed-ga-runtime/README.md). See `AGENTS.md`
+  Rule 1.
+- Galley Core accepts local control only on a Unix socket (macOS/Linux) or a
+  named pipe (Windows), with no TCP server or token auth. `AGENTS.md` Rule 2
+  names the two narrow exceptions: the one-shot loopback listener of Sign in
+  with ChatGPT, and the outward, end-to-end encrypted remote module.
 - Rust Galley Core is authoritative for SQLite writes, session lifecycle,
   runner ownership, and command dispatch.
 - The CLI JSON contract is stable. Read [agent-api](./docs/agent-api/README.md)

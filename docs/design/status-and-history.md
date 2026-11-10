@@ -14,11 +14,10 @@
 
 ### 推到未来版本的设计扩展
 
-- **Dark mode**：light-first token 已预留命名空间（`surface-dark` 系列待补）
+（2026-11-10 删去已发运的三项：深色主题、跨会话全文搜索（⌘K）、自定义模型显示名。）
+
 - **`file_write` 内容预览**：依赖 GA 上游把 `extract_robust_content` 前置到 dispatch，可以是给 GA 的 PR
 - **Slash commands** in Composer（`/restore` `/new` 等）
-- **Cross-session 全文搜索**（Command Palette `#` prefix）
-- **Custom LLM displayName**（Settings → LLM tab）
 - **拖拽 session 到 Project**（V0.1 用右键 + hover `⋯`）
 - **Trees / file explorer**（如果 V0.2+ 加 file inspector，候选 [trees.software](https://trees.software) + [@pierre/diffs](https://diffs.com) 配套）
 
@@ -27,7 +26,7 @@
 ## 12. 与 Notion 历史稿的关系
 
 - v0.1 完整版（dark-first / Linear 风）保留在 Notion 作为历史对照（page id `3552aab6e913815f91a1c2b8b0a15672`）
-- 当前权威版本在本仓库 `docs/DESIGN.md` + devlog
+- 当前权威版本在本仓库 `docs/design/`（`docs/DESIGN.md` 只留指向它的入口）+ devlog
 - Notion 不再作为当前实现 spec 的同步源；避免同一设计基准出现两个真源
 
 完整决策叙事见 `docs/devlog/`：

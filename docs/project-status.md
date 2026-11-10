@@ -4,8 +4,9 @@
 > [README](../README.md). For architecture, read [architecture](./architecture.md).
 
 This document tracks the current working state of Galley. Long historical
-decision trails live in [devlog](./devlog/README.md); implementation playbooks
-live in [refactor](./archive/refactor/README.md).
+decision trails live in [devlog](./devlog/README.md); finished implementation
+playbooks are archived in [refactor](./archive/refactor/README.md) (history,
+not current rules).
 
 ## Current Target
 
@@ -944,11 +945,12 @@ Post-release follow-up:
    write-off — do not let it sit here reading as pending. Keep asking for the
    step 10 result explicitly during step 9 — the smoke happens outside any
    agent tool call, so silence is not evidence it was skipped.
-2. Watch tool-output truncation, carried forward from the `308153b` baseline
-   (shipped in `v0.4.5`), which tightened the tool-output cap ~14%
-   (`maxlen_multiplier` 2.25 → 1.93 as a denominator). `f06d550` did not move
-   it again, so the watch is unchanged: `...[Truncated]...` arriving sooner is
-   the regression direction that only long real sessions surface.
+2. Watch tool-output truncation. The cap follows `maxlen_multiplier` (a
+   denominator): the `308153b` baseline (shipped in `v0.4.5`) took it
+   2.25 → 1.93 (~14% tighter), and `1b6442f` (shipped in `v0.5.1`, upstream
+   `default_context_win` 35000 → 38000) took it to 1.78 (−8%); no baseline
+   since has moved it, `d66509b` included. `...[Truncated]...` arriving
+   sooner is the regression direction that only long real sessions surface.
 3. Verify the reply-done / ask_user notifications on an installed
    Windows build (macOS was smoked at release; `tauri dev` cannot show
    notifications on macOS — see devlog 2026-07-21-reply-done-notification).
@@ -965,7 +967,10 @@ Post-release follow-up:
 ## Unreleased On Main
 
 Release-scope truth is `git log v0.7.7..HEAD`. Merged since `v0.7.7`:
-release docs only.
+the release docs; the README's Windows minimum (Windows 10 or later, both
+READMEs); the dispatch workflow (`docs/agents/dispatch.md`,
+`scripts/new-ticket-worktree.sh`, the `AGENTS.md` and docs-index routing,
+ticket `.scratch/dispatch-workflow/issues/01`). None of it changes the app.
 
 **Owed from the `v0.7.7` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. The database shows the draft's
@@ -1121,11 +1126,7 @@ quitting with a live runner leaves no Python process, a Windows install.
 Follow-ups noted at the release (no tickets yet): prompt checklist item 10 answers 「我是你的
 AI 助手」 without saying it is Galley (the role word is still 助手; only the
 IM entry layer says 助理) and item 14's reply repeats its verdict in a closing
-line, both for one `0.7.x` prompt ticket with its eval; Feishu, Telegram and
-Discord memory distillation cannot read L0 (`ga.py` opened it by a path
-relative to the channel's working directory), older than this release (on
-main since the `d66509b` bump, where `0001` reads L0 from the state root at
-`ga.py:542`, they can); the
+line, both for one `0.7.x` prompt ticket with its eval; the
 comment at `core/src/migration_backup.rs:13` says the opposite of its test.
 
 Carried forward. The README screenshots were re-shot (v3, 2026-10-21).
@@ -1258,8 +1259,10 @@ which no user has yet asked for.
 Two debts were found during the dark-theme work and deliberately left for
 later, both in [deferred](./devlog/deferred.md): Tailwind v4 inlines `@theme --shadow-*`
 values into the utilities it generates, so the dark `--shadow-*` block is
-dead for the 52 call sites writing `shadow-card` rather than
-`shadow-[var(--shadow-card)]`; and dark's `--color-brand-tint` is still
+dead for the call sites writing the bare utilities (2026-11-10: 47
+`shadow-elevated`, 9 `shadow-card`, one each `shadow-selected` and
+`shadow-composer-stop`) rather than `shadow-[var(--shadow-card)]` and the
+like; and dark's `--color-brand-tint` is still
 carrying a `provisional` marker whose review this very dark pass should have
 done.
 
@@ -1289,8 +1292,8 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Core architecture | Rust Galley Core is authoritative | [architecture demo](./architecture-demo.md) |
 | CLI / Agent API | `schemaVersion: 3` since v0.7.0 (Goal removed 2026-10-13); `2` (since v0.5.0) and `1` still served for unchanged commands | [agent-api](./agent-api.md) |
 | Agent surface | Settings -> Agent, copy-first SOP, Claude Skill | [Supervisor SOP](./integrations/galley-supervisor-sop.md) |
-| Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; audited upstream `b1e173dc` baseline shipped in v0.2.16; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime/README.md) |
-| Data migration | v0.2.16 adds managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
+| Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; upstream baseline: see the GA baseline row; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime/README.md) |
+| Data migration | Migrations run through `056_subtask_background.sql`; v0.2.16 added managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
 | Release path | v0.7.7 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |

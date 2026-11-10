@@ -497,6 +497,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 - [桌面工艺打磨轮：窗口记忆 + 菜单栏精修 + skeleton 否决](./2026-07-15-desktop-craft-polish-round.md) — 十维审计定缺口：窗口状态持久化 + 删两灰菜单占位 + 补系统标准菜单项；Skeleton 明确否决
 
 ### 2026-07-16
+- [原生手感轮：hover 瞬时 + 光标策略 + 动效 token](./2026-07-16-native-feel-hover-cursor-motion-tokens.md) — hover 全局瞬时、光标策略、动效时长 / 缓动 token、骨架屏与拖拽 / 缩放防护；`foundations.md` §2.5–§2.7 的出处
 - [更新下载真实进度条 + spinner 统一](./2026-07-16-update-download-progress-and-spinner-unification.md) — 接通 Tauri 下载回调广播 app-update-progress + ProgressThrottle 节流；顺手统一 10 处 spinner
 - [Windows 滚动条打磨（Mac 不动）](./2026-07-16-windows-scrollbar-polish.md) — 全库零自定义滚动条 → 加 data-platform=windows 限定的 webkit 滚动条样式，Mac byte-identical
 

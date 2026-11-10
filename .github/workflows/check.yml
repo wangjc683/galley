@@ -4,9 +4,13 @@ name: Check
 # to main. Verifies release-target health WITHOUT producing release
 # artifacts, so it stays much faster than the release workflow.
 #
-# Gates: actionlint, pnpm typecheck, pnpm lint, pnpm test, IPC protocol
-# drift check, supervisor SOP copy drift check, docs link check, managed GA
-# payload check, cargo check, and cargo test.
+# Seven job runs: Workflow lint (actionlint); Frontend and managed payload
+# (pnpm typecheck / lint / test, then six node gates: IPC protocol drift,
+# supervisor SOP copy drift, docs links, version consistency, managed GA
+# payload, GA baseline metadata drift); Python runner (pytest, mypy, ruff);
+# Core on three targets (cargo check, then cargo test per package:
+# galley-core, galley-cli, galley-remote-protocol, galley-relay), after
+# the frontend and Python jobs pass; Relay (Linux).
 # Target jobs run in parallel;
 # fail-fast: false so every platform reports independently and we get
 # a complete picture.
@@ -195,9 +199,7 @@ jobs:
       # integration suite.
       #
       # We do NOT run `--workspace` here — the workspace currently includes
-      # `core`, `../cli`, `../remote-protocol` and `../relay`, and the CLI's
-      # integration tests need the `galley` binary built first, which is a
-      # slower job.
+      # `core`, `../cli`, `../remote-protocol` and `../relay`.
       # Per-package runs let each fail independently and report clearly, so
       # a new workspace member needs its own step below.
       - name: Cargo test (core, full)

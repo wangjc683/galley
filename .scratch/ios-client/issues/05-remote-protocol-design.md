@@ -1,6 +1,6 @@
 # 05 / 06 — 远程模块与 relay 协议设计稿
 
-Status: ready-for-agent（第 12 节裁决点全部落定，2026-10-10；实现拆分见第 13 节，05a `4b53f751`、05c `01d67d44`、05b `ee3ea6c2`、06a `28601618`、06b `1e483880`、07a `8fb2601b` 已合入；05d `dc15ccdb`（配对改为第一台手机连上才算，`98547789`）已本地合入，待 JC 在 dev 预览后 push；余 06c）
+Status: ready-for-agent（第 12 节裁决点全部落定，2026-10-10；实现拆分见第 13 节，05a `4b53f751`、05c `01d67d44`、05b `ee3ea6c2`、06a `28601618`、06b `1e483880`、07a `8fb2601b` 已合入；05d 已合入（`dc15ccdb`、`98547789`：配对改为第一台手机连上才算）；余 06c）
 
 来源：2026-10-10 JC 裁决「iOS 端开源，单仓按建议推进，先出协议设计稿」。上游：PRD 裁决 1、2、6、8、9、17、18、22、23（`../PRD.md`）；
 宪法 Rule 2（`AGENTS.md:107-126`）。依据两份调研：
@@ -205,7 +205,7 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
 ### 4.4 实现、部署与容量
 
 - **实现**（06a 落定，2026-10-10；用法见 `relay/README.md`）：Rust 二进制 `relay/`（包名 `galley-relay`），tokio；hyper 1 收 HTTP 与升级，
-  tokio-tungstenite 0.30.0（与 Core 同一版本）跑 WebSocket；只用 `remote-protocol` 的 `frame` 和 `keys`（算频道键）。
+  tokio-tungstenite 0.30.0（与 Core 同一版本）跑 WebSocket；只用 `remote-protocol` 的 `frame` 和 `keys`（算频道键），06b 起还用 `push::apns_payload`（APNs 载荷封装，不碰密钥）。
   - 建连：路径、方法、WebSocket 升级头和三个 `X-Galley-*` 头逐项校验，不合格就在升级前回纯 HTTP 错误（404、405、400，WebSocket 版本不对回 426），
     URL 带 query 也拒；频道已有 4 个 client 回 429。占位在回 101 之前完成，两个 client 抢最后一个位置不会都进来。
   - 限速是背压，不是断开：按每条连接发给 relay 的字节记令牌桶（持续 512KB/s、突发 2MB，按 1024 进位），超了就放慢读这条连接，
@@ -335,7 +335,7 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
 | `message.deleted` | `message-deleted`（2026-10-16 加，主聊天票 32：桌面在主对话里删了一条消息） | `{sessionId, messageIds, via}`；一条消息可以是好几行（回复连同过程），手机把这些行都去掉。只加不改，协议版本不动 |
 | `runner.event` | `runner-event`，只转订阅的会话 | `turn_progress` 按 100ms 合批；单条最大的是 `turn_end`，带完整工具调用与结果（`core/src/ipc.rs:184-219`） |
 | `session.runState` | **新增**的 Core 事件（第 7 节缺口 3） | 「在跑 / 在问你 / 排队」 |
-| `history.replay`、`goal.updated`、`queue.changed` | 已有 | |
+| `history.replay`、`queue.changed` | 已有 | `goal.updated` 随 2026-10-13 Goal 移除删掉，`.scratch/remove-goal/` |
 | `sync.required` | 远程模块自己发（05a 新增） | 丢过给这台手机的事件后通知它重读，见第 6.5、6.6 节 |
 
 ### 6.5 重新同步
@@ -358,7 +358,7 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
 - **`session.messages`**：`before` 是上一页里的消息 id（`null` 取尾部），`limit` 缺省 50、上限 200；结果按时间正序，带 `hasMore`。
 - **`session.send`**：图片用 `{mimeType, data, width, height}`，`data` 是标准 base64，不用 data URL；限额照桌面（4 张、单张 10MB、合计 25MB）。
 - **透传的大块 JSON**：`runner.event` 的载荷是 `{sessionId, events: [...]}`，一条消息装 100ms 合批的多条 runner 事件，每条原样透传 Core 的 `IpcEvent` JSON；
-  消息的 `toolCalls` / `toolResults`、`goal.updated` 的 `goal` 也原样透传，不在手机类型里展开。
+  消息的 `toolCalls` / `toolResults` 也原样透传，不在手机类型里展开（`goal.updated` 随 2026-10-13 Goal 移除删掉，`.scratch/remove-goal/`）。
 - **`sync.required`**：载荷 `{sessionId}`。Core 丢过给这台手机的事件（第 6.5 节队列满）时发，手机据此重读；`sessionId` 为 `null` 表示全部重读。
 - **分片**：
   - `chunk` 的 `id` 是发送方自己的流编号，与请求 id 无关；`i` 从 0 逐一递增，`last: true` 结束；不同的流之间、流与普通消息之间可以交错；
@@ -374,7 +374,7 @@ JSON，UTF-8；每条 Noise 传输消息装一条，大的经 `chunk` 重组后�
 - **写入的来源**：手机的发送与新建是 `origin.via = gui`、`client = ios`（裁决 9）；由此产生的会话事件里 `via` 是 `ios`。
 - **`session.create`**：不带标题就用「新对话」，第一条消息会给它起名，与桌面一致；模型留空，起 runner 时用内置运行时的默认模型。
 - **顺序**：Core 不强制 `hello` 在先；`session.unsubscribe` 总是成功。
-- **事件过滤**：`goal.updated` 按 `goal.sessionId` 判断是否内置会话；`project.deleted` 的 `detachedSessionIds` 只列内置会话；
+- **事件过滤**（原有的 `goal.updated` 一条随 2026-10-13 Goal 移除删掉，`.scratch/remove-goal/`）：`project.deleted` 的 `detachedSessionIds` 只列内置会话；
   `session.deleted` 只要不是已知的外置会话就转发（行已删，查不到运行时）。
 
 ## 7. Core 改动（票 05）

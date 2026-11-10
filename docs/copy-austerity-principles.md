@@ -146,7 +146,7 @@ austere 不等于 cryptic。以下场景**保留必要的解释句**：
 - 排印（怎么排）：见 [typography-principles](./typography-principles.md)。
 - 术语、Agent/AI、中文版英文词、语言偏好：见
   [copy-language-guidelines](./copy-language-guidelines.md)。
-- 英文逐区域草稿：见 [english-copy-draft](./archive/english-copy-draft.md)。本准则
-  通过后，英文改写在该草稿基础上按 B 方向再收紧。
+- 英文逐区域草稿：见 [english-copy-draft](./archive/english-copy-draft.md)（已实现并归档，
+  现行英文文案在 `gui/src/i18n/locales/en.ts`）。
 - 题词 / Composer 三寄存器的哲学落点：见
   [2026-06-03 devlog](./devlog/2026-06-03-philosophical-voice-and-austerity-copy.md)。

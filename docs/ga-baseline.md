@@ -1382,7 +1382,7 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     both runtime modes, no managed patch). `agent_runner_loop` leaves
     `while turn < handler.max_turns` with an empty `exit_reason`, so the
     in-loop `turn_end_callback` is the last one: the post-loop callback
-    is guarded by `if exit_reason:` (`agent_loop.py:104`) and the
+    is guarded by `if exit_reason:` (right after the loop in `agent_loop.py`) and the
     `MAX_TURNS_EXCEEDED` the generator returns is dropped by
     `agentmain.run()`'s `for chunk in gen:`. Galley relies on two things:
     (a) `runner/workbench_bridge.py::_on_turn_end` reads
@@ -1715,7 +1715,11 @@ git -C /tmp/galley-ga-upgrade diff <current_baseline>..<target_sha> -- <must-rea
 
 ```bash
 cd ~/Documents/genericagent-webui
-# update managed-ga/manifest.json upstream.commit / upstream.auditedAt first
+# managed-ga/manifest.json still names the OLD baseline here. When the audit
+# predicts more than trivial line drift, rebase the patch stack now (the
+# script reads the old baseline from the manifest; see below):
+./scripts/rebase-managed-ga-patches.sh <target_sha> /tmp/galley-ga-upgrade
+# then update all four managed-ga/manifest.json upstream fields (step 9)
 ./scripts/build-managed-ga.sh /tmp/galley-ga-upgrade
 node scripts/check-managed-ga-payload.mjs
 ```
@@ -1732,7 +1736,9 @@ Then inspect the managed patch stack semantically, not just mechanically:
   hunks — regenerate the stack with the commit-chain rebase script
   (replay current stack as commits, byte-verify against the checked-in
   payload, rebase onto the new baseline, re-export as `-U0` patches;
-  real conflicts stop for manual resolution):
+  real conflicts stop for manual resolution). It must run while the
+  manifest still names the old baseline, so if the build above shows
+  drift, put the manifest back on the old baseline first:
 
 ```bash
 ./scripts/rebase-managed-ga-patches.sh <target_sha> /tmp/galley-ga-upgrade

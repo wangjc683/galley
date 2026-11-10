@@ -5,9 +5,8 @@
 ## 状态
 
 - Owner review：待确认
-- 代码实现：基础语言偏好与 Settings 入口已接入
-- 中文 source copy：第一批全局控件和 Settings 入口已清理，继续整理中
-- 英文 copy：第一稿见 [English copy draft](./archive/english-copy-draft.md)
+- 代码实现：完整的中英文词典已落地，`gui/src/i18n/locales/zh.ts`、`en.ts` 是 UI 文案的现行来源；本文件定叫法与规则
+- 英文 copy：第一稿 [English copy draft](./archive/english-copy-draft.md) 已实现并归档
 
 ## 核心原则
 
@@ -41,14 +40,9 @@ Galley 应该有两套原生文案系统，而不是一套 source string 加一�
 
 ## 语言入口
 
-不要只为语言新建 `General` tab。
-
-Settings 里，语言选择放在左侧栏底部，作为一个轻量全局设置：
-
-```text
-Language
-跟随系统
-```
+Settings 里，语言与外观自 2026-07-17 起住在 `General / 通用` tab，见
+[overlays-and-settings](./design/overlays-and-settings.md)「语言与 Tabs」；
+顶栏的「显示」按钮见 [layout-and-chrome](./design/layout-and-chrome.md) §4.1。
 
 Onboarding 里，语言选择放在顶部右侧，使用轻量菜单：
 
@@ -78,8 +72,6 @@ Auto
 中文
 English
 ```
-
-如果未来增加 theme、telemetry、启动行为等全局偏好，再升级成真正的 Preferences / General 页面。
 
 ## 中文版 Settings Tab
 
@@ -262,9 +254,9 @@ Section 标签（2026-10-07 JC 裁）：
 
 「智能体」只用作中文辅助解释，帮助不懂英文的用户建立概念，例如 Settings tab 中文标签与页头标题 `智能体接入`。正文不大面积把 `Agent` 改成「智能体」。
 
-## 中文版待清理区域
+## 中文版文案对照（i18n 前的清理表）
 
-这些是实现 i18n 前需要 review 的现有产品文案区域。
+这些是实现 i18n 前 review 过的产品文案区域；i18n 已落地，现行文案以 locale 文件为准。
 
 ### 全局控件
 
@@ -390,16 +382,10 @@ Section 标签（2026-10-07 JC 裁）：
 
 ## 实现备注
 
-英文 copy review 通过前，不进入完整 i18n dictionary 实现，也不把英文
-UI 当作已完成体验。
-
-当前已接入的基础实现：
+完整的 i18n dictionary 已实现（`gui/src/i18n/locales/`），遵循下面的约定：
 
 - 新增 typed language preference：`system | zh-CN | en-US`。
 - 在状态 / render 边界解析 `system`，不要每个组件各自判断 locale。
 - 命令 / 搜索 alias 可以多语言。
 - 中文 aria label 不暴露英文实现术语。
-
-后续进入完整双语实现时：
-
 - i18n key 按 UI 区域组织，不要做一个扁平字符串大表。

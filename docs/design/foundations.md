@@ -290,13 +290,10 @@ TN 10.59）。翻转必然让长文阅读面变暗；若日后读着发刺，解
 
 交互入口：
 
-- TopBar 放 icon-only 外观按钮，固定在 Settings 左侧；状态类入口（Browser Control /
-  Channels）在它左边，避免外观偏好的肌肉记忆随状态按钮出现而漂移。
-  图标表达**当前实际主题**：浅色显示 `Sun`，深色显示 `Moon`。
-- 点击弹三选菜单：`Monitor` 跟随系统 / `Sun` 浅色 / `Moon` 深色；菜单勾选
-  当前偏好，tooltip/aria 显示“偏好 · 当前实际主题”。
-- Settings 左侧底部放同一个 Appearance 菜单，和语言偏好并列；当前不新增
-  General tab。
+- 外观入口见 [layout-and-chrome](./layout-and-chrome.md) §4.1：顶栏一个固定
+  `TextAa` 的「显示」按钮（2026-10-04 起，按钮面不显示当前主题），以及
+  Settings 的 `General / 通用` tab（[overlays-and-settings](./overlays-and-settings.md)
+  「语言与 Tabs」）。
 - 切换主题只做 120ms root opacity acknowledgement，首次启动不播放，
   `prefers-reduced-motion` 下禁用；不做全局 color transition，避免整屏拖影。
 
@@ -346,7 +343,7 @@ Galley 有两套**并行**的字号系统，分属不同表面，二者不互相
 **B. UI chrome 面 — 固定值 token**
 
 `@theme` token（`--text-ui-*` → `text-ui-*` utility）。覆盖阅读面以外的所有 UI。
-**新 chrome 代码用这些名字**；现存 ~436 处 raw `text-[Npx]` 在组件下次被触碰时迁移。
+**新 chrome 代码用这些名字**；现存约 297 处 raw `text-[Npx]`（2026-11-10） 在组件下次被触碰时迁移。
 字号主题不变（dark mode 只翻颜色，不翻字号）。
 
 | Token（utility） | 值 | 角色 | 代表位置 |
@@ -526,7 +523,7 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
 | `radius-lg` | 14px | overlay (Command Palette) |
 | `shadow-card` | `0 1px 2px rgba(31,27,23,0.04)` | 普通卡片 |
 | `shadow-elevated` | `0 8px 24px rgba(31,27,23,0.12)` | 浮起卡片、Command Palette |
-| `space-unit` | 4px | 间距基础单位 |
+| `space-unit`（不是 token） | 4px | 间距基础单位：即 Tailwind 默认的 `0.25rem` 步长，`gui/src` 里没有同名变量 |
 
 ### 2.5 UI primitives
 
@@ -668,7 +665,7 @@ devlog [thinking 计时器与 shimmer 裁决](../devlog/2026-08-12-thinking-time
 
 **豁免二（2026-10-20）：助理的脸。** 内置运行时有主对话时，侧栏助理卡片上的头像是一张会动的脸：应用图标那个木头机器人，眼睛、嘴、舌头卷成的 G 跟着它在做的事动（[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 117、118、119，票 65、66、67）。这里重审而不是规范赢（裁决 117 第 5 条）：本节反对的是「仪器在运转」的工具气质，转圈恰恰是仪器，一张在想事情的脸是人；活物的信号是对你有反应、有眼神、动得有变化、大多数时候是静的，所以要的是对的动效，不是更多动效。边界：
 
-- **只此一张，只在侧栏卡片上**：顶栏身份行的 28px 头像一律静止（`gui/src/components/layout/assistant/AssistantIdentity.tsx:53` 画静止的图标），它在做什么由对话里三点气泡下面那一行说（裁决 119 第 6 条；2026-10-23 起顶栏在跑时留空，裁决 134、135）；侧栏收起时也不交给顶栏。同一时刻只有一张脸在动，规则没有例外。驱动只挂一个（`gui/src/App.tsx:826` 的 `AssistantFaceDriver`），外置运行时没有助理，一个像素不变。
+- **只此一张，只在侧栏卡片上**：顶栏身份行的 28px 头像一律静止（`gui/src/components/layout/assistant/AssistantIdentity.tsx:53` 画静止的图标），它在做什么由对话里三点气泡下面那一行说（裁决 119 第 6 条；2026-10-23 起顶栏在跑时留空，裁决 134、135）；侧栏收起时也不交给顶栏。同一时刻只有一张脸在动，规则没有例外。驱动只挂一个（`gui/src/App.tsx` 里的 `AssistantFaceDriver`），外置运行时没有助理，一个像素不变。
 - **只在它有状态时动，每个动作一句话说得清在表达什么**：每个动作对应界面已经知道的一件事，不演它没在做的事；同一个动作备两到四个变体、大小与时机每次重抽，不做节拍器；几件撞在一起只演最要紧的：等你回复 > 出错 > 写回复 > 做事 > 想（`gui/src/lib/assistant-face.ts:212` `faceActivity`）。状态表以代码为准（`lib/assistant-face.ts` 的 `FaceActivity`、`FaceReaction`）：
   - **持续的**（事情在就一直演）：在想（还没动手或两步之间）、看网页（`web_scan`、`web_execute_js`）、读文件（`file_read`）、记（`file_write`、`file_patch`、`start_long_term_update`，以及 `code_run` 里 galley 的待办与提醒写操作）、动手（其余 `code_run`）、写回复（正在出字）、等子任务（它派出的子任务在跑）；等你回复与出错演完进入的那一拍就定住不动；闲着、打盹（30 分钟没碰它，深夜 1 分钟，`:256`）。工具怎么归类在 `:114` `classifyTool`。
   - **演一次的**：你发出消息、在它的输入框打字、鼠标移上去、拖进文件、按停止、做完、派出子任务、子任务交回、提醒叫醒、打盹时被碰醒。

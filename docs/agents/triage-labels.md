@@ -1,6 +1,6 @@
 # Triage Labels
 
-The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's issue tracker.
+The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's issue tracker, plus two values of our own that the dispatch and session-close workflows depend on: `needs-dogfood` and `done` (seven values in all).
 
 Since issues are local markdown files, each label is written as a `Status:` value near the top of the issue file rather than applied through an issue-tracker UI.
 
@@ -28,5 +28,3 @@ original word at the start of the parenthetical
   `（拆为 …，以子票状态为准）`
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding string from this table.
-
-Edit the right-hand column to match whatever vocabulary you actually use.

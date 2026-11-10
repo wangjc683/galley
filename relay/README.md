@@ -9,7 +9,8 @@ This relay is the only meeting point.
 Design and rationale:
 [05 / 06 remote protocol design](../.scratch/ios-client/issues/05-remote-protocol-design.md),
 §4 and §8. The wire formats come from
-[`remote-protocol`](../remote-protocol/README.md) (`frame`, `keys`).
+[`remote-protocol`](../remote-protocol/README.md) (`frame`, `keys`, and
+`push` for the APNs payload wrapper, which holds no key).
 
 ## What it sees and what it does not
 
