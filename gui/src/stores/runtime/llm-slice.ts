@@ -56,7 +56,7 @@ export interface LlmSlice {
    * `pendingLLMIndex`: stashed because no session row exists yet;
    * `undefined` = untouched, `null` = explicitly
    * follow the model configuration, a tier = override the next session.
-   * Consumed (and always cleared) by `sessionsStore.createSession`,
+   * Consumed (and cleared) by `sessionsStore.createSessionPersisted`,
    * which seeds the new session's override and lets Core forward it.
    */
   pendingReasoningEffort: string | null | undefined;

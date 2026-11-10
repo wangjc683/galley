@@ -503,9 +503,9 @@ describe("the broadcast of this page's own write changes nothing", () => {
     );
   });
 
-  it("create: no second row, the new session stays open", () => {
+  it("create: no second row, the new session stays open", async () => {
     useRuntimeStore.setState({ pendingReasoningEffort: "high" });
-    const id = useSessionsStore.getState().createSession();
+    const id = await useSessionsStore.getState().createSessionPersisted();
     expect(row(id).reasoningEffort).toBe("high");
     expectEchoIsNoop(() =>
       useSessionsStore

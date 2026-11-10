@@ -45,8 +45,8 @@ export interface EmptyStateProps {
   /** Fallback for pre-bridge / dev when `llms` is empty. */
   onOpenLLMSwitcher?: () => void;
   /** Reasoning-effort pill state — EmptyState configures the NEXT new
-   * session (pendingReasoningEffort, consumed and always cleared by
-   * createSession), same lifecycle as the LLM pre-pick. */
+   * session (pendingReasoningEffort, consumed and cleared by
+   * createSessionPersisted), same lifecycle as the LLM pre-pick. */
   reasoningEffort?: ComposerReasoningEffortState;
   /**
    * Width mode from the TopBar toggle. EmptyState's hero block tracks

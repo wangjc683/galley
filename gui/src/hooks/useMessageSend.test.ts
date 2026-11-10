@@ -931,6 +931,74 @@ describe("useMessageSend handlers", () => {
     expect(consumeReplyNotifyPending(sid)).toBe(true);
   });
 
+  it("submitFromEmpty: the effort picked on the empty screen reaches Core before the send", async () => {
+    useSessionsStore.setState({ sessions: [], activeSessionId: undefined });
+    useRuntimeStore.setState({ pendingReasoningEffort: "high" });
+    core((args) => dispatched(row(args.sessionId, 1, "第一条")));
+    const { api } = mountSend();
+
+    api.submitFromEmpty("第一条", []);
+    await settle();
+
+    const sid = useSessionsStore.getState().activeSessionId!;
+    expect(
+      useSessionsStore.getState().sessions.find((s) => s.id === sid)
+        ?.reasoningEffort,
+    ).toBe("high");
+    expect(useRuntimeStore.getState().pendingReasoningEffort).toBeUndefined();
+    expect(calls("set_session_reasoning_effort")).toEqual([
+      expect.objectContaining({ id: sid, value: "high" }),
+    ]);
+    const order = tauriMocks.invoke.mock.calls.map(([command]) => command);
+    expect(order.indexOf("create_session")).toBeLessThan(
+      order.indexOf("set_session_reasoning_effort"),
+    );
+    expect(order.indexOf("set_session_reasoning_effort")).toBeLessThan(
+      order.indexOf("send_user_message"),
+    );
+  });
+
+  it("the Browser Control demo waits for Core's row before it activates", async () => {
+    useSessionsStore.setState({ sessions: [], activeSessionId: undefined });
+    let commitRow: () => void = () => {};
+    const rowCommitted = new Promise<void>((resolve) => {
+      commitRow = resolve;
+    });
+    tauriMocks.invoke.mockImplementation(async (command, args) => {
+      if (command === "create_session") return await rowCommitted;
+      if (command === "ensure_session_runner") {
+        return { pid: 41, spawned: true, ready: null };
+      }
+      if (command === "send_user_message") {
+        const sessionId = (args as { sessionId: string }).sessionId;
+        return dispatched(row(sessionId, 1, "演示"));
+      }
+      if (command === "list_live_runners" || command === "runner_stderr_tail") {
+        return [];
+      }
+      return undefined;
+    });
+    const { api } = mountSend();
+
+    const demo = api.runBrowserControlDemo();
+    await settle();
+    expect(calls("create_session")).toHaveLength(1);
+    expect(calls("ensure_session_runner")).toHaveLength(0);
+    expect(calls("send_user_message")).toHaveLength(0);
+
+    commitRow();
+    await demo;
+
+    const sid = useSessionsStore.getState().activeSessionId!;
+    expect(calls("ensure_session_runner")).toEqual([
+      expect.objectContaining({ sessionId: sid }),
+    ]);
+    expect(calls("send_user_message")[0]).toMatchObject({
+      sessionId: sid,
+      text: copy.browserControl.demoPrompt,
+    });
+  });
+
   // The main chat queues like any session (ruling 71, item 4): its
   // 排队 / 开新对话 choice (ticket 02) is gone, and no new session opens.
   it("the main chat mid-run: a send queues like any session's, no new session", async () => {

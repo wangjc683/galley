@@ -245,7 +245,7 @@ export function useMessageSend({
     }
     let demoSid: string | null = null;
     try {
-      const sid = useSessionsStore.getState().createSession();
+      const sid = await useSessionsStore.getState().createSessionPersisted();
       demoSid = sid;
       await useSessionsStore.getState().activateSession(sid);
       useUiStore.getState().setScreen("main");

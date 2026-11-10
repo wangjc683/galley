@@ -96,54 +96,63 @@ describe("sessionsStore · setSessionReasoningEffort", () => {
 
 /**
  * EmptyState's pill has no session row to write onto, so it stashes
- * `pendingReasoningEffort` and `createSession` consumes it — same
- * lifecycle as `pendingLLMIndex`: seeded onto
- * the new session, ALWAYS cleared, and persisted through Core (which
- * forwards to the runner / next spawn).
+ * `pendingReasoningEffort` and `createSessionPersisted` consumes it —
+ * same lifecycle as `pendingLLMIndex`: seeded onto the new session,
+ * cleared, and persisted through Core (which forwards to the runner /
+ * next spawn) before the create resolves.
  */
-async function flushPromises(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, 0);
-  });
-}
-
-describe("sessionsStore · createSession consumes the effort pre-pick", () => {
+describe("sessionsStore · createSessionPersisted consumes the effort pre-pick", () => {
   beforeEach(() => {
     resetStores();
   });
 
-  it("seeds the override, clears the stash and persists it via Core", async () => {
+  it("seeds the override, clears the stash and persists it via Core after the row", async () => {
     useRuntimeStore.setState({ pendingReasoningEffort: "high" });
 
-    const id = useSessionsStore.getState().createSession();
+    const id = await useSessionsStore.getState().createSessionPersisted();
 
     expect(useSessionsStore.getState().sessions[0].reasoningEffort).toBe(
       "high",
     );
     expect(useRuntimeStore.getState().pendingReasoningEffort).toBeUndefined();
-    await flushPromises();
     expect(effortInvokes()).toHaveLength(1);
     expect(effortInvokes()[0][1]).toMatchObject({ id, value: "high" });
+    const order = getTauriMocks().invoke.mock.calls.map((call) => call[0]);
+    expect(order.indexOf("create_session")).toBeLessThan(
+      order.indexOf("set_session_reasoning_effort"),
+    );
   });
 
   it("sends no command when the pre-pick follows the model configuration", async () => {
     useRuntimeStore.setState({ pendingReasoningEffort: null });
 
-    useSessionsStore.getState().createSession();
+    await useSessionsStore.getState().createSessionPersisted();
 
     expect(useSessionsStore.getState().sessions[0].reasoningEffort).toBeNull();
     expect(useRuntimeStore.getState().pendingReasoningEffort).toBeUndefined();
-    await flushPromises();
     expect(effortInvokes()).toHaveLength(0);
   });
 
   it("leaves an untouched pill alone", async () => {
-    useSessionsStore.getState().createSession();
+    await useSessionsStore.getState().createSessionPersisted();
 
     expect(useSessionsStore.getState().sessions[0].reasoningEffort).toBeNull();
-    await flushPromises();
+    expect(effortInvokes()).toHaveLength(0);
+  });
+
+  it("gives the pre-pick back when Core refuses the create", async () => {
+    useRuntimeStore.setState({ pendingReasoningEffort: "high" });
+    getTauriMocks().invoke.mockImplementation(async (command) => {
+      if (command === "create_session") throw new Error("db locked");
+      return undefined;
+    });
+
+    await expect(
+      useSessionsStore.getState().createSessionPersisted(),
+    ).rejects.toThrow("db locked");
+
+    expect(useSessionsStore.getState().sessions).toHaveLength(0);
+    expect(useRuntimeStore.getState().pendingReasoningEffort).toBe("high");
     expect(effortInvokes()).toHaveLength(0);
   });
 });

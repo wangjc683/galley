@@ -21,7 +21,6 @@ describe("useSessionsStore shape", () => {
       // lifecycle
       "setActiveSession",
       "activateSession",
-      "createSession",
       "createSessionPersisted",
       "renameSession",
       "togglePinSession",

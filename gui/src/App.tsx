@@ -285,7 +285,7 @@ function App() {
   // landing in the empty screen. Earlier versions did, which
   // accumulated piles of "新对话" rows every time the user opened
   // and closed the app without ever typing. The Composer's
-  // onSubmit handles createSession + activate at the moment the
+  // onSubmit handles createSessionPersisted + activate at the moment the
   // user actually has intent. Sidebar's "New Chat" button still
   // creates an explicit session immediately, because that click
   // *is* the intent.
@@ -357,8 +357,8 @@ function App() {
         }
       : undefined;
   // EmptyState's effort pill configures the NEXT session, same
-  // lifecycle as the LLM pre-pick (createSession
-  // consumes and always clears it). Deviation is normalized here
+  // lifecycle as the LLM pre-pick (createSessionPersisted
+  // consumes and clears it). Deviation is normalized here
   // because there is no session row yet for the store action to
   // normalize against.
   const emptyReasoningEffortState = hasSelectedModel
@@ -595,7 +595,7 @@ function App() {
               // until the user actually submits — otherwise every
               // click on this button piles up another "新对话"
               // placeholder in the sidebar. submitOnEmpty does the
-              // createSession + activateSession when the user
+              // createSessionPersisted + activateSession when the user
               // commits to a first message.
               //
               // 侧栏新对话永远是普通新对话，与 ⌘N 一样（2026-10-09，

@@ -51,7 +51,7 @@ interface LlmSelectionSnapshot {
   displayName: string;
 }
 
-/** "新对话" — seed title set by `createSession`. */
+/** "新对话" — seed title set by `createSessionPersisted`. */
 export const DEFAULT_NEW_SESSION_TITLE = "新对话";
 
 /**
@@ -182,12 +182,10 @@ export interface SessionLifecycleSlice {
     id: string,
     opts?: { ensureRunner?: boolean },
   ) => Promise<RunnerEnsureFailure | null>;
-  /** Synchronous create — returns the new id for chaining. Rust write
-   * happens fire-and-forget; in-memory state updates immediately. */
-  createSession: (projectId?: string) => string;
-  /** Create and await the Rust row. Used when another Core command must
-   * reference the session immediately, such as the empty screen's first
-   * send. */
+  /** Create and await the Rust row, so the next Core command (the empty
+   * screen's first send, the Browser Control demo's activation) finds
+   * it. Seeds and persists the EmptyState effort pre-pick before it
+   * resolves. */
   createSessionPersisted: (
     projectId?: string,
     title?: string,
@@ -396,8 +394,8 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       //     (even if it hasn't flipped yet — flipping here would land
       //     the user on the older click).
       //   - pointer: a non-activation path moved it directly
-      //     (createSession, session delete write activeSessionId
-      //     without going through activateSession).
+      //     (createSessionPersisted, session delete write
+      //     activeSessionId without going through activateSession).
       // Either way we skip: the turns are already restored into
       // messagesStore, so the superseding action (or a later revisit)
       // gets them for free. Bridge spawn below still proceeds,
@@ -468,85 +466,6 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     return runnerFailure;
   },
 
-  createSession: (projectId) => {
-    const id = `s-${Date.now().toString(36)}-${Math.random()
-      .toString(36)
-      .slice(2, 6)}`;
-    const now = new Date().toISOString();
-    const gaRuntimeKind = usePrefsStore.getState().activeRuntimeKind;
-    const llmSelection = currentLLMSelectionForNewSession(
-      gaRuntimeKind,
-      get().activeSessionId,
-    );
-    const promptProfile =
-      gaRuntimeKind === "managed" ? MANAGED_PROMPT_PROFILE : undefined;
-    // EmptyState's effort pill stashes an explicit pre-pick the same
-    // way the LLM picker stashes pendingLLMIndex: there is no session
-    // row yet to write the override onto (`undefined` = untouched,
-    // `null` = follow the model configuration, a tier = override).
-    // Consume (and always clear) it here so an abandoned pick can't
-    // leak into a later unrelated session. Core forwards the value to
-    // the runner / next spawn — the GUI never talks to the bridge for
-    // this.
-    const pendingReasoningEffort =
-      useRuntimeStore.getState().pendingReasoningEffort;
-    if (pendingReasoningEffort !== undefined) {
-      useRuntimeStore.setState({ pendingReasoningEffort: undefined });
-    }
-    const newSession: Session = {
-      id,
-      title: DEFAULT_NEW_SESSION_TITLE,
-      status: "idle",
-      projectId,
-      errorCount: 0,
-      lastActivityAt: now,
-      createdAt: now,
-      updatedAt: now,
-      runtimeKind: gaRuntimeKind,
-      runtimeLabel: gaRuntimeKind === "managed" ? "内置内核" : "外部 GA",
-      gaRuntimeKind,
-      promptProfile,
-      reasoningEffort: pendingReasoningEffort ?? null,
-      selectedLlmIndex: llmSelection?.index,
-      selectedLlmKey: llmSelection?.key,
-      selectedLlmDisplayName: llmSelection?.displayName,
-    };
-    // Nothing of it exists yet that this page will not see arrive.
-    useMessagesStore.getState().markHistoryRead(id);
-    set((state) => ({
-      sessions: [newSession, ...state.sessions],
-      activeSessionId: id,
-    }));
-    void invoke("create_session", {
-      input: {
-        id,
-        title: DEFAULT_NEW_SESSION_TITLE,
-        projectId,
-        selectedLlmIndex: llmSelection?.index,
-        selectedLlmKey: llmSelection?.key,
-        selectedLlmDisplayName: llmSelection?.displayName,
-        gaRuntimeKind,
-        promptProfile,
-      } as CreateSessionInputWire,
-      origin: GUI_ORIGIN,
-    })
-      .then(() => {
-        // Persist the pre-picked override after the row exists. Only a
-        // real tier needs persisting: `null` / `undefined` is
-        // exactly what the freshly created row already holds.
-        if (!pendingReasoningEffort) return;
-        return invoke("set_session_reasoning_effort", {
-          id,
-          value: pendingReasoningEffort,
-          origin: GUI_ORIGIN,
-        });
-      })
-      .catch((e) => {
-        console.debug("[sessions] create_session invoke failed.", e);
-      });
-    return id;
-  },
-
   createSessionPersisted: async (projectId, title) => {
     const id = `s-${Date.now().toString(36)}-${Math.random()
       .toString(36)
@@ -560,6 +479,19 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     const promptProfile =
       gaRuntimeKind === "managed" ? MANAGED_PROMPT_PROFILE : undefined;
     const sessionTitle = title?.trim() || DEFAULT_NEW_SESSION_TITLE;
+    // EmptyState's effort pill stashes an explicit pre-pick the same
+    // way the LLM picker stashes pendingLLMIndex: there is no session
+    // row yet to write the override onto (`undefined` = untouched,
+    // `null` = follow the model configuration, a tier = override).
+    // Consume (and clear) it here so an abandoned pick can't leak into
+    // a later unrelated session; it goes back only when Core refuses
+    // the create below. Core forwards the value to the runner / next
+    // spawn — the GUI never talks to the bridge for this.
+    const pendingReasoningEffort =
+      useRuntimeStore.getState().pendingReasoningEffort;
+    if (pendingReasoningEffort !== undefined) {
+      useRuntimeStore.setState({ pendingReasoningEffort: undefined });
+    }
     const newSession: Session = {
       id,
       title: sessionTitle,
@@ -573,6 +505,7 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       runtimeLabel: gaRuntimeKind === "managed" ? "内置内核" : "外部 GA",
       gaRuntimeKind,
       promptProfile,
+      reasoningEffort: pendingReasoningEffort ?? null,
       selectedLlmIndex: llmSelection?.index,
       selectedLlmKey: llmSelection?.key,
       selectedLlmDisplayName: llmSelection?.displayName,
@@ -603,7 +536,33 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
         activeSessionId:
           state.activeSessionId === id ? undefined : state.activeSessionId,
       }));
+      // No session took the pre-pick: the pill keeps it for the next
+      // try, unless the user picked again meanwhile.
+      if (
+        pendingReasoningEffort !== undefined &&
+        useRuntimeStore.getState().pendingReasoningEffort === undefined
+      ) {
+        useRuntimeStore.setState({ pendingReasoningEffort });
+      }
       throw e;
+    }
+    // Persist the pre-picked override once the row exists and before
+    // the caller's first command, so the runner that command starts
+    // reads it. Only a real tier needs persisting: `null` / `undefined`
+    // is exactly what the freshly created row already holds.
+    if (pendingReasoningEffort) {
+      try {
+        await invoke("set_session_reasoning_effort", {
+          id,
+          value: pendingReasoningEffort,
+          origin: GUI_ORIGIN,
+        });
+      } catch (e) {
+        console.debug(
+          "[sessions] set_session_reasoning_effort invoke failed.",
+          e,
+        );
+      }
     }
     return id;
   },
