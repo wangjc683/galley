@@ -169,6 +169,7 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] An older installed build finds the new version and downloads it in the background **without closing the app** (before 2026-10-08 the updater's `install` ran right after download and exited the app)
 - [ ] Settings → About shows `vX 已下载，重启 Galley 后生效`; channels and the browser bridge keep running while the update waits
 - [ ] Clicking 重启并更新 stops Galley's child processes, the installer takes over, and Galley relaunches on the new version — no `_bz2.pyd` file-lock dialog
+- [ ] Manual upgrade: with an older build installed and running (and a `galley` CLI command running from the install dir, e.g. `galley session wait`), run the new `*-setup.exe`. The installer's pre-install hook closes both the app (`galley-core.exe`) and the CLI (`galley.exe`) under the install dir, with no file-lock dialog; afterwards `where.exe galley` points at the install dir and `galley version` reports the same version as Settings → About (before 2026-11-10 the hook matched only `galley.exe`, so the app kept running)
 - [ ] Tray 「Report an Issue…」opens Settings → 报告问题 (not the GitHub chooser)
 
 ### Settings -> Models
