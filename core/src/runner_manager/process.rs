@@ -460,10 +460,6 @@ impl RunnerProcess {
         self.pid
     }
 
-    pub fn session_id(&self) -> &str {
-        &self.session_id
-    }
-
     /// The child has exited (its stdout reader broadcast `Closed`), even
     /// though the manager may still hold this entry.
     pub fn has_closed(&self) -> bool {
@@ -637,14 +633,6 @@ impl RunnerProcess {
                 Ok(())
             }
         }
-    }
-
-    /// Wait for the child to exit. Idempotent — `tokio::Child::wait`
-    /// caches the result internally.
-    #[allow(dead_code)] // Used by tests + reserved for future watchers
-    pub async fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
-        let mut child = self.child.lock().await;
-        child.wait().await
     }
 }
 

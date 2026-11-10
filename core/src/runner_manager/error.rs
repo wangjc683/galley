@@ -125,12 +125,9 @@ impl std::error::Error for SendCommandError {}
 #[serde(tag = "error", rename_all = "snake_case")]
 pub enum ShutdownError {
     /// The session id had no matching alive process. Idempotent shutdown
-    /// callers should treat this as success.
+    /// callers should treat this as success. (The only failure: a kill
+    /// fallback that fails is best-effort and not reported.)
     NotFound { session_id: String },
-    /// Sending `{"kind":"shutdown"}` to stdin failed AND the kill
-    /// fallback also failed. Process is in an unknown state. Carries
-    /// the underlying message for diagnostics.
-    KillFailed { detail: String },
 }
 
 impl fmt::Display for ShutdownError {
@@ -139,7 +136,6 @@ impl fmt::Display for ShutdownError {
             Self::NotFound { session_id } => {
                 write!(f, "no runner process for session {}", session_id)
             }
-            Self::KillFailed { detail } => write!(f, "kill failed: {}", detail),
         }
     }
 }

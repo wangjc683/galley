@@ -202,8 +202,9 @@ pub(super) async fn dispatch_session_delete(
         .shutdown(id.as_str(), Some(DELETE_SHUTDOWN_GRACE))
         .await
     {
+        // No runner is fine. Exhaustive on purpose: a new shutdown
+        // failure must be handled here.
         Ok(()) | Err(ShutdownError::NotFound { .. }) => {}
-        Err(e) => eprintln!("[session.delete {id}] runner shutdown failed (deleting anyway): {e}"),
     }
     match Writes::new(&galley, ctx.notifier.as_ref(), "session.delete")
         .protecting_main_chat()

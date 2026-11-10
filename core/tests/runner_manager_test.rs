@@ -1884,7 +1884,7 @@ async fn replay_session(
             .await
             .expect("assistant row");
         galley
-            .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()), None, false)
+            .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()))
             .await
             .expect("bump");
     }

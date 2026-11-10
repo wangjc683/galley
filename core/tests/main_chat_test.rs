@@ -508,7 +508,7 @@ async fn a_line_told_beside_a_question_hides_neither() {
         .await
         .unwrap());
     galley
-        .bump_session_after_turn(main.clone(), Some("问城市".into()), None, false)
+        .bump_session_after_turn(main.clone(), Some("问城市".into()))
         .await
         .unwrap();
 

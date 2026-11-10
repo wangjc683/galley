@@ -160,7 +160,7 @@ async fn reply_to(
         .await
         .expect("assistant row");
     galley
-        .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()), None, false)
+        .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()))
         .await
         .expect("bump");
 }
@@ -1068,7 +1068,7 @@ async fn reply_silently(galley: &SqliteGalley, sid: &str, turn_index: u32, conte
         .await
         .expect("silent reply");
     galley
-        .bump_session_after_turn(SessionId(sid.into()), None, None, false)
+        .bump_session_after_turn(SessionId(sid.into()), None)
         .await
         .expect("bump");
 }
@@ -1332,7 +1332,7 @@ async fn with_nothing_complete_before_the_boundary_there_is_nothing_to_replay() 
         .await
         .expect("user row");
     galley
-        .bump_session_after_turn(SessionId(sid.into()), None, None, false)
+        .bump_session_after_turn(SessionId(sid.into()), None)
         .await
         .expect("bump");
     idle_for(&pool, sid, 5.0).await;

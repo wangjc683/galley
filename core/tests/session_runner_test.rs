@@ -1247,7 +1247,7 @@ async fn seed_exchange(galley: &SqliteGalley, sid: &str, user: &str, reply: &str
         .await
         .expect("assistant row");
     galley
-        .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()), None, false)
+        .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()))
         .await
         .expect("bump");
 }
@@ -1563,7 +1563,7 @@ async fn completed_turns_that_convert_to_nothing_send_no_load_history() {
         .await
         .unwrap();
     galley
-        .bump_session_after_turn(SessionId("s-rp-empty".into()), None, None, false)
+        .bump_session_after_turn(SessionId("s-rp-empty".into()), None)
         .await
         .unwrap();
     let runner = ScriptedRunner::ready_on_spawn();

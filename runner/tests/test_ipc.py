@@ -347,43 +347,6 @@ def test_decode_invalid_json() -> None:
         decode_event("not json")
 
 
-def test_decode_command_repairs_unescaped_quoted_windows_path() -> None:
-    line = (
-        r'{"kind":"user_message","text":"学习一下这个sop, '
-        r'"D:\GenericAgent\memory\sophub.md"","images":[]}'
-    )
-
-    decoded = decode_command(line)
-
-    assert isinstance(decoded, UserMessageCommand)
-    assert decoded.text == r'学习一下这个sop, "D:\GenericAgent\memory\sophub.md"'
-    assert decoded.images == []
-
-
-def test_decode_command_repairs_unescaped_quotes_with_images() -> None:
-    line = r'{"kind":"user_message","text":"看 "D:\a\b.md"","images":["C:\\shot.png"]}'
-
-    decoded = decode_command(line)
-
-    assert isinstance(decoded, UserMessageCommand)
-    assert decoded.text == r'看 "D:\a\b.md"'
-    assert decoded.images == [r"C:\shot.png"]
-
-
-def test_decode_command_repairs_legacy_line_with_absolute_turn_index() -> None:
-    line = (
-        r'{"kind":"user_message","text":"看 "D:\a\b.md"",'
-        r'"images":["C:\\shot.png"],"absoluteTurnIndex":7}'
-    )
-
-    decoded = decode_command(line)
-
-    assert isinstance(decoded, UserMessageCommand)
-    assert decoded.text == r'看 "D:\a\b.md"'
-    assert decoded.images == [r"C:\shot.png"]
-    assert decoded.absoluteTurnIndex == 7
-
-
 def test_decode_empty_line() -> None:
     with pytest.raises(IPCProtocolError, match="Empty"):
         decode_event("")

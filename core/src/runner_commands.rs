@@ -77,7 +77,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::broadcast::error::RecvError;
@@ -342,7 +342,6 @@ pub(crate) async fn prepare_managed_runtime_context(
     })?;
     let env = managed_runtime_env(
         &diagnostics.paths.state_root,
-        &model_config_path,
         managed_prompt::compose_runtime_prompt(&app.package_info().version.to_string()),
         runtime_config,
     );
@@ -376,7 +375,6 @@ pub(crate) const MAIN_CHAT_ENV: &str = "GALLEY_MAIN_CHAT";
 /// does that, for its runner only).
 fn managed_runtime_env(
     state_root: &str,
-    model_config_path: &Path,
     runtime_prompt: String,
     runtime_config: String,
 ) -> Vec<(String, String)> {
@@ -384,10 +382,6 @@ fn managed_runtime_env(
         ("GALLEY_RUNTIME_KIND".into(), "managed".into()),
         ("PYTHONDONTWRITEBYTECODE".into(), "1".into()),
         ("GALLEY_GA_STATE_ROOT".into(), state_root.to_string()),
-        (
-            "GALLEY_MANAGED_MODEL_CONFIG_PATH".into(),
-            model_config_path.to_string_lossy().into_owned(),
-        ),
         ("GALLEY_RUNTIME_PROMPT_TEXT".into(), runtime_prompt),
         ("GALLEY_MANAGED_MODEL_CONFIG_JSON".into(), runtime_config),
     ]
@@ -636,7 +630,6 @@ pub async fn shutdown_runner(
         // would force every caller to ignore one specific variant. Treat
         // as success at the transport boundary instead.
         Err(ShutdownError::NotFound { .. }) => Ok(()),
-        Err(e) => Err(err_to_json::<ShutdownError>(e)),
     }
 }
 
@@ -1067,12 +1060,7 @@ mod tests {
     /// adds `GALLEY_MAIN_CHAT=1`, once.
     #[test]
     fn only_marking_adds_the_main_chat_flag() {
-        let mut env = managed_runtime_env(
-            "/state",
-            Path::new("/state/models.json"),
-            "workbench prompt".into(),
-            "{}".into(),
-        );
+        let mut env = managed_runtime_env("/state", "workbench prompt".into(), "{}".into());
         assert!(env_value(&env, MAIN_CHAT_ENV).is_empty());
         assert_eq!(env_value(&env, "GALLEY_RUNTIME_KIND"), ["managed"]);
         mark_main_chat_env(&mut env, "main chat prompt".into());
@@ -1159,12 +1147,7 @@ mod tests {
             ("s-subtask", false),
             ("s-external", false),
         ] {
-            let mut env = managed_runtime_env(
-                "/state",
-                Path::new("/state/models.json"),
-                "workbench prompt".into(),
-                "{}".into(),
-            );
+            let mut env = managed_runtime_env("/state", "workbench prompt".into(), "{}".into());
             if crate::session_runner::segment::prompt_state(&galley, id)
                 .await
                 .is_some()
@@ -1265,12 +1248,7 @@ mod tests {
             ("s-side", false),
             ("s-main", false),
         ] {
-            let mut env = managed_runtime_env(
-                "/state",
-                Path::new("/state/models.json"),
-                "workbench prompt".into(),
-                "{}".into(),
-            );
+            let mut env = managed_runtime_env("/state", "workbench prompt".into(), "{}".into());
             if let Some(background) = crate::subtask_background::prompt_section(&galley, id).await {
                 set_runtime_prompt(
                     &mut env,

@@ -228,9 +228,7 @@ impl ImSupervisorManager {
                 managed_prompt::im_supervisor_prompt_template(&sop_path_str, platform),
             ));
         }
-        env.push(("GALLEY_SUPERVISOR_SOP_PATH".into(), sop_path_str));
         env.push(("GALLEY_SUPERVISOR_ID".into(), supervisor_id));
-        env.push(("GALLEY_IM_PLATFORM".into(), platform.into()));
         env.push((GALLEY_CORE_PID_ENV.into(), std::process::id().to_string()));
         let binding = append_platform_env(platform, &mut env)
             .await
@@ -242,7 +240,6 @@ impl ImSupervisorManager {
         let python = managed_python_for_app(&app).map_err(StartFailure::Shared)?;
         let code_root = context.diagnostics.paths.code_root.clone();
         let state_dir_arg = state_dir.to_string_lossy().into_owned();
-        let sop_path_arg = sop_path.to_string_lossy().into_owned();
         let mut cmd = Command::new(&python);
         cmd.args([
             "-m",
@@ -253,8 +250,6 @@ impl ImSupervisorManager {
             &code_root,
             "--state-dir",
             &state_dir_arg,
-            "--sop-path",
-            &sop_path_arg,
         ]);
         if relogin {
             cmd.arg("--relogin");

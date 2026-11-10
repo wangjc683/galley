@@ -103,20 +103,15 @@ async fn project_sessions(
     galley: &SqliteGalley,
     project_id: &str,
     all: bool,
-    scope: Option<&[String]>,
 ) -> Result<Vec<SessionBrief>, GalleyError> {
-    let mut sessions = galley
+    galley
         .list_sessions(SessionFilter {
             project_id: Some(project_id.to_string()),
             status: None,
             archived: if all { None } else { Some(false) },
             runtime_kind: None,
         })
-        .await?;
-    if let Some(scope) = scope {
-        sessions.retain(|session| scope.iter().any(|id| id == session.id.as_str()));
-    }
-    Ok(sessions)
+        .await
 }
 
 fn status_key(status: SessionStatus) -> &'static str {
@@ -175,13 +170,9 @@ fn project_follow_state(
     }
 }
 
-async fn project_has_active_sessions(
-    project_id: &str,
-    all: bool,
-    scope: Option<&[String]>,
-) -> Result<bool, GalleyError> {
+async fn project_has_active_sessions(project_id: &str, all: bool) -> Result<bool, GalleyError> {
     let galley = SqliteGalley::open().await?;
-    let sessions = project_sessions(&galley, project_id, all, scope).await?;
+    let sessions = project_sessions(&galley, project_id, all).await?;
     Ok(sessions
         .iter()
         .any(|session| is_live_candidate(session.status)))
@@ -193,7 +184,7 @@ async fn project_rollup_payload(
     all: bool,
 ) -> Result<ProjectRollupPayload, GalleyError> {
     let project = find_project(galley, project_id).await?;
-    let sessions = project_sessions(galley, project_id, all, None).await?;
+    let sessions = project_sessions(galley, project_id, all).await?;
     let running_sessions = sessions
         .iter()
         .filter(|s| s.status == SessionStatus::Running)
@@ -232,10 +223,9 @@ async fn project_show_payload(
     project_id: &str,
     tail: usize,
     all: bool,
-    scope: Option<&[String]>,
 ) -> Result<ProjectShowPayload, GalleyError> {
     let project = find_project(galley, project_id).await?;
-    let sessions = project_sessions(galley, project_id, all, scope).await?;
+    let sessions = project_sessions(galley, project_id, all).await?;
     let status_counts = status_counts(&sessions);
     let session_count = sessions.len();
     let details = project_session_details(galley, &sessions, tail).await?;
@@ -254,9 +244,8 @@ async fn project_snapshot_payload(
     phase: &'static str,
     tail: usize,
     all: bool,
-    scope: Option<&[String]>,
 ) -> Result<ProjectSnapshotPayload, GalleyError> {
-    let show = project_show_payload(galley, project_id, tail, all, scope).await?;
+    let show = project_show_payload(galley, project_id, tail, all).await?;
     Ok(ProjectSnapshotPayload {
         schema_version: SCHEMA_VERSION,
         stream: "snapshot",
@@ -325,7 +314,7 @@ pub(crate) async fn project_show(
     all: bool,
 ) -> Result<(), GalleyError> {
     let galley = SqliteGalley::open().await?;
-    emit_json(&project_show_payload(&galley, &project_id, tail, all, None).await?)?;
+    emit_json(&project_show_payload(&galley, &project_id, tail, all).await?)?;
     Ok(())
 }
 
@@ -424,11 +413,10 @@ async fn emit_project_final_snapshot(
     tail: usize,
     all: bool,
     mode: &'static str,
-    scope: Option<&[String]>,
 ) -> Result<(), GalleyError> {
     let galley = SqliteGalley::open().await?;
     let mut final_snapshot =
-        project_snapshot_payload(&galley, project_id, "final", tail, all, scope).await?;
+        project_snapshot_payload(&galley, project_id, "final", tail, all).await?;
     final_snapshot.follow_state = Some(project_follow_state(mode, &final_snapshot.sessions));
     emit_json(&final_snapshot)
 }
@@ -438,7 +426,6 @@ async fn project_follow_until_idle(
     tail: usize,
     all: bool,
     final_show: bool,
-    scope: Option<Vec<String>>,
     mut rx: tokio::sync::mpsc::UnboundedReceiver<ProjectWatchItem>,
 ) -> Result<(), GalleyError> {
     let mut saw_stream_item = false;
@@ -460,14 +447,8 @@ async fn project_follow_until_idle(
                             tokio::time::sleep(PROJECT_FOLLOW_IDLE_QUIET_WINDOW).await;
                         }
                         if final_show || saw_stream_item {
-                            emit_project_final_snapshot(
-                                &project_id,
-                                tail,
-                                all,
-                                "until_idle",
-                                scope.as_deref(),
-                            )
-                            .await?;
+                            emit_project_final_snapshot(&project_id, tail, all, "until_idle")
+                                .await?;
                         }
                         emit_json(&StreamEndPayload {
                             schema_version: SCHEMA_VERSION,
@@ -483,16 +464,9 @@ async fn project_follow_until_idle(
                 }
             }
             _ = &mut quiet_window => {
-                if !project_has_active_sessions(&project_id, all, scope.as_deref()).await? {
+                if !project_has_active_sessions(&project_id, all).await? {
                     if final_show {
-                        emit_project_final_snapshot(
-                            &project_id,
-                            tail,
-                            all,
-                            "until_idle",
-                            scope.as_deref(),
-                        )
-                        .await?;
+                        emit_project_final_snapshot(&project_id, tail, all, "until_idle").await?;
                     }
                     emit_json(&StreamEndPayload {
                         schema_version: SCHEMA_VERSION,
@@ -509,23 +483,15 @@ async fn project_follow_until_idle(
     }
 }
 
-/// `only_sessions` restricts the follow to those session ids (watch
-/// targets, idle detection, and snapshots), so chatter in unrelated
-/// sessions of the same project cannot reset the until-idle quiet
-/// window. `galley project follow` passes `None`: the whole project.
 pub(crate) async fn project_follow(
     project_id: String,
     tail: usize,
     all: bool,
     until_idle: bool,
     final_show: bool,
-    only_sessions: Option<Vec<String>>,
 ) -> Result<(), GalleyError> {
     let galley = SqliteGalley::open().await?;
-    let scope = only_sessions;
-    let mut initial =
-        project_snapshot_payload(&galley, &project_id, "initial", tail, all, scope.as_deref())
-            .await?;
+    let mut initial = project_snapshot_payload(&galley, &project_id, "initial", tail, all).await?;
     let mode = if until_idle { "until_idle" } else { "live" };
     let watch_targets = initial
         .sessions
@@ -542,7 +508,7 @@ pub(crate) async fn project_follow(
 
     if watch_targets.is_empty() {
         if final_show {
-            emit_project_final_snapshot(&project_id, tail, all, mode, scope.as_deref()).await?;
+            emit_project_final_snapshot(&project_id, tail, all, mode).await?;
         }
         emit_json(&StreamEndPayload {
             schema_version: SCHEMA_VERSION,
@@ -564,7 +530,7 @@ pub(crate) async fn project_follow(
     drop(tx);
 
     if until_idle {
-        return project_follow_until_idle(project_id, tail, all, final_show, scope, rx).await;
+        return project_follow_until_idle(project_id, tail, all, final_show, rx).await;
     }
 
     let mut saw_stream_item = false;
@@ -575,7 +541,7 @@ pub(crate) async fn project_follow(
 
     if !saw_stream_item {
         if final_show {
-            emit_project_final_snapshot(&project_id, tail, all, mode, scope.as_deref()).await?;
+            emit_project_final_snapshot(&project_id, tail, all, mode).await?;
         }
         emit_json(&StreamEndPayload {
             schema_version: SCHEMA_VERSION,
@@ -585,7 +551,7 @@ pub(crate) async fn project_follow(
         return Ok(());
     }
 
-    emit_project_final_snapshot(&project_id, tail, all, mode, scope.as_deref()).await?;
+    emit_project_final_snapshot(&project_id, tail, all, mode).await?;
     emit_json(&StreamEndPayload {
         schema_version: SCHEMA_VERSION,
         stream: "end",

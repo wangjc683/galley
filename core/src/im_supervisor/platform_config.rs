@@ -718,7 +718,7 @@ mod tests {
     fn credential_env() -> Vec<(String, String)> {
         // Built the way `append_platform_env` builds them.
         vec![
-            ("GALLEY_IM_PLATFORM".into(), "telegram".into()),
+            ("GALLEY_SUPERVISOR_ID".into(), "galley-im/telegram".into()),
             (
                 "GALLEY_TELEGRAM_CONFIG_JSON".into(),
                 serde_json::to_string(&json!({

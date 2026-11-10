@@ -824,6 +824,25 @@ def test_codex_backend_token_wait_is_bounded(monkeypatch: pytest.MonkeyPatch) ->
     assert str(raised.value) == "Galley Codex credential refresh failed: timed out"
 
 
+@pytest.mark.parametrize(("codex_backend", "expected"), [(True, "medium"), (False, "minimal")])
+def test_codex_backend_raises_a_minimal_effort_to_medium(
+    codex_backend: bool, expected: str
+) -> None:
+    """The plan backend has no `minimal`; the engine raises it (the runner
+    passes the configured effort through)."""
+    cfg: dict[str, Any] = {
+        "name": "chatgpt-test",
+        "apikey": "galley-codex-oauth",
+        "apibase": "https://api.openai.com/v1",
+        "model": "gpt-5.6-sol",
+        "reasoning_effort": "minimal",
+    }
+    if codex_backend:
+        cfg["codex_backend"] = True
+
+    assert llmcore.LLMSession(cfg).reasoning_effort == expected
+
+
 def test_without_the_codex_backend_ga_headers_are_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -676,7 +676,6 @@ pub(super) async fn dispatch_session_shutdown_runner(
             request_id,
             serde_json::json!({ "dispatch": "already_stopped" }),
         ),
-        Err(e) => SocketResponse::err(request_id, ErrorTag::RunnerError, e.to_string()),
     }
 }
 

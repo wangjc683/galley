@@ -390,16 +390,15 @@ async fn drop_queued(runner: &dyn RunnerPort, ids: &[SessionId]) {
 }
 
 /// Close the runners of `ids`, concurrently. A session without one is
-/// fine; another failure is logged (the manager kills what does not exit
-/// in time).
+/// fine (the manager kills what does not exit in time).
 async fn shut_down(runner: &dyn RunnerPort, ids: &[SessionId]) {
     let results =
         futures_util::future::join_all(ids.iter().map(|id| runner.shutdown(id.as_str(), None)))
             .await;
-    for (id, result) in ids.iter().zip(results) {
+    // Exhaustive on purpose: a new shutdown failure must be handled here.
+    for result in results {
         match result {
             Ok(()) | Err(crate::runner_manager::ShutdownError::NotFound { .. }) => {}
-            Err(e) => eprintln!("[main-chat-reset] closing the runner of {id} failed: {e}"),
         }
     }
 }

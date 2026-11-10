@@ -188,8 +188,8 @@ def managed_model_config_from_env() -> dict[str, Any]:
             cfg["galley_api_key_ref"] = api_key_ref
             if isinstance(credential_ipc, dict):
                 cfg["galley_credential_ipc"] = credential_ipc
-            if str(cfg.get("reasoning_effort") or "").strip().lower() == "minimal":
-                cfg["reasoning_effort"] = "medium"
+            # A `minimal` effort is raised to `medium` by the engine itself
+            # (patch 0007, `BaseSession.__init__` on `codex_backend`).
         # auth_kind "none" is a deliberate no-auth endpoint (e.g. local
         # Ollama): an empty apikey is its real credential — GA sends the
         # auth header unconditionally and such endpoints ignore it.

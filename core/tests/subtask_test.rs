@@ -143,7 +143,7 @@ async fn exchange(
         .await
         .expect("assistant row");
     galley
-        .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()), None, false)
+        .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()))
         .await
         .expect("bump");
     i64::from(turn_index)
@@ -1418,7 +1418,7 @@ async fn every_runner_of_a_subtask_is_told_the_same_background() {
         .await
         .unwrap();
     galley
-        .bump_session_after_turn(SessionId(sub.clone()), Some("订好了".into()), None, false)
+        .bump_session_after_turn(SessionId(sub.clone()), Some("订好了".into()))
         .await
         .unwrap();
     exchange(&galley, MAIN, "改成周六吧", "好。", None).await;

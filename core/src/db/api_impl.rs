@@ -148,11 +148,8 @@ impl GalleyApi for SqliteGalley {
         &self,
         id: SessionId,
         summary: Option<String>,
-        step_number: Option<u32>,
-        mark_unread: bool,
     ) -> Result<SessionBrief> {
-        self.bump_session_after_turn_db(id, summary, step_number, mark_unread)
-            .await
+        self.bump_session_after_turn_db(id, summary).await
     }
 
     async fn mark_session_unread(&self, id: SessionId) -> Result<()> {

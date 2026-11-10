@@ -9,7 +9,6 @@ serialization a trivial `dataclasses.asdict` call without any name remapping.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -532,54 +531,6 @@ def decode_command(line: str) -> Command:
     return cast(Command, _decode(line, COMMAND_KINDS, "command"))
 
 
-_USER_MESSAGE_PREFIX_RE = re.compile(
-    r'^\{\s*"kind"\s*:\s*"user_message"\s*,\s*"text"\s*:\s*"'
-)
-_USER_MESSAGE_IMAGES_SUFFIX_RE = re.compile(
-    r'"\s*,\s*"images"\s*:\s*(?P<images>\[[\s\S]*?\])'
-    r'(?P<tail>\s*,\s*"absoluteTurnIndex"\s*:\s*(?P<absolute_turn_index>-?\d+|null))?'
-    r"\s*\}\s*$"
-)
-
-
-def _repair_malformed_user_message_command(line: str) -> dict[str, Any] | None:
-    """Recover legacy malformed `user_message` command lines.
-
-    v0.1.x builds wrote bridge commands from the webview through
-    tauri-plugin-shell. A reported Windows case reached the bridge as a JSON-ish
-    line where the user text was not escaped, e.g. a quoted `D:\\...` path broke
-    `json.loads`. This recovery is intentionally narrow: only the fixed
-    `user_message` envelope is accepted, and non-message commands still fail
-    closed.
-    """
-    prefix = _USER_MESSAGE_PREFIX_RE.match(line)
-    if not prefix:
-        return None
-    matches = list(_USER_MESSAGE_IMAGES_SUFFIX_RE.finditer(line))
-    if not matches:
-        return None
-    suffix = matches[-1]
-    try:
-        images = json.loads(suffix.group("images"))
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(images, list) or not all(isinstance(item, str) for item in images):
-        return None
-    payload: dict[str, Any] = {
-        "kind": "user_message",
-        "text": line[prefix.end() : suffix.start()],
-        "images": images,
-    }
-    raw_absolute_turn_index = suffix.group("absolute_turn_index")
-    if raw_absolute_turn_index is not None:
-        payload["absoluteTurnIndex"] = (
-            None
-            if raw_absolute_turn_index == "null"
-            else int(raw_absolute_turn_index)
-        )
-    return payload
-
-
 def _decode(line: str, registry: dict[str, type], label: str) -> Any:
     line = line.strip()
     if not line:
@@ -587,9 +538,7 @@ def _decode(line: str, registry: dict[str, type], label: str) -> Any:
     try:
         payload = json.loads(line)
     except json.JSONDecodeError as e:
-        payload = _repair_malformed_user_message_command(line) if label == "command" else None
-        if payload is None:
-            raise IPCProtocolError(f"Invalid JSON in {label}: {e.msg}") from e
+        raise IPCProtocolError(f"Invalid JSON in {label}: {e.msg}") from e
     if not isinstance(payload, dict):
         raise IPCProtocolError(
             f"{label.capitalize()} must be a JSON object, got {type(payload).__name__}"

@@ -190,7 +190,7 @@ async fn step(
         .await
         .expect("assistant row");
     galley
-        .bump_session_after_turn(SessionId(sid.into()), None, None, false)
+        .bump_session_after_turn(SessionId(sid.into()), None)
         .await
         .expect("bump");
 }
@@ -1966,7 +1966,7 @@ async fn answered_report(galley: &SqliteGalley, runner: &Runner, env: &FakeEnv, 
         .await
         .expect("silent reply");
     galley
-        .bump_session_after_turn(SessionId(MAIN.into()), None, None, false)
+        .bump_session_after_turn(SessionId(MAIN.into()), None)
         .await
         .expect("bump");
     runner.settle(MAIN);

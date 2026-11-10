@@ -614,47 +614,6 @@ impl SqliteGalley {
         Ok(briefs)
     }
 
-    pub async fn persist_gui_user_message(
-        &self,
-        session_id: SessionId,
-        turn_index: u32,
-        content: String,
-        origin: Origin,
-    ) -> Result<()> {
-        let id = format!("msg_{}_{}_user", session_id.as_str(), turn_index);
-        let created_at = chrono_now_iso();
-        sqlx::query(
-            "INSERT INTO messages (
-               id, session_id, turn_index, sequence, role, content,
-               tool_calls, tool_results, thinking, final_answer, created_at,
-               created_via, supervisor, origin_note, client, visibility
-             ) VALUES (?, ?, ?, 0, 'user', ?,
-                       NULL, NULL, NULL, NULL, ?,
-                       ?, ?, ?, ?, 'visible')
-             ON CONFLICT(id) DO UPDATE SET
-               content = excluded.content,
-               created_via = excluded.created_via,
-               supervisor = excluded.supervisor,
-               origin_note = excluded.origin_note,
-               client = excluded.client",
-        )
-        .bind(&id)
-        .bind(session_id.as_str())
-        .bind(i64::from(turn_index))
-        .bind(&content)
-        .bind(&created_at)
-        .bind(origin.via.as_sql())
-        .bind(origin.stored_supervisor())
-        .bind(&origin.reason)
-        .bind(origin.client.map(|c| c.as_sql()))
-        .execute(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
-        self.index_message_fts(&id, session_id.as_str(), "user", turn_index, &content)
-            .await;
-        Ok(())
-    }
-
     /// Upsert one assistant row on its deterministic
     /// `msg_{session}_{turn}_assistant` id. Core's turn persistence
     /// ([`crate::turn_persistence`]) is the only caller in the app: it
@@ -1566,8 +1525,6 @@ impl SqliteGalley {
         &self,
         id: SessionId,
         summary: Option<String>,
-        step_number: Option<u32>,
-        mark_unread: bool,
     ) -> Result<SessionBrief> {
         let now = chrono_now_iso();
         // Only refresh summary when caller passed a non-empty value.
@@ -1579,25 +1536,19 @@ impl SqliteGalley {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(truncate_summary);
-        let step = step_number.map(|n| n as i64);
 
-        // bumpSessionAfterTurn historically didn't touch
-        // `last_step_index` if the bridge didn't send `stepNumber`.
-        // Sqlite COALESCE keeps the previous value when the bind is NULL.
         if let Some(s) = new_summary {
             let res = sqlx::query(
                 "UPDATE sessions SET \
                     turn_count = turn_count + 1, \
                     summary = ?, \
                     last_activity_at = ?, \
-                    updated_at = ?, \
-                    has_unread = CASE WHEN ? = 1 THEN 1 ELSE has_unread END \
+                    updated_at = ? \
                  WHERE id = ?",
             )
             .bind(&s)
             .bind(&now)
             .bind(&now)
-            .bind(if mark_unread { 1_i64 } else { 0_i64 })
             .bind(id.as_str())
             .execute(&self.pool)
             .await
@@ -1612,13 +1563,11 @@ impl SqliteGalley {
                 "UPDATE sessions SET \
                     turn_count = turn_count + 1, \
                     last_activity_at = ?, \
-                    updated_at = ?, \
-                    has_unread = CASE WHEN ? = 1 THEN 1 ELSE has_unread END \
+                    updated_at = ? \
                  WHERE id = ?",
             )
             .bind(&now)
             .bind(&now)
-            .bind(if mark_unread { 1_i64 } else { 0_i64 })
             .bind(id.as_str())
             .execute(&self.pool)
             .await
@@ -1629,15 +1578,6 @@ impl SqliteGalley {
                 });
             }
         }
-
-        // last_step_index isn't a column on the sessions table — it's
-        // a transient runtime field the GUI computes from per-turn
-        // events. Persisting it here was discussed in the M4 sub-plan
-        // but rejected: bumpSessionAfterTurn's GUI counterpart only
-        // mirrors it into in-memory state, not SQLite. Suppress the
-        // unused param to keep the signature stable for B4+ where a
-        // future audit table may pick it up.
-        let _ = step;
         self.session_brief(id).await
     }
 

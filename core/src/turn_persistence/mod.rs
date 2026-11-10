@@ -194,8 +194,6 @@ pub(crate) async fn persist_turn_end(
             galley.bump_session_after_turn(
                 SessionId(session_id.to_string()),
                 Some(event.summary.clone()),
-                None,
-                false,
             )
         })
         .await;

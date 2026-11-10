@@ -150,7 +150,7 @@ async fn step(
         .await
         .expect("assistant row");
     galley
-        .bump_session_after_turn(SessionId(sid.into()), None, None, false)
+        .bump_session_after_turn(SessionId(sid.into()), None)
         .await
         .expect("bump");
 }

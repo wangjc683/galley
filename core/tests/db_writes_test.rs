@@ -2185,7 +2185,7 @@ async fn bump_session_after_turn_increments_turn_count_and_summary() {
     seed_session_idle(&pool, "s1").await;
     let galley = SqliteGalley::from_pool(pool);
     let brief = galley
-        .bump_session_after_turn(sid("s1"), Some("did work".into()), Some(1), false)
+        .bump_session_after_turn(sid("s1"), Some("did work".into()))
         .await
         .expect("bump");
     assert_eq!(brief.turn_count, Some(1));
@@ -2194,30 +2194,18 @@ async fn bump_session_after_turn_increments_turn_count_and_summary() {
 }
 
 #[tokio::test]
-async fn bump_session_after_turn_mark_unread_sets_flag() {
-    let pool = fresh_pool().await;
-    seed_session_idle(&pool, "s1").await;
-    let galley = SqliteGalley::from_pool(pool);
-    let brief = galley
-        .bump_session_after_turn(sid("s1"), Some("done".into()), Some(1), true)
-        .await
-        .expect("bump unread");
-    assert_eq!(brief.has_unread, Some(true));
-}
-
-#[tokio::test]
 async fn bump_session_after_turn_empty_summary_keeps_previous() {
     let pool = fresh_pool().await;
     seed_session_idle(&pool, "s1").await;
     let galley = SqliteGalley::from_pool(pool);
     galley
-        .bump_session_after_turn(sid("s1"), Some("first recap".into()), Some(1), false)
+        .bump_session_after_turn(sid("s1"), Some("first recap".into()))
         .await
         .unwrap();
     // Second bump with empty summary — turn_count goes up, summary
     // stays at "first recap".
     let brief = galley
-        .bump_session_after_turn(sid("s1"), Some("   ".into()), Some(2), false)
+        .bump_session_after_turn(sid("s1"), Some("   ".into()))
         .await
         .expect("bump empty");
     assert_eq!(brief.turn_count, Some(2));
@@ -2231,7 +2219,7 @@ async fn bump_session_after_turn_truncates_long_summary() {
     let galley = SqliteGalley::from_pool(pool);
     let long: String = "x".repeat(120);
     let brief = galley
-        .bump_session_after_turn(sid("s1"), Some(long), Some(1), false)
+        .bump_session_after_turn(sid("s1"), Some(long))
         .await
         .expect("bump long");
     let summary = brief.summary.unwrap();
@@ -2245,7 +2233,7 @@ async fn bump_session_after_turn_not_found() {
     let pool = fresh_pool().await;
     let galley = SqliteGalley::from_pool(pool);
     let err = galley
-        .bump_session_after_turn(sid("ghost"), Some("x".into()), Some(1), false)
+        .bump_session_after_turn(sid("ghost"), Some("x".into()))
         .await
         .expect_err("missing");
     assert!(matches!(err, GalleyError::NotFound { .. }));

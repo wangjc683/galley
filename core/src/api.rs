@@ -296,22 +296,20 @@ pub trait GalleyApi: Send + Sync {
         display_name: Option<String>,
     ) -> Result<SessionBrief>;
 
-    /// Increment `turn_count`, refresh `summary` + `last_activity_at` +
-    /// `updated_at`, and flip `has_unread = 1` when the call says so.
-    /// `summary` is server-side truncated to 80 chars.
+    /// Increment `turn_count` and refresh `summary` + `last_activity_at` +
+    /// `updated_at`. `summary` is server-side truncated to 80 chars.
+    /// `has_unread` is left alone: the GUI owns unread through
+    /// [`Self::mark_session_unread`].
     ///
     /// No `origin` — this is a system-driven write: Core's turn
     /// persistence calls it on every visible runner `turn_end`
-    /// (`crate::turn_persistence`, always `mark_unread: false`; the GUI
-    /// owns unread through [`Self::mark_session_unread`]).
+    /// (`crate::turn_persistence`).
     ///
     /// **Errors**: `not_found`.
     async fn bump_session_after_turn(
         &self,
         id: SessionId,
         summary: Option<String>,
-        step_number: Option<u32>,
-        mark_unread: bool,
     ) -> Result<SessionBrief>;
 
     /// Set `has_unread`. The GUI calls it when a run's final reply lands

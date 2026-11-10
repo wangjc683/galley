@@ -48,7 +48,6 @@ def _args(ga_path: Path, state_dir: Path, platform: str = "feishu") -> Namespace
         platform=platform,
         ga_path=str(ga_path),
         state_dir=str(state_dir),
-        sop_path=str(state_dir / "sop.md"),
         relogin=False,
     )
 
@@ -395,8 +394,6 @@ def test_main_accepts_discord_platform(monkeypatch: Any, tmp_path: Path) -> None
         str(tmp_path / "ga"),
         "--state-dir",
         str(tmp_path / "state"),
-        "--sop-path",
-        str(tmp_path / "sop.md"),
     ]
     assert managed_im_supervisor.main(argv) == 0
     assert seen == ["discord"]

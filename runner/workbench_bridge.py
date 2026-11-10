@@ -320,8 +320,6 @@ def _to_json_safe(obj: Any) -> Any:
     return str(obj)
 
 
-_managed_model_config_from_env = managed_runtime.managed_model_config_from_env
-
 _USAGE_FIELDS = ("requests", "input", "output", "cache_create", "cache_read")
 
 

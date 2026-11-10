@@ -130,7 +130,7 @@ async fn seed_exchange(galley: &SqliteGalley, sid: &str, user: &str, reply: &str
         .await
         .expect("assistant row");
     galley
-        .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()), None, false)
+        .bump_session_after_turn(SessionId(sid.into()), Some(reply.into()))
         .await
         .expect("bump");
 }

@@ -271,12 +271,7 @@ impl World {
             .await
             .expect("assistant row");
         self.galley
-            .bump_session_after_turn(
-                SessionId(sid.into()),
-                Some(format!("{text} 的一句话")),
-                None,
-                false,
-            )
+            .bump_session_after_turn(SessionId(sid.into()), Some(format!("{text} 的一句话")))
             .await
             .expect("bump");
         format!("msg_{sid}_{turn}_assistant")

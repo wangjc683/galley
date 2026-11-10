@@ -36,7 +36,6 @@ from runner.workbench_bridge import (
     _clean_turn_summary,
     _FenceFilter,
     _llm_display_name,
-    _managed_model_config_from_env,
 )
 
 # ---------------- _classify_error ----------------
@@ -208,7 +207,7 @@ def test_managed_model_config_maps_connect_timeout_to_ga_timeout(
         ),
     )
 
-    cfg = _managed_model_config_from_env()["native_oai_config_0"]
+    cfg = managed_runtime.managed_model_config_from_env()["native_oai_config_0"]
 
     assert cfg["connect_timeout"] == 12
     assert cfg["timeout"] == 12
@@ -257,7 +256,7 @@ def test_managed_model_config_fetches_api_key_from_credential_ipc(
         ),
     )
 
-    cfg = _managed_model_config_from_env()["native_oai_config_0"]
+    cfg = managed_runtime.managed_model_config_from_env()["native_oai_config_0"]
 
     assert cfg["apikey"] == "sk-from-ipc"
     assert calls == [
@@ -301,7 +300,7 @@ def test_managed_model_config_keeps_no_auth_model_with_empty_key(
         ),
     )
 
-    out = _managed_model_config_from_env()
+    out = managed_runtime.managed_model_config_from_env()
 
     assert list(out) == ["native_oai_config_0"]
     cfg = out["native_oai_config_0"]
@@ -411,12 +410,14 @@ def test_managed_model_config_maps_codex_oauth_to_ga_config(
         ),
     )
 
-    cfg = _managed_model_config_from_env()["native_oai_config_0"]
+    cfg = managed_runtime.managed_model_config_from_env()["native_oai_config_0"]
 
     assert cfg["codex_backend"] is True
     assert cfg["api_mode"] == "responses"
     assert cfg["stream"] is True
-    assert cfg["reasoning_effort"] == "medium"
+    # Passed through: the engine raises `minimal` to `medium` (patch 0007;
+    # test_managed_ga_llmcore.py).
+    assert cfg["reasoning_effort"] == "minimal"
     assert cfg["galley_api_key_ref"] == "managed-provider:mp_chatgpt_codex"
     assert cfg["galley_credential_ipc"]["token"] == "secret"
 
@@ -442,7 +443,7 @@ def _single_model_config(
     monkeypatch.setenv(
         "GALLEY_MANAGED_MODEL_CONFIG_JSON", json.dumps({"models": [model]})
     )
-    out = _managed_model_config_from_env()
+    out = managed_runtime.managed_model_config_from_env()
     assert len(out) == 1
     return cast(dict[str, Any], next(iter(out.values())))
 

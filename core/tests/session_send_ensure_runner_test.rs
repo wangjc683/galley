@@ -111,7 +111,7 @@ async fn session_with_history(dir: &std::path::Path, reply_tool_calls: Value) ->
         .await
         .expect("assistant row");
     galley
-        .bump_session_after_turn(SessionId(SID.into()), None, None, false)
+        .bump_session_after_turn(SessionId(SID.into()), None)
         .await
         .expect("bump");
     galley

@@ -846,7 +846,6 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--ga-path", required=True)
     parser.add_argument("--state-dir", required=True)
-    parser.add_argument("--sop-path", required=True)
     parser.add_argument("--relogin", action="store_true")
     args = parser.parse_args(argv)
 
