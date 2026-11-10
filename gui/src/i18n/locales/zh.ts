@@ -2215,6 +2215,15 @@ export const zhCopy = {
         weekday: (isoDay: number) => "一二三四五六日"[isoDay - 1] ?? "?",
         monthday: (day: number) => String(day),
         joinDays: "·",
+        /** 时间那一行的短写法（主聊天票 159，裁决 207 第 2 条）：间隔是 1、至多一个星期或日子、
+         * 且与这一期的到期日一致时只写这几个字，前面的到期日已经说了是哪天。悬停、无障碍名与
+         * 浮层里只读的那一句照旧写全。 */
+        short: {
+          daily: "每天",
+          weekly: "每周",
+          monthly: "每月",
+          yearly: "每年",
+        },
       },
     },
     /** 打开后没有备注时画的那一行：点了就是加。 */
@@ -2246,6 +2255,17 @@ export const zhCopy = {
     /** 铃铛的悬停文字与无障碍名称。 */
     reminderAt: (when: string) => `提醒 ${when}`,
     reminderPaused: (when: string) => `提醒 ${when} · 已暂停`,
+    /** 重复的这一期，提醒正好是规则记的那个时铃铛后面的字（主聊天票 159，裁决 207 第 3 条）：
+     * 不写日子，写离到期日多远；当天的只写钟点。不是一律只写钟点：「和截止同一天只写钟点」
+     * 是现有的规矩，前一天的提醒只写「09:00」会被读成当天。悬停与无障碍名照旧是带日子的全句。 */
+    reminderBefore: (daysBefore: number, clock: string) =>
+      daysBefore === 0
+        ? clock
+        : daysBefore === 1
+          ? `前一天 ${clock}`
+          : daysBefore === 7
+            ? `提前 1 周 ${clock}`
+            : `提前 ${daysBefore} 天 ${clock}`,
     /** 重复的那一期，时间那一行的重复记号的悬停文字与无障碍名（主聊天票 157）：规则用
      * todo.date.rule 写成的字。 */
     repeats: (rule: string) => `重复：${rule}`,

@@ -2183,6 +2183,14 @@ export const enCopy: AppCopy = {
           return `${day}${suffix}`;
         },
         joinDays: ", ",
+        // The time line's short words (main chat ticket 159): mid-line,
+        // after the day they would repeat.
+        short: {
+          daily: "daily",
+          weekly: "weekly",
+          monthly: "monthly",
+          yearly: "yearly",
+        },
       },
     },
     addNotes: "Add notes",
@@ -2205,6 +2213,14 @@ export const enCopy: AppCopy = {
     overdueAt: (when: string) => `Overdue · ${when}`,
     reminderAt: (when: string) => `Reminder ${when}`,
     reminderPaused: (when: string) => `Reminder ${when} · Paused`,
+    reminderBefore: (daysBefore: number, clock: string) =>
+      daysBefore === 0
+        ? clock
+        : daysBefore === 1
+          ? `day before ${clock}`
+          : daysBefore === 7
+            ? `1 week before ${clock}`
+            : `${daysBefore} days before ${clock}`,
     // The rule's words start a sentence ("Weekly on Mon"): lowered here,
     // as Core's In Hand line says it ("repeats weekly on Mon").
     repeats: (rule: string) =>

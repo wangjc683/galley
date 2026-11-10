@@ -21,7 +21,12 @@ import {
 } from "@/lib/message-time";
 import { todoItemWords } from "@/lib/reminder-first-line";
 import { repeatSummary } from "@/lib/scheduled-tasks";
-import { reminderMovedOn, todoRepeatWords } from "@/lib/todo-date";
+import {
+  reminderMovedOn,
+  reminderOnRule,
+  todoRepeatLineWords,
+  todoRepeatWords,
+} from "@/lib/todo-date";
 import type { TodoGlance } from "@/lib/todo-open";
 import { TODO_PLACES, type TodoPlace } from "@/lib/todo-panel-memory";
 
@@ -219,6 +224,16 @@ export function todoOverdueDays(
  * to a later period's time once it went off (`reminderMovedOn`, ticket
  * 154 behaviour 13): it points past this period's day. Overdue, it is
  * drawn: it says when it rings again.
+ *
+ * Since main chat ticket 159 (PRD ruling 207 points 2 and 3) the line is
+ * shorter where it can be: the rule's words alone (「每周」) where the rule
+ * says no more than the due day before them (`todoRepeatLineWords`; the
+ * hover keeps them whole), and the period's reminder, when it is the one
+ * the rule records (`reminderOnRule`), said from the due day — 「前一天
+ * 09:00」, 「提前 2 天 09:00」, 「提前 1 周 09:00」, the clock alone on the
+ * day — rather than with a day of its own (「11月19日 09:00」). Not the
+ * clock alone: the clock alone already means the due day itself. A to-do
+ * that does not repeat reads as before, word for word.
  */
 export function todoMetaParts(
   item: TodoItem,
@@ -241,13 +256,13 @@ export function todoMetaParts(
     }
   }
   const rule = item.todoRepeat;
-  if (rule && !checked && !todoCancelled(item)) {
-    const words = todoRepeatWords(rule, copy);
+  const repeating = rule !== undefined && !checked && !todoCancelled(item);
+  if (repeating) {
     parts.push({
-      text: words,
+      text: todoRepeatLineWords(rule, due?.date, copy),
       tone: "muted",
       repeat: true,
-      title: copy.todo.repeats(words),
+      title: copy.todo.repeats(todoRepeatWords(rule, copy)),
     });
   }
   const reminder = item.reminder;
@@ -258,7 +273,12 @@ export function todoMetaParts(
   const day = Number.isNaN(at) ? null : localDayStart(at);
   const dueDay = due ? localDayMs(due.date) : null;
   const sameDay = day !== null && day === dueDay;
-  const short = (sameDay ? formatClock(reminder.at, language) : null) ?? full;
+  const clock = formatClock(reminder.at, language);
+  // The rule's own reminder, said from the due day (ticket 159).
+  const before = repeating ? reminderOnRule(item) : null;
+  const relative =
+    before !== null && clock ? copy.todo.reminderBefore(before, clock) : null;
+  const short = relative ?? (sameDay ? clock : null) ?? full;
   const paused = reminder.state === "paused";
   parts.push({
     text: paused ? `${short} · ${copy.todo.statePaused}` : short,

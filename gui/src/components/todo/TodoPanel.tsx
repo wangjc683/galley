@@ -82,7 +82,7 @@ import { GroupLabel } from "./GroupLabel";
 import { MemoPage } from "./MemoPage";
 import { TodoCheck } from "./TodoCheck";
 import { TodoDateButton } from "./TodoDatePopover";
-import { TodoMetaText } from "./TodoMetaText";
+import { TodoMetaBreak, TodoMetaText } from "./TodoMetaText";
 import {
   TodoRowContextMenu,
   TodoRowMenuButton,
@@ -90,7 +90,7 @@ import {
 } from "./TodoRowMenu";
 import { TodoSubitems } from "./TodoSubitems";
 import { TodoTextEditor } from "./TodoTextEditor";
-import { todoTitleClass } from "./todo-styles";
+import { TODO_META_SEGMENT, todoTitleClass } from "./todo-styles";
 
 export interface TodoPanelProps {
   /** The main chat, wherever the panel is (ticket 46): titles jump into
@@ -1319,7 +1319,9 @@ function EditFailure({ kind }: { kind: TodoFailure }) {
 
 /** 「取消提醒」, on hover at the end of a row's second line, outside what
  * the line cuts: a to-do's reminder, and since ticket 80 one of Galley's
- * own one-off reminders — the same button in both. */
+ * own one-off reminders — the same button in both. `align-top` is for the
+ * open row's inline line (ticket 159): it sits there as a folded row's
+ * flex line centres it, and grows neither; a flex line ignores it. */
 function CancelReminder({
   disabled,
   onClick,
@@ -1334,7 +1336,7 @@ function CancelReminder({
       size="xs"
       disabled={disabled}
       onClick={onClick}
-      className="-my-0.5 ml-0.5 shrink-0 opacity-0 group-focus-within/todo-row:opacity-100 group-hover/todo-row:opacity-100"
+      className="-my-0.5 ml-0.5 shrink-0 align-top opacity-0 group-focus-within/todo-row:opacity-100 group-hover/todo-row:opacity-100"
     >
       <BellSimpleSlash size={12} weight="thin" />
     </IconButton>
@@ -1368,7 +1370,14 @@ function CancelReminder({
  * in words after when it is due, before the bell, 8px either side
  * (TodoMetaText) — folded and open alike, open inside the date button. A
  * narrow row cuts that run of words at its end, never the count or the
- * reminder's cancel. */
+ * reminder's cancel.
+ *
+ * Open (main chat ticket 159, PRD ruling 207 point 4) the line does not
+ * cut: it goes onto a second line, a part at a time and never inside one
+ * — when it is due and the rule on the first, the bell's part down whole,
+ * then the count if it still does not fit — each line flush with the
+ * first, at the line's own height; 「取消提醒」 goes with what comes last.
+ * Folded, as ever: one line, cut at its end, its height unchanged. */
 function MetaLine({
   parts,
   checked,
@@ -1383,24 +1392,54 @@ function MetaLine({
   date?: TodoItem;
 }) {
   const copy = useCopy();
+  const line = useRef<HTMLDivElement>(null);
   if (parts.length === 0 && !count && !date) return null;
+  const ink = checked ? "text-ink-muted" : "text-ink-soft";
+  if (date) {
+    // Open (ticket 159, PRD ruling 207 point 4): inline words on a
+    // nowrap line, breaking only at a `TodoMetaBreak`, so where it does
+    // not fit a whole part goes down — the bell's, then the count —
+    // flush with the line's start. 「取消提醒」 has no break before it:
+    // it stays by what comes last. Folded rows keep the one cut line
+    // below.
+    return (
+      <div
+        ref={line}
+        data-role="todo-meta"
+        data-wrap=""
+        className={cn(
+          "mt-0.5 min-w-0 whitespace-nowrap text-[12px] leading-[1.4] tabular-nums",
+          ink,
+        )}
+      >
+        <TodoDateButton item={date} empty={parts.length === 0} anchor={line}>
+          {parts.length === 0 ? (
+            copy.todo.addDate
+          ) : (
+            <TodoMetaText parts={parts} wrap />
+          )}
+        </TodoDateButton>
+        {count && (
+          <span data-role="todo-item-count">
+            <TodoMetaBreak />
+            <span data-segment="" className={TODO_META_SEGMENT}>
+              {count}
+            </span>
+          </span>
+        )}
+        {after}
+      </div>
+    );
+  }
   return (
     <div
       data-role="todo-meta"
       className={cn(
         "mt-0.5 flex min-w-0 items-center text-[12px] leading-[1.4] tabular-nums",
-        checked ? "text-ink-muted" : "text-ink-soft",
+        ink,
       )}
     >
-      {date ? (
-        <TodoDateButton item={date} empty={parts.length === 0}>
-          {parts.length === 0 ? (
-            copy.todo.addDate
-          ) : (
-            <TodoMetaText parts={parts} />
-          )}
-        </TodoDateButton>
-      ) : parts.length === 0 ? null : (
+      {parts.length === 0 ? null : (
         <span className="min-w-0 truncate">
           <TodoMetaText parts={parts} />
         </span>
@@ -1410,7 +1449,7 @@ function MetaLine({
           data-role="todo-item-count"
           className={cn(
             "shrink-0 whitespace-nowrap",
-            (parts.length > 0 || date) && "ml-2",
+            parts.length > 0 && "ml-2",
           )}
         >
           {count}

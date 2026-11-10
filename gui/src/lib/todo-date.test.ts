@@ -22,10 +22,13 @@ import {
   periodReminder,
   reminderMovedOn,
   reminderOffset,
+  reminderOnRule,
   repeatChoice,
+  repeatFitsDay,
   repeatRuleFor,
   timeValue,
   todayKey,
+  todoRepeatLineWords,
   todoRepeatWords,
 } from "@/lib/todo-date";
 
@@ -425,5 +428,187 @@ describe("a period's reminder moved on", () => {
     };
     expect(reminderMovedOn(none)).toBe(false);
     expect(periodReminder(none)).toBeNull();
+  });
+});
+
+// Main chat ticket 159 (PRD ruling 207 point 2): the rule's words on the
+// time line, short where the due day before them already says it.
+describe("the time line's short words", () => {
+  const line = (
+    rule: Parameters<typeof todoRepeatLineWords>[0],
+    due: string | undefined,
+  ) => [
+    todoRepeatLineWords(rule, due, zhCopy),
+    todoRepeatLineWords(rule, due, enCopy),
+  ];
+  // Fri 2026-11-20; November has 30 days.
+  const friday = "2026-11-20";
+
+  it("is 「每天」 「每周」 「每月」 「每年」 where the rule fits the due day", () => {
+    expect(line({ kind: "daily" }, friday)).toEqual(["每天", "daily"]);
+    expect(line({ kind: "weekly", weekdays: [5] }, friday)).toEqual([
+      "每周",
+      "weekly",
+    ]);
+    expect(line({ kind: "monthly", monthdays: [20] }, friday)).toEqual([
+      "每月",
+      "monthly",
+    ]);
+    expect(line({ kind: "yearly" }, friday)).toEqual(["每年", "yearly"]);
+    // No weekday or date of its own: the due day's.
+    expect(repeatFitsDay({ kind: "weekly" }, friday)).toBe(true);
+    expect(repeatFitsDay({ kind: "monthly", monthdays: [] }, friday)).toBe(
+      true,
+    );
+    // Every 1 written out.
+    expect(
+      repeatFitsDay({ kind: "weekly", weekdays: [5], every: 1 }, friday),
+    ).toBe(true);
+  });
+
+  it("holds a rule's 31st on a shorter month's last day", () => {
+    const the31st = { kind: "monthly" as const, monthdays: [31] };
+    // November has 30: its 30th is the rule's day.
+    expect(line(the31st, "2026-11-30")).toEqual(["每月", "monthly"]);
+    expect(repeatFitsDay(the31st, "2026-10-31")).toBe(true);
+    // February 2027 has 28; a rule's 30th falls on its 28th.
+    expect(
+      repeatFitsDay({ kind: "monthly", monthdays: [30] }, "2027-02-28"),
+    ).toBe(true);
+    // Not the day before the month's last.
+    expect(line(the31st, "2026-11-29")).toEqual([
+      "每月 31 日",
+      "Monthly on the 31st",
+    ]);
+  });
+
+  it("is the rule whole where it says more: moved off its day, every 2, two days", () => {
+    // A period moved by hand to another weekday: the rule's own.
+    expect(line({ kind: "weekly", weekdays: [1] }, friday)).toEqual([
+      "每周一",
+      "Weekly on Mon",
+    ]);
+    expect(line({ kind: "monthly", monthdays: [15] }, friday)).toEqual([
+      "每月 15 日",
+      "Monthly on the 15th",
+    ]);
+    expect(line({ kind: "weekly", weekdays: [5], every: 2 }, friday)).toEqual([
+      "每 2 周的周五",
+      "Every 2 weeks on Fri",
+    ]);
+    expect(
+      line({ kind: "monthly", monthdays: [20], every: 3 }, friday),
+    ).toEqual(["每 3 个月的 20 日", "Every 3 months on the 20th"]);
+    expect(line({ kind: "daily", every: 2 }, friday)).toEqual([
+      "每 2 天",
+      "Every 2 days",
+    ]);
+    expect(line({ kind: "yearly", every: 2 }, friday)).toEqual([
+      "每 2 年",
+      "Every 2 years",
+    ]);
+    expect(line({ kind: "weekly", weekdays: [1, 5] }, friday)).toEqual([
+      "每周一·五",
+      "Weekly on Mon, Fri",
+    ]);
+    expect(line({ kind: "monthly", monthdays: [5, 20] }, friday)).toEqual([
+      "每月 5·20 日",
+      "Monthly on the 5th, 20th",
+    ]);
+    // No due day to say it, or one that does not parse.
+    expect(line({ kind: "weekly", weekdays: [5] }, undefined)).toEqual([
+      "每周五",
+      "Weekly on Fri",
+    ]);
+    expect(repeatFitsDay({ kind: "daily" }, "2026-02-30")).toBe(false);
+  });
+});
+
+// Main chat ticket 159 (PRD ruling 207 point 3): a period's reminder that
+// is the one its rule records, said from the due day.
+describe("a period's reminder on its rule", () => {
+  const period = (
+    at: string | null,
+    remind: { daysBefore: number; time: string } | null,
+  ): TodoItem => ({
+    kind: "todo",
+    id: "todo_f",
+    text: "交周报",
+    state: "open",
+    createdBy: "assistant",
+    due: { date: "2026-11-20", hasTime: false },
+    reminder: at ? { taskId: "sched_f", at, state: "scheduled" } : undefined,
+    todoRepeat: {
+      kind: "weekly",
+      weekdays: [5],
+      ...(remind ? { remind } : {}),
+    },
+  });
+
+  it("is how many days before, when the period's reminder is the rule's", () => {
+    for (const [day, daysBefore] of [
+      ["2026-11-20", 0],
+      ["2026-11-19", 1],
+      ["2026-11-18", 2],
+      ["2026-11-13", 7],
+    ] as const) {
+      expect(
+        reminderOnRule(
+          period(localIso(day, 9, 0), { daysBefore, time: "09:00" }),
+        ),
+      ).toBe(daysBefore);
+    }
+  });
+
+  it("is none for one that is not: another time or day, moved on, none on the rule, none at all", () => {
+    const rule = { daysBefore: 1, time: "09:00" };
+    // The day before, but at 20:00 — set by hand.
+    expect(reminderOnRule(period(localIso("2026-11-19", 20, 0), rule))).toBe(
+      null,
+    );
+    // Two days before at 09:00 — set by hand, or moved toward the day.
+    expect(reminderOnRule(period(localIso("2026-11-18", 9, 0), rule))).toBe(
+      null,
+    );
+    // Moved on by Core to the next period's (ticket 157).
+    expect(reminderOnRule(period(localIso("2026-11-26", 9, 0), rule))).toBe(
+      null,
+    );
+    // A rule that records none; no reminder; a rule's after the day.
+    expect(reminderOnRule(period(localIso("2026-11-19", 9, 0), null))).toBe(
+      null,
+    );
+    expect(reminderOnRule(period(null, rule))).toBe(null);
+    expect(
+      reminderOnRule(
+        period(localIso("2026-11-21", 9, 0), { daysBefore: -1, time: "09:00" }),
+      ),
+    ).toBe(null);
+    // A to-do that does not repeat.
+    expect(
+      reminderOnRule({
+        ...period(localIso("2026-11-19", 9, 0), rule),
+        todoRepeat: undefined,
+      }),
+    ).toBe(null);
+  });
+
+  it("words it from the due day, the clock alone on the day itself", () => {
+    const zh = (n: number) => zhCopy.todo.reminderBefore(n, "09:00");
+    const en = (n: number) => enCopy.todo.reminderBefore(n, "9:00 AM");
+    expect([0, 1, 2, 3, 7].map(zh)).toEqual([
+      "09:00",
+      "前一天 09:00",
+      "提前 2 天 09:00",
+      "提前 3 天 09:00",
+      "提前 1 周 09:00",
+    ]);
+    expect([0, 1, 2, 3, 7].map(en)).toEqual([
+      "9:00 AM",
+      "day before 9:00 AM",
+      "2 days before 9:00 AM",
+      "3 days before 9:00 AM",
+      "1 week before 9:00 AM",
+    ]);
   });
 });

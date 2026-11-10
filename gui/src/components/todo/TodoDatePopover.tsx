@@ -5,6 +5,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { flushSync } from "react-dom";
 
@@ -65,21 +66,32 @@ import { TodoCalendar } from "./TodoCalendar";
  * focus moves or a key is pressed there); one begun from the keyboard (Esc,
  * Enter on a day) with its ring, as before. A press outside closes it and
  * leaves the focus where the press put it (Radix's own way).
+ *
+ * Since main chat ticket 159 (PRD ruling 207 point 4) the open row's time
+ * line goes onto a second line where it does not fit: the words here are
+ * inline (a `role="button"` span, Enter and Space as a button's), so the
+ * line breaks between their parts and the count and 「取消提醒」 after
+ * them follow on the last line; the popover hangs under the whole line
+ * (`anchor`) — on two lines, under the second.
  */
 export function TodoDateButton({
   item,
   empty,
+  anchor,
   children,
 }: {
   item: TodoItem;
   /** No due date and no reminder: 「添加日期」. */
   empty: boolean;
+  /** The time line it is on: the popover hangs under the whole of it
+   * (ticket 159). */
+  anchor: RefObject<HTMLElement | null>;
   children: ReactNode;
 }) {
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const content = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
+  const trigger = useRef<HTMLSpanElement>(null);
   // 「改日期」, held shut while the focus is handed back (ticket 157).
   const [tip, setTip] = useState(false);
   const handingBack = useRef(false);
@@ -98,21 +110,32 @@ export function TodoDateButton({
   };
   const button = (
     <Popover.Trigger asChild>
-      <button
+      {/* Inline words, not a button box (ticket 159): a <button> lays out
+          as one block, so a line too long for the row could only go down
+          whole, the count and 「取消提醒」 after it on a line of their
+          own. Its keys are a button's (NotesText's way). */}
+      <span
         ref={trigger}
-        type="button"
+        role="button"
+        tabIndex={0}
         data-role={empty ? "todo-add-date" : "todo-meta-date"}
         data-ring={quietRing ? "quiet" : undefined}
         onBlur={() => setQuietRing(false)}
-        onKeyDown={() => setQuietRing(false)}
+        onKeyDown={(event) => {
+          setQuietRing(false);
+          if (event.target !== event.currentTarget) return;
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          event.currentTarget.click();
+        }}
         className={cn(
-          "min-w-0 truncate rounded-sm text-left outline-none",
+          "rounded-sm outline-none",
           !quietRing && "focus-visible:ring-2 focus-visible:ring-brand/30",
           empty && "text-ink-muted hover:text-ink-soft",
         )}
       >
         {children}
-      </button>
+      </span>
     </Popover.Trigger>
   );
   return (
@@ -134,6 +157,13 @@ export function TodoDateButton({
           {button}
         </TooltipLabel>
       )}
+      {/* Under the line, not the words: on two lines, under the second
+          (ticket 159). After the trigger, not before: on the first commit
+          the trigger still anchors itself (Radix learns of this one in an
+          effect), and effects run in tree order, so this one must come
+          last to stay the anchor. Radix types the ref as never empty; it
+          reads it in an effect, once the line is there. */}
+      <Popover.Anchor virtualRef={anchor as RefObject<HTMLElement>} />
       <Popover.Portal>
         <Popover.Content
           ref={content}

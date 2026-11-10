@@ -510,7 +510,9 @@ describe("the panel's rows", () => {
     expect(mark).not.toBeNull();
     expect(mark![1]).toBe(`重复：${WEEKLY_RULE}`);
     expect(mark![2]).toBe(`重复：${WEEKLY_RULE}`);
-    expect(mark![3]).toBe(WEEKLY_RULE);
+    // On the due day's weekday: 「每周」 alone (ticket 159), the rule whole
+    // in its hover and name.
+    expect(mark![3]).toBe("每周");
     // After when it is due, before the bell; no 「·」 either side.
     expect(meta.indexOf("todo-meta-repeat")).toBeLessThan(
       meta.indexOf('aria-label="提醒 '),
@@ -522,6 +524,47 @@ describe("the panel's rows", () => {
     );
     // A to-do that does not repeat: none.
     expect(row(html, "todo_report")).not.toContain("todo-meta-repeat");
+  });
+
+  // Main chat ticket 159 (PRD ruling 207 point 4): only the open row's
+  // line goes onto a second line (TodoPanel.date.test.tsx).
+  it("keeps a folded row's time line one line, cut at its end: no breaks, no parts on their own", () => {
+    const withItems = todo({
+      ...WEEKLY,
+      reminder: { ...WEEKLY.reminder!, at: inDays(2, 9) },
+      todoRepeat: {
+        ...WEEKLY.todoRepeat!,
+        remind: { daysBefore: 1, time: "09:00" },
+      },
+      items: [
+        { id: "item_1", text: "数据", done: true },
+        { id: "item_2", text: "图表", done: false },
+      ],
+    });
+    const html = panel({
+      ...EMPTY_TODO,
+      yours: { today: [], later: [withItems, REMINDED], anytime: [] },
+    });
+    for (const id of ["todo_weekly", "todo_report"]) {
+      const r = row(html, id);
+      const meta = r.slice(r.indexOf('data-role="todo-meta"'));
+      expect(meta, id).toMatch(
+        /^data-role="todo-meta" class="mt-0\.5 flex min-w-0 items-center /,
+      );
+      expect(meta, id).toMatch(/^[^>]*><span class="min-w-0 truncate">/);
+      expect(meta, id).not.toContain("todo-meta-break");
+      expect(meta, id).not.toContain("<wbr");
+      expect(meta, id).not.toContain("data-segment");
+      expect(meta, id).not.toContain("data-wrap");
+      expect(meta, id).not.toContain("whitespace-normal");
+    }
+    // The words shorter all the same: 「每周」, 「前一天 09:00」, the count.
+    const weekly = row(html, "todo_weekly");
+    expect(weekly).toContain('aria-hidden="true" class="ml-[3px]">每周<');
+    expect(weekly).toContain(
+      'aria-hidden="true" class="ml-[3px]">前一天 09:00<',
+    );
+    expect(weekly).toContain(">1/2 项<");
   });
 
   it("gives what Galley will come back to no box but the clock, and its subtasks no row (ruling 197)", () => {

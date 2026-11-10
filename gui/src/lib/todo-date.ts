@@ -284,6 +284,25 @@ export function periodReminder(item: TodoItem): TodoRepeatRemind | null {
   return read && rule && reminderMovedOn(item) ? rule : read;
 }
 
+/**
+ * How many days before its due day a repeating period's reminder is, when
+ * it is exactly the one its rule records (main chat ticket 159, PRD ruling
+ * 207 point 3): its local day `todoRepeat.remind.daysBefore` before the
+ * due day, at `todoRepeat.remind.time`. The time line then says it
+ * relative to the due day (「前一天 09:00」) instead of with a day of its
+ * own. Null for one set on the period by hand, one Core moved on
+ * (`reminderMovedOn`), one under a rule that records none or records one
+ * after the due day, and on a to-do that does not repeat.
+ */
+export function reminderOnRule(item: TodoItem): number | null {
+  const rule = item.todoRepeat?.remind;
+  if (!rule || rule.daysBefore < 0) return null;
+  const read = reminderOffset(item.due, item.reminder?.at);
+  return read?.daysBefore === rule.daysBefore && read.time === rule.time
+    ? rule.daysBefore
+    : null;
+}
+
 /** The five choices of 「重复」, and what a rule that is none of them
  * reads as. */
 export type RepeatChoice = "none" | "daily" | "weekly" | "monthly" | "yearly";
@@ -353,4 +372,57 @@ export function todoRepeatWords(rule: TodoRepeatRule, copy: AppCopy): string {
         (rule.monthdays ?? []).map(words.monthday).join(words.joinDays),
       );
   }
+}
+
+/**
+ * Whether a rule says no more than its period's due day already does
+ * (main chat ticket 159, PRD ruling 207 point 2): every 1, at most one
+ * weekday or date, and that one the due day's — its weekday, its date (a
+ * rule's 31st in a month of 30 days is that month's 30th, as Core holds
+ * it); every day and every year always are. False without a due day.
+ */
+export function repeatFitsDay(
+  rule: TodoRepeatRule,
+  due: DayKey | undefined,
+): boolean {
+  if (!due || Math.max(1, rule.every ?? 1) !== 1) return false;
+  const day = parseDay(due);
+  if (!day) return false;
+  switch (rule.kind) {
+    case "daily":
+    case "yearly":
+      return true;
+    case "weekly": {
+      const days = rule.weekdays ?? [];
+      return (
+        days.length === 0 || (days.length === 1 && days[0] === isoWeekday(due))
+      );
+    }
+    case "monthly": {
+      const days = rule.monthdays ?? [];
+      return (
+        days.length === 0 ||
+        (days.length === 1 && Math.min(days[0], daysInMonth(day)) === day.day)
+      );
+    }
+  }
+}
+
+/**
+ * A rule in words for the time line (main chat ticket 159, PRD ruling 207
+ * point 2): 「每天」 「每周」 「每月」 「每年」 alone where the rule fits its
+ * period's due day (`repeatFitsDay`) — the line already says the day just
+ * before it — else the rule in full (`todoRepeatWords`: 「每周五」 for a
+ * period moved off its weekday by hand, 「每 2 周的周一」, 「每周一·四」).
+ * The glyph's hover and name, and the popover's read-only rule, keep the
+ * full words.
+ */
+export function todoRepeatLineWords(
+  rule: TodoRepeatRule,
+  due: DayKey | undefined,
+  copy: AppCopy,
+): string {
+  return repeatFitsDay(rule, due)
+    ? copy.todo.date.rule.short[rule.kind]
+    : todoRepeatWords(rule, copy);
 }

@@ -999,3 +999,208 @@ describe("the popover's addendum (ticket 157)", () => {
     expect(quickPick("no-date").disabled).toBe(false);
   });
 });
+
+// Main chat ticket 159 (PRD ruling 207 point 4). jsdom lays nothing out:
+// what is pinned here is where the line can break and what goes together;
+// the main session measures the wrap itself in the real window.
+describe("the open row's time line goes onto a second line (ticket 159)", () => {
+  /** A weekly period ten days out (its day a date, not a weekday), reminded
+   * the day before at 09:00 as its rule records, two items under it. */
+  const LONG = todo("todo_long", {
+    due: onDay(inDays(10)),
+    reminder: remindAt(inDays(9), 9, 0),
+    todoRepeat: {
+      kind: "weekly",
+      weekdays: [isoWeekday(inDays(10))],
+      remind: { daysBefore: 1, time: "09:00" },
+    },
+    seriesId: "series_l",
+    items: [
+      { id: "item_a", text: "数据", done: true },
+      { id: "item_b", text: "图表", done: false },
+    ],
+  });
+  const meta = (container: HTMLElement) =>
+    row(container, "todo_long").querySelector<HTMLElement>(
+      '[data-role="todo-meta"]',
+    )!;
+  function mountLong(): HTMLElement {
+    core = list([LONG, REPORT]);
+    useAssistantTodoStore.setState({ todo: core });
+    return mount();
+  }
+
+  it("breaks only between whole parts — the day and the rule, the bell's, the count — 「取消提醒」 with the last", () => {
+    const container = mountLong();
+    click(row(container, "todo_long"));
+    const line = meta(container);
+    expect(line.hasAttribute("data-wrap")).toBe(true);
+    expect(line.className).toContain("whitespace-nowrap");
+    expect(line.className).not.toContain("flex");
+    expect(line.className).not.toContain("truncate");
+    // Where it may break: 8px, then a <wbr>, before the rule, the bell
+    // and the count — nowhere else on the line.
+    const breaks = Array.from(
+      line.querySelectorAll<HTMLElement>('[data-role="todo-meta-break"]'),
+    );
+    expect(breaks).toHaveLength(3);
+    for (const each of breaks) {
+      expect(each.className).toBe("ml-2 whitespace-normal");
+      expect(Array.from(each.childNodes, (node) => node.nodeName)).toEqual([
+        "WBR",
+      ]);
+    }
+    expect(
+      Array.from(line.querySelectorAll(".whitespace-normal")).every(
+        (each) => each.getAttribute("data-role") === "todo-meta-break",
+      ),
+    ).toBe(true);
+    // Each part whole: an inline block on one line, no break inside.
+    const parts = Array.from(
+      line.querySelectorAll<HTMLElement>("[data-segment]"),
+    );
+    expect(parts.map((part) => part.textContent)).toEqual([
+      parts[0].textContent,
+      "每周",
+      "前一天 09:00",
+      "1/2 项",
+    ]);
+    expect(parts[0].textContent).toMatch(/^\d+月\d+日$/);
+    for (const part of parts) {
+      expect(part.className).toBe("inline-block max-w-full truncate align-top");
+      expect(part.querySelector('[data-role="todo-meta-break"]')).toBeNull();
+    }
+    // The day, the rule and the bell are the button's; the count is not.
+    const words = line.querySelector<HTMLElement>(
+      '[data-role="todo-meta-date"]',
+    )!;
+    expect(words.tagName).toBe("SPAN");
+    expect(words.getAttribute("role")).toBe("button");
+    expect(words.tabIndex).toBe(0);
+    expect(parts.slice(0, 3).every((part) => words.contains(part))).toBe(true);
+    expect(words.contains(parts[3])).toBe(false);
+    expect(
+      line.querySelector('[data-role="todo-item-count"]')!.textContent,
+    ).toBe("1/2 项");
+    // 「取消提醒」 last, no break before it: it goes with what comes last.
+    const cancel = line.querySelector<HTMLElement>(
+      'button[aria-label="取消提醒"]',
+    )!;
+    expect(line.lastElementChild).toBe(cancel);
+    expect(cancel.previousElementSibling?.getAttribute("data-role")).toBe(
+      "todo-item-count",
+    );
+    expect(cancel.className).toContain("align-top");
+    // The hovers keep the rule and the day whole.
+    expect(parts[1].getAttribute("title")).toMatch(
+      /^重复：每周[一二三四五六日]$/,
+    );
+    expect(parts[2].getAttribute("title")).toMatch(/^提醒 /);
+    expect(parts[2].getAttribute("title")).not.toContain("前一天");
+  });
+
+  it("draws the folded row as ever: one line, cut at its end", () => {
+    const container = mountLong();
+    // Folded first, then opened and folded again.
+    for (const step of ["folded", "open", "folded again"]) {
+      if (step !== "folded") click(row(container, "todo_long"));
+      if (step === "open") continue;
+      const line = meta(container);
+      expect(line.className, step).toContain("flex");
+      expect(line.className, step).toContain("items-center");
+      expect(line.hasAttribute("data-wrap"), step).toBe(false);
+      expect(line.firstElementChild!.className, step).toBe("min-w-0 truncate");
+      expect(
+        line.querySelector(
+          '[data-role="todo-meta-break"], [data-segment], wbr',
+        ),
+        step,
+      ).toBeNull();
+      expect(line.textContent, step).toContain("每周");
+      expect(line.textContent, step).toContain("前一天 09:00");
+    }
+  });
+
+  it("opens the popover from any of its parts, and on Enter or Space", async () => {
+    const container = mountLong();
+    click(row(container, "todo_long"));
+    const parts = () =>
+      Array.from(
+        meta(container).querySelectorAll<HTMLElement>("[data-segment]"),
+      );
+    for (const index of [0, 1, 2]) {
+      click(parts()[index]);
+      expect(popover(), `part ${index}`).not.toBeNull();
+      key(document.activeElement!, "Escape");
+      await settle();
+      expect(popover()).toBeNull();
+    }
+    // The count is not a time: a click there is the row's (it folds).
+    click(parts()[3]);
+    expect(popover()).toBeNull();
+    expect(row(container, "todo_long").hasAttribute("data-todo-open")).toBe(
+      false,
+    );
+    click(row(container, "todo_long"));
+    for (const name of ["Enter", " "]) {
+      const words = meta(container).querySelector<HTMLElement>(
+        '[data-role="todo-meta-date"]',
+      )!;
+      act(() => words.focus());
+      key(words, name);
+      expect(popover(), JSON.stringify(name)).not.toBeNull();
+      key(document.activeElement!, "Escape");
+      await settle();
+      expect(popover()).toBeNull();
+      expect(document.activeElement).toBe(
+        meta(container).querySelector('[data-role="todo-meta-date"]'),
+      );
+    }
+  });
+
+  it("hangs the popover under the whole line — on two lines, under the second", async () => {
+    const container = mountLong();
+    click(row(container, "todo_long"));
+    const rect = (left: number, top: number, width: number, height: number) =>
+      ({
+        x: left,
+        y: top,
+        left,
+        top,
+        width,
+        height,
+        right: left + width,
+        bottom: top + height,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    // The line on two lines; its words, inline, a box of their own that
+    // starts and ends elsewhere.
+    meta(container).getBoundingClientRect = () => rect(40, 100, 200, 34);
+    meta(container).querySelector<HTMLElement>(
+      '[data-role="todo-meta-date"]',
+    )!.getBoundingClientRect = () => rect(52, 101, 180, 15);
+    // A window for the popper to stay inside (jsdom's is 0 × 0, which
+    // flips it above).
+    const html = document.documentElement;
+    Object.defineProperty(html, "clientWidth", {
+      configurable: true,
+      value: 1024,
+    });
+    Object.defineProperty(html, "clientHeight", {
+      configurable: true,
+      value: 768,
+    });
+    try {
+      click(meta(container).querySelector('[data-role="todo-meta-date"]')!);
+      await settle();
+      const wrapper = popover()!.closest<HTMLElement>(
+        "[data-radix-popper-content-wrapper]",
+      )!;
+      // The line's start, its foot (134) and the 4px offset.
+      expect(wrapper.style.transform).toBe("translate(40px, 138px)");
+    } finally {
+      delete (html as unknown as Record<string, unknown>).clientWidth;
+      delete (html as unknown as Record<string, unknown>).clientHeight;
+    }
+  });
+});

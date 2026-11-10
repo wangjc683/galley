@@ -327,17 +327,19 @@ describe("a to-do's second line (ruling 97)", () => {
       ).map((p) => (p.bell ? `🔔${p.text}` : p.repeat ? `↻${p.text}` : p.text));
 
     it("says its rule after when it is due, before the bell, with the repeat glyph", () => {
-      expect(marks(weekly)).toEqual(["周一", "↻每周一", "🔔09:00"]);
+      // On the due day's weekday: 「每周」 alone (ticket 159), the rule
+      // whole in its hover and name.
+      expect(marks(weekly)).toEqual(["周一", "↻每周", "🔔09:00"]);
       const parts = todoMetaParts(weekly, false, TODAY, "zh-CN", zh);
       expect(parts[1]).toEqual({
-        text: "每周一",
+        text: "每周",
         tone: "muted",
         repeat: true,
         title: "重复：每周一",
       });
-      // English: the rule's words, its name a sentence.
+      // English: the short words, its name the rule as a sentence.
       const en1 = todoMetaParts(weekly, false, TODAY, "en-US", en)[1];
-      expect(en1.text).toBe("Weekly on Mon");
+      expect(en1.text).toBe("weekly");
       expect(en1.title).toBe("Repeats weekly on Mon");
       // A rule none of the five, in its words.
       const fortnight = todo({
@@ -355,7 +357,7 @@ describe("a to-do's second line (ruling 97)", () => {
         reminder: undefined,
         overdue: true,
       });
-      expect(marks(late)).toEqual(["逾期 4 天", "↻每周一"]);
+      expect(marks(late)).toEqual(["逾期 4 天", "↻每周"]);
     });
 
     it("says none on a to-do that does not repeat, one checked or one cancelled", () => {
@@ -376,7 +378,7 @@ describe("a to-do's second line (ruling 97)", () => {
         ...weekly,
         reminder: { ...weekly.reminder!, at: local(2026, 10, 26, 9, 0) },
       });
-      expect(marks(movedOn)).toEqual(["周一", "↻每周一"]);
+      expect(marks(movedOn)).toEqual(["周一", "↻每周"]);
       // Overdue (due Mon Oct 12, its reminder moved on to Mon Oct 26): it
       // says when it rings again.
       const overdue = todo({
@@ -386,7 +388,7 @@ describe("a to-do's second line (ruling 97)", () => {
       });
       expect(marks(overdue)).toEqual([
         "逾期 4 天",
-        "↻每周一",
+        "↻每周",
         "🔔10月26日 09:00",
       ]);
       // Under a rule that records no reminder Core moves none on: a
@@ -395,16 +397,148 @@ describe("a to-do's second line (ruling 97)", () => {
         ...movedOn,
         todoRepeat: { kind: "weekly", weekdays: [1] },
       });
-      expect(marks(unrecorded)).toEqual([
-        "周一",
-        "↻每周一",
-        "🔔10月26日 09:00",
-      ]);
+      expect(marks(unrecorded)).toEqual(["周一", "↻每周", "🔔10月26日 09:00"]);
       // Nor on a to-do that does not repeat.
       expect(marks(todo({ ...movedOn, todoRepeat: undefined }))).toEqual([
         "周一",
         "🔔10月26日 09:00",
       ]);
+    });
+
+    // Main chat ticket 159 (PRD ruling 207 points 2 and 3): the line the
+    // real window cut, 「11月20日 ↻ 每周五 🔔 11月19日 09…」.
+    describe("shorter (ticket 159)", () => {
+      // Due Fri Nov 20, past a week out, so the day is a date; weekly on
+      // Friday, reminded the day before at 09:00, the rule recording it.
+      const friday = todo({
+        due: { date: "2026-11-20", hasTime: false },
+        reminder: {
+          taskId: "sched_f",
+          at: local(2026, 11, 19, 9, 0),
+          state: "scheduled",
+        },
+        todoRepeat: {
+          kind: "weekly",
+          weekdays: [5],
+          remind: { daysBefore: 1, time: "09:00" },
+        },
+        seriesId: "series_f",
+      });
+      const onRule = (daysBefore: number, h = 9) =>
+        todo({
+          ...friday,
+          reminder: {
+            ...friday.reminder!,
+            at: local(2026, 11, 20 - daysBefore, h, 0),
+          },
+          todoRepeat: {
+            ...friday.todoRepeat!,
+            remind: { daysBefore, time: `${String(h).padStart(2, "0")}:00` },
+          },
+        });
+      const enLine = (item: TodoItem) =>
+        marks(item, {}, "en-US").map((t) => t.replace(/\s/g, " "));
+      const last = <T>(list: readonly T[]): T => list[list.length - 1];
+
+      it("reads 「11月20日 ↻ 每周 🔔 前一天 09:00」, the hover whole", () => {
+        expect(marks(friday)).toEqual(["11月20日", "↻每周", "🔔前一天 09:00"]);
+        const parts = todoMetaParts(friday, false, TODAY, "zh-CN", zh);
+        expect(parts[1].title).toBe("重复：每周五");
+        expect(parts[2].title).toBe("提醒 11月19日 09:00");
+        expect(enLine(friday)).toEqual([
+          "Nov 20",
+          "↻weekly",
+          "🔔day before 9:00 AM",
+        ]);
+        const enParts = todoMetaParts(friday, false, TODAY, "en-US", en);
+        expect(enParts[1].title).toBe("Repeats weekly on Fri");
+        expect(enParts[2].title?.replace(/\s/g, " ")).toBe(
+          "Reminder Nov 19, 9:00 AM",
+        );
+      });
+
+      it("says the rule's reminder from the due day: the day, the day before, N days, a week", () => {
+        expect(last(marks(onRule(0)))).toBe("🔔09:00");
+        expect(last(marks(onRule(1)))).toBe("🔔前一天 09:00");
+        expect(last(marks(onRule(2)))).toBe("🔔提前 2 天 09:00");
+        expect(last(marks(onRule(3, 20)))).toBe("🔔提前 3 天 20:00");
+        expect(last(marks(onRule(7)))).toBe("🔔提前 1 周 09:00");
+        expect(last(enLine(onRule(0)))).toBe("🔔9:00 AM");
+        expect(last(enLine(onRule(1)))).toBe("🔔day before 9:00 AM");
+        expect(last(enLine(onRule(2)))).toBe("🔔2 days before 9:00 AM");
+        expect(last(enLine(onRule(7)))).toBe("🔔1 week before 9:00 AM");
+        // Its hover keeps the day.
+        expect(
+          last(todoMetaParts(onRule(7), false, TODAY, "zh-CN", zh)).title,
+        ).toBe("提醒 11月13日 09:00");
+        // Paused: so said after it.
+        const paused = todo({
+          ...friday,
+          reminder: { ...friday.reminder!, state: "paused" },
+        });
+        expect(last(marks(paused))).toBe("🔔前一天 09:00 · 已暂停");
+      });
+
+      it("says a reminder that is not the rule's as before: set by hand, moved toward the day, none on the rule", () => {
+        // Set on this period by hand: two days before at 20:00.
+        const byHand = todo({
+          ...friday,
+          reminder: { ...friday.reminder!, at: local(2026, 11, 18, 20, 0) },
+        });
+        expect(last(marks(byHand))).toBe("🔔11月18日 20:00");
+        // The rule's a week before; moved toward the due day (ticket 157's
+        // 往到期日退) to the day before: not the rule's.
+        const movedBack = todo({
+          ...friday,
+          todoRepeat: {
+            ...friday.todoRepeat!,
+            remind: { daysBefore: 7, time: "09:00" },
+          },
+        });
+        expect(last(marks(movedBack))).toBe("🔔11月19日 09:00");
+        // The same time on the due day, by hand: the clock alone, as ever.
+        const sameDay = todo({
+          ...friday,
+          reminder: { ...friday.reminder!, at: local(2026, 11, 20, 9, 0) },
+        });
+        expect(last(marks(sameDay))).toBe("🔔09:00");
+        // A rule that records no reminder.
+        const unrecorded = todo({
+          ...friday,
+          todoRepeat: { kind: "weekly", weekdays: [5] },
+        });
+        expect(last(marks(unrecorded))).toBe("🔔11月19日 09:00");
+      });
+
+      it("leaves a to-do that does not repeat word for word as it was", () => {
+        const plain = todo({ ...friday, todoRepeat: undefined });
+        expect(marks(plain)).toEqual(["11月20日", "🔔11月19日 09:00"]);
+        expect(todoMetaParts(plain, false, TODAY, "zh-CN", zh)).toEqual([
+          { text: "11月20日", tone: "muted" },
+          {
+            text: "11月19日 09:00",
+            tone: "muted",
+            bell: true,
+            title: "提醒 11月19日 09:00",
+          },
+        ]);
+        expect(enLine(plain)).toEqual(["Nov 20", "🔔Nov 19, 9:00 AM"]);
+      });
+
+      it("writes the rule whole where it says more than the due day", () => {
+        const rule = (todoRepeat: TodoItem["todoRepeat"]) =>
+          marks(todo({ ...friday, todoRepeat }))[1];
+        // Moved by hand off its weekday (due Friday, the rule Monday).
+        expect(rule({ kind: "weekly", weekdays: [1] })).toBe("↻每周一");
+        expect(rule({ kind: "weekly", weekdays: [5], every: 2 })).toBe(
+          "↻每 2 周的周五",
+        );
+        expect(rule({ kind: "weekly", weekdays: [1, 4] })).toBe("↻每周一·四");
+        expect(rule({ kind: "monthly", monthdays: [20] })).toBe("↻每月");
+        expect(rule({ kind: "monthly", monthdays: [15] })).toBe("↻每月 15 日");
+        expect(rule({ kind: "daily" })).toBe("↻每天");
+        expect(rule({ kind: "yearly" })).toBe("↻每年");
+      });
     });
   });
 
