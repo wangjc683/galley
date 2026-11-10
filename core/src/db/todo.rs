@@ -857,9 +857,15 @@ impl SqliteGalley {
     /// this patch gives notes, and the anchor only when it gives a due
     /// date. A repeating period's due date cannot be taken away
     /// (`REPEAT_NEEDS_DUE`, point 9); `series` and `no_repeat` on one that
-    /// does not repeat are [`NOT_REPEATING`]. Everything is checked before
-    /// anything is written; the period and its rule are written in one
-    /// transaction, its reminder after it.
+    /// does not repeat are [`NOT_REPEATING`]. With `series`, a reminder
+    /// time already past is not [`TIME_IN_PAST`] (main chat ticket 158:
+    /// 「以后都提前两天提醒」 on a period due tomorrow): the rule takes it as
+    /// its offset all the same, and this period's reminder is hung at the
+    /// first of the rule's reminder times still ahead
+    /// ([`next_reminder_ahead`], its own first), or, with none, not at all.
+    /// Without `series` a past time is refused as before. Everything is
+    /// checked before anything is written; the period and its rule are
+    /// written in one transaction, its reminder after it.
     ///
     /// **Errors**: `not_found`, `invalid_args`.
     pub async fn update_todo(
@@ -905,7 +911,11 @@ impl SqliteGalley {
             Some(None) => (None, None),
             None => (row.due_date.clone(), row.due_at.clone()),
         };
-        let remind_at = match &patch.remind_at {
+        // Ticket 158: with `series`, a reminder time already past is the
+        // rule's offset all the same (「以后都提前两天提醒」 on a period due
+        // tomorrow); this period's own reminder is worked out below.
+        let mut past_for_series = false;
+        let mut remind_at = match &patch.remind_at {
             Some(Some(raw)) => {
                 if row.done_at.is_some() {
                     return Err(invalid(format!(
@@ -913,7 +923,15 @@ impl SqliteGalley {
                     )));
                 }
                 let raw = raw.trim().to_string();
-                future_fire_at(&raw, CONTEXT)?;
+                match future_fire_at(&raw, CONTEXT) {
+                    Ok(_) => {}
+                    Err(GalleyError::InvalidArgs { message })
+                        if patch.series && message.starts_with(TIME_IN_PAST) =>
+                    {
+                        past_for_series = true;
+                    }
+                    Err(e) => return Err(e),
+                }
                 Some(Some(raw))
             }
             other => other.clone(),
@@ -947,6 +965,48 @@ impl SqliteGalley {
                 .map(|at| at.with_timezone(&Utc)),
             None => None,
         };
+        // Ticket 158: `series` with a time already past. The rule takes the
+        // time as its offset from this period's due day all the same (below,
+        // `reminder_after`); this period's own reminder goes to the first
+        // of the rule's reminder times still ahead — the rule as this change
+        // leaves it — counted from its own due day, its own first
+        // ([`next_reminder_ahead`]). With none, none is hung, and the one
+        // it had is let go after the write, as Core's own.
+        let mut let_reminder_go = false;
+        if let (true, Some(due), Some(given)) = (past_for_series, &due, reminder_after) {
+            let rule_after = match &rule {
+                Some(rule) => Some(rule.clone()),
+                None => series
+                    .as_ref()
+                    .map(TodoSeriesRow::rule)
+                    .transpose()?
+                    .map(|mut rule| {
+                        // With `due`, `series` counts the rule from it.
+                        if matches!(patch.due, Some(Some(_))) {
+                            rule.anchor = due.local_date(&Local);
+                        }
+                        rule
+                    }),
+            };
+            let ahead = rule_after.and_then(|rule| {
+                next_reminder_ahead(
+                    &rule,
+                    due.local_date(&Local),
+                    due_time_of_day(due, &Local),
+                    remind_offset(due, given, &Local),
+                    true,
+                    Utc::now(),
+                    &Local,
+                )
+            });
+            match ahead {
+                Some(at) => remind_at = Some(Some(instant_to_utc_iso(&at))),
+                None => {
+                    remind_at = None;
+                    let_reminder_go = true;
+                }
+            }
+        }
         let now = chrono_now_iso();
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         sqlx::query(
@@ -1074,6 +1134,12 @@ impl SqliteGalley {
                 }
             }
             None => {}
+        }
+        if let_reminder_go {
+            if let Some(task) = self.todo_reminder_task(id.as_str()).await? {
+                self.cancel_scheduled_task(&task.id, &Origin::system())
+                    .await?;
+            }
         }
         self.todo(id.as_str()).await
     }

@@ -231,9 +231,9 @@ flags); prints `{"todo": …}`.
 - `--notes=` with an empty value clears the notes.
 - `--due` (`add`'s forms) sets the due date; `--no-due` removes it.
 - `--remind-at` sets the reminder, or moves it (the same task; one that went
-  off is armed again); `time_in_past:` when past. Refused on a done to-do:
-  `reopen` it first. `--no-remind` removes the reminder (its task is
-  cancelled).
+  off is armed again); `time_in_past:` when past (with `--series`, see
+  below). Refused on a done to-do: `reopen` it first. `--no-remind`
+  removes the reminder (its task is cancelled).
 - `origin` is not changed: it says who noted the to-do.
 
 Repeating to-dos (added 2026-11-10, main chat ticket 154):
@@ -248,6 +248,17 @@ Repeating to-dos (added 2026-11-10, main chat ticket 154):
   progress), and the rule counts from its due day only when this same
   command gives `--due`. Refused on a done period (ticking it off let its
   reminder go): take the open period into the rule.
+- Added 2026-11-10 (main chat ticket 158): with `--series`, a
+  `--remind-at` already past is not `time_in_past:` (「以后都提前两天提醒」
+  said of a period due tomorrow). The rule takes that time's offset from
+  this period's due day all the same; this period's reminder goes to the
+  first of the rule's reminder times still ahead, counted from its own
+  due day, its own first (when its own has passed, a later period's), the
+  same task moved; when the rule gives none, it has no reminder. The
+  output is `{"todo": …}` as before: its `reminder` is the one hung, its
+  `repeat.remind` the new offset. Without `--series` a past time is
+  refused as before, and `--series` on a to-do that does not repeat is
+  still `not_repeating:`.
 - A rule flag (`add`'s) on a to-do that does not repeat makes it the first
   period of a rule, as `add` would have (it needs a due date, `--due` in
   the same command or one it has); refused on a done one, `reopen` it
@@ -267,8 +278,9 @@ empty `due` for `--no-due` and an empty `remindAt` for `--no-remind`. Since
 and `series: true` are the rule flags, `--no-repeat` and `--series`. An
 update with nothing to change is `invalid_args`.
 
-Exit codes: `0` / `2 invalid_args` (incl. `time_in_past:`,
-`assistant_unavailable:`; since 2026-11-10 `repeat_needs_due:`, and
+Exit codes: `0` / `2 invalid_args` (incl. `time_in_past:`, not with
+`--series` since main chat ticket 158; `assistant_unavailable:`; since
+2026-11-10 `repeat_needs_due:`, and
 `not_repeating:` for `--series` or `--no-repeat` on a to-do that does not
 repeat or whose rule ended) / `3 not_found` (unknown or cancelled) /
 `4 db_unavailable`.
