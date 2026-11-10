@@ -1708,3 +1708,13 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite wake --variant core --cas
 - **回归**：由不过变过的两条：`rep-done-report`（上一次回复只写进了 `<summary>`）、`rep-overdue-ring`（同上）；由过变不过的一条：`rep-quarterly-hint`，记对了这一次的季报（周五到期、周四 9 点提醒、不设规则），回复「记下了：本周五（11 月 13 日）前交季报，周四上午 9 点提醒你，留一天收尾。」没问以后每季度记不记；这条走的是 `todos.md` 的「A to-do that repeats」，这一票没动那一节，同组第 2、3 遍都问了。`rep-remind-two-days`（下周五到期、时刻还没过的那条）照旧过，新的分界没碰到它。叫醒套件十六次与上一次一样全过（同审计票 11 的跑法，`w-merge-two-long` 只经 `--t147` 跑，没重跑）；它们是子任务的回报，不经过待办的叫醒说明，读 `wake.md` 时读到的是改过的那一条。
 - **用量**：35 次运行，107 次模型调用（新用例 3 次 9 次、待办回归 14 次 44 次、`rep-overdue-ring` 第 2、3 遍 2 次 5 次、叫醒回归 16 次 49 次）；`--dry-test` 不连模型。被替换的运行在两套 `meta.superseded_runs` 里以「票 158」开头的几组，`todo/results.md` 的「票 158」一节与它后面的重跑表对比。
 - **没测到的**：规则一个提醒时刻都给不出来（实际上碰不到）时放掉原来那个提醒；同一条命令既给 `--due` 又 `--series` 加已过的时刻（Core 的测试覆盖了，评测没有用例）；叫醒说明的「不重复、逾期」与「重复、逾期但是它自己的提醒晚响」两种只在 Core 的测试与 `--dry-test` 的样本里，评测没有用例；`rep-overdue-ring` 只在手册改后跑，没有拿掉 `wake.md` 那半句的对照。
+
+### 续：这一期的提醒先往到期日退（2026-11-10，gpt-6.1-sol，推理强度 high）
+
+dev 里看到的：每周三重复、明天到期、明天 09:00 提醒的一件，`todo update --remind-at=<前天 09:00> --series` 之后规则对了（提前 2 天 09:00），这一期的提醒却挪到了下周一 09:00，在到期日之后五天，到期前什么都不响、面板上也不画铃铛。主会话定：同手改日子时票 157 的退法（裁决 205 第 6 条），这一期的提醒保持新的钟点，从这一期到期前 N 天起，那个时刻已过就试 N−1、N−2……退到到期日当天（0），挂在第一个还没过的；都过了才挂到后面一期的提醒时刻（`next_reminder_ahead`，同上一节）；在到期日之后（偏移小于 0）的不退。上面「结果」一节写的是第一轮（退法之前）。
+
+- **Core**：票 157 写在 `todo_by_hand.rs` 闭包里的退法挪进 `core/src/todo_repeat.rs` 的 `reminder_toward_due`，手改日子与 `--series` 共用这一份；票 157 的测试一条没改、照过。临时测试在内存库上对 Core 抓过：明天（周三）到期、`--remind-at` 前天 09:00 加 `--series`，晚上跑，Core 回的是明天 09:00、同一个任务、`{"daysBefore":2,"time":"09:00"}`。
+- **手册**：`todos-change.md` 那半句改成「Galley still changes the rule, and this one's reminder moves to the same time on the first day still ahead up to its own day, and to a later one's time only when there is none.」。
+- **评测**：`REPEAT_PY` 加 `r_reminder_toward_due`（照 Rust 单测的几组日子在 `--dry-test` 里对过），假 CLI 改用它；`--dry-test` 的假 CLI 一段改成期望这一期的提醒落在今天 09:00（还没过时）或到期日 09:00，并且不晚于到期日；新用例的判定没有写死下周一（判的是规则提前 2 天、一次成、回复说清以后怎么提醒），另加一条只记录的注：这一期的提醒落在哪天、在不在到期日之后。
+- **结果**：`rep-remind-two-days-near` 重跑三遍 3/3，9 次模型调用。三遍都是一条 `todo update … --remind-at=2026-11-09T09:00 --series`，一次成，规则提前 2 天 09:00，这一期的提醒落在明天（到期日）09:00；回复都说了以后每周一上午 9 点提醒、这次改为明天上午 9 点提醒，如「已改好，以后每周三交的周报，都会在周一上午9点提醒你。本周提前两天的时间已过，这次改为明天（11月11日）上午9点提醒。」。被替换的退法之前三遍在 `todo/results.json` 的 `meta.superseded_runs` 里「票 158 续」那一组。
+- **没测到的**：评测里这一期的提醒退回「今天」的那一种（在今天 09:00 之前跑才会出现）没有跑到，只在 `--dry-test` 与 Rust 单测里；退法在 DST 切换那几天只有纯函数测试（`resolve_wall_clock`）。

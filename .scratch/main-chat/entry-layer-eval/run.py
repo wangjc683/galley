@@ -798,6 +798,25 @@ def r_next_reminder_ahead(rule, due_day, remind, own, now, tz):
     return None
 
 
+def r_reminder_toward_due(day, remind, toward_due, rule, now, tz):
+    """reminder_toward_due (PRD ruling 205 point 6; tickets 157, 158): a
+    reminder `remind` ((days_before, "HH:MM")) from the due day `day`, at
+    that instant when still after `now`; past and `toward_due`, the same
+    time a day nearer the due day, down to the due day itself (an offset
+    below 0 is not walked); none ahead, under `rule` the first reminder time
+    still ahead after `day` (r_next_reminder_ahead); else None."""
+    days_before = int(remind[0])
+    nearest = min(days_before, 0) if toward_due else days_before
+    while True:
+        _, at = r_period_on(day, None, (days_before, remind[1]), tz)
+        if at > now:
+            return at
+        if days_before <= nearest:
+            break
+        days_before -= 1
+    return r_next_reminder_ahead(rule, day, remind, False, now, tz) if rule is not None else None
+
+
 def r_ordinal(d):
     suffix = "th" if 11 <= d % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(d % 10, "th")
     return str(d) + suffix
@@ -824,6 +843,7 @@ r_next_due_day = _REPEAT_NS["r_next_due_day"]
 r_period_on = _REPEAT_NS["r_period_on"]
 r_remind_offset = _REPEAT_NS["r_remind_offset"]
 r_next_reminder_ahead = _REPEAT_NS["r_next_reminder_ahead"]
+r_reminder_toward_due = _REPEAT_NS["r_reminder_toward_due"]
 r_repeat_words = _REPEAT_NS["r_repeat_words"]
 
 # The wake suite's fake galley: answers from the run's fixture (sessions,
@@ -1883,14 +1903,16 @@ if cmd == ("todo", "update"):
             if due is not None:
                 s["anchor"] = due_day(t).isoformat()
     # Ticket 158: `--series` with a time already past. This period's own
-    # reminder goes to the first of the rule's reminder times still ahead
-    # (the rule as this change left it), counted from its own due day, its
-    # own first (next_reminder_ahead); with none, none is hung and the one
-    # it had is let go, as Core's own.
+    # reminder keeps that time and falls back toward its due day (a day
+    # nearer, down to the due day, the first still ahead; PRD ruling 205
+    # point 6), and only with none ahead goes to the first of the rule's
+    # reminder times after its day (the rule as this change left it):
+    # reminder_toward_due. With none, none is hung and the one it had is
+    # let go, as Core's own.
     hang, let_go = at, False
     if past:
         s, day = live_series(t), due_day(t)
-        hang = (r_next_reminder_ahead(series_rule(s), day, r_remind_offset(day, at, TZ), True, now_utc(), TZ)
+        hang = (r_reminder_toward_due(day, r_remind_offset(day, at, TZ), True, series_rule(s), now_utc(), TZ)
                 if s is not None and day is not None else None)
         let_go = hang is None
     if hang is not None:
@@ -8364,6 +8386,15 @@ def repeat_facts(r: dict[str, Any], exp: dict[str, Any], log: list[list[str]], f
         # Ticket 158: done at the first try — no `todo update` refused, one
         # `todo update` in all.
         if sr.get("once"):
+            # The ticket 158 follow-up: where this period's reminder ended
+            # up (Core falls it back toward the due day), noted.
+            task = next((x for x in st.get("tasks") or [] if x.get("todoId") == sr["id"]
+                         and not x.get("cancelledAt") and x.get("fireAt")), None)
+            if task:
+                at = datetime.fromisoformat(task["fireAt"]).astimezone(tz)
+                due_d = day_of(todo_by_id.get(sr["id"]) or fx_todos.get(sr["id"]) or {})
+                flags.append(f"这一期的提醒：{local_words(at)}"
+                             + ("（到期日之后）" if due_d and at.date() > due_d else "（到期日当天或之前）"))
             refused = [e for e in st.get("errors") or [] if cli_name(e.get("argv") or []) == "todo update"]
             if refused:
                 reasons.append("todo update 被拒过（" + first_line(str(refused[0].get("message") or ""))[:120] + "）")
@@ -13728,15 +13759,19 @@ def dry_test_series_past_cli(r: dict[str, Any], check: Any) -> None:
     """Ticket 158: TODO_SERIES_PAST_DRY_BASH through the fake galley, on
     rep-remind-two-days-near's fixture (weekly, due tomorrow, a day before
     at 09:00): the refusals in Core's words, and with `--series` the rule's
-    new offset and this period's reminder, the same task, at the next time
-    still ahead (as Core printed it in a temporary in-memory test: due on a
-    Wednesday, the reminder the Monday after next at 09:00, its task kept);
-    the refusals recorded for the judge."""
+    new offset and this period's reminder, the same task, fallen back
+    toward its due day — today at 09:00 when that is still ahead, else the
+    due day at 09:00 — as Core printed it in a temporary in-memory test
+    (due on a Wednesday, `--remind-at` Monday 09:00 with `--series` in the
+    evening: Wednesday 09:00, its task kept); the refusals recorded for the
+    judge."""
     out = str((r["calls"][0].get("result") or {}).get("stdout", ""))
-    tz = datetime.fromisoformat(r["now"]).tzinfo
+    run_now = datetime.fromisoformat(r["now"])
+    tz = run_now.tzinfo
     due = date.fromisoformat(r["fixture_todos"][0]["dueDate"])
-    past = datetime(due.year, due.month, due.day, 9, 0, tzinfo=tz) - timedelta(days=2)
-    ahead = datetime(due.year, due.month, due.day, 9, 0, tzinfo=tz) + timedelta(days=5)
+    nine = datetime(due.year, due.month, due.day, 9, 0, tzinfo=tz)
+    past = nine - timedelta(days=2)
+    ahead = next((t for t in (nine - timedelta(days=1), nine) if t > run_now), nine + timedelta(days=5))
     rule = json.dumps({"kind": "weekly", "remind": {"daysBefore": 2, "time": "09:00"}, "weekdays": [due.isoweekday()]},
                       sort_keys=True)
     for piece in ("plain=2", f"time_in_past: update_todo: {iso_utc(past)} is in the past (now ",
@@ -13748,8 +13783,9 @@ def dry_test_series_past_cli(r: dict[str, Any], check: Any) -> None:
     s = (st.get("series") or [{}])[0]
     check((s.get("remindDaysBefore"), s.get("remindTime")) == (2, "09:00"), f"series past: the rule's offset ({s})")
     live = [t for t in st.get("tasks") or [] if t.get("todoId") == REPORT_ID_DRY and not t.get("cancelledAt")]
-    check([(t["id"], t["fireAt"]) for t in live] == [("sched_6b2f8d4c0e3a5f71", iso_utc(ahead))],
-          f"series past: one reminder, the same task, moved ahead ({live})")
+    check([(t["id"], t["fireAt"]) for t in live] == [("sched_6b2f8d4c0e3a5f71", iso_utc(ahead))]
+          and ahead.date() <= due,
+          f"series past: one reminder, the same task, fallen back to on or before its due day ({live})")
     errs = st.get("errors") or []
     check([e["message"].split(":")[0] for e in errs] == ["time_in_past", "not_repeating"]
           and all(e["argv"][:2] == ["todo", "update"] for e in errs),
@@ -14149,6 +14185,36 @@ def dry_test_series_near(cases: dict[str, dict[str, Any]], mon: datetime, check:
                                 date(2026, 10, 20), (2, "09:00"), True, mon, mon.tzinfo)
           == datetime(2026, 10, 25, 9, 0, tzinfo=mon.tzinfo),
           "next_reminder_ahead: its own (Sunday 09:00) past, next week's two days before")
+    # The ticket 158 follow-up: the fallback toward the due day first
+    # (reminder_toward_due), on core/src/todo_repeat.rs's unit test's days.
+    tz = mon.tzinfo
+    fridays = {"kind": "weekly", "every": 1, "days": [5], "anchor": date(2026, 11, 13)}
+    fri = date(2026, 11, 13)
+
+    def nine(d: date) -> datetime:
+        return datetime(d.year, d.month, d.day, 9, 0, tzinfo=tz)
+
+    def toward(offset: int, walk: bool, rule: Any, now_at: datetime) -> Any:
+        return r_reminder_toward_due(fri, (offset, "09:00"), walk, rule, now_at, tz)
+
+    for got, want, what in (
+            (toward(2, True, fridays, nine(date(2026, 11, 10)) - timedelta(hours=1)), nine(date(2026, 11, 11)),
+             "still ahead: there"),
+            (toward(2, True, fridays, nine(date(2026, 11, 12)) + timedelta(hours=12)), nine(fri),
+             "Thursday evening: the due day's"),
+            (toward(2, False, fridays, nine(date(2026, 11, 12)) + timedelta(hours=12)), nine(date(2026, 11, 18)),
+             "not following the day: the next period's"),
+            (toward(2, True, fridays, nine(fri) + timedelta(hours=1)), nine(date(2026, 11, 18)),
+             "nothing ahead up to the due day: the next period's"),
+            (toward(2, True, None, nine(fri) + timedelta(hours=1)), None, "no rule: none"),
+            (toward(-1, True, fridays, nine(date(2026, 11, 14)) + timedelta(hours=1)), nine(date(2026, 11, 21)),
+             "after the due day: not walked")):
+        check(got == want, f"reminder_toward_due: {what} ({got})")
+    # The new case's fixture at the fixed Monday 18:25: due Tuesday, two
+    # days before (Sunday) 09:00 past, Monday 09:00 past: Tuesday 09:00.
+    check(r_reminder_toward_due(date(2026, 10, 20), (2, "09:00"), True,
+                                {"kind": "weekly", "every": 1, "days": [2], "anchor": date(2026, 10, 20)}, mon, tz)
+          == datetime(2026, 10, 20, 9, 0, tzinfo=tz), "rep-remind-two-days-near: this period rings on its due day")
     upd = ("todo", "update", REPORT_ID_DRY, "--supervisor=galley-assistant")
     past = "--remind-at=2026-10-18T09:00"
     refused = {"argv": list(upd + (past,)), "error": "invalid_args",
@@ -14164,9 +14230,11 @@ def dry_test_series_near(cases: dict[str, dict[str, Any]], mon: datetime, check:
         r["fake_state"]["errors"] = list(errors)
         return todo_facts(r, near)
 
-    said = "好，以后周报都提前两天、早上 9 点提醒你；这一期明天就到期，下次提醒是下周日早上 9 点。"
+    said = "好，以后周报都提前两天、早上 9 点提醒你；这一期明天就到期，提前两天已经过了，就在明天早上 9 点提醒你。"
     f = run(said, log=(upd + (past, "--series"),))
     check(f["pass"] is True, f"near: `--series` with the past time at the first try passes ({f['reasons']})")
+    check(any(x.startswith("这一期的提醒：2026-10-26 09:00 (Mon)（到期日之后）") for x in f["flags"]),
+          f"near: where this period's reminder is, noted (here left where the fixture had it) ({f['flags']})")
     f = run(said, log=(upd + (past,), upd + (past, "--series")), errors=(refused,))
     check(f["pass"] is False and any("todo update 被拒过（time_in_past:" in x for x in f["reasons"])
           and any("用了 2 次" in x for x in f["reasons"]), f"near: refused first fails ({f['reasons']})")

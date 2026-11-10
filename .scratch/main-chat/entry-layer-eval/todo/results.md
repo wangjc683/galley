@@ -78,6 +78,8 @@
 
 注 34：票 158：rep-overdue-ring 第 2、3 遍换成 Core 新的叫醒说明重跑（写着它在重复、7 天前到期、是没勾的这一期在后面一期的时刻又响）。被替换的 2 次运行原样留在 results.json 的 `meta.superseded_runs[33]` 里。
 
+注 35：票 158 续：这一期的提醒先往到期日退（裁决 205 第 6 条）之后，rep-remind-two-days-near 重跑三遍；被替换的是退法之前的三遍（这一期的提醒挂到下一期的时刻）。被替换的 3 次运行原样留在 results.json 的 `meta.superseded_runs[34]` 里。
+
 ## 票 158：只改规则的提醒、叫醒说明写明重复与逾期
 
 主聊天 PRD 裁决 204 第 8、12 条。Core 改了两处：`todo update --series` 给的提醒时刻已经过了（这一期离到期太近）不再 `time_in_past:`，规则照改，这一期的提醒挂到后面第一个还没过的时刻；待办的叫醒说明写明它在重复（规则）、过了到期日几天、是没勾的这一期在后面一期的时刻又响。手册 `todos-change.md`、`wake.md` 各补半句。新用例一条（`v9`，提供 `tell_user`），`rep-overdue-ring` 换成新的叫醒说明重跑（它的运行也算在票 155 那一节里）。「todo show」一栏是去读了这件待办的运行数（只记录，不判）。
@@ -93,10 +95,10 @@
   - 第 1 遍：什么都没记、没改，回复 「上周那份周报已经发到部门群、抄送组长了吗？如果已经交了，告诉我一声，我再把这次待办勾掉。」；命令：todo show todo_5a1e7c3b9d2f4e60；过（注：去了 todo show（1 次））
   - 第 2 遍：什么都没记、没改，回复 「上周那份周报已经发到部门群、抄送组长了吗？可能只是交了还没勾掉，我先确认一下。」；命令：todo show todo_5a1e7c3b9d2f4e60；过（注：去了 todo show（1 次））
   - 第 3 遍：什么都没记、没改，回复 「上次的周报已经发到部门群、抄送组长了吗？可能只是交完后忘了打勾，确认一下就好。」；命令：todo show todo_5a1e7c3b9d2f4e60；过（注：去了 todo show（1 次））
-- **rep-remind-two-days-near**（以后都这样、这一期就在明天：清单里有每周重复的「交周报」（明天到期，每期提前一天早上 9 点提醒；今天早上那一响已经响过，提醒已挂到下一期的时刻），用户说「以后周报都提前两天提醒我」→ `todo update --remind-at=<这一期到期前两天，已经过了> --series` 一次成（规则记成提前 2 天），回复说清以后怎么提醒；不该报错后放弃，不该另建一条）：
-  - 第 1 遍：改了已有的「交周报」（规则：repeats weekly on Wed，每期提前 2 天 09:00 提醒），回复 「改好了，以后每周三交的周报，都在**周一上午9点**提醒你。 ⏎ 这周的提前两天时间已过，下次提醒是 **11月16日（周一）上午9点**；明天（11月11日）的周报仍要交。」；命令：todo show todo_5a1e7c3b9d2f4e60、todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点、todo show todo_5a1e7c3b9d2f4e60；过
-  - 第 2 遍：改了已有的「交周报」（规则：repeats weekly on Wed，每期提前 2 天 09:00 提醒），回复 「改好了，以后每周三交周报，都会在**周一上午9点**提醒你。 ⏎ 本周提前两天的时间已过，下一次提醒是 **11月16日（下周一）上午9点**；本周周报仍是明天截止。」；命令：todo show todo_5a1e7c3b9d2f4e60、todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点、todo show todo_5a1e7c3b9d2f4e60；过
-  - 第 3 遍：改了已有的「交周报」（规则：repeats weekly on Wed，每期提前 2 天 09:00 提醒），回复 「改好了，以后每周三交的周报，都在**周一上午9点**提醒你。 ⏎ 本周的提前提醒时间已过，下一次提醒是 **11月16日（周一）上午9点**；本周周报仍是明天（11月11日）交。」；命令：todo show todo_5a1e7c3b9d2f4e60、todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点、todo show todo_5a1e7c3b9d2f4e60；过
+- **rep-remind-two-days-near**（以后都这样、这一期就在明天：清单里有每周重复的「交周报」（明天到期，每期提前一天早上 9 点提醒；今天早上那一响已经响过，提醒已挂到下一期的时刻），用户说「以后周报都提前两天提醒我」→ `todo update --remind-at=<这一期到期前两天，已经过了> --series` 一次成（规则记成提前 2 天；这一期的提醒由 Core 退到到期日当天或之前还没过的那个钟点，注出来），回复说清以后怎么提醒；不该报错后放弃，不该另建一条）：
+  - 第 1 遍：改了已有的「交周报」（规则：repeats weekly on Wed，每期提前 2 天 09:00 提醒），回复 「已改好，以后每周三交的周报，都会在**周一上午9点**提醒你。 ⏎ 本周提前两天的时间已过，这次改为**明天（11月11日）上午9点**提醒。」；命令：todo show todo_5a1e7c3b9d2f4e60、todo update todo_5a1e7c3b9d2f4e60 --series --remind-at=2026-11-09T09:00 --supervisor=galley-assistant --reason=user: 以后周报都提前两天提醒，保留上午9点、todo show todo_5a1e7c3b9d2f4e60；过（注：这一期的提醒：2026-11-11 09:00 (Wed)（到期日当天或之前））
+  - 第 2 遍：改了已有的「交周报」（规则：repeats weekly on Wed，每期提前 2 天 09:00 提醒），回复 「改好了，以后每周三交的周报，都在**周一上午9点**提醒你。 ⏎ 本周提前两天的时间已过，改为**明天（11月11日）上午9点**提醒。」；命令：todo show todo_5a1e7c3b9d2f4e60、todo update todo_5a1e7c3b9d2f4e60 --series --remind-at=2026-11-09T09:00 --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保持上午9点、todo show todo_5a1e7c3b9d2f4e60；过（注：这一期的提醒：2026-11-11 09:00 (Wed)（到期日当天或之前））
+  - 第 3 遍：改了已有的「交周报」（规则：repeats weekly on Wed，每期提前 2 天 09:00 提醒），回复 「已改好，以后每周一上午 9 点提醒你交周三的周报。这周提前两天的时间已过，改为明天（11 月 11 日）上午 9 点提醒。」；命令：todo show todo_5a1e7c3b9d2f4e60、todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点、todo show todo_5a1e7c3b9d2f4e60；过（注：这一期的提醒：2026-11-11 09:00 (Wed)（到期日当天或之前））
 
 ## 票 158 重跑（2026-11-10，gpt-6.1-sol，推理强度 high）
 
@@ -993,7 +995,7 @@
 | 80 | rep-remind-two-days | 重复的待办（票 155） | 以后都这样：清单里有每周五重复的「交周报」（下周五到期，提前一天晚上 8 点提醒），用户说「以后周报都提前两天提醒我」→ `todo update --remind-at=<到期前两天> --series`（规则记成提前 2 天）；不该不带 `--series`（只改了这一期） | 3 | 3 | 100% |
 | 81 | rep-overdue-ring | 重复的待办（票 155） | 逾期的又响：每周重复的「交周报」上周的这一期没勾（到期在 7 天前），它的提醒今天又到点（Core 的待办叫醒措辞；票 158 起说明里写着它在重复、7 天前到期、是没勾的这一期在后面一期的时刻又响）→ 先问做了没有，不把同一句提醒再说一遍；用户没说做了就不勾；不该直接勾掉，不该另记一件；另记它还去不去 `todo show`（只记录） | 3 | 3 | 100% |
 | 82 | rep-already-there | 重复的待办（票 155） | 已经有了：清单里有每周一重复的「交周报」（下周一到期，前一天晚上 8 点提醒），用户说「下周一要交周报」→ 不再记，说已经有了、这一期是下周一；不该再记一件 | 3 | 3 | 100% |
-| 83 | rep-remind-two-days-near | 重复的待办收尾（票 158） | 以后都这样、这一期就在明天：清单里有每周重复的「交周报」（明天到期，每期提前一天早上 9 点提醒；今天早上那一响已经响过，提醒已挂到下一期的时刻），用户说「以后周报都提前两天提醒我」→ `todo update --remind-at=<这一期到期前两天，已经过了> --series` 一次成（规则记成提前 2 天），回复说清以后怎么提醒；不该报错后放弃，不该另建一条 | 3 | 3 | 100% |
+| 83 | rep-remind-two-days-near | 重复的待办收尾（票 158） | 以后都这样、这一期就在明天：清单里有每周重复的「交周报」（明天到期，每期提前一天早上 9 点提醒；今天早上那一响已经响过，提醒已挂到下一期的时刻），用户说「以后周报都提前两天提醒我」→ `todo update --remind-at=<这一期到期前两天，已经过了> --series` 一次成（规则记成提前 2 天；这一期的提醒由 Core 退到到期日当天或之前还没过的那个钟点，注出来），回复说清以后怎么提醒；不该报错后放弃，不该另建一条 | 3 | 3 | 100% |
 | | 合计 | | | 207 | 198 | 96% |
 
 ## 一览
@@ -1270,9 +1272,9 @@ HR 说本周五（2026-11-13）给 offer 答复。届时在主聊天 s-…9w0e �
 | 82 | rep-already-there | 1 | todo list | 待办里已经有了：**下周一（11 月 16 日）交周报**，周日（11 月 15 日）晚上 8 点会提醒你。 | 54 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md；1 次 1 轮，19498 字节 | 读了清单 | 过 |
 | 82 | rep-already-there | 2 | todo list | 已经在待办里了：下周一（11 月 16 日）交周报，周日晚上 8 点提醒你，原来的安排不变。 | 46 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md；1 次 1 轮，19496 字节 | 读了清单 | 过 |
 | 82 | rep-already-there | 3 | todo list | 待办里已经有了：下周一（11 月 16 日）交周报，周日（11 月 15 日）晚 8 点提醒你。 | 48 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md；1 次 1 轮，19499 字节 | 读了清单 | 过 |
-| 83 | rep-remind-two-days-near | 1 | todo show todo_5a1e7c3b9d2f4e60；schedule list；todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点；todo show todo_5a1e7c3b9d2f4e60；schedule list | 改好了，以后每周三交的周报，都在**周一上午9点**提醒你。 ⏎ 这周的提前两天时间已过，下次提醒是 **11月16日（周一）上午9点**；明天（11月11日）的周报仍要交。 | 86 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，12265 字节 | 没查 | 过 |
-| 83 | rep-remind-two-days-near | 2 | todo show todo_5a1e7c3b9d2f4e60；schedule list；todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点；todo show todo_5a1e7c3b9d2f4e60 | 改好了，以后每周三交周报，都会在**周一上午9点**提醒你。 ⏎ 本周提前两天的时间已过，下一次提醒是 **11月16日（下周一）上午9点**；本周周报仍是明天截止。 | 82 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，12006 字节 | 没查 | 过 |
-| 83 | rep-remind-two-days-near | 3 | todo show todo_5a1e7c3b9d2f4e60；schedule list；todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点；todo show todo_5a1e7c3b9d2f4e60 | 改好了，以后每周三交的周报，都在**周一上午9点**提醒你。 ⏎ 本周的提前提醒时间已过，下一次提醒是 **11月16日（周一）上午9点**；本周周报仍是明天（11月11日）交。 | 88 | 读了（第 1 次调用）：reminders.md、todos-change.md、times.md；1 次 1 轮，12265 字节 | 没查 | 过 |
+| 83 | rep-remind-two-days-near | 1 | todo show todo_5a1e7c3b9d2f4e60；schedule list；todo update todo_5a1e7c3b9d2f4e60 --series --remind-at=2026-11-09T09:00 --supervisor=galley-assistant --reason=user: 以后周报都提前两天提醒，保留上午9点；todo show todo_5a1e7c3b9d2f4e60 | 已改好，以后每周三交的周报，都会在**周一上午9点**提醒你。 ⏎ 本周提前两天的时间已过，这次改为**明天（11月11日）上午9点**提醒。 | 70 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，12142 字节 | 没查 | 过（注：这一期的提醒：2026-11-11 09:00 (Wed)（到期日当天或之前）） |
+| 83 | rep-remind-two-days-near | 2 | todo show todo_5a1e7c3b9d2f4e60；schedule list；todo update todo_5a1e7c3b9d2f4e60 --series --remind-at=2026-11-09T09:00 --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保持上午9点；todo show todo_5a1e7c3b9d2f4e60 | 改好了，以后每周三交的周报，都在**周一上午9点**提醒你。 ⏎ 本周提前两天的时间已过，改为**明天（11月11日）上午9点**提醒。 | 67 | 读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，12080 字节 | 没查 | 过（注：这一期的提醒：2026-11-11 09:00 (Wed)（到期日当天或之前）） |
+| 83 | rep-remind-two-days-near | 3 | todo show todo_5a1e7c3b9d2f4e60；schedule list；todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点；todo show todo_5a1e7c3b9d2f4e60 | 已改好，以后每周一上午 9 点提醒你交周三的周报。这周提前两天的时间已过，改为明天（11 月 11 日）上午 9 点提醒。 | 61 | 读了（第 1 次调用）：reminders.md、todos-change.md、times.md；1 次 1 轮，12079 字节 | 没查 | 过（注：这一期的提醒：2026-11-11 09:00 (Wed)（到期日当天或之前）） |
 
 ## 1. note-report（该记待办）
 
@@ -6933,7 +6935,7 @@ It was due 2026-11-03 (Tue), local time, 7 days ago. It repeats weekly on Tue: t
 
 ## 83. rep-remind-two-days-near（重复的待办收尾（票 158））
 
-**期望**：以后都这样、这一期就在明天：清单里有每周重复的「交周报」（明天到期，每期提前一天早上 9 点提醒；今天早上那一响已经响过，提醒已挂到下一期的时刻），用户说「以后周报都提前两天提醒我」→ `todo update --remind-at=<这一期到期前两天，已经过了> --series` 一次成（规则记成提前 2 天），回复说清以后怎么提醒；不该报错后放弃，不该另建一条
+**期望**：以后都这样、这一期就在明天：清单里有每周重复的「交周报」（明天到期，每期提前一天早上 9 点提醒；今天早上那一响已经响过，提醒已挂到下一期的时刻），用户说「以后周报都提前两天提醒我」→ `todo update --remind-at=<这一期到期前两天，已经过了> --series` 一次成（规则记成提前 2 天；这一期的提醒由 Core 退到到期日当天或之前还没过的那个钟点，注出来），回复说清以后怎么提醒；不该报错后放弃，不该另建一条
 
 已有的待办（运行那一刻）：
 
@@ -6947,54 +6949,37 @@ It was due 2026-11-03 (Tue), local time, 7 days ago. It repeats weekly on Tue: t
 
 ### 第 1 遍：过
 
+注：这一期的提醒：2026-11-11 09:00 (Wed)（到期日当天或之前）
+
 工具调用：
 
 1. code_run（galley todo show，galley schedule list）；galley todo show todo_5a1e7c3b9d2f4e60；galley schedule list
-2. code_run（galley todo update，galley todo show，galley schedule list）；galley todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点；galley todo show todo_5a1e7c3b9d2f4e60；galley schedule list
+2. code_run（galley todo update，galley todo show）；galley todo update todo_5a1e7c3b9d2f4e60 --series --remind-at=2026-11-09T09:00 --supervisor=galley-assistant --reason=user: 以后周报都提前两天提醒，保留上午9点；galley todo show todo_5a1e7c3b9d2f4e60
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，12265 字节；写前读过清单：没查；手册版本：`6c945020`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，12142 字节；写前读过清单：没查；手册版本：`8d40d520`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：`todo_5a1e7c3b9d2f4e60` 交周报（备注：发到部门群里，抄送组长），截止 2026-11-11，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-改好了，以后每周三交的周报，都在**周一上午9点**提醒你。
+已改好，以后每周三交的周报，都会在**周一上午9点**提醒你。
 
-这周的提前两天时间已过，下次提醒是 **11月16日（周一）上午9点**；明天（11月11日）的周报仍要交。
+本周提前两天的时间已过，这次改为**明天（11月11日）上午9点**提醒。
 ```
 
-建议标签：明天上午9点也提醒我交这周的周报
+建议标签：帮我看看还有哪些待办
 
 ### 第 2 遍：过
 
-工具调用：
-
-1. code_run（galley todo show，galley schedule list）；galley todo show todo_5a1e7c3b9d2f4e60；galley schedule list
-2. code_run（galley todo update，galley todo show）；galley todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点；galley todo show todo_5a1e7c3b9d2f4e60
-
-结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，12006 字节；写前读过清单：没查；手册版本：`6c945020`。
-
-新记的待办：无；新建的提醒：无；改过的已有待办：`todo_5a1e7c3b9d2f4e60` 交周报（备注：发到部门群里，抄送组长），截止 2026-11-11，没做；取消的已有提醒：无。
-
-回复（去掉 summary 与建议标签）：
-
-```text
-改好了，以后每周三交周报，都会在**周一上午9点**提醒你。
-
-本周提前两天的时间已过，下一次提醒是 **11月16日（下周一）上午9点**；本周周报仍是明天截止。
-```
-
-建议标签：帮我给明天要交的周报加个上午9点的提醒
-
-### 第 3 遍：过
+注：这一期的提醒：2026-11-11 09:00 (Wed)（到期日当天或之前）
 
 工具调用：
 
 1. code_run（galley todo show，galley schedule list）；galley todo show todo_5a1e7c3b9d2f4e60；galley schedule list
-2. code_run（galley todo update，galley todo show）；galley todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点；galley todo show todo_5a1e7c3b9d2f4e60
+2. code_run（galley todo update，galley todo show）；galley todo update todo_5a1e7c3b9d2f4e60 --series --remind-at=2026-11-09T09:00 --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保持上午9点；galley todo show todo_5a1e7c3b9d2f4e60
 
-结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、todos-change.md、times.md；1 次 1 轮，12265 字节；写前读过清单：没查；手册版本：`6c945020`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、reminders.md、times.md；1 次 1 轮，12080 字节；写前读过清单：没查；手册版本：`8d40d520`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：`todo_5a1e7c3b9d2f4e60` 交周报（备注：发到部门群里，抄送组长），截止 2026-11-11，没做；取消的已有提醒：无。
 
@@ -7003,7 +6988,28 @@ It was due 2026-11-03 (Tue), local time, 7 days ago. It repeats weekly on Tue: t
 ```text
 改好了，以后每周三交的周报，都在**周一上午9点**提醒你。
 
-本周的提前提醒时间已过，下一次提醒是 **11月16日（周一）上午9点**；本周周报仍是明天（11月11日）交。
+本周提前两天的时间已过，改为**明天（11月11日）上午9点**提醒。
 ```
 
-建议标签：明天上午9点也提醒我交本周周报
+建议标签：帮我看看还有哪些待办
+
+### 第 3 遍：过
+
+注：这一期的提醒：2026-11-11 09:00 (Wed)（到期日当天或之前）
+
+工具调用：
+
+1. code_run（galley todo show，galley schedule list）；galley todo show todo_5a1e7c3b9d2f4e60；galley schedule list
+2. code_run（galley todo update，galley todo show）；galley todo update todo_5a1e7c3b9d2f4e60 --remind-at=2026-11-09T09:00 --series --supervisor=galley-assistant --reason=用户要求以后周报都提前两天提醒，保留上午9点；galley todo show todo_5a1e7c3b9d2f4e60
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：reminders.md、todos-change.md、times.md；1 次 1 轮，12079 字节；写前读过清单：没查；手册版本：`8d40d520`。
+
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_5a1e7c3b9d2f4e60` 交周报（备注：发到部门群里，抄送组长），截止 2026-11-11，没做；取消的已有提醒：无。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+已改好，以后每周一上午 9 点提醒你交周三的周报。这周提前两天的时间已过，改为明天（11 月 11 日）上午 9 点提醒。
+```
+
+建议标签：帮我看看还有哪些待办
