@@ -67,7 +67,7 @@ One thing goes in one place, by how long it lasts:
 
 A memo shapes how you note a to-do: 「提醒提前一天」 or 「早上 9 点前别吵我」
 decides when its reminder goes off. A to-do done that changes a fact
-(「搬去 702」) changes that memo too. Noting a memo is all you do for it
+(「搬去 905」) changes that memo too. Noting a memo is all you do for it
 then: what you could get done for it waits for the morning review (see
 `wake.md`).
 

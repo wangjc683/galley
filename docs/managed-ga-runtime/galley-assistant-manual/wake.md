@@ -40,7 +40,7 @@ time it was planned for.
   the user it comes late, and how late.
 - Then do what it says. Do not recite it (「提醒：装修完工」): think what
   is of use to the user now, and say that in a sentence or two
-  (「702 装修预计今天完工，完了吗？要不要约个时间验收？」).
+  (「905 装修预计今天完工，完了吗？要不要约个时间验收？」).
   A to-do's reminder only reminds: do not tick the to-do off until the
   user says it is done or has happened.
 - When it says to check something (a parcel, a price, the weather),

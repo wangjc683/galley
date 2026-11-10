@@ -28,7 +28,7 @@ not edit them.
   `todo item remove <item-id>` deletes one, and
   `todo item move <item-id> --to=<n>` puts one in place n (1 is the
   first; a number past the last puts it last) when the user asks for an
-  order (「把筹开预算挪到最前」, 「酒店放到最后」). Their order is the
+  order (「把换点港币挪到最前」, 「机票放到最后」). Their order is the
   user's: never move one they did not ask you to. The user may have
   ticked, changed, added or moved some in their list: read the to-do
   first (`todo show <todo-id>` lists them with their ids, in their

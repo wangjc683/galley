@@ -3622,7 +3622,7 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
         "todo-follow-own": [
             call("<summary>Follow it up</summary>\n跟一下。", ("code_run", {"type": "bash", "script":
                  'G="$(sed -n \'1p\' ~/.config/galley/cli-path)"; "$G" schedule list >/dev/null; '
-                 '"$G" schedule create "问一下用户 702 办公室装修完没" --at="$(date +%Y)-11-20T10:00" '
+                 '"$G" schedule create "问一下用户 905 办公室装修完没" --at="$(date +%Y)-11-20T10:00" '
                  '--target=assistant --supervisor=galley-assistant --reason="renovation due to finish"'})),
             call("<summary>Set</summary>\n11 月 20 号上午 10 点我问你一下装修完没。")],
         "todo-stop-kind": [
@@ -3649,7 +3649,7 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  '--at="$(date -v+1H +%Y-%m-%dT%H:%M)" --target=assistant --supervisor=galley-assistant '
                  '--reason="dinner tonight"'})),
             call("<summary>Set</summary>\n一小时后提醒你出门。")],
-        "todo-recite": [call("<summary>Remind</summary>\n提醒：702 办公室装修完工。")],
+        "todo-recite": [call("<summary>Remind</summary>\n提醒：905 办公室装修完工。")],
         # Ticket 63: 「记下了」 with nothing written (wrong), and after a
         # line its own code appends to GA's memory (right); its own
         # reminder's wake answered with a question.
@@ -3659,7 +3659,7 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                  'printf \'\\n- 公司成立日：2019-11-20\\n\' >> "$GALLEY_GA_STATE_ROOT/memory/global_mem.txt"; echo ok'})),
             call("<summary>Noted</summary>\n记下了：你们公司 2019 年 11 月 20 日成立。")],
         "todo-offer-ask": [call("<summary>Ask</summary>\nHR 今天该给 offer 答复了，结果怎么样？")],
-        "todo-put-to-use": [call("<summary>Remind</summary>\n702 装修预计今天完工，完了吗？要不要约个时间验收？")],
+        "todo-put-to-use": [call("<summary>Remind</summary>\n905 装修预计今天完工，完了吗？要不要约个时间验收？")],
         # Ticket 78: the review and a subtask's result in one wake, the
         # result checked through the fake galley and passed on.
         "todo-mix-checked": [
@@ -11468,14 +11468,14 @@ def dry_test_moved(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
           "handed over: two turns carried, said 16 and 10 hours before")
     fx = sched_fixture(clock_case(over, mon), mon)
     srow = fx["sessions"][sub["id"]]
-    hilton = next(t for t in fx["todos"] if t["id"] == hid)
+    proj = next(t for t in fx["todos"] if t["id"] == hid)
     ran = [datetime.fromisoformat(srow[k]) for k in ("createdAt", "lastActivityAt")]
     check(ran[0] == mon - timedelta(minutes=604) and mon - timedelta(minutes=604) < ran[1] <= mon - timedelta(minutes=600)
-          and hilton["createdAt"] == iso_utc(mon - timedelta(hours=16))
-          and hilton["updatedAt"] == iso_utc(mon - timedelta(hours=10)),
+          and proj["createdAt"] == iso_utc(mon - timedelta(hours=16))
+          and proj["updatedAt"] == iso_utc(mon - timedelta(hours=10)),
           "handed over: the subtask ran ten hours ago; the to-do noted 16 hours ago, changed 10")
     jobs = make_sched_jobs([over], mon, {}, "en", set(), 1, "dry", suite="todo")
-    check(jobs[0]["wake"]["files"] == over["files"] and "{{HOME}}/Downloads/希尔顿酒店资料收集模板.md" in hilton["notes"]
+    check(jobs[0]["wake"]["files"] == over["files"] and "{{HOME}}/Downloads/松岚湾酒店资料收集模板.md" in proj["notes"]
           and "{{HOME}}" in jobs[0]["history"][2]["content"],
           "handed over: the template goes into the run's ~/Downloads; its path by HOME, filled per run")
     plain = sched_fixture(clock_case(cases["review-advance"], mon), mon)
@@ -11485,33 +11485,33 @@ def dry_test_moved(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
     f = run(over, "<no-reply/>", log=(("todo", "list"), show))
     check(f["pass"] is True and not f["flags"], f"handed over: read, <no-reply/>: passes ({f['reasons']} {f['flags']})")
     for reply, kw, why in (
-            ("<subtask>查希尔顿项目的公开资料</subtask>\n<no-reply/>", {}, "最多派 0 件"),
-            ("<no-reply/>", {"home_added": ["/sandbox/home/Downloads/希尔顿开业时间表.md"]}, "做了新文件"),
-            ("<no-reply/>", {"notes": {hid: f"{day}：看了一下，等业主资料\n" + hilton["notes"]}}, "不该动备注"),
+            ("<subtask>查松岚湾项目的公开资料</subtask>\n<no-reply/>", {}, "最多派 0 件"),
+            ("<no-reply/>", {"home_added": ["/sandbox/home/Downloads/松岚湾开业时间表.md"]}, "做了新文件"),
+            ("<no-reply/>", {"notes": {hid: f"{day}：看了一下，等业主资料\n" + proj["notes"]}}, "不该动备注"),
             ("<no-reply/>", {"tasks": (synth_reminder(mon + timedelta(days=2)),), "log": (SYNTH_CREATE,)},
              "不该建它自己的提醒"),
-            ("希尔顿那件在等你拿业主的资料。", {}, "不是只有")):
+            ("松岚湾那件在等你拿业主的资料。", {}, "不是只有")):
         f = run(over, reply, **kw)
         check(f["pass"] is False and any(why in x for x in f["reasons"]), f"handed over: {why} fails ({f['reasons']})")
     # Done the night before, not in the notes: the line first.
     base = missed["todos"][0]["notes"]
-    path = "/sandbox/home/Downloads/希尔顿酒店资料收集模板.md"
+    path = "/sandbox/home/Downloads/松岚湾酒店资料收集模板.md"
     for lead, ok in ((day, True), (f"{yesterday.month}月{yesterday.day}日", True),
                      (f"{before.month}月{before.day}日", False)):
         line = f"{lead}：资料收集模板做好了：{path}"
         f = run(missed, "<no-reply/>", {hid: line + "\n" + base}, (show, upd(hid, line + "\n" + base)))
         check(f["pass"] is ok, f"not noted: the line led by {lead} {'passes' if ok else 'fails'} ({f['reasons']})")
     line = f"{day}：资料收集模板做好了：{path}"
-    told = f"希尔顿那份资料收集模板在这里：\n[FILE:{path}]"
+    told = f"松岚湾那份资料收集模板在这里：\n[FILE:{path}]"
     f = run(missed, told, {hid: line + "\n" + base}, (show, upd(hid, line + "\n" + base)))
     check(f["pass"] is True and any("交出了文件" in x for x in f["flags"]),
           f"not noted: speaking to hand the file over passes, noted ({f['reasons']} {f['flags']})")
     for reply, notes, kw, why in (
             ("<no-reply/>", f"{day}：资料收集模板做好了", {}, "绝对路径"),
-            ("<no-reply/>", f"{day}：资料收集模板做好了：~/Downloads/希尔顿酒店资料收集模板.md", {}, "~/"),
+            ("<no-reply/>", f"{day}：资料收集模板做好了：~/Downloads/松岚湾酒店资料收集模板.md", {}, "~/"),
             ("<no-reply/>", None, {}, "没补"),
-            ("希尔顿那件我补到备注里了。", line, {}, "没交出文件"),
-            ("<no-reply/>", line, {"home_added": ["/sandbox/home/Downloads/希尔顿资料收集模板v2.md"]}, "做了新文件")):
+            ("松岚湾那件我补到备注里了。", line, {}, "没交出文件"),
+            ("<no-reply/>", line, {"home_added": ["/sandbox/home/Downloads/松岚湾资料收集模板v2.md"]}, "做了新文件")):
         upd_notes = {hid: notes + "\n" + base} if notes else None
         f = run(missed, reply, upd_notes, (show, upd(hid, notes + "\n" + base)) if notes else (show,), **kw)
         check(f["pass"] is False and any(why in x for x in f["reasons"]), f"not noted: {why} fails ({f['reasons']})")
@@ -11533,15 +11533,15 @@ def dry_test_moved(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
     check(f["pass"] is True, f"news on top: 「已记录」 inside a subtask's brief is no claim ({f['reasons']})")
     f = run(news, "", log=(show,), stop="web_tool")
     check(f["pass"] is True, f"news on top: a look in the browser passes ({f['reasons']} {f['flags']})")
-    found = f"{day}：查了环岛东路 1999 号地块：已取得规划许可，周边两家竞品酒店（文件：/sandbox/home/Downloads/希尔顿项目周边.md）"
-    f = run(news, "希尔顿那件我早上查了一下项目地块：规划许可已下，周边有两家同档竞品。\n[FILE:/sandbox/home/Downloads/希尔顿项目周边.md]",
+    found = f"{day}：查了环岛东路 1999 号地块：已取得规划许可，周边两家竞品酒店（文件：/sandbox/home/Downloads/松岚湾项目周边.md）"
+    f = run(news, "松岚湾那件我早上查了一下项目地块：规划许可已下，周边有两家同档竞品。\n[FILE:/sandbox/home/Downloads/松岚湾项目周边.md]",
             {hid: found + "\n" + nbase}, (show, upd(hid, found + "\n" + nbase)),
-            home_added=["/sandbox/home/Downloads/希尔顿项目周边.md"])
+            home_added=["/sandbox/home/Downloads/松岚湾项目周边.md"])
     check(f["pass"] is True, f"news on top: done, said, the line on top: passes ({f['reasons']} {f['flags']})")
     for reply, kw, why in (
-            ("<subtask>按新地址重做希尔顿资料收集模板</subtask>\n<no-reply/>", {}, "重做了「模板」"),
-            ("<no-reply/>", {"home_added": ["/sandbox/home/Downloads/希尔顿资料收集模板（新）.md"]}, "重做了「模板」"),
-            ("希尔顿那件还在等业主的其余资料。", {}, "没做成什么却开口了"),
+            ("<subtask>按新地址重做松岚湾资料收集模板</subtask>\n<no-reply/>", {}, "重做了「模板」"),
+            ("<no-reply/>", {"home_added": ["/sandbox/home/Downloads/松岚湾资料收集模板（新）.md"]}, "重做了「模板」"),
+            ("松岚湾那件还在等业主的其余资料。", {}, "没做成什么却开口了"),
             ("项目地址收到了，要不要我查一下周边竞品？", {}, "建议")):
         f = run(news, reply, log=(show,), **kw)
         check(f["pass"] is False and any(why in x for x in f["reasons"]), f"news on top: {why} fails ({f['reasons']})")
@@ -11608,9 +11608,9 @@ def dry_test_items(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
     prompt = sched_prompt(cases["items-tick-last"], mon)
     check(", 2 of 3 items done: 上海出差前的准备" in prompt and "订酒店" not in prompt,
           "In Hand: the count, not the items")
-    hilton = next(t for t in sched_fixture(clock_case(cases["items-hilton-split"], mon), mon)["todos"] if t["id"] == hid)
-    check(not hilton.get("items") and hilton["notes"].split("\n")[2].startswith("收集要点："),
-          "fixture: Hilton has no items, the list as its notes' last line")
+    proj = next(t for t in sched_fixture(clock_case(cases["items-client-split"], mon), mon)["todos"] if t["id"] == hid)
+    check(not proj.get("items") and proj["notes"].split("\n")[2].startswith("收集要点："),
+          "fixture: the project has no items, the list as its notes' last line")
 
     # 1. The trip: one to-do with three items.
     due = sched_day({"week_after": 3}, mon)
@@ -11716,27 +11716,27 @@ def dry_test_items(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
     f = run("items-tick-last", "好的。", log=(show, done_hkd, done_trip), edit=last)
     check(f["pass"] is False and any("没点到" in x for x in f["reasons"]), f"the last one: not said fails ({f['reasons']})")
 
-    # 6. News about Hilton: a line, not an item.
-    base = hilton["notes"]
+    # 6. News about the project: a line, not an item.
+    base = proj["notes"]
     line = f"{day}：业主说筹开预算下周给"
     news = ("todo", "update", hid, f"--notes={line}\n{base}", "--supervisor=galley-assistant", "--reason=dry")
 
     def noted_line(todos: dict[str, dict[str, Any]]) -> None:
         todos[hid]["notes"] = line + "\n" + base
 
-    f = run("items-hilton-news", "记下了，补在希尔顿那件的备注里。", log=(("todo", "show", hid), news), edit=noted_line)
+    f = run("items-client-news", "记下了，补在松岚湾那件的备注里。", log=(("todo", "show", hid), news), edit=noted_line)
     check(f["pass"] is True, f"news: a line on top passes ({f['reasons']})")
 
     def as_item(todos: dict[str, dict[str, Any]]) -> None:
         noted_line(todos)
         todos[hid]["items"] = [item("筹开预算下周给", 10)]
 
-    f = run("items-hilton-news", "记下了。", log=(("todo", "show", hid), news,
+    f = run("items-client-news", "记下了。", log=(("todo", "show", hid), news,
                                                   ("todo", "item", "add", hid, "筹开预算下周给", "--supervisor=galley-assistant")),
             edit=as_item)
     check(f["pass"] is False and any("不该动子项" in x for x in f["reasons"]), f"news: an item for it fails ({f['reasons']})")
 
-    # 7. Hilton's list made items.
+    # 7. The project's list made items.
     l1, l2, l3 = base.split("\n")
     five = [item(t, 20 + k) for k, t in enumerate(("具体品牌与管理模式", "项目位置和当前阶段", "工程及证照进度", "筹开预算",
                                                     "人员与系统准备情况"))]
@@ -11749,9 +11749,9 @@ def dry_test_items(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
             todos[hid]["items"] = items
         return edit
 
-    f = run("items-hilton-split", "拆好了，5 项都在希尔顿那件下面。", log=split_log, edit=split(f"{l1}\n{l2}", five))
+    f = run("items-client-split", "拆好了，5 项都在松岚湾那件下面。", log=split_log, edit=split(f"{l1}\n{l2}", five))
     check(f["pass"] is True and not any("备注里多了" in x for x in f["flags"]), f"split: five items, the list out passes ({f['reasons']} {f['flags']})")
-    f = run("items-hilton-split", "拆好了。", log=split_log, edit=split(f"{day}：收集要点拆成了 5 项\n{l1}\n{l2}", five))
+    f = run("items-client-split", "拆好了。", log=split_log, edit=split(f"{day}：收集要点拆成了 5 项\n{l1}\n{l2}", five))
     check(f["pass"] is True and any("备注里多了" in x for x in f["flags"]), f"split: a line more is noted ({f['reasons']} {f['flags']})")
     for notes, items, why in (
             (base, five, "还留着「收集要点」那一行"),
@@ -11761,7 +11761,7 @@ def dry_test_items(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
             (f"{l1}\n{l2}", five[:4], "该有 5 项子项，加了 4 项"),
             (f"{l1}\n{l2}", five + [item("开业时间表", 30)], "该有 5 项子项，加了 6 项"),
             (f"{l1}\n{l2}", five[:4] + [item("其他", 31)], "对不上")):
-        f = run("items-hilton-split", "拆好了。", log=split_log, edit=split(notes, items))
+        f = run("items-client-split", "拆好了。", log=split_log, edit=split(notes, items))
         check(f["pass"] is False and any(why in x for x in f["reasons"]), f"split: {why} fails ({f['reasons']})")
 
     # Round 2 (PRD ruling 157 point 12): items come only from the user. A
@@ -11828,15 +11828,15 @@ def dry_test_item_move(cases: dict[str, dict[str, Any]], mon: datetime, check: A
         return todo_facts(r, case)
 
     fx = sched_fixture(clock_case(first, mon), mon)
-    hilton = next(t for t in fx["todos"] if t["id"] == hid)
-    ids = [x["id"] for x in hilton["items"]]
-    words = [x["text"] for x in hilton["items"]]
+    proj = next(t for t in fx["todos"] if t["id"] == hid)
+    ids = [x["id"] for x in proj["items"]]
+    words = [x["text"] for x in proj["items"]]
     check(words == ["具体品牌与管理模式", "项目位置和当前阶段", "工程及证照进度", "筹开预算", "人员与系统准备情况",
                     "开业时间表", "业主方对接人"]
-          and [x["done"] for x in hilton["items"]] == [False, True, False, False, False, False, False],
-          "fixture: Hilton's seven items, the second ticked in the panel")
+          and [x["done"] for x in proj["items"]] == [False, True, False, False, False, False, False],
+          "fixture: the project's seven items, the second ticked in the panel")
     prompt = sched_prompt(first, mon)
-    check(", 1 of 7 items done: 希尔顿酒店项目上下文资料收集" in prompt and "筹开预算" not in prompt,
+    check(", 1 of 7 items done: 松岚湾酒店项目上下文资料收集" in prompt and "筹开预算" not in prompt,
           "In Hand: the count, not the items")
     budget = ids[3]
     show = ("todo", "show", hid)
@@ -11877,15 +11877,15 @@ def dry_test_item_move(cases: dict[str, dict[str, Any]], mon: datetime, check: A
     twice = ("todo", "item", "move", budget, "--to=2", "--supervisor=galley-assistant")
     f = run(first, said, moved, (show, twice, move))
     check(f["pass"] is True and any("挪了 2 次" in x for x in f["flags"]), f"moved: twice to the place passes, noted ({f['flags']})")
-    f = run(first, said, moved, (show, move), notes={hid: f"{day}：筹开预算挪到了第一个\n" + hilton["notes"]})
+    f = run(first, said, moved, (show, move), notes={hid: f"{day}：筹开预算挪到了第一个\n" + proj["notes"]})
     check(f["pass"] is False and any("不该动备注" in x for x in f["reasons"]), f"moved: a line in the notes fails ({f['reasons']})")
     # The news: a line on top, the items as they were.
-    base = hilton["notes"]
+    base = proj["notes"]
     line = f"{day}：业主说筹开预算下周给"
     upd = ("todo", "update", hid, f"--notes={line}\n{base}", "--supervisor=galley-assistant", "--reason=dry")
-    f = run(news, "记在希尔顿那件的备注里了。", log=(show, upd), notes={hid: line + "\n" + base})
+    f = run(news, "记在松岚湾那件的备注里了。", log=(show, upd), notes={hid: line + "\n" + base})
     check(f["pass"] is True, f"news: a line on top, nothing moved: passes ({f['reasons']} {f['flags']})")
-    f = run(news, "记在希尔顿那件的备注里了。", moved, (show, upd, move), notes={hid: line + "\n" + base})
+    f = run(news, "记在松岚湾那件的备注里了。", moved, (show, upd, move), notes={hid: line + "\n" + base})
     check(f["pass"] is False and any("不该动子项却动了" in x and "挪了次序" in x for x in f["reasons"])
           and any("多余的写命令" in x and "todo item move" in x for x in f["reasons"]),
           f"news: a move beside it fails ({f['reasons']})")
@@ -11907,10 +11907,10 @@ def dry_test_item_move(cases: dict[str, dict[str, Any]], mon: datetime, check: A
         check(f["pass"] is ok and (ok or any(why in x for x in f["reasons"])),
               f"backticks: {lead[-30:]!r} under {sha} {'passes' if ok else 'fails'} ({f['reasons']})")
     missed = cases["review-done-not-noted"]
-    tpl = "/sandbox/home/Downloads/希尔顿酒店资料收集模板.md"
+    tpl = "/sandbox/home/Downloads/松岚湾酒店资料收集模板.md"
     nbase = missed["todos"][0]["notes"]
     for line, ok in ((f"{day}：资料收集模板做好了：`{tpl}`", True), (f"{day}：资料收集模板做好了：{tpl}", False),
-                     (f"{day}：资料收集模板做好了：`~/Downloads/希尔顿酒店资料收集模板.md`", False)):
+                     (f"{day}：资料收集模板做好了：`~/Downloads/松岚湾酒店资料收集模板.md`", False)):
         r = synth_run(missed, mon, "<no-reply/>", log=(show, ("todo", "update", hid, "--notes=…",
                                                               "--supervisor=galley-assistant")))
         r["manual_sha"] = now_sha
@@ -11963,7 +11963,7 @@ def dry_test_progress(cases: dict[str, dict[str, Any]], mon: datetime, check: An
         check(bool(PROGRESS_DAY_RE.match(words)) is ok, f"the day first: {words!r} {'is' if ok else 'is not'}")
     base = cases["news-budget"]["todos"][0]["notes"]
     line = f"{day}：业主说筹开预算下周给"
-    said = "记在希尔顿那件的备注里了：业主下周给筹开预算。"
+    said = "记在松岚湾那件的备注里了：业主下周给筹开预算。"
     f = run("news-budget", said, {hid: line + "\n" + base}, (show, upd(hid, line + "\n" + base)))
     check(f["pass"] is True and f["progress"]["line"] == line and not f["flags"],
           f"news: a line on top, the old notes below word for word: passes ({f['reasons']} {f['flags']})")
@@ -12002,7 +12002,7 @@ def dry_test_progress(cases: dict[str, dict[str, Any]], mon: datetime, check: An
     fx = sched_fixture(clock_case(cases["news-moves-time"], mon), mon)
     rem = next(t for t in fx["tasks"] if t.get("todoId") == rid)
     new_rem = dict(rem, fireAt=iso_utc(datetime(2026, 12, 5, 9, 0, tzinfo=tz)))
-    r = synth_run(cases["news-moves-time"], mon, "改好了：702 装修顺延到 12 月 5 日，当天早上 9 点提醒你。",
+    r = synth_run(cases["news-moves-time"], mon, "改好了：905 装修顺延到 12 月 5 日，当天早上 9 点提醒你。",
                   log=(("todo", "show", rid), ("todo", "update", rid, "--due=2026-12-05", "--remind-at=2026-12-05T09:00",
                                                "--notes=" + moved + "\n" + reno["notes"],
                                                "--supervisor=galley-assistant", "--reason=dry")))
@@ -12061,17 +12061,17 @@ def dry_test_progress(cases: dict[str, dict[str, Any]], mon: datetime, check: An
     ed = cases["news-user-edited"]
     ebase = ed["todos"][0]["notes"]
     fire = f"{day}：业主说消防验收下周能过"
-    f = run("news-user-edited", "记在希尔顿那件上了。", {hid: fire + "\n" + ebase}, (show, upd(hid, fire + "\n" + ebase)))
+    f = run("news-user-edited", "记在松岚湾那件上了。", {hid: fire + "\n" + ebase}, (show, upd(hid, fire + "\n" + ebase)))
     check(f["pass"] is True and "品牌定位与客房数量" not in ebase, f"edited: on the user's notes: passes ({f['reasons']})")
-    f = run("news-user-edited", "记在希尔顿那件上了。", {hid: fire + "\n" + base}, (show, upd(hid, fire + "\n" + base)))
+    f = run("news-user-edited", "记在松岚湾那件上了。", {hid: fire + "\n" + base}, (show, upd(hid, fire + "\n" + base)))
     check(f["pass"] is False and any("用户删掉的" in x for x in f["reasons"]) and any("一字不差" in x for x in f["reasons"]),
           f"edited: the point the user took out written back fails ({f['reasons']})")
     # News of something not on the list.
     f = run("news-unrelated", "万豪那边下个月开始招标，我先记着。")
     check(f["pass"] is True, f"unrelated: nothing touched passes ({f['reasons']})")
-    f = run("news-unrelated", "记在希尔顿那件上了。", {hid: f"{day}：万豪业主说下个月招标\n" + base},
+    f = run("news-unrelated", "记在松岚湾那件上了。", {hid: f"{day}：万豪业主说下个月招标\n" + base},
             (show, upd(hid, f"{day}：万豪业主说下个月招标\n" + base)))
-    check(f["pass"] is False and any("不该动备注" in x for x in f["reasons"]), f"unrelated: into the Hilton notes fails ({f['reasons']})")
+    check(f["pass"] is False and any("不该动备注" in x for x in f["reasons"]), f"unrelated: into the project's notes fails ({f['reasons']})")
     # Elsewhere a change of notes is only noted.
     qm = cases["quote-move"]
     r = synth_run(qm, mon, "改到周四了。")
@@ -12299,7 +12299,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     check(paras[0] == OPENING_MIXED and paras[-1] == CLOSING_MANY and len(paras) == 4
           and paras[1].startswith("Reminder `sched_4b8c2d6e0f1a3957` on the user's to-do `todo_6f7a8b9c0d1e2f3a` "
                                   "came due.")
-          and "<<<\n702 办公室装修完工\n装修师傅说预计这天完工\n>>>\nIt is due "
+          and "<<<\n905 办公室装修完工\n装修师傅说预计这天完工\n>>>\nIt is due "
           f"{mon:%Y-%m-%d} ({WEEKDAYS_EN[mon.weekday()]}), local time." in paras[1]
           and paras[2].startswith(f"The morning review `sched_5e1a9c3f7b2d4608` (every day at {mon:%H:%M}) came due."),
           "review-with-reminder: one wake, mixed opening, the reminder then the review, Core's closing")
@@ -12320,11 +12320,11 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
           & {"s-mgu2r7k4-8c3v5n1x"},
           "review-with-subtask-done: the subtask is in the fake galley, its first message where the note says")
     rem_prompt = sched_prompt(mix_rem, mon)
-    check("702 办公室装修完工" in rem_prompt and "Galley's morning review" in rem_prompt
+    check("905 办公室装修完工" in rem_prompt and "Galley's morning review" in rem_prompt
           and "s-mgu2r7k4-8c3v5n1x" not in sched_prompt(mix_sub, mon),
           "the two: In Hand has the to-do and the review; the subtask came after the snapshot")
     for cid, good, unnamed in (
-            ("review-with-reminder", "702 那边今天该完工了，完了吗？完了我们约个时间去验收。", "早上好，今天天气不错。"),
+            ("review-with-reminder", "905 那边今天该完工了，完了吗？完了我们约个时间去验收。", "早上好，今天天气不错。"),
             ("review-with-subtask-done", "查到了下周三上午三班：G7502 09:12 开，G7348 09:41 开，G1374 10:05 开，"
              "二等座都是 73 元，前两班有票（12306 余票查询页）。", "好的，收到。")):
         f = judged(cid, good)
@@ -12351,7 +12351,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
         check(f["pass"] is False and any("<summary>" in x for x in f["reasons"])
               and not any("吞掉" in x for x in f["reasons"]),
               f"{cid}: words only in <summary>: fails as such ({f['reasons']})")
-    f = judged("review-with-reminder", "提醒：702 办公室装修完工。")
+    f = judged("review-with-reminder", "提醒：905 办公室装修完工。")
     check(f["pass"] is False and any("复述" in x for x in f["reasons"]),
           f"review-with-reminder: the reminder read back fails ({f['reasons']})")
     rid = "sched_5e1a9c3f7b2d4608"
@@ -12524,7 +12524,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
                   f"a reason without the kind: fails ({f['reasons']})")
         elif r["id"] == "todo-declined-quiet":
             block = system[system.index("### In Hand"):system.index("## Galley Main Chat Entry Layer")]
-            check("`todo_7a8b9c0d1e2f3a4b` cancelled " in block and "by you at the user's request: 702 办公室装修完工 "
+            check("`todo_7a8b9c0d1e2f3a4b` cancelled " in block and "by you at the user's request: 905 办公室装修完工 "
                   "(reason: user: no renovation progress reminders)" in block
                   and "The user's to-dos (not done):" not in block and "sched_5c9d3e7f1a2b4068" not in block,
                   "In Hand: the to-do turned down (its reminder Core took along is not), nothing open")
@@ -14507,7 +14507,7 @@ def main() -> int:
                       "report; the manual of before it in meta.ticket110w_control, the new one without that bullet in "
                       "meta.ticket110r_control); rerun for ticket 112 (todos-change.md: `todo item move` only when the "
                       "user asks for an order; a file's path in a to-do's notes in backticks, there and in todos.md's "
-                      "--notes; two cases on Hilton's seven items, the three cases that write a file into the notes "
+                      "--notes; two cases on the project's seven items, the three cases that write a file into the notes "
                       "judged on the backticks)"
                       if todo else
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "

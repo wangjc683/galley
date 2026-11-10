@@ -15,7 +15,7 @@
           "id": "todo_asked",
           "kind": "todo",
           "reason": "用户说装修这类别提醒",
-          "text": "702 装修验收"
+          "text": "905 装修验收"
         },
         {
           "by": "user",
@@ -227,7 +227,7 @@
             "via": "supervisor"
           },
           "status": "cancelled",
-          "title": "702 装修验收",
+          "title": "905 装修验收",
           "updatedAt": "2026-07-01T00:00:00+00:00"
         },
         {
@@ -901,7 +901,7 @@
           "cancelledAt": "2026-10-15T13:30:00+00:00",
           "id": "sched_7a1b2c3d4e5f6a7b",
           "kind": "task",
-          "text": "提醒用户确认 702 装修进度"
+          "text": "提醒用户确认 905 装修进度"
         },
         {
           "by": "assistant",
@@ -909,7 +909,7 @@
           "id": "todo_5e6f7a8b9c0d1e2f",
           "kind": "todo",
           "reason": "用户说装修这类的别提醒",
-          "text": "702 装修验收"
+          "text": "905 装修验收"
         },
         {
           "by": "assistant",
@@ -944,7 +944,7 @@
       ],
       "name": "full-declined",
       "now": "2026-10-16T06:05:00Z",
-      "text": "### In Hand\n\nAs of 2026-10-16 14:05, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).\n\nThe user's to-dos (not done):\n- `todo_1a2b3c4d5e6f7a8b` due 2026-10-16 10:00 (Fri), overdue: 回房东电话\n- `todo_1a2b3c4d5e6f7a8c` due 2026-10-16 (Fri), reminder 2026-10-16 17:00 (Fri) (paused): 今天交的\n- `todo_2b3c4d5e6f7a8b9c` due 2026-10-21 15:00 (Wed), reminder 2026-10-21 12:00 (Wed): 交季度报告\n- `todo_3c4d5e6f7a8b9c0d` due 2026-10-23 (Fri), reminded 2026-10-16 09:00 (Fri): 交材料 两份\n- `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土\n- and 1 more: `todo list`\n\nWhat you are on (subtasks not finished, then one-off reminders and tasks to come):\n- `s-mgq3c1d8-2k7v4p0a` 查三家本周螺纹钢报价: working\n- `s-mgr8x2k1-5b9d3f7h` 订周三去上海的高铁: asking a question\n- `s-mgs1q9w3-8c2v6n4m` (untitled): failed\n- `s-mgs1q9w3-8c2v6n4n` 核对发票: paused at the step limit\n- `s-mgs1q9w3-8c2v6n4o` 比价: stopped before it finished\n- and 2 more: `sessions list`, `schedule list`\n\nRoutine (repeating tasks):\n- `sched_41d0aa5e9b3c2f17` 2026-10-17 17:00 (Sat), weekly, set by the user, starts a new conversation: 整理下载文件夹\n- `sched_0b0b0b0b0b0b0b0b` 2026-10-18 09:00 (Sun), monthly, set by an outside agent: 没名字的外部 agent\n- `sched_9b2c7e1f0a3d4c58` daily, paused, set by the outside agent claude-code-with-a-very-…: 看一眼 MyApp 的依赖更新\n\nFollow-ups the user turned down (to-dos and reminders you set that were cancelled on the desktop or at their request, last 90 days):\n- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-15 21:30 (Thu) by the user on the desktop: 提醒用户确认 702 装修进度\n- `todo_5e6f7a8b9c0d1e2f` cancelled 2026-10-14 09:12 (Wed) by you at the user's request: 702 装修验收 (reason: 用户说装修这类的别提醒)\n- `todo_6f7a8b9c0d1e2f3a` cancelled 2026-10-13 08:00 (Tue) by you at the user's request: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十… (reason: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十…)\n- `sched_8b2c3d4e5f6a7b8c` cancelled 2026-10-13 07:59 (Tue) by the user on the desktop: 提醒用户 喝水\n- `sched_9c3d4e5f6a7b8c9d` cancelled by you at the user's request: 看新闻 (reason: 用户说不用)\n- and 1 more: `todo list --all`, `schedule list --all`",
+      "text": "### In Hand\n\nAs of 2026-10-16 14:05, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).\n\nThe user's to-dos (not done):\n- `todo_1a2b3c4d5e6f7a8b` due 2026-10-16 10:00 (Fri), overdue: 回房东电话\n- `todo_1a2b3c4d5e6f7a8c` due 2026-10-16 (Fri), reminder 2026-10-16 17:00 (Fri) (paused): 今天交的\n- `todo_2b3c4d5e6f7a8b9c` due 2026-10-21 15:00 (Wed), reminder 2026-10-21 12:00 (Wed): 交季度报告\n- `todo_3c4d5e6f7a8b9c0d` due 2026-10-23 (Fri), reminded 2026-10-16 09:00 (Fri): 交材料 两份\n- `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土\n- and 1 more: `todo list`\n\nWhat you are on (subtasks not finished, then one-off reminders and tasks to come):\n- `s-mgq3c1d8-2k7v4p0a` 查三家本周螺纹钢报价: working\n- `s-mgr8x2k1-5b9d3f7h` 订周三去上海的高铁: asking a question\n- `s-mgs1q9w3-8c2v6n4m` (untitled): failed\n- `s-mgs1q9w3-8c2v6n4n` 核对发票: paused at the step limit\n- `s-mgs1q9w3-8c2v6n4o` 比价: stopped before it finished\n- and 2 more: `sessions list`, `schedule list`\n\nRoutine (repeating tasks):\n- `sched_41d0aa5e9b3c2f17` 2026-10-17 17:00 (Sat), weekly, set by the user, starts a new conversation: 整理下载文件夹\n- `sched_0b0b0b0b0b0b0b0b` 2026-10-18 09:00 (Sun), monthly, set by an outside agent: 没名字的外部 agent\n- `sched_9b2c7e1f0a3d4c58` daily, paused, set by the outside agent claude-code-with-a-very-…: 看一眼 MyApp 的依赖更新\n\nFollow-ups the user turned down (to-dos and reminders you set that were cancelled on the desktop or at their request, last 90 days):\n- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-15 21:30 (Thu) by the user on the desktop: 提醒用户确认 905 装修进度\n- `todo_5e6f7a8b9c0d1e2f` cancelled 2026-10-14 09:12 (Wed) by you at the user's request: 905 装修验收 (reason: 用户说装修这类的别提醒)\n- `todo_6f7a8b9c0d1e2f3a` cancelled 2026-10-13 08:00 (Tue) by you at the user's request: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十… (reason: 一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十…)\n- `sched_8b2c3d4e5f6a7b8c` cancelled 2026-10-13 07:59 (Tue) by the user on the desktop: 提醒用户 喝水\n- `sched_9c3d4e5f6a7b8c9d` cancelled by you at the user's request: 看新闻 (reason: 用户说不用)\n- and 1 more: `todo list --all`, `schedule list --all`",
       "todo": {
         "assistant": [
           {
@@ -1164,7 +1164,7 @@
           "cancelledAt": "2026-10-15T13:30:00+00:00",
           "id": "sched_7a1b2c3d4e5f6a7b",
           "kind": "task",
-          "text": "提醒用户确认 702 装修进度"
+          "text": "提醒用户确认 905 装修进度"
         },
         {
           "by": "assistant",
@@ -1172,12 +1172,12 @@
           "id": "todo_5e6f7a8b9c0d1e2f",
           "kind": "todo",
           "reason": "用户说装修这类的别提醒",
-          "text": "702 装修验收"
+          "text": "905 装修验收"
         }
       ],
       "name": "only-declined",
       "now": "2026-10-16T06:05:00Z",
-      "text": "### In Hand\n\nAs of 2026-10-16 14:05, local time (it may have changed since: `schedule list` and `session brief <id>` read it now).\n\nFollow-ups the user turned down (to-dos and reminders you set that were cancelled on the desktop or at their request, last 90 days):\n- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-15 21:30 (Thu) by the user on the desktop: 提醒用户确认 702 装修进度\n- `todo_5e6f7a8b9c0d1e2f` cancelled 2026-10-14 09:12 (Wed) by you at the user's request: 702 装修验收 (reason: 用户说装修这类的别提醒)",
+      "text": "### In Hand\n\nAs of 2026-10-16 14:05, local time (it may have changed since: `schedule list` and `session brief <id>` read it now).\n\nFollow-ups the user turned down (to-dos and reminders you set that were cancelled on the desktop or at their request, last 90 days):\n- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-15 21:30 (Thu) by the user on the desktop: 提醒用户确认 905 装修进度\n- `todo_5e6f7a8b9c0d1e2f` cancelled 2026-10-14 09:12 (Wed) by you at the user's request: 905 装修验收 (reason: 用户说装修这类的别提醒)",
       "todo": {
         "assistant": [],
         "done": [],
@@ -1199,7 +1199,7 @@
           "cancelledAt": "2026-10-15T13:30:00+00:00",
           "id": "sched_7a1b2c3d4e5f6a7b",
           "kind": "task",
-          "text": "提醒用户确认 702 装修进度"
+          "text": "提醒用户确认 905 装修进度"
         },
         {
           "by": "assistant",
@@ -1207,12 +1207,12 @@
           "id": "todo_5e6f7a8b9c0d1e2f",
           "kind": "todo",
           "reason": "用户说装修这类的别提醒",
-          "text": "702 装修验收"
+          "text": "905 装修验收"
         }
       ],
       "name": "only-declined-utc",
       "now": "2026-10-16T06:05:00Z",
-      "text": "### In Hand\n\nAs of 2026-10-16 06:05, local time (it may have changed since: `schedule list` and `session brief <id>` read it now).\n\nFollow-ups the user turned down (to-dos and reminders you set that were cancelled on the desktop or at their request, last 90 days):\n- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-15 13:30 (Thu) by the user on the desktop: 提醒用户确认 702 装修进度\n- `todo_5e6f7a8b9c0d1e2f` cancelled 2026-10-14 01:12 (Wed) by you at the user's request: 702 装修验收 (reason: 用户说装修这类的别提醒)",
+      "text": "### In Hand\n\nAs of 2026-10-16 06:05, local time (it may have changed since: `schedule list` and `session brief <id>` read it now).\n\nFollow-ups the user turned down (to-dos and reminders you set that were cancelled on the desktop or at their request, last 90 days):\n- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-15 13:30 (Thu) by the user on the desktop: 提醒用户确认 905 装修进度\n- `todo_5e6f7a8b9c0d1e2f` cancelled 2026-10-14 01:12 (Wed) by you at the user's request: 905 装修验收 (reason: 用户说装修这类的别提醒)",
       "todo": {
         "assistant": [],
         "done": [],
@@ -1284,7 +1284,7 @@
     {
       "name": "items",
       "now": "2026-10-16T06:05:00Z",
-      "text": "### In Hand\n\nAs of 2026-10-16 14:05, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).\n\nThe user's to-dos (not done):\n- `todo_7a8b9c0d1e2f3a4b` due 2026-10-15 20:00 (Thu), overdue, 1 of 1 items done: 带齐材料\n- `todo_5e6f7a8b9c0d1e2f` due 2026-10-21 (Wed), reminder 2026-10-20 20:00 (Tue), 2 of 3 items done: 去上海出差\n- `todo_6f7a8b9c0d1e2f3a` no due date, 0 of 2 items done: 希尔顿酒店项目资料收集\n- `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土",
+      "text": "### In Hand\n\nAs of 2026-10-16 14:05, local time (it may have changed since: `todo list`, `schedule list` and `session brief <id>` read it now).\n\nThe user's to-dos (not done):\n- `todo_7a8b9c0d1e2f3a4b` due 2026-10-15 20:00 (Thu), overdue, 1 of 1 items done: 带齐材料\n- `todo_5e6f7a8b9c0d1e2f` due 2026-10-21 (Wed), reminder 2026-10-20 20:00 (Tue), 2 of 3 items done: 去上海出差\n- `todo_6f7a8b9c0d1e2f3a` no due date, 0 of 2 items done: 松岚湾酒店项目资料收集\n- `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土",
       "todo": {
         "assistant": [],
         "done": [],
@@ -1310,7 +1310,7 @@
               ],
               "kind": "todo",
               "state": "open",
-              "text": "希尔顿酒店项目资料收集"
+              "text": "松岚湾酒店项目资料收集"
             },
             {
               "createdBy": "assistant",
@@ -1614,14 +1614,14 @@
           "fired_local": "2026-11-20 08:57 (Fri)",
           "late": null,
           "once": true,
-          "prompt": "702 办公室装修完工",
+          "prompt": "905 办公室装修完工",
           "rule": "one-off",
           "task_id": "sched_4b8c2d6e0f1a3957",
           "todo": {
             "due": "2026-11-20 (Fri)",
             "id": "todo_6f7a8b9c0d1e2f3a",
             "notes": "装修师傅说预计这天完工",
-            "title": "702 办公室装修完工"
+            "title": "905 办公室装修完工"
           }
         },
         {
@@ -1636,7 +1636,7 @@
           "todo": null
         }
       ],
-      "text": "[Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.\n\nReminder `sched_4b8c2d6e0f1a3957` on the user's to-do `todo_6f7a8b9c0d1e2f3a` came due. Planned for 2026-11-20 08:57 (Fri), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n702 办公室装修完工\n装修师傅说预计这天完工\n>>>\nIt is due 2026-11-20 (Fri), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nThe morning review `sched_5e1a9c3f7b2d4608` (every day at 08:57) came due. Planned for 2026-11-20 08:57 (Fri), local time. Galley made this task, not you: once a day, go over what is in hand. Read \"The morning review\" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.\n\nReply once, covering all of them."
+      "text": "[Galley — not a message from the user] Things you are looking after have updates. Act on them, then reply to the user. Do not mention this note.\n\nReminder `sched_4b8c2d6e0f1a3957` on the user's to-do `todo_6f7a8b9c0d1e2f3a` came due. Planned for 2026-11-20 08:57 (Fri), local time. The to-do is on the user's list, something to do or something coming up they want to hear about:\n<<<\n905 办公室装修完工\n装修师傅说预计这天完工\n>>>\nIt is due 2026-11-20 (Fri), local time. Act on it now: tell the user what is of use to them now, in a sentence or two (not the to-do read back: ask whether it is done or has happened, or give the next step), look something up first, or start a subtask. Do not tick it off until they say it is done or has happened. If it no longer applies (the user already did it), end your reply with exactly <no-reply/>.\n\nThe morning review `sched_5e1a9c3f7b2d4608` (every day at 08:57) came due. Planned for 2026-11-20 08:57 (Fri), local time. Galley made this task, not you: once a day, go over what is in hand. Read \"The morning review\" in `wake.md` in your manual and do as it says: read `todo list`, `schedule list` and your running subtasks, move forward what you can without being asked, and start at most two subtasks in all. Speak only when you got something done the user will want to know, in one message, in your own words, with no fixed heading. If you only started subtasks, write nothing else for the user and end your reply with exactly <no-reply/>; if you did nothing, your whole reply is exactly <no-reply/>.\n\nReply once, covering all of them."
     },
     {
       "reports": [

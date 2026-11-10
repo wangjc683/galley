@@ -648,7 +648,7 @@ mod tests {
             // they may have dragged some.
             "`todo item move <item-id> --to=<n>` puts one in place n (1 is the",
             "first; a number past the last puts it last) when the user asks for an",
-            "order (「把筹开预算挪到最前」, 「酒店放到最后」). Their order is the",
+            "order (「把换点港币挪到最前」, 「机票放到最后」). Their order is the",
             "user's: never move one they did not ask you to. The user may have",
             "ticked, changed, added or moved some in their list: read the to-do",
             "first (`todo show <todo-id>` lists them with their ids, in their",
@@ -799,7 +799,7 @@ mod tests {
         let wake = part("wake.md");
         assert!(wake
             .contains("- Then do what it says. Do not recite it (「提醒：装修完工」): think what"));
-        assert!(wake.contains("(「702 装修预计今天完工，完了吗？要不要约个时间验收？」)."));
+        assert!(wake.contains("(「905 装修预计今天完工，完了吗？要不要约个时间验收？」)."));
         let change = part("todos-change.md");
         assert!(change.contains(
             "  (「这类别提醒我」), cancel the one you set, and say the kind, briefly, at"
@@ -1213,7 +1213,7 @@ mod tests {
             "a memo, as an interest.",
             // Together; what waits for the review; GA's memory.
             "A memo shapes how you note a to-do: 「提醒提前一天」 or 「早上 9 点前别吵我」",
-            "(「搬去 702」) changes that memo too. Noting a memo is all you do for it",
+            "(「搬去 905」) changes that memo too. Noting a memo is all you do for it",
             // Ticket 145's second round: how they want things done for
             // them is about them; how to do a task itself is GA's memory.
             "What is about the user goes here, how they want you to do things for",

@@ -1,16 +1,16 @@
 # 81 巡看只为没有自己闹钟的事醒；手册：备注写给用户看
 
-Status: needs-dogfood（2026-10-22 与票 82 一起快进合入 `1df221c7`、`516d3acc`、`b4609f7f`；主会话机器验收：逐处看过 `assistant_todo.rs`、`scheduler.rs`、手册两处的 diff，新增行无本机数据；rebase 到含票 80、83 的 main 后 `TZ=UTC cargo test --workspace` 1220 条全过，代理另跑本机时区与洛杉矶。代理用 JC 库的备份核对：今天只有 702，新判据不醒。回报第 3 条（备注里「尚未提供」「此前对话中的」、弯引号）已转 JC，先不改手册；2026-10-22 第 1 站「后天面试、带身份证」没走（库里没有这件），备注写法待补；巡看判据看 10-23 早上 08:51 的巡看记录，今晚若没有 3 天内的事应当跳过）
+Status: needs-dogfood（2026-10-22 与票 82 一起快进合入 `1df221c7`、`516d3acc`、`b4609f7f`；主会话机器验收：逐处看过 `assistant_todo.rs`、`scheduler.rs`、手册两处的 diff，新增行无本机数据；rebase 到含票 80、83 的 main 后 `TZ=UTC cargo test --workspace` 1220 条全过，代理另跑本机时区与洛杉矶。代理用 JC 库的备份核对：今天只有 905，新判据不醒。回报第 3 条（备注里「尚未提供」「此前对话中的」、弯引号）已转 JC，先不改手册；2026-10-22 第 1 站「后天面试、带身份证」没走（库里没有这件），备注写法待补；巡看判据看 10-23 早上 08:51 的巡看记录，今晚若没有 3 天内的事应当跳过）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 128 第 4 条与第 5 条的手册那句（2026-10-22，从底层捋一遍待办；JC：「按你的推荐推进」）；改写 [助手 PRD](../../assistant/PRD.md) 裁决 10「确定式的部分」的叫醒判据。只改 Core、手册与评测。与票 80（GUI 待办面板、设计文档）同时在跑，不碰同一处。依赖票 73、78（都已合入 main）。
 
 ## 为什么
 
 - 巡看叫醒前的判据是 `AssistantTodo::anything_in_hand`（`core/src/assistant_todo.rs:150`）：用户有没勾掉的事，或 Galley 有在办的事（`assistant` 组：没结束的子任务，加它自己还没响的一次性提醒）。唯一调用方是 `fire_review`（`core/src/scheduler.rs:445`）。
-- 它几乎每天都成立。库里现在只有一件没做完的事：702 装修（11-20 到期、挂着 11-20 09:00 的提醒），它就让巡看从 10-22 起天天醒，至少醒到 11-20；10-22 早上那一轮读了三遍清单与记录，最后 `<no-reply/>`，一个字没说。
+- 它几乎每天都成立。库里现在只有一件没做完的事：905 装修（11-20 到期、挂着 11-20 09:00 的提醒），它就让巡看从 10-22 起天天醒，至少醒到 11-20；10-22 早上那一轮读了三遍清单与记录，最后 `<no-reply/>`，一个字没说。
 - Galley 自己的一次性提醒到点会自己叫醒它，巡看替它天天多醒没有用；远期的事有提醒管着，没提醒的也要临近截止才有可准备的。
 - 裁决 128 定的原则：**巡看只为没有自己闹钟的事醒**。醒了以后它照旧过一遍全部在办的事，改的只是醒不醒。
-- 备注：手册让它在 `--notes` 里写「到时要用的东西」（`docs/managed-ga-runtime/galley-assistant-manual/todos.md:107-109`），原来只有它自己在提醒响时读到。票 80 起面板会把备注显示给用户。库里 702 那条备注是「JC 告知：702 办公室装修预计于 2026 年 11 月 20 日完工；当天确认实际完工情况，日期为预计而非已确认。」：第三人称、复述了标题与日子，显示出来像一份内部记录。
+- 备注：手册让它在 `--notes` 里写「到时要用的东西」（`docs/managed-ga-runtime/galley-assistant-manual/todos.md:107-109`），原来只有它自己在提醒响时读到。票 80 起面板会把备注显示给用户。库里 905 那条备注是「JC 告知：905 办公室装修预计于 2026 年 11 月 20 日完工；当天确认实际完工情况，日期为预计而非已确认。」：第三人称、复述了标题与日子，显示出来像一份内部记录。
 
 ## 要做的
 
@@ -29,7 +29,7 @@ Status: needs-dogfood（2026-10-22 与票 82 一起快进合入 `1df221c7`、`51
 4. **评测**（`.scratch/main-chat/entry-layer-eval/`）：
    - `--dry-test` 要过（手册改了，若评测有手册或叫醒的镜像，照 README 的做法更新）。
    - 待办套件（`todo/`）若能走到 `todo add` 那一步（看 `run.py` 怎么模拟读手册），挑会写备注的用例（带地点、人名、号码的那几条），用 `--model-id mm_1792576875658`（API key 接入的 gpt-6.1-sol）各跑一遍，最多 6 次真调用；回报每条的 `--notes` 原文，看是不是写给用户看的。走不到那一步就只跑 `--dry-test`，回报里写明。结果文件按 README 的合并做法写回，结果里不写服务商名、域名。
-5. **对真实数据核对**：`sqlite3 ~/Library/Application\ Support/app.galley/workbench.db ".backup <worktree 之外的临时目录>/wb.db"`，用不提交的临时测试按 `assistant_todo` 的读法读备份（`runners` 用空的或不在跑的状态），算出今天新判据的结果：应当是不醒（只有 702，截止 11-20）。回报只写各组件数与判断结果，不写内容。跑完删掉临时测试与备份。
+5. **对真实数据核对**：`sqlite3 ~/Library/Application\ Support/app.galley/workbench.db ".backup <worktree 之外的临时目录>/wb.db"`，用不提交的临时测试按 `assistant_todo` 的读法读备份（`runners` 用空的或不在跑的状态），算出今天新判据的结果：应当是不醒（只有 905，截止 11-20）。回报只写各组件数与判断结果，不写内容。跑完删掉临时测试与备份。
 6. **测试**：只有远期待办（挂提醒与不挂）→ 不醒；截止在今天加 3 天（只有日期、有时刻在当天晚上）→ 醒；今天加 4 天 → 不醒；今天到期、逾期 → 醒；随时的一件 → 醒；只有它自己的一次性提醒（target assistant 与 session 各一）→ 不醒；有一个没结束的子任务（在跑、出错各一）→ 醒；只有例行（含巡看本身）→ 不醒；读失败 → 醒（原有测试若有，保留）。原有巡看测试按新判据调整，覆盖的情形都留着。时区：跑完整套之后再在 `TZ=UTC` 与 `TZ=America/Los_Angeles` 下各跑一遍（CI 跑在 UTC；日期边界最容易在这里错）。
 7. **文档**：grep `docs/`（devlog、PRD 原文与 `docs/project-status.md` 的历史不动）里描述巡看判据的现行说法（「nothing in hand」「没有在办的事就不叫醒」「没有没结束的事」之类），改成新判据，比如 `docs/managed-ga-runtime/` 下讲巡看的那份。改了哪些文件写进回报。
 
@@ -64,7 +64,7 @@ Status: needs-dogfood（2026-10-22 与票 82 一起快进合入 `1df221c7`、`51
 
 ## 给 JC 的真机步骤
 
-1. 合入后 dev 重启 Core。明天早上巡看的时刻过后，看 dev 日志：应当是跳过（只有 702，离截止还远），主对话里没有新的一轮。
+1. 合入后 dev 重启 Core。明天早上巡看的时刻过后，看 dev 日志：应当是跳过（只有 905，离截止还远），主对话里没有新的一轮。
 2. 跟它说一件今天往后三天内要办的事（比如「后天下午要把报价发给客户」），第二天早上巡看应当醒；它开不开口照旧由它判断。
 3. 让它记一件带地点或人名的事（比如「下周三下午 3 点去 A 座 3 楼面试，记得带身份证」），打开待办面板（票 80 合入后）：那件事下面的备注是写给你看的一句，不复述标题与日子。
 
@@ -77,7 +77,7 @@ Status: needs-dogfood（2026-10-22 与票 82 一起快进合入 `1df221c7`、`51
 - **`fire_review`**：`today` 取 `now` 换到 `chrono::Local` 的日子（`assistant_todo` 构建清单用的就是 `chrono::Local`），判断本身只吃传进来的 `today`，单测里用 UTC、上海、洛杉矶各自的日子。读失败照旧醒，日志改成 `reading the to-do list failed, waking it`。跳过时的日志：`[scheduler] review {id}: nothing to look at (no to-do any time or due within 3 days, no unfinished subtask), skipped`（3 来自常量）。模块注释、`ReviewEvent::Skipped`、`ReviewEvent::Run`、`ReviewFire::Skipped`、`fire_review` 的文档注释改成新判据的说法；`REVIEW_PROMPT`、`review_paragraph`、`in_hand_section`、清单的分组排序都没动。
 - **手册**：`wake.md` 第一段末尾改为「Galley made this task, not you, and skips the morning when there is nothing to look at (what is due further off and your own reminders come up at their own time); when it wakes you, go over everything in hand.」；`todos.md` 的 `--notes` 一条原句保留，后面补「The user sees the notes under the to-do in their list: write them for the user, in their language (「A 座 3 楼，带身份证」), without the title or the day again, and not as a record about them (「用户说……」).」。反例没用票面的「JC 告知：……」，改成评测里旧手册下真出现过的「用户说……」，免得手册里带出真实用户的名字。`assistant_manual.rs` 两组断言各加了新句子（单行片段），`.md` 交叉引用数没变（仍是 18）。
 - **字节预算**：手册没有字节预算。`core/` 里的预算常量只管进提示词的部分（`STATIC_PROMPT_BUDGET_BYTES`、`MAIN_CHAT_ENTRY_LAYER_BUDGET_BYTES`、`MAIN_CHAT_SECTION_BUDGET_BYTES`、`IN_HAND_BUDGET_BYTES`、`IM_PROMPT_BUDGET_BYTES`），手册是按需读的文件，这次提示词一字没变，所以没有常量要改、`prompt-composition.md` 的条款台账也不用加行。两处手册改动合计 +363 字节（`todos.md` 6865 → 7097，+232；`wake.md` 4151 → 4282，+131；九个部分合计 26693 → 27056）。
-- **测试**：`assistant_todo.rs` 新增两条纯函数测试：只有远期待办（挂提醒的 11-20、不挂的今天加 4 天、今天加 4 天零点）、它自己的一次性任务（target assistant 与 session）、例行（含巡看本身）、已完成的待办与子任务 → 不醒；在此之上任加一件今天加 3 天（只有日期、当天 23:59）、今天加 2 天挂提醒、今天、逾期（日期、时刻）、随时 → 醒，单独一件也醒；在跑、出错、在问、没跑完的子任务各一 → 醒；7 天没动、不在清单里的旧子任务 → 不醒。时区：同一时刻的截止在上海是加 4 天、在洛杉矶是加 3 天，一醒一不醒；同一时刻上海已是第二天，日期型截止在上海算加 3 天、洛杉矶算加 4 天。`schedule_wake_test.rs`：`with_nothing_to_look_at_the_review_wakes_nobody`（原 `with_nothing_in_hand…`，加了 702 那样的远期待办挂提醒、加 4 天不挂、它自己的喝水提醒、一个开会话的一次性任务，照旧跳过，清单里这几件都还在）；`with_something_to_look_at_the_review_wakes_the_main_chat`（随时的那件照旧醒；加 3 天挂与不挂、今天、逾期 2 天醒，加 4 天挂与不挂不醒，加 3 天 23:59 醒；原来「它自己的一次性提醒也算在办」那段改成只有它不醒）；新增 `a_review_that_cannot_read_the_list_wakes_the_main_chat`（把 `todos` 表改名让读失败，照旧醒、记 `woke`）。原来靠一个十分钟后的提醒让巡看醒的四处（投递不到、runner 起不来、这一轮出错、外置运行时）改成一件随时的待办，覆盖的情形都留着。
+- **测试**：`assistant_todo.rs` 新增两条纯函数测试：只有远期待办（挂提醒的 11-20、不挂的今天加 4 天、今天加 4 天零点）、它自己的一次性任务（target assistant 与 session）、例行（含巡看本身）、已完成的待办与子任务 → 不醒；在此之上任加一件今天加 3 天（只有日期、当天 23:59）、今天加 2 天挂提醒、今天、逾期（日期、时刻）、随时 → 醒，单独一件也醒；在跑、出错、在问、没跑完的子任务各一 → 醒；7 天没动、不在清单里的旧子任务 → 不醒。时区：同一时刻的截止在上海是加 4 天、在洛杉矶是加 3 天，一醒一不醒；同一时刻上海已是第二天，日期型截止在上海算加 3 天、洛杉矶算加 4 天。`schedule_wake_test.rs`：`with_nothing_to_look_at_the_review_wakes_nobody`（原 `with_nothing_in_hand…`，加了 905 那样的远期待办挂提醒、加 4 天不挂、它自己的喝水提醒、一个开会话的一次性任务，照旧跳过，清单里这几件都还在）；`with_something_to_look_at_the_review_wakes_the_main_chat`（随时的那件照旧醒；加 3 天挂与不挂、今天、逾期 2 天醒，加 4 天挂与不挂不醒，加 3 天 23:59 醒；原来「它自己的一次性提醒也算在办」那段改成只有它不醒）；新增 `a_review_that_cannot_read_the_list_wakes_the_main_chat`（把 `todos` 表改名让读失败，照旧醒、记 `woke`）。原来靠一个十分钟后的提醒让巡看醒的四处（投递不到、runner 起不来、这一轮出错、外置运行时）改成一件随时的待办，覆盖的情形都留着。
 - **快照脚本**：`.scratch/assistant/closed-loop-snapshot.py` 文档串与输出里的「skipped (nothing in hand)」改为「skipped (nothing to look at)」，文档串写明票 81 起的判据；只读日志，没加逻辑。
 - **评测**：`run.py` 没有巡看判据的镜像（巡看用例直接拼到点的叫醒），手册目录照旧整套拷进状态根，`--dry-test` 560 项 PASS、0 项 FAIL，结尾 `DRY TEST PASSED`，`managed-ga/` 下没有 `__pycache__`。待办套件能走到 `todo add`，挑了六条（`reno-asked`、`flight-wed`、`hospital-tomorrow`、`half-done`、`lease-expiry`、`meeting-3pm`）各跑第 1 遍，`--model-id mm_1792576875658`，6 次运行、24 次模型调用，六遍都过；用 `--supersede` 合并，被替换的旧第 1 遍在 `meta.superseded_runs[10]`。备注原文：
   - `reno-asked`：「预计完工，届时确认实际进度。」
