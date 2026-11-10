@@ -165,7 +165,7 @@ bridge 启动并完成 GA 初始化后**立刻**发的第一条事件。desktop 
 
 - `reasoningEffort` / `configuredReasoningEffort`（2026-09-22 additive，缺省 `null`）：当前激活 backend 上生效的推理强度，以及模型配置本身带的档位（bridge 在套用会话覆盖**之前**从 backend 读到的值）。两者相同或都为 `null` 表示会话在跟随模型配置；`null` = 不发该参数、由服务商决定。语义见 §5.14。
 
-desktop 必须验证 `protocolVersion` 与自身一致；不一致应主动 `shutdown`。
+- `protocolVersion`：诊断信息，没有任何一端校验它。Core 与 runner 总是来自同一个安装包（外置模式下 runner 也是 Galley 自己带的），发布版里两端的版本不会错位；它随 `ready` 原样转发（`session watch` 的帧里看得到），供排查用。见 §9。
 
 ### 4.2 `turn_start`
 
@@ -783,7 +783,6 @@ bridge:   { kind: "turn_start", ... }
 | 场景 | bridge 行为 | desktop 行为 |
 |---|---|---|
 | 字段缺失 / 类型错误 | emit `error`，丢弃命令 | 显示错误，不重试 |
-| 协议版本不匹配 | （ready 后 desktop 检查） | 立即 `shutdown` |
 | GA import 失败 | emit `error` 后 exit(1) | 标记 session error |
 | LLM 调用失败 | 由 GA agent 内部处理；可能 emit 多个 `error` | 透传给用户 |
 | bridge 进程崩溃 | stdout EOF + exit code != 0 | 标记 session error，可选重启 |
@@ -794,7 +793,7 @@ bridge:   { kind: "turn_start", ... }
 
 - 当前版本：`0.1`
 - 不兼容变更必须升 minor 版本号（`0.1` → `0.2`）
-- desktop 与 bridge 版本不匹配 → desktop 主动 shutdown
+- 运行时不校验版本号：Core 与 runner 同包发布，`ready` 里的 `protocolVersion`（§4.1）只是诊断信息。版本号写在 `runner/ipc.py` 与 `core/src/ipc.rs` 两处，`scripts/check-ipc-protocol-drift.mjs` 核对两处一致
 - 兼容性变更（仅新增可选字段）可保持版本号
 
 ## 10. Open Items（实现阶段确认）

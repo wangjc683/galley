@@ -43,7 +43,9 @@ use serde_json::Value;
 
 /// Wire-format protocol version. Bumped when breaking changes happen to
 /// the schema (additive field changes don't bump). Currently matches
-/// `runner/ipc.py:PROTOCOL_VERSION`.
+/// `runner/ipc.py:PROTOCOL_VERSION`; `scripts/check-ipc-protocol-drift.mjs`
+/// checks the two agree. Nothing checks the runner's `ready.protocolVersion`
+/// at runtime: Core and the runner ship together, so the field is diagnostic.
 pub const PROTOCOL_VERSION: &str = "0.1";
 
 // ---------------- Events (runner -> Galley Core) ----------------

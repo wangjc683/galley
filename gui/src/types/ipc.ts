@@ -9,8 +9,6 @@
  * and these TS types implement it.
  */
 
-export const PROTOCOL_VERSION = "0.1";
-
 // ---------------- Shared shapes ----------------
 
 export type MessageVisibility = "visible" | "internal";

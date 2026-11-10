@@ -55,11 +55,13 @@ function fieldMapEntries(fields) {
   return sorted([...fields.keys()]);
 }
 
+// The GUI mirror carries no version constant: nothing on the desktop side
+// checks `ready.protocolVersion` (docs/ipc-protocol.md §9), so only the
+// runner's and Core's constants are compared.
 function parseProtocolVersion(source, language) {
   const patterns = {
     python: /\bPROTOCOL_VERSION\s*=\s*"([^"]+)"/,
     rust: /\bPROTOCOL_VERSION\s*:\s*&str\s*=\s*"([^"]+)"/,
-    ts: /\bPROTOCOL_VERSION\s*=\s*"([^"]+)"/,
   };
   const match = source.match(patterns[language]);
   if (!match) fail(`Could not find PROTOCOL_VERSION in ${language}`);
@@ -217,8 +219,7 @@ function parseRust(source) {
 }
 
 function parseTypeScript(source) {
-  const protocolVersion = parseProtocolVersion(source, "ts");
-  const result = { protocolVersion, events: new Map(), commands: new Map() };
+  const result = { protocolVersion: null, events: new Map(), commands: new Map() };
   const commandMarker = source.indexOf("// ---------------- Commands");
   if (commandMarker < 0) fail("Could not find TypeScript commands marker");
 
@@ -256,10 +257,9 @@ function parseTypeScript(source) {
 }
 
 function compareVersions(specs) {
-  const versions = Object.entries(specs).map(([name, spec]) => [
-    name,
-    spec.protocolVersion,
-  ]);
+  const versions = Object.entries(specs)
+    .filter(([, spec]) => spec.protocolVersion !== null)
+    .map(([name, spec]) => [name, spec.protocolVersion]);
   const expected = versions[0][1];
   return versions
     .filter(([, version]) => version !== expected)
