@@ -453,6 +453,22 @@ were left as they are, by JC's ruling. The main session verified in dev: the
 removed socket commands, one full round with a tool call, the manual's new
 examples in the binary.
 
+Loose ends closed the same day (tickets 10, 11; `ea7872bc` … `2ed7175f`).
+The main chat memory reset's critical seed list gained `ultraplan_sop.md`
+and a test ties it to the gates' list. **The assistant manual changed**
+(`subtasks.md`, ruling by JC after the `w-long` eval diagnosis): a screenshot
+the assistant cannot read counts as something it could not verify; it does
+not look for a way to read it and does not send the work back to have it
+written out. The `wake` suite was rerun under it: every case with a
+screenshot stopped hunting for OCR (`w-table` 8 tool calls to 3,
+`done-evidence` 5 to 2), `done-no-proof` still sends back, no case let
+through what should go back. `w-long` stays record-only (2 of 3; one run
+pasted the whole text back, three runs cannot tell noise from effect). The
+eval harness itself was corrected for that case (its tool cap, the wake note
+handed over in full as the product does since ticket 147, four flaws in its
+fixture) and no longer drops ticket 147's runs. Narrative: devlog
+[2026-11-10-whole-project-audit](./devlog/2026-11-10-whole-project-audit.md).
+
 **Owed from the `v0.7.7` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. The database shows the draft's
 first launch (09:00:44 UTC) caught up a due reminder that woke the main

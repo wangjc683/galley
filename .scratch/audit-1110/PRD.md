@@ -68,4 +68,4 @@
 | [10](./issues/10-loose-ends.md) | 收尾：评测用例 `w-long`、`run.py` 丢记录、种子清单、失效的暂缓项 |
 | [11](./issues/11-unreadable-screenshot-rule.md) | 手册：读不出的截图不找识字办法、不为它打回（票 10 诊断后 JC 的裁决） |
 
-第一波 01、02、04、05、08 与第二波 03、06、07、09 都已于 2026-11-10 合入。票 02、08 的 dev 真机 JC 当天已走。还等的：票 04 的 Windows 真机；票 04、07 的 `release.yml` 验证（JC 裁定这次不做 dry-run，留到下次发版）。
+第一波 01、02、04、05、08 与第二波 03、06、07、09 都已于 2026-11-10 合入。票 02、08 的 dev 真机 JC 当天已走；收尾的票 10、11 同日合入。还等的只有下次发版：票 04 的 Windows 真机；票 04、07 的 `release.yml` 验证（JC 裁定这次不做 dry-run）。经过与理由见 [devlog](../../docs/devlog/2026-11-10-whole-project-audit.md)。两张票关掉后按 issue tracker 的规则删掉本目录。

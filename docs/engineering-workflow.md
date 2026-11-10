@@ -140,9 +140,11 @@ refactor-execution rules (I1, I2, I4, I7, I8, I10) live in the
   `core/src/migration_backup.rs` ends at 033 on purpose; do not add later
   migrations there. A CHECK change on a foreign-key parent table must not
   rely on `PRAGMA foreign_keys = OFF` (a no-op inside SQLx's transaction):
-  rebuild the child around the parent in the same migration, as 052 does. Test fixtures keep their own per-file migration lists
-  (`core/tests/*.rs`, `cli/tests/*.rs`) — extend the ones whose tables you
-  touched.
+  rebuild the child around the parent in the same migration, as 052 does. Full-schema test fixtures apply the app's own list
+  (`galley_core_lib::apply_all_migrations_for_tests`), so a new migration
+  needs no test-list edit; only the upgrade tests keep partial lists that
+  stop at a version on purpose (`core/tests/db_test.rs`,
+  `core/tests/db_writes_test.rs`).
 - **I5 — API surface single source of truth.** The Rust `GalleyApi` trait is
   the only definition of commands. Both transports (Tauri command, socket)
   thin-wrap it. No command may exist on only one transport, and no business
