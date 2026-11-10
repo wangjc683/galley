@@ -1,8 +1,8 @@
 use crate::args::RuntimeArg;
 use crate::client::{call_print, call_value, client, next_watch_frame_strict};
 use crate::common::{
-    emit_json, emit_line, parse_status_arg, probe_live_states, runtime_arg_for_session_new,
-    runtime_filter, with_live, StreamEndPayload, SCHEMA_VERSION,
+    emit_json, emit_line, live_run_ended, parse_status_arg, probe_live_states,
+    runtime_arg_for_session_new, runtime_filter, with_live, StreamEndPayload, SCHEMA_VERSION,
 };
 use galley_core_lib::api::{
     parse_local_time_bound, GalleyApi, MessageBrief, MessageId, MessageRole, MessageWindow,
@@ -238,14 +238,6 @@ fn wait_completed(
     live: Option<&Value>,
 ) -> bool {
     has_agent_output(messages, after_turn) && (!until_idle || live.is_none_or(live_run_ended))
-}
-
-/// `live.openRun` and `live.agentRunning` both false. `askPending` and
-/// `queuedCount` are deliberately not consulted: a held queue behind a
-/// question keeps `busy` true, yet nothing will run until it is answered.
-fn live_run_ended(live: &Value) -> bool {
-    let flag = |key: &str| live.get(key).and_then(Value::as_bool).unwrap_or(false);
-    !flag("openRun") && !flag("agentRunning")
 }
 
 /// How long `--until-idle` waits before confirming a run it saw ended.

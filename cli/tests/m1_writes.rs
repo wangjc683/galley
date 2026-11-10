@@ -632,6 +632,206 @@ async fn project_follow_running_session_without_core_marks_session_end() {
     assert_eq!(end["reason"], "all_live_sessions_ended");
 }
 
+// ---------------- project commands against a live Core ----------------
+
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    extern "C" {
+        fn getuid() -> u32;
+    }
+    // SAFETY: getuid has no preconditions and cannot fail.
+    unsafe { getuid() }
+}
+
+/// A Galley Core stand-in on the tempdir socket, for the project
+/// commands. It answers `ping`; it accepts every `session.watch` and then
+/// writes nothing (a live runner that is quiet: Core sends no frame when
+/// it accepts a subscription); and it answers the n-th
+/// `sessions.run_state` probe with `answers[n]`, the last one repeating.
+/// Returns the server task and the probes seen so far.
+#[cfg(unix)]
+fn fake_core(
+    socket_path: PathBuf,
+    answers: Vec<serde_json::Value>,
+) -> (
+    tokio::task::JoinHandle<()>,
+    std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
+) {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixListener;
+    let listener = UnixListener::bind(&socket_path).expect("bind fake core");
+    let probes = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let seen = probes.clone();
+    let task = tokio::spawn(async move {
+        loop {
+            let Ok((stream, _)) = listener.accept().await else {
+                return;
+            };
+            let answers = answers.clone();
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                let (read_half, mut write_half) = stream.into_split();
+                let mut lines = BufReader::new(read_half).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let req: serde_json::Value = serde_json::from_str(&line).expect("request");
+                    let result = match req["command"].as_str() {
+                        Some("ping") => serde_json::json!({"pong": true}),
+                        // Like Core's stream loop: stop reading (the CLI
+                        // half-closes after subscribing) and send nothing.
+                        Some("session.watch") => std::future::pending::<serde_json::Value>().await,
+                        Some("sessions.run_state") => {
+                            let n = {
+                                let mut seen = seen.lock().unwrap();
+                                seen.push(req["args"].clone());
+                                seen.len() - 1
+                            };
+                            answers[n.min(answers.len() - 1)].clone()
+                        }
+                        other => panic!("fake core: unexpected command {other:?}"),
+                    };
+                    let response = serde_json::json!({"ok": true, "result": result});
+                    if write_half
+                        .write_all(format!("{response}\n").as_bytes())
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            });
+        }
+    });
+    (task, probes)
+}
+
+/// One session's `sessions.run_state` answer.
+#[cfg(unix)]
+fn run_state(id: &str, open_run: bool, agent_running: bool) -> serde_json::Value {
+    serde_json::json!({
+        "sessionId": id, "runnerAlive": true, "agentRunning": agent_running,
+        "openRun": open_run, "queuedCount": 0, "busy": open_run || agent_running,
+        "askPending": false, "lastExit": null
+    })
+}
+
+/// The SOP's Project-group wait (`--until-idle --final-show`) used to end
+/// with `project_idle` at the first quiet window because it read the
+/// persisted status, which Core writes only as `idle`. It now asks Core:
+/// a session persisted `idle` whose run is open keeps the follow going,
+/// and the follow ends once Core reports the run ended.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn project_follow_until_idle_waits_for_a_run_core_reports_open() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_project(&pool, "proj_batch", "Release check", "2026-05-20T00:00:00Z").await;
+    seed_project_session(
+        &pool,
+        "s_child",
+        "proj_batch",
+        "Child",
+        "idle",
+        "2026-05-20T00:00:02Z",
+    )
+    .await;
+    seed_message(&pool, "m1", "s_child", 0, 0, "user", "do the work").await;
+    drop(pool);
+
+    let running = serde_json::json!({"sessions": [run_state("s_child", true, false)]});
+    let ended = serde_json::json!({"sessions": [run_state("s_child", false, false)]});
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let (server, probes) = fake_core(
+        socket_path,
+        vec![
+            running.clone(), // initial snapshot's followState
+            running,         // first quiet window: still running, keep following
+            ended.clone(),   // second quiet window: ended
+            ended,           // final snapshot's followState
+        ],
+    );
+    let (stdout, code) = run_galley_isolated(
+        &db,
+        td.path(),
+        &[
+            "project",
+            "follow",
+            "proj_batch",
+            "--tail",
+            "1",
+            "--until-idle",
+            "--final-show",
+        ],
+    );
+    server.abort();
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    let lines: Vec<serde_json::Value> = stdout
+        .trim()
+        .lines()
+        .map(|l| serde_json::from_str(l).expect("ndjson line"))
+        .collect();
+    assert_eq!(lines.len(), 3, "stdout: {stdout}");
+    assert_eq!(lines[0]["phase"], "initial");
+    assert_eq!(lines[0]["followState"]["state"], "active_status_sessions");
+    assert_eq!(lines[0]["followState"]["activeStatusSessions"], 1);
+    assert_eq!(lines[0]["followState"]["idleStatusSessions"], 0);
+    assert_eq!(lines[1]["phase"], "final");
+    assert_eq!(lines[1]["followState"]["activeStatusSessions"], 0);
+    assert_eq!(lines[1]["followState"]["idleStatusSessions"], 1);
+    assert_eq!(lines[2]["stream"], "end");
+    assert_eq!(lines[2]["reason"], "project_idle");
+
+    // The follow did not end while Core reported the run open: it ended
+    // at the check that saw it ended, then read the final state.
+    let probes = probes.lock().unwrap().clone();
+    assert_eq!(probes.len(), 4, "probes: {probes:?}");
+    for args in &probes {
+        assert_eq!(args["sessionIds"], serde_json::json!(["s_child"]));
+    }
+}
+
+/// `project brief`'s `runningSessions` is what Core reports running, not
+/// the persisted status (always `idle`), when Core answers.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn project_brief_running_sessions_come_from_core() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_project(&pool, "proj_batch", "Release check", "2026-05-20T00:00:00Z").await;
+    for (id, ts) in [
+        ("s_busy", "2026-05-20T00:00:03Z"),
+        ("s_step", "2026-05-20T00:00:02Z"),
+        ("s_done", "2026-05-20T00:00:01Z"),
+    ] {
+        seed_project_session(&pool, id, "proj_batch", id, "idle", ts).await;
+    }
+    drop(pool);
+
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let (server, probes) = fake_core(
+        socket_path,
+        vec![serde_json::json!({"sessions": [
+            run_state("s_busy", true, false),
+            run_state("s_step", false, true),
+            run_state("s_done", false, false),
+        ]})],
+    );
+    let (stdout, code) = run_galley_isolated(&db, td.path(), &["project", "brief", "proj_batch"]);
+    server.abort();
+    assert_eq!(code, Some(0), "stdout: {stdout}");
+    let payload: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+    assert_eq!(payload["statusCounts"]["idle"], 3);
+    let running: Vec<&str> = payload["runningSessions"]
+        .as_array()
+        .expect("runningSessions")
+        .iter()
+        .map(|s| s["id"].as_str().expect("id"))
+        .collect();
+    assert_eq!(running, ["s_busy", "s_step"]);
+    assert_eq!(probes.lock().unwrap().len(), 1);
+}
+
 // ---------------- llm.* (mixed: SQLite reads + socket writes) ----------------
 //
 // The three `llm_list_*` cache tests below pin `--runtime external`: the

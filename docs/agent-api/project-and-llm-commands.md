@@ -54,7 +54,9 @@ Exit codes: `0` success / `4 db_unavailable`.
 
 ### 5.15a · `galley project brief <project-id> [--all]`
 
-**Read-only** — direct SQLite, no socket. Returns one JSON object that
+**Read-only** — direct SQLite, plus one best-effort `sessions.run_state`
+probe of Galley Core (bounded to 3s, as for `sessions list`) for
+`runningSessions`. Works without Core. Returns one JSON object that
 rolls up a project for supervisor batch orchestration.
 
 By default archived sessions are excluded. Pass `--all` to include
@@ -63,7 +65,7 @@ archived sessions in `sessionCount` and `statusCounts`.
 ```bash
 $ galley project brief proj_demo
 {"schemaVersion":3,"project":{…},"sessionCount":4,
- "statusCounts":{"running":2,"completed":2},
+ "statusCounts":{"idle":4},
  "runningSessions":[{…},{…}],"lastActivityAt":"…"}
 ```
 
@@ -72,8 +74,8 @@ $ galley project brief proj_demo
 | `schemaVersion`   | int               | Current CLI schema version.                |
 | `project`         | `ProjectBrief`    | Project row.                               |
 | `sessionCount`    | int               | Sessions in the project after filters.     |
-| `statusCounts`    | object            | Keys are `SessionBrief.status` values.     |
-| `runningSessions` | `SessionBrief[]`  | Sessions whose persisted status is `running`. |
+| `statusCounts`    | object            | Keys are `SessionBrief.status` values (the persisted status, which reads `idle` or `archived` for every current session). |
+| `runningSessions` | `SessionBrief[]`  | Sessions Galley Core reports with a run open or in progress: `live.openRun` or `live.agentRunning`, the rule `session wait --until-idle` uses ([session-commands](./session-commands.md) §5.5d). When Core is unreachable, sessions whose persisted status is `running`, which in practice is none. Until 2026-11-10 it always read the persisted status, so it was always empty ([stability](./stability-and-versioning.md) §7.1). |
 | `lastActivityAt`  | string (ISO8601)  | Echo of `project.lastActivityAt`.          |
 
 Exit codes: `0` success / `3 not_found` / `4 db_unavailable`.
@@ -116,18 +118,35 @@ object:
 | Field                  | Type   | Notes |
 | ---------------------- | ------ | ----- |
 | `mode`                 | string | `live` or `until_idle`. |
-| `state`                | string | `empty_project`, `checking_live_events`, or `active_status_sessions`. |
+| `state`                | string | `empty_project`, `checking_live_events`, or `active_status_sessions` (at least one session counts as active, below). |
 | `watchedSessions`      | int    | Sessions the command attempted to follow. |
-| `activeStatusSessions` | int    | Sessions persisted as `connecting` / `running` / `waiting_approval`. |
-| `idleStatusSessions`   | int    | Sessions persisted as `idle`. |
-| `note`                 | string | Human-readable hint. In particular, `checking_live_events` means the DB snapshot may still look idle while newly dispatched runners are starting. |
+| `activeStatusSessions` | int    | Sessions Galley Core reports with a run open or in progress (`live.openRun` or `live.agentRunning`, as for `runningSessions` in §5.15a). When Core is unreachable, sessions persisted as `connecting` / `running` / `waiting_approval`. |
+| `idleStatusSessions`   | int    | Sessions persisted as `idle` that Galley Core does not report as active. When Core is unreachable, every session persisted as `idle`. |
+| `note`                 | string | Human-readable hint. In particular, `checking_live_events` means no session counts as active at that moment, while newly dispatched runners may still be starting. |
+
+Each snapshot reads the live run state with one best-effort
+`sessions.run_state` probe of Galley Core (bounded to 3s). Until
+2026-11-10 both counts read the persisted status only, so
+`activeStatusSessions` was `0` in practice ([stability](./stability-and-versioning.md) §7.1).
 
 `--until-idle` is for Supervisor batch jobs. It keeps following live
-events, but also polls the Project after a short quiet window. Once no
-session in the Project is persisted as `connecting`, `running`, or
-`waiting_approval`, the command exits with
-`{"stream":"end","reason":"project_idle"}`. This handles runner
-processes that stay alive after a turn emits `run_complete`.
+events, and after each quiet window (1.5 seconds without an event) it
+asks Galley Core for the live run state of every session in the
+Project. Once no session has a run open or in progress — `live.openRun`
+and `live.agentRunning` both `false`, the rule `session wait
+--until-idle` uses ([session-commands](./session-commands.md) §5.5d) —
+the command exits with `{"stream":"end","reason":"project_idle"}`. This
+handles runner processes that stay alive after a turn emits
+`run_complete`. As with `session wait --until-idle`, a session whose run
+ended on an `ask_user` question counts as ended, and a draining queue
+keeps `live.openRun` true, so the follow goes on until the queue has
+run. When Core is unreachable at a check, that check falls back to the
+persisted status: the Project is idle once no session is persisted as
+`connecting`, `running`, or `waiting_approval`. Until 2026-11-10 every
+check used that persisted reading, which never shows a run (Core
+persists only `idle` / `archived`), so the command could end with
+`project_idle` at the first quiet window while a child session was
+still running ([stability](./stability-and-versioning.md) §7.1).
 
 `waiting_approval` in the lists above is no longer produced since approval
 was removed (2026-10-05). It stays listed because it is still a stable

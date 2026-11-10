@@ -157,6 +157,24 @@ pub(crate) fn with_live<T: serde::Serialize>(
     Ok(value)
 }
 
+/// `live.openRun` and `live.agentRunning` both false: Galley Core reports
+/// no run open or in progress. The one "the run has ended" rule that
+/// `session wait --until-idle` and `project follow --until-idle` share.
+/// `askPending` and `queuedCount` are deliberately not consulted: a held
+/// queue behind a question keeps `busy` true, yet nothing will run until
+/// it is answered.
+pub(crate) fn live_run_ended(live: &serde_json::Value) -> bool {
+    let flag = |key: &str| {
+        live.get(key)
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+    };
+    !flag("openRun") && !flag("agentRunning")
+}
+
+/// The persisted statuses that read as a run in progress. Core writes the
+/// status column only as `idle` / `archived`, so this is the fallback for
+/// when Galley Core is unreachable, never the primary signal.
 pub(crate) fn is_live_candidate(status: SessionStatus) -> bool {
     matches!(
         status,

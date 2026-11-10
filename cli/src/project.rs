@@ -1,8 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
 use crate::client::{call_print, client, next_watch_frame_strict};
-use crate::common::{emit_json, is_live_candidate, StreamEndPayload, SCHEMA_VERSION};
+use crate::common::{
+    emit_json, is_live_candidate, live_run_ended, probe_live_states, StreamEndPayload,
+    SCHEMA_VERSION,
+};
 use galley_core_lib::api::{
     GalleyApi, MessageBrief, ProjectBrief, SessionBrief, SessionFilter, SessionStatus,
 };
@@ -12,6 +15,8 @@ use galley_core_lib::protocol::{ProjectCreateArgs, ProjectDeleteArgs, WatchFrame
 use serde::Serialize;
 use serde_json::Value;
 
+/// `--until-idle` asks Galley Core whether any session still has a run
+/// open or in progress only after this long without an event.
 const PROJECT_FOLLOW_IDLE_QUIET_WINDOW: Duration = Duration::from_millis(1500);
 
 #[derive(Serialize)]
@@ -135,17 +140,54 @@ fn status_counts(sessions: &[SessionBrief]) -> BTreeMap<String, usize> {
     counts
 }
 
+/// Galley Core's live run state (`sessions.run_state`) per session id.
+type LiveStates = HashMap<String, Value>;
+
+/// One best-effort live probe for these sessions; `None` when Galley Core
+/// is unreachable, and the callers then read the persisted status.
+async fn probe_project_live(ids: Vec<String>) -> Option<LiveStates> {
+    if ids.is_empty() {
+        return Some(LiveStates::new());
+    }
+    probe_live_states(Some(ids)).await
+}
+
+fn detail_ids(details: &[ProjectSessionDetail]) -> Vec<String> {
+    details
+        .iter()
+        .map(|detail| detail.session.id.0.clone())
+        .collect()
+}
+
+/// Whether a project session has a run open or in progress. With Galley
+/// Core reachable that is its live run state, by the rule `session wait
+/// --until-idle` uses ([`live_run_ended`]); Core answers for every id it
+/// is asked about, so a missing entry means no run. The persisted status
+/// never shows a run (Core writes only `idle` / `archived`), so it is
+/// only the fallback for an unreachable Core.
+fn session_active(session: &SessionBrief, live: Option<&LiveStates>) -> bool {
+    match live {
+        Some(states) => states
+            .get(&session.id.0)
+            .is_some_and(|state| !live_run_ended(state)),
+        None => is_live_candidate(session.status),
+    }
+}
+
 fn project_follow_state(
     mode: &'static str,
     sessions: &[ProjectSessionDetail],
+    live: Option<&LiveStates>,
 ) -> ProjectFollowState {
     let active_status_sessions = sessions
         .iter()
-        .filter(|detail| is_live_candidate(detail.session.status))
+        .filter(|detail| session_active(&detail.session, live))
         .count();
     let idle_status_sessions = sessions
         .iter()
-        .filter(|detail| detail.session.status == SessionStatus::Idle)
+        .filter(|detail| {
+            detail.session.status == SessionStatus::Idle && !session_active(&detail.session, live)
+        })
         .count();
     let (state, note) = if sessions.is_empty() {
         ("empty_project", "project has no sessions to follow")
@@ -173,9 +215,10 @@ fn project_follow_state(
 async fn project_has_active_sessions(project_id: &str, all: bool) -> Result<bool, GalleyError> {
     let galley = SqliteGalley::open().await?;
     let sessions = project_sessions(&galley, project_id, all).await?;
+    let live = probe_project_live(sessions.iter().map(|s| s.id.0.clone()).collect()).await;
     Ok(sessions
         .iter()
-        .any(|session| is_live_candidate(session.status)))
+        .any(|session| session_active(session, live.as_ref())))
 }
 
 async fn project_rollup_payload(
@@ -185,9 +228,14 @@ async fn project_rollup_payload(
 ) -> Result<ProjectRollupPayload, GalleyError> {
     let project = find_project(galley, project_id).await?;
     let sessions = project_sessions(galley, project_id, all).await?;
+    let live = probe_project_live(sessions.iter().map(|s| s.id.0.clone()).collect()).await;
     let running_sessions = sessions
         .iter()
-        .filter(|s| s.status == SessionStatus::Running)
+        .filter(|s| match &live {
+            Some(states) => session_active(s, Some(states)),
+            // Core unreachable: the persisted status, as before.
+            None => s.status == SessionStatus::Running,
+        })
         .cloned()
         .collect::<Vec<_>>();
     Ok(ProjectRollupPayload {
@@ -417,7 +465,12 @@ async fn emit_project_final_snapshot(
     let galley = SqliteGalley::open().await?;
     let mut final_snapshot =
         project_snapshot_payload(&galley, project_id, "final", tail, all).await?;
-    final_snapshot.follow_state = Some(project_follow_state(mode, &final_snapshot.sessions));
+    let live = probe_project_live(detail_ids(&final_snapshot.sessions)).await;
+    final_snapshot.follow_state = Some(project_follow_state(
+        mode,
+        &final_snapshot.sessions,
+        live.as_ref(),
+    ));
     emit_json(&final_snapshot)
 }
 
@@ -464,6 +517,8 @@ async fn project_follow_until_idle(
                 }
             }
             _ = &mut quiet_window => {
+                // A live runner stays subscribed after its run ends, so a
+                // quiet stream is not the end: Core's run state decides.
                 if !project_has_active_sessions(&project_id, all).await? {
                     if final_show {
                         emit_project_final_snapshot(&project_id, tail, all, "until_idle").await?;
@@ -503,7 +558,8 @@ pub(crate) async fn project_follow(
             )
         })
         .collect::<Vec<_>>();
-    initial.follow_state = Some(project_follow_state(mode, &initial.sessions));
+    let live = probe_project_live(detail_ids(&initial.sessions)).await;
+    initial.follow_state = Some(project_follow_state(mode, &initial.sessions, live.as_ref()));
     emit_json(&initial)?;
 
     if watch_targets.is_empty() {
@@ -571,4 +627,88 @@ pub(crate) async fn project_delete(
         reason,
     })
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn brief(id: &str, status: &str) -> SessionBrief {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "title": id,
+            "status": status,
+            "lastActivityAt": "2026-11-10T00:00:00Z",
+            "createdAt": "2026-11-10T00:00:00Z",
+            "updatedAt": "2026-11-10T00:00:00Z",
+            "runtimeKind": "managed",
+            "runtimeLabel": "Galley",
+            "gaRuntimeKind": "managed",
+        }))
+        .expect("session brief")
+    }
+
+    fn detail(id: &str, status: &str) -> ProjectSessionDetail {
+        ProjectSessionDetail {
+            session: brief(id, status),
+            messages: Vec::new(),
+        }
+    }
+
+    fn live(open_run: bool, agent_running: bool) -> Value {
+        serde_json::json!({
+            "runnerAlive": true,
+            "agentRunning": agent_running,
+            "openRun": open_run,
+            "queuedCount": 0,
+            "busy": open_run || agent_running,
+            "askPending": false,
+            "lastExit": null,
+        })
+    }
+
+    fn states() -> LiveStates {
+        LiveStates::from([
+            ("running".to_string(), live(true, false)),
+            ("mid-step".to_string(), live(false, true)),
+            ("ended".to_string(), live(false, false)),
+        ])
+    }
+
+    #[test]
+    fn live_state_decides_and_persisted_status_is_only_the_fallback() {
+        let states = states();
+        // Persisted `idle` (all Core ever writes) while Core says a run is
+        // open or a step is in progress: active.
+        assert!(session_active(&brief("running", "idle"), Some(&states)));
+        assert!(session_active(&brief("mid-step", "idle"), Some(&states)));
+        assert!(!session_active(&brief("ended", "idle"), Some(&states)));
+        // A stale persisted `running` row Core reports as ended: not active.
+        assert!(!session_active(&brief("ended", "running"), Some(&states)));
+        // No entry from a reachable Core: no run.
+        assert!(!session_active(&brief("unknown", "idle"), Some(&states)));
+        // Core unreachable: the persisted status, as before.
+        assert!(session_active(&brief("running", "running"), None));
+        assert!(!session_active(&brief("running", "idle"), None));
+    }
+
+    #[test]
+    fn follow_state_counts_come_from_live_state_when_core_answers() {
+        let details = vec![
+            detail("running", "idle"),
+            detail("ended", "idle"),
+            detail("old", "archived"),
+        ];
+        let states = states();
+        let with_core = project_follow_state("until_idle", &details, Some(&states));
+        assert_eq!(with_core.state, "active_status_sessions");
+        assert_eq!(with_core.watched_sessions, 3);
+        assert_eq!(with_core.active_status_sessions, 1);
+        assert_eq!(with_core.idle_status_sessions, 1);
+
+        let without_core = project_follow_state("until_idle", &details, None);
+        assert_eq!(without_core.state, "checking_live_events");
+        assert_eq!(without_core.active_status_sessions, 0);
+        assert_eq!(without_core.idle_status_sessions, 2);
+    }
 }

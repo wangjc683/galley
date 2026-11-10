@@ -39,8 +39,10 @@ is running. Since 2026-09-09 three of them (`sessions list`,
 additive `live` field; when Core is unreachable the field is simply
 omitted and the command still succeeds from SQLite alone. `session wait`
 makes the same best-effort probe on every poll to judge live run state
-(below). These are the only places a read command touches the socket — it
-never fails because of it.
+(below), and since 2026-11-10 `project brief` makes it once to fill
+`runningSessions` (falling back to the persisted status without Core).
+These are the only places a read command touches the socket — it never
+fails because of it.
 
 ### Write commands → local socket
 
@@ -48,7 +50,9 @@ never fails because of it.
 per-user local socket served by a running Galley Core process.
 `session follow` and `project follow` are hybrid commands: they read
 SQLite snapshots first, then attempt live socket subscriptions when a
-runner is available. `session wait` does not subscribe to live events:
+runner is available. `project follow` also probes `sessions.run_state`
+for each snapshot's `followState` and, under `--until-idle`, after each
+quiet window. `session wait` does not subscribe to live events:
 it polls persisted messages and, on each poll, reads live run state with
 the best-effort `sessions.run_state` probe above.
 

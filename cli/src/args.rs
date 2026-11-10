@@ -496,7 +496,8 @@ pub(crate) enum ProjectCmd {
     List,
     /// One-project rollup for supervisor batch orchestration.
     /// Read-only — opens SQLite directly and includes session status
-    /// counts plus currently-running sessions.
+    /// counts plus currently-running sessions (asked of Galley Core when
+    /// it is reachable; works without it).
     Brief {
         /// Project id.
         project_id: String,
@@ -529,9 +530,11 @@ pub(crate) enum ProjectCmd {
         /// Include archived sessions in snapshots and subscription attempts.
         #[arg(long)]
         all: bool,
-        /// Exit after the project has had no active sessions for a short
-        /// quiet window. Useful for supervisor batch jobs where runner
-        /// processes may stay alive after a turn completes.
+        /// Exit once, after a short quiet window, Galley Core reports no
+        /// session of the project with a run open or in progress
+        /// (`live.openRun` and `live.agentRunning` both false). Useful
+        /// for supervisor batch jobs where runner processes may stay
+        /// alive after a turn completes.
         #[arg(long)]
         until_idle: bool,
         /// Emit one final project snapshot before the stream end frame.

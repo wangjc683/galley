@@ -3,7 +3,8 @@
 //! Read commands open the local SQLite database directly; write and
 //! streaming commands talk to Galley Core over the per-user local socket.
 //! Three read commands (`sessions list`, `session brief`, `status`) also
-//! make one best-effort socket probe for the additive `live` field.
+//! make one best-effort socket probe for the additive `live` field;
+//! `project brief` makes it for `runningSessions`.
 //!
 //! Output discipline:
 //!   - Success → JSON on stdout. List-returning commands emit

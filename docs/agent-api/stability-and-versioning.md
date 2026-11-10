@@ -130,7 +130,7 @@ For NDJSON stream-end frames on `session watch` (§5.5b),
 | `timeout`            | `session wait` reached its bounded wait deadline |
 | `session_error`      | `session wait` found the session in the persisted `error` status |
 | `session_cancelled`  | `session wait` found the session in the persisted `cancelled` status |
-| `project_idle`       | `project follow --until-idle` found no session of the project in an active persisted status after its quiet window |
+| `project_idle`       | `project follow --until-idle` found no session of the project with a run open or in progress after its quiet window (Galley Core's live run state; the persisted status when Core is unreachable) |
 
 `subprocess_error` and `cancelled`, listed here until 2026-11-10, were
 never emitted: a runner that dies sends `subprocess_exited` too, and a
@@ -270,6 +270,20 @@ and error discriminants unchanged):
   existing command, field, exit code or error changed. Also served under
   `--schema=1` and `--schema=2`. See
   [todo-commands.md](./todo-commands.md) §5.34e.
+- 2026-11-10 — Behavior fix: `project follow --until-idle` judges idle
+  from Galley Core's live run state. After each quiet window it probes
+  `sessions.run_state` for the Project's sessions and ends with
+  `project_idle` only once none has `live.openRun` or `live.agentRunning`
+  set, the rule `session wait --until-idle` uses. It used to check the
+  persisted status, which Core writes only as `idle` / `archived`, so it
+  could end at the first 1.5-second pause while a child session was
+  still running. The same live reading now fills `project brief`'s
+  `runningSessions` and `followState`'s `activeStatusSessions` /
+  `idleStatusSessions`, which were empty / `0` in practice. With Core
+  unreachable every one of them falls back to the persisted status, as
+  before. No command, flag, field name or type, exit code or error
+  changed. Also under `--schema=1` and `--schema=2`. See §5.15a and
+  §5.15c in [project-and-llm-commands.md](./project-and-llm-commands.md).
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 
