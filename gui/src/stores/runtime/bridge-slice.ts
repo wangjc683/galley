@@ -26,10 +26,12 @@ import {
   DEFAULT_LLMS,
 } from "@/stores/defaults";
 import { useMessagesStore } from "@/stores/messages";
+import { usePrefsStore } from "@/stores/prefs";
 import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
 import { makeAppError } from "@/types/app-error";
+import type { RuntimeKind } from "@/types/session";
 
 import {
   currentCopy,
@@ -158,6 +160,15 @@ function _lruTouch(sessionId: string): void {
 function _lruRemove(sessionId: string): void {
   const idx = _lruOrder.indexOf(sessionId);
   if (idx !== -1) _lruOrder.splice(idx, 1);
+}
+
+/** Which engine a session's runner runs, for naming it in a crash
+ * message: 内核 / the engine, or the user's own GA. */
+function runnerEngineKind(sessionId: string): RuntimeKind {
+  const session = useSessionsStore
+    .getState()
+    .sessions.find((s) => s.id === sessionId);
+  return session?.gaRuntimeKind ?? usePrefsStore.getState().activeRuntimeKind;
 }
 
 function actionableBridgeCrashMessage(message: string): string {
@@ -316,9 +327,7 @@ function makeBridgeHandlers(sessionId: string): BridgeHandlers {
       const tail = abnormalClose ? (_stderrTails.get(sessionId) ?? []) : [];
       const rawMessage = tail.length
         ? tail.slice(-3).join("\n")
-        : code === null
-          ? "Galley 运行时意外退出，未返回退出码。"
-          : `Bridge exited with code ${code}`;
+        : copy.errors.bridgeExited(runnerEngineKind(sessionId), code);
       const message = abnormalClose
         ? actionableBridgeCrashMessage(rawMessage)
         : rawMessage;

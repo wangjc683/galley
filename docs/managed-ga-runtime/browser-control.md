@@ -159,7 +159,7 @@ subscribes in `useBrowserControlLiveStatus`, managed runtime only):
 | `running`, `tabCount > 0` | `connected` |
 | `running`, extension connected, no tabs | `connected_no_tabs` |
 | `running`, not connected | `offline` if verified, else `not_connected` |
-| `error` | `error` with the bridge's message |
+| `error` | `error`; the GUI words a kind it names itself and shows the bridge's (Chinese) message only for one it does not (2026-11-10 audit, A8) |
 | `stopped` / `starting` / no report yet | `unknown` (resolves within about a second; the TopBar draws the unlit lamp if verified, 待解锁 if not, instead of a 「检测中」 badge) |
 
 Tabs win over the extension flag: GA can drive any tab the master lists, and an

@@ -5,6 +5,7 @@ import { zhCopy } from "@/i18n/locales/zh";
 
 import {
   type BrowserControlViewInput,
+  browserControlErrorLine,
   browserControlErrorSource,
   browserControlErrorTitle,
   browserControlMaintenance,
@@ -87,7 +88,7 @@ describe("browserControlErrorSource", () => {
           error: "连接中断，正在重试",
         }),
       ),
-    ).toMatchObject({ group: "unreachable", retrying: false });
+    ).toMatchObject({ group: "unreachable", retrying: true });
     expect(
       browserControlErrorSource(
         input({ bridge: { state: "error", errorKind: null } }),
@@ -348,6 +349,55 @@ describe("browserControlErrorTitle", () => {
           copy,
         ),
       ).toBe(copy.browserControl.testException);
+    }
+  });
+});
+
+describe("browserControlErrorLine", () => {
+  it("words a named bridge kind, falls back to the raw text otherwise", () => {
+    for (const copy of [zhCopy, enCopy]) {
+      expect(
+        browserControlErrorLine(
+          {
+            source: "bridge",
+            group: "portInUse",
+            detail: "浏览器控制端口 18765 被其他程序占用。",
+            retrying: true,
+          },
+          copy,
+        ),
+      ).toBe(copy.topbar.browserControlErrorDetails.portInUse);
+      expect(
+        browserControlErrorLine(
+          {
+            source: "bridge",
+            group: "startFailed",
+            detail: "浏览器控制服务意外退出（exit status: 1）",
+            retrying: true,
+          },
+          copy,
+        ),
+      ).toBeNull();
+      expect(
+        browserControlErrorLine(
+          {
+            source: "bridge",
+            group: "generic",
+            detail: "读取浏览器控制状态失败：x",
+            retrying: true,
+          },
+          copy,
+        ),
+      ).toBe("读取浏览器控制状态失败：x");
+      expect(
+        browserControlErrorLine(
+          { source: "probe", kind: "script_failed", detail: "TypeError" },
+          copy,
+        ),
+      ).toBe("TypeError");
+      expect(
+        browserControlErrorLine({ source: "layout", detail: "EACCES" }, copy),
+      ).toBe("EACCES");
     }
   });
 });

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import { enCopy } from "@/i18n/locales/en";
+import { zhCopy } from "@/i18n/locales/zh";
+
 import {
   type BrowserControlIndicatorInput,
+  browserControlErrorDetail,
   browserControlErrorGroup,
   browserControlErrorRetries,
   browserControlIndicatorView,
@@ -91,18 +95,18 @@ describe("browserControlErrorGroup", () => {
 });
 
 describe("browserControlErrorRetries", () => {
-  it("retries bridge failures except the one that already says so", () => {
+  it("retries every bridge failure", () => {
     for (const kind of [
       "missing_dependency",
       "port_in_use",
       "start_failed",
       "exited",
       "status_failed",
+      // Its own sentence said 正在重试; it is no longer shown (A8).
+      "master_unreachable",
     ]) {
       expect(browserControlErrorRetries(kind)).toBe(true);
     }
-    // The unreachable message already ends in 正在重试.
-    expect(browserControlErrorRetries("master_unreachable")).toBe(false);
   });
 
   it("does not retry probe or folder-sync failures (no kind)", () => {
@@ -135,5 +139,47 @@ describe("browserControlInviteVisible", () => {
     expect(
       browserControlInviteVisible(input({ verificationHydrated: false })),
     ).toBe(false);
+  });
+});
+
+describe("browserControlErrorDetail", () => {
+  const BRIDGE_SENTENCE = "浏览器控制端口 18765 被其他程序占用。";
+
+  it("words the kinds it names in the UI's language, never the bridge's sentence", () => {
+    for (const copy of [zhCopy, enCopy]) {
+      const details = copy.topbar.browserControlErrorDetails;
+      expect(
+        browserControlErrorDetail("portInUse", BRIDGE_SENTENCE, copy.topbar),
+      ).toBe(details.portInUse);
+      expect(
+        browserControlErrorDetail(
+          "missingDependency",
+          BRIDGE_SENTENCE,
+          copy.topbar,
+        ),
+      ).toBe(details.missingDependency);
+      // The title and 正在自动重试 say it all.
+      for (const group of ["unreachable", "startFailed"] as const) {
+        expect(
+          browserControlErrorDetail(group, BRIDGE_SENTENCE, copy.topbar),
+        ).toBeNull();
+      }
+    }
+  });
+
+  it("falls back to the raw text for a kind it does not know, or none", () => {
+    expect(
+      browserControlErrorDetail(
+        "generic",
+        "读取浏览器控制状态失败：x",
+        enCopy.topbar,
+      ),
+    ).toBe("读取浏览器控制状态失败：x");
+    expect(
+      browserControlErrorDetail("generic", "TypeError: boom", enCopy.topbar),
+    ).toBe("TypeError: boom");
+    expect(
+      browserControlErrorDetail("generic", null, enCopy.topbar),
+    ).toBeNull();
   });
 });

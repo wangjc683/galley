@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { TopBarIconButton } from "../TopBarIconButton";
 import {
   type BrowserControlIndicatorInput,
+  browserControlErrorDetail,
   browserControlErrorRetries,
   browserControlIndicatorView,
 } from "./browser-control-indicator-status";
@@ -125,7 +126,7 @@ export function BrowserControlIndicator({
         : "text-ink-muted";
   const hint =
     view.form === "error"
-      ? input.errorDetail
+      ? browserControlErrorDetail(view.group, input.errorDetail, copy)
       : view.state === "offline"
         ? popoverCopy.offlineHint
         : null;
@@ -186,9 +187,10 @@ export function BrowserControlIndicator({
             </div>
             {/* Below the row, indented to the name column: the tab count
                 (a second line rather than beside the name — JC's live pick
-                on 2026-10-04), the offline hint, or the bridge's message,
-                which may widen the menu up to its 300px cap and is clamped
-                at two lines: Settings shows it in full. */}
+                on 2026-10-04), the offline hint, or the error's line (the
+                GUI's own words for a bridge kind it names, else the raw
+                text), which may widen the menu up to its 300px cap and is
+                clamped at two lines: Settings shows it in full. */}
             {tabsLabel && (
               <div className="mt-0.5 pl-5.5 text-ui-tertiary leading-snug tabular-nums text-ink-muted">
                 {tabsLabel}

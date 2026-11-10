@@ -367,6 +367,10 @@ export const enCopy: AppCopy = {
         state: "Couldn't start",
       },
     },
+    browserControlErrorDetails: {
+      missingDependency: "Reinstalling Galley fixes it.",
+      portInUse: "Quit the program using port 18765 or 18766.",
+    },
     browserControlPopover: {
       name: "Browser",
       connected: "Connected",
@@ -1813,6 +1817,12 @@ export const enCopy: AppCopy = {
     managedModelsLoadFailed:
       "Loading model config failed; keeping the current screen. Open Settings → Models to retry.",
     bridgeCrashed: "Bridge process crashed",
+    bridgeExited: (kind, code) => {
+      const engine = kind === "managed" ? "The engine" : "GA";
+      return code === null
+        ? `${engine} quit unexpectedly (no exit code).`
+        : `${engine} quit unexpectedly (exit code ${code}).`;
+    },
     bridgeFailed: "Bridge failed to start",
     externalMyKeyImportFailed: (moduleName) =>
       moduleName

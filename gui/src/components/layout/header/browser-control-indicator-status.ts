@@ -1,4 +1,5 @@
 import type { BrowserControlStatus } from "@/lib/browser-control";
+import type { AppCopy } from "@/lib/i18n";
 
 /** What the MainHeader needs from the Browser Control store. */
 export interface BrowserControlIndicatorInput {
@@ -10,7 +11,9 @@ export interface BrowserControlIndicatorInput {
   tabCount: number;
   /** The bridge's machine error kind (`port_in_use`, …), when it has one. */
   errorKind: string | null;
-  /** The bridge's (Chinese) error text, or a probe / folder-sync failure. */
+  /** The store's raw detail: the bridge's own (Chinese) sentence, or a
+   * probe / folder-sync failure. Shown only where the GUI has no words of
+   * its own (`browserControlErrorDetail`). */
   errorDetail: string | null;
 }
 
@@ -101,13 +104,38 @@ export function browserControlErrorGroup(
  * Whether an error is being retried on its own, for the 「正在自动重试。」
  * line (topbar menu and Settings' error card). Bridge failures retry (the
  * bridge with backoff, Core by restarting it); probe and folder-sync
- * failures carry no kind and do not. The unreachable message already
- * ends in 正在重试 (`managed_browser_bridge.py`), so it is not said twice.
+ * failures carry no kind and do not. Connection lost included: the
+ * bridge's own sentence that said 正在重试 is no longer shown
+ * (2026-11-10 audit, A8).
  */
 export function browserControlErrorRetries(errorKind: string | null): boolean {
-  return (
-    Boolean(errorKind) && browserControlErrorGroup(errorKind) !== "unreachable"
-  );
+  return Boolean(errorKind);
+}
+
+/**
+ * The line under an error's title (topbar menu and Settings' error card).
+ * A bridge kind the GUI names gets its own words, in the UI's language,
+ * or none where the title and 正在自动重试 say it all; the bridge's
+ * sentence is Chinese whatever the UI language, so it is only the
+ * fallback, for a kind the GUI does not know (2026-11-10 audit, A8).
+ * Without a kind (probe and folder-sync failures) the raw technical text
+ * stays.
+ */
+export function browserControlErrorDetail(
+  group: BrowserControlErrorGroup,
+  raw: string | null,
+  copy: Pick<AppCopy["topbar"], "browserControlErrorDetails">,
+): string | null {
+  switch (group) {
+    case "missingDependency":
+    case "portInUse":
+      return copy.browserControlErrorDetails[group];
+    case "unreachable":
+    case "startFailed":
+      return null;
+    case "generic":
+      return raw;
+  }
 }
 
 /**

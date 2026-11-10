@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { useBrowserControlStore } from "@/stores/browser-control";
 
 import {
+  browserControlErrorLine,
   browserControlErrorTitle,
   browserControlMaintenance,
   browserControlSetupLine,
@@ -658,10 +659,12 @@ function SpinnerIcon() {
   );
 }
 
-/** Worded title (per source), the raw detail below, and 正在自动重试 for
- * the bridge failures that retry on their own. */
+/** Worded title (per source), the line below it (worded per bridge kind,
+ * else the raw detail), and 正在自动重试 for the bridge failures that retry
+ * on their own. */
 function ErrorStatus({ error }: { error: BrowserControlErrorSource }) {
   const fullCopy = useCopy();
+  const detail = browserControlErrorLine(error, fullCopy);
   return (
     <StatusLine
       icon={
@@ -674,10 +677,8 @@ function ErrorStatus({ error }: { error: BrowserControlErrorSource }) {
       title={browserControlErrorTitle(error, fullCopy)}
       titleClassName="text-error"
     >
-      {error.detail && (
-        <ErrorDetail mono={error.source !== "bridge"}>
-          {error.detail}
-        </ErrorDetail>
+      {detail && (
+        <ErrorDetail mono={error.source !== "bridge"}>{detail}</ErrorDetail>
       )}
       {error.source === "bridge" && error.retrying && (
         <div className="mt-1 text-ui-tertiary leading-notice text-ink-muted">

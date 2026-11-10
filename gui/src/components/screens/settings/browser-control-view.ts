@@ -1,5 +1,6 @@
 import {
   type BrowserControlErrorGroup,
+  browserControlErrorDetail,
   browserControlErrorGroup,
   browserControlErrorRetries,
 } from "@/components/layout/header/browser-control-indicator-status";
@@ -46,6 +47,8 @@ export type BrowserControlErrorSource =
   | {
       source: "bridge";
       group: BrowserControlErrorGroup;
+      /** The bridge's own sentence, raw; shown only for a kind the GUI
+       * does not name (`browserControlErrorLine`). */
       detail: string | null;
       /** Show 「正在自动重试。」 (same rule as the topbar menu). */
       retrying: boolean;
@@ -210,7 +213,21 @@ export function browserControlSetupLine(
   }
 }
 
-/** The error's title line; the source's raw text goes below it. */
+/**
+ * The line under the title: for a bridge failure the GUI's own words
+ * (`browserControlErrorDetail`, shared with the topbar menu), otherwise
+ * the source's raw text.
+ */
+export function browserControlErrorLine(
+  error: BrowserControlErrorSource,
+  copy: Pick<AppCopy, "topbar">,
+): string | null {
+  return error.source === "bridge"
+    ? browserControlErrorDetail(error.group, error.detail, copy.topbar)
+    : error.detail;
+}
+
+/** The error's title line; `browserControlErrorLine` goes below it. */
 export function browserControlErrorTitle(
   error: BrowserControlErrorSource,
   copy: Pick<AppCopy, "browserControl" | "topbar">,

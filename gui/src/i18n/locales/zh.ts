@@ -420,6 +420,14 @@ export const zhCopy = {
         state: "未能启动",
       },
     },
+    /** 标题下那一行（顶栏菜单与 设置 → 浏览器控制 的错误卡共用），替代桥自己的
+     * 中文原句：只给有下一步可做的两类；连接中断、未能启动只有「正在自动重试。」。
+     * 端口是 TMWebDriver 固定的两个（runner/managed_browser_bridge.py
+     * 的 DRIVER_PORT 与它的下一个）。 */
+    browserControlErrorDetails: {
+      missingDependency: "重新安装 Galley 可修复。",
+      portInUse: "关掉占用 18765 或 18766 端口的程序。",
+    },
     browserControlPopover: {
       name: "浏览器",
       connected: "已连接",
@@ -1870,6 +1878,14 @@ export const zhCopy = {
     managedModelsLoadFailed:
       "模型配置读取失败，已保留当前界面。打开 设置 → 模型 可重试。",
     bridgeCrashed: "Bridge 进程崩溃",
+    /** 一个对话的运行进程退出、又没留下错误输出时的正文（toast 与子任务
+     * 卡片的「出错：」后）：内置运行时叫它内核，外置叫 GA。 */
+    bridgeExited: (kind: "managed" | "external", code: number | null) => {
+      const engine = kind === "managed" ? "内核" : "GA ";
+      return code === null
+        ? `${engine}意外退出（没有退出码）。`
+        : `${engine}意外退出（退出码 ${code}）。`;
+    },
     bridgeFailed: "Bridge 启动失败",
     externalMyKeyImportFailed: (moduleName: string | null) =>
       moduleName

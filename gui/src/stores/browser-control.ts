@@ -103,7 +103,9 @@ interface BrowserControlState {
   /** Detail for the error status, as its source gave it: the bridge's
    * own message, the folder-sync error, the probe's `detail` or invoke
    * error; null when the source has none. The store adds no wording of
-   * its own: the UI words the status and shows this as the detail. */
+   * its own: the UI words the status and shows this as the detail, except
+   * for a bridge error kind it names, which it words itself (the bridge's
+   * message is Chinese in either UI language; `browserControlErrorDetail`). */
   error: string | null;
   /** The last connection test's outcome for Settings' inline result
    * line; null while one runs and once the live status changes. */
