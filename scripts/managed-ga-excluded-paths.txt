@@ -1,0 +1,17 @@
+# Upstream paths left out of the managed GA code payload (managed-ga/code).
+#
+# The payload is upstream GenericAgent at the pinned baseline commit, minus
+# user state and secrets, minus the paths below, plus Galley's patch stack.
+# Each entry is media only upstream's own README shows or links; no code in
+# the payload, in Galley Core or in the runner reads it, and if kept it
+# would ship in every installer and every update (about 22 MB together).
+# Why and since when: docs/managed-ga-runtime/code-state-and-patches.md,
+# "Payload Definition".
+#
+# Single source of truth: build-managed-ga.sh removes these before patch
+# replay, and check-managed-ga-payload.mjs / check-managed-ga-app-bundle.mjs
+# fail when one is present. Each line names one file or directory, relative
+# to the GenericAgent source root; no globs. The build fails when an entry
+# is not in the baseline commit, so the list cannot outlive what it names.
+assets/demo
+assets/GenericAgent_Technical_Report.pdf

@@ -3,6 +3,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  criticalCodeFiles,
+  criticalMemorySeedFiles,
+  excludedUpstreamPaths,
+  forbiddenMemorySeedFiles,
+  forbiddenStatePaths,
+  isForbiddenName,
+  walk,
+} from "./managed-ga-payload-rules.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
@@ -20,29 +29,14 @@ const appPath =
   );
 const macOsRoot = path.join(appPath, "Contents", "MacOS");
 const resourcesRoot = path.join(appPath, "Contents", "Resources");
+const runnerRoot = path.join(resourcesRoot, "runner");
+const repoRunnerRoot = path.join(repoRoot, "runner");
 const managedRoot = path.join(resourcesRoot, "managed-ga");
 const codeRoot = path.join(managedRoot, "code");
 const memorySeedRoot = path.join(managedRoot, "state-seed", "memory");
 const manifestPath = path.join(managedRoot, "manifest.json");
 
 const errors = [];
-const criticalMemorySeedFiles = [
-  "memory_management_sop.md",
-  "plan_sop.md",
-  "tmwebdriver_sop.md",
-  "web_setup_sop.md",
-  "deliverable_audit_sop.md",
-  "supervisor_sop.md",
-  "project_mode_sop.md",
-  "L4_raw_sessions/salient_mining_sop.md",
-  "L4_raw_sessions/compress_session.py",
-];
-const forbiddenMemorySeedFiles = new Set([
-  "global_mem.txt",
-  "global_mem_insight.txt",
-  "file_access_stats.json",
-  "all_histories.txt",
-]);
 
 function fail(message) {
   errors.push(message);
@@ -83,41 +77,21 @@ function display(file) {
   return path.relative(repoRoot, file).replaceAll(path.sep, "/");
 }
 
-function walk(dir) {
-  const pending = [dir];
-  const entries = [];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (!fs.existsSync(current)) continue;
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const entryPath = path.join(current, entry.name);
-      entries.push(entryPath);
-      if (entry.isDirectory()) {
-        pending.push(entryPath);
-      }
-    }
-  }
-  return entries;
-}
-
 requireDir(appPath);
 requireDir(macOsRoot);
 requireExecutableFile(path.join(macOsRoot, "galley"));
 requireDir(resourcesRoot);
-requireDir(path.join(resourcesRoot, "runner"));
-requireFile(path.join(resourcesRoot, "runner", "workbench_bridge.py"));
+requireDir(runnerRoot);
+requireFile(path.join(runnerRoot, "workbench_bridge.py"));
 requireDir(path.join(resourcesRoot, "python"));
 requireDir(managedRoot);
 requireDir(codeRoot);
 requireDir(memorySeedRoot);
 requireFile(manifestPath);
 requireFile(path.join(managedRoot, "patches", "manifest.md"));
-requireFile(path.join(codeRoot, "agentmain.py"));
-requireFile(path.join(codeRoot, "agent_loop.py"));
-requireFile(path.join(codeRoot, "llmcore.py"));
-// llmcore.py imports it at its end (upstream 4ca9028); a missing file
-// fails `import llmcore` with ModuleNotFoundError.
-requireFile(path.join(codeRoot, "legacy_llmcore.py"));
+for (const rel of criticalCodeFiles) {
+  requireFile(path.join(codeRoot, ...rel.split("/")));
+}
 if (fs.existsSync(path.join(managedRoot, "galley-prompts"))) {
   fail("managed prompt profile is embedded in Core; app bundle must not ship managed-ga/galley-prompts");
 }
@@ -149,37 +123,50 @@ if (manifest) {
   }
 }
 
-const forbiddenNames = new Set([
-  ".DS_Store",
-  "__pycache__",
-  ".git",
-  ".venv",
-  "venv",
-  "env",
-  "mykey.py",
-  "mykey.json",
-  ".env",
-  "auth.json",
-]);
-const forbiddenRootState = new Set([
-  "memory",
-  "sop",
-  "skills",
-  "temp",
-  "model_responses",
-]);
-
-for (const entryPath of walk(codeRoot)) {
+// All of managed-ga/, not only code/: Tauri copies the directory whole, so a
+// local build also picks up .DS_Store or __pycache__ beside manifest.json,
+// in patches/ or in state-seed/.
+for (const entryPath of walk(managedRoot)) {
   const name = path.basename(entryPath);
-  if (forbiddenNames.has(name) || name.endsWith(".pyc")) {
+  if (isForbiddenName(name)) {
     fail(`app bundle managed GA contains generated/secret artifact: ${display(entryPath)}`);
   }
 }
 
-for (const name of forbiddenRootState) {
-  const entryPath = path.join(codeRoot, name);
+for (const rel of forbiddenStatePaths) {
+  const entryPath = path.join(codeRoot, ...rel.split("/"));
   if (fs.existsSync(entryPath)) {
     fail(`app bundle managed GA contains user-state root: ${display(entryPath)}`);
+  }
+}
+
+for (const rel of excludedUpstreamPaths) {
+  const entryPath = path.join(codeRoot, ...rel.split("/"));
+  if (fs.existsSync(entryPath)) {
+    fail(
+      `app bundle managed GA contains an excluded upstream path (scripts/managed-ga-excluded-paths.txt): ${display(entryPath)}`,
+    );
+  }
+}
+
+// core/tauri.conf.json bundles only the runner's modules (`../runner/*.py`).
+// Nothing generated or test-only may ride along, and nothing the runner
+// needs may be left behind by that glob (a subpackage or a data file would
+// be).
+for (const entryPath of walk(runnerRoot)) {
+  const name = path.basename(entryPath);
+  if (name === "tests" || isForbiddenName(name)) {
+    fail(`app bundle runner contains a test or generated artifact: ${display(entryPath)}`);
+  }
+}
+if (fs.existsSync(repoRunnerRoot)) {
+  for (const name of fs.readdirSync(repoRunnerRoot)) {
+    if (name === "tests" || isForbiddenName(name)) continue;
+    if (!fs.existsSync(path.join(runnerRoot, name))) {
+      fail(
+        `app bundle is missing runner/${name} (core/tauri.conf.json bundles only ../runner/*.py)`,
+      );
+    }
   }
 }
 
@@ -187,13 +174,10 @@ if (fs.existsSync(memorySeedRoot)) {
   for (const rel of criticalMemorySeedFiles) {
     requireFile(path.join(memorySeedRoot, ...rel.split("/")));
   }
+  // Generated and secret names are caught by the managed-ga/ walk above.
   for (const entryPath of walk(memorySeedRoot)) {
     const name = path.basename(entryPath);
-    if (
-      forbiddenNames.has(name) ||
-      forbiddenMemorySeedFiles.has(name) ||
-      name.endsWith(".pyc")
-    ) {
+    if (forbiddenMemorySeedFiles.has(name)) {
       fail(`app bundle managed GA memory seed contains generated/secret artifact: ${display(entryPath)}`);
     }
   }

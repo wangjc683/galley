@@ -8,7 +8,10 @@ Galley integrates with GenericAgent in two different ways:
 - **External / attach GA**: user-owned GenericAgent. Galley audits
   compatibility but never upgrades or modifies that checkout.
 - **Managed / bundled GA**: Galley-owned GenericAgent runtime. Galley vendors
-  the audited upstream commit and reapplies its managed-runtime patch stack.
+  the audited upstream commit, minus a named list of upstream demo media
+  (`scripts/managed-ga-excluded-paths.txt`, see
+  [payload definition](./managed-ga-runtime/code-state-and-patches.md#payload-definition)),
+  and reapplies its managed-runtime patch stack.
 
 The baseline records the upstream GenericAgent commit that both paths have been
 audited against.
@@ -1753,6 +1756,14 @@ Then inspect the managed patch stack semantically, not just mechanically:
 - Did upstream add an official state-root/profile option that should replace a
   Galley patch?
 - Did upstream rename a key that Galley's managed model config emits?
+- Does the excluded-media list still match upstream? The build removes each
+  path in `scripts/managed-ga-excluded-paths.txt` before replay and stops
+  when the new baseline no longer has one (upstream deleted or moved it):
+  drop or rename that entry, here and in the
+  [payload definition](./managed-ga-runtime/code-state-and-patches.md#payload-definition).
+  When the delta adds large media under `assets/` that only upstream's
+  README uses, decide whether to list it too; a new entry is a decision
+  recorded with its reason, like a patch.
 
 6. Run the compatibility matrix:
 

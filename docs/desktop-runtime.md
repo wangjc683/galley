@@ -294,11 +294,14 @@ The managed-runtime product and upgrade rules live in
 [managed GA runtime](./managed-ga-runtime.md).
 
 Release builds run `node scripts/check-managed-ga-payload.mjs` before packaging.
-That gate verifies the Tauri resource mapping (managed GA and the CLI sidecar),
-managed GA manifest, patch stack, critical code and memory-seed files, the
-absence of `managed-ga/galley-prompts` (the managed prompt is embedded in
-Core), and the absence of generated / local / secret-bearing artifacts inside
-`managed-ga/code` and the memory seed.
+That gate verifies the Tauri resource mapping (managed GA, the runner's
+modules without `runner/tests/`, and the CLI sidecar), managed GA manifest,
+patch stack, critical code and memory-seed files, the absence of
+`managed-ga/galley-prompts` (the managed prompt is embedded in Core), and the
+absence of generated / local / secret-bearing artifacts, user-state
+directories and the excluded upstream media (see
+[payload definition](./managed-ga-runtime/code-state-and-patches.md#payload-definition))
+inside `managed-ga/code` and the memory seed.
 
 ## Release Artifacts
 

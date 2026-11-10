@@ -61,7 +61,7 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../runner": "runner",
+      "../runner/*.py": "runner/",
       "../managed-ga": "managed-ga",
       "python-bundle/python": "python"
     },

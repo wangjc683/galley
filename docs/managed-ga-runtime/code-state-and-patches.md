@@ -118,6 +118,47 @@ writes still go through `managed-ga-state/memory/`. The seed is copied
 missing-only so existing `global_mem.txt`, `global_mem_insight.txt`, custom SOPs,
 skills, and edited memory files survive normal Galley updates.
 
+## Payload Definition
+
+`managed-ga/code/` is upstream GenericAgent at the pinned baseline, minus a
+named list of upstream demo media, plus the Galley patch stack.
+`scripts/build-managed-ga.sh` produces it in this order:
+
+1. **Upstream at the baseline**: the tracked tree of `upstream.commit` in
+   `managed-ga/manifest.json`, read with `git archive`, never from a working
+   tree.
+2. **Minus the excluded upstream paths** (since 2026-11-10), one per line
+   in `scripts/managed-ga-excluded-paths.txt`, the single list the build
+   and both payload gates read:
+   - `assets/demo/`: the four GIFs and three screenshots upstream's README
+     shows, about 19 MB;
+   - `assets/GenericAgent_Technical_Report.pdf`: upstream's technical
+     report, about 3 MB.
+
+   Nothing in the payload, in Galley Core or in the runner reads them; only
+   upstream's own `README.md` refers to the demo images, and nothing renders
+   that file, so its broken image links do not matter. Kept, they added
+   about 22 MB to every installer and every update. Each entry names one
+   file or directory, with no globs, and the build stops when the baseline
+   no longer has one, so a baseline upgrade prunes stale entries. Adding an
+   entry is a decision like adding a patch: record it here with its reason.
+3. **Minus user state, secrets and generated files**, as always: `memory/`
+   (shipped separately as `state-seed/memory/`), `sop/`, `skills/`, `temp/`,
+   `model_responses/`, `mykey.py`, `mykey.json`, `.git`, virtualenvs,
+   `__pycache__`, `*.pyc`, `.DS_Store`.
+4. **Plus the patch stack**: every patch in `patchStack.patches`, in
+   manifest order. No patch touches an excluded path.
+
+`check-managed-ga-payload.mjs` (CI) and `check-managed-ga-app-bundle.mjs`
+(release builds) fail when the payload holds an excluded path, a
+user-state directory (including upstream's scheduled tasks in `sche_tasks/`
+and its frontends' scratch files in `frontends/temp/`) or a `*.egg-info`.
+They share their file lists through `scripts/managed-ga-payload-rules.mjs`.
+
+Galley's own runner is packaged on the same principle: `core/tauri.conf.json`
+bundles only its modules (`../runner/*.py`); `runner/tests/` stays in the
+repository.
+
 ## Patch Discipline
 
 Managed GA can be patched, but Galley must not become a divergent GA fork.
@@ -133,6 +174,7 @@ managed-ga/patches/
   ...                          # see patches/manifest.md for the full stack
 managed-ga/patches/manifest.md
 scripts/build-managed-ga.sh
+scripts/managed-ga-excluded-paths.txt   # upstream media left out (Payload Definition)
 ```
 
 Rules:

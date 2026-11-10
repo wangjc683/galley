@@ -2,8 +2,33 @@
 
 Patch stack id: `galley-managed-ga-patches-v1`
 
-Last replay verified: `2026-11-03` against upstream
+Payload: `managed-ga/code` is upstream at the baseline commit below, minus
+the upstream paths named in `scripts/managed-ga-excluded-paths.txt`
+(`assets/demo/` and `assets/GenericAgent_Technical_Report.pdf`, demo media
+only upstream's README uses, about 22 MB; left out since 2026-11-10), minus
+user state and secrets, plus the patches below in order. No patch touches
+an excluded path. Reasons and rules:
+[payload definition](../../docs/managed-ga-runtime/code-state-and-patches.md#payload-definition).
+
+Last replay verified: `2026-11-10` against upstream
 `d66509bf09f6dd356704a257744a1d7ff899f8f9` (29-patch stack through `0031`;
+same baseline and stack, no patch changed; the payload drops the excluded
+media, audit 2026-11-10 ticket 07,
+`.scratch/audit-1110/issues/07-payload-slimming.md`). The source was a
+fresh clone of upstream. First the old `build-managed-ga.sh` replayed the
+committed stack from it, checked out clean at `d66509b`: `git status`
+stayed clean. The clone was then put back on upstream `main` (`68d996a`)
+and given ignored, untracked and edited files on purpose; the new script,
+which reads the commit with `git archive` and takes the clone as a
+required argument, rebuilt the payload and memory seed from it byte for
+byte. With the exclusion list it applied all 29 patches, its `py_compile`
+sweep passed,
+and the rebuilt `managed-ga/code` differs from the previous one by eight
+deletions only (the seven files of `assets/demo/` and the PDF, 23,045,826
+bytes; 178 files → 170); `state-seed` did not change.
+`check-managed-ga-payload.mjs` / `check-ga-baseline-drift.mjs` passed.
+
+Previous replay (`2026-11-03`, `d66509b`, 29-patch stack through `0031`;
 same baseline, `0031` appended on top for main chat ticket 140, the request
 deadline,
 `.scratch/main-chat/issues/140-cap-each-model-request-at-five-minutes.md`).

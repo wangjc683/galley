@@ -3,6 +3,15 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  criticalCodeFiles,
+  criticalMemorySeedFiles,
+  excludedUpstreamPaths,
+  forbiddenMemorySeedFiles,
+  forbiddenStatePaths,
+  isForbiddenName,
+  walk,
+} from "./managed-ga-payload-rules.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
@@ -16,24 +25,6 @@ const patchRoot = path.join(managedRoot, "patches");
 const errors = [];
 const pythonAssetPathPattern =
   /os\.path\.join\([^)\n]*script_dir[^)\n]*(?:f?["']assets\/|["']assets\/)/;
-const criticalMemorySeedFiles = [
-  "memory_management_sop.md",
-  "plan_sop.md",
-  "tmwebdriver_sop.md",
-  "web_setup_sop.md",
-  "deliverable_audit_sop.md",
-  "supervisor_sop.md",
-  "project_mode_sop.md",
-  "ultraplan_sop.md",
-  "L4_raw_sessions/salient_mining_sop.md",
-  "L4_raw_sessions/compress_session.py",
-];
-const forbiddenMemorySeedFiles = new Set([
-  "global_mem.txt",
-  "global_mem_insight.txt",
-  "file_access_stats.json",
-  "all_histories.txt",
-]);
 
 function fail(message) {
   errors.push(message);
@@ -64,37 +55,14 @@ function relative(file) {
   return path.relative(repoRoot, file).replaceAll(path.sep, "/");
 }
 
-function walk(dir) {
-  const pending = [dir];
-  const files = [];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const entryPath = path.join(current, entry.name);
-      files.push(entryPath);
-      if (entry.isDirectory()) {
-        pending.push(entryPath);
-      }
-    }
-  }
-  return files;
-}
-
 requireDir(managedRoot);
 requireDir(codeRoot);
 requireDir(memorySeedRoot);
 requireFile(manifestPath);
 requireFile(path.join(patchRoot, "manifest.md"));
-requireFile(path.join(codeRoot, "agentmain.py"));
-requireFile(path.join(codeRoot, "agent_loop.py"));
-requireFile(path.join(codeRoot, "llmcore.py"));
-// llmcore.py imports it at its end (upstream 4ca9028); a missing file
-// fails `import llmcore` with ModuleNotFoundError.
-requireFile(path.join(codeRoot, "legacy_llmcore.py"));
-requireFile(path.join(codeRoot, "frontends", "wechatapp.py"));
-requireFile(path.join(codeRoot, "frontends", "fsapp.py"));
-requireFile(path.join(codeRoot, "frontends", "dcapp.py"));
-requireFile(path.join(codeRoot, "frontends", "workspace_cmd.py"));
+for (const rel of criticalCodeFiles) {
+  requireFile(path.join(codeRoot, ...rel.split("/")));
+}
 if (fs.existsSync(path.join(managedRoot, "galley-prompts"))) {
   fail("managed prompt profile is embedded in Core; remove managed-ga/galley-prompts");
 }
@@ -103,6 +71,14 @@ const tauriConfig = readJson(tauriConfigPath);
 const resourceMap = tauriConfig?.bundle?.resources;
 if (!resourceMap || resourceMap["../managed-ga"] !== "managed-ga") {
   fail("core/tauri.conf.json must bundle ../managed-ga as managed-ga");
+}
+// Only the runner's modules ship: mapping the whole directory would also
+// bundle runner/tests (and, on a local build, __pycache__ and .DS_Store).
+if (!resourceMap || resourceMap["../runner/*.py"] !== "runner/") {
+  fail('core/tauri.conf.json must bundle the runner modules as "../runner/*.py": "runner/"');
+}
+if (resourceMap && Object.hasOwn(resourceMap, "../runner")) {
+  fail("core/tauri.conf.json must not bundle ../runner whole (it ships runner/tests)");
 }
 const externalBin = tauriConfig?.bundle?.externalBin;
 if (
@@ -149,30 +125,10 @@ if (manifest) {
   }
 }
 
-const forbiddenNames = new Set([
-  ".DS_Store",
-  "__pycache__",
-  ".git",
-  ".venv",
-  "venv",
-  "env",
-  "mykey.py",
-  "mykey.json",
-  ".env",
-  "auth.json",
-]);
-const forbiddenRootState = new Set([
-  "memory",
-  "sop",
-  "skills",
-  "temp",
-  "model_responses",
-]);
-
 if (fs.existsSync(codeRoot)) {
   for (const entryPath of walk(codeRoot)) {
     const name = path.basename(entryPath);
-    if (forbiddenNames.has(name) || name.endsWith(".pyc")) {
+    if (isForbiddenName(name)) {
       fail(`managed GA payload contains generated/secret artifact: ${relative(entryPath)}`);
     }
     if (entryPath.endsWith(".py")) {
@@ -182,10 +138,18 @@ if (fs.existsSync(codeRoot)) {
       }
     }
   }
-  for (const name of forbiddenRootState) {
-    const entryPath = path.join(codeRoot, name);
+  for (const rel of forbiddenStatePaths) {
+    const entryPath = path.join(codeRoot, ...rel.split("/"));
     if (fs.existsSync(entryPath)) {
       fail(`managed GA payload contains user-state root: ${relative(entryPath)}`);
+    }
+  }
+  for (const rel of excludedUpstreamPaths) {
+    const entryPath = path.join(codeRoot, ...rel.split("/"));
+    if (fs.existsSync(entryPath)) {
+      fail(
+        `managed GA payload contains an excluded upstream path (scripts/managed-ga-excluded-paths.txt): ${relative(entryPath)}`,
+      );
     }
   }
 }
@@ -196,11 +160,7 @@ if (fs.existsSync(memorySeedRoot)) {
   }
   for (const entryPath of walk(memorySeedRoot)) {
     const name = path.basename(entryPath);
-    if (
-      forbiddenNames.has(name) ||
-      forbiddenMemorySeedFiles.has(name) ||
-      name.endsWith(".pyc")
-    ) {
+    if (isForbiddenName(name) || forbiddenMemorySeedFiles.has(name)) {
       fail(`managed GA memory seed contains generated/secret artifact: ${relative(entryPath)}`);
     }
   }

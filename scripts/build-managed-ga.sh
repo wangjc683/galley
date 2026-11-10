@@ -4,8 +4,9 @@ set -euo pipefail
 # Build the source-tree managed GA code payload from a GenericAgent clone.
 # The payload is read from the pinned baseline commit itself (`git archive`),
 # never from the clone's working tree, so ignored, untracked or uncommitted
-# files there cannot reach it. This script copies code only; user state and
-# secrets are excluded.
+# files there cannot reach it. This script copies code only; user state,
+# secrets and the upstream media in scripts/managed-ga-excluded-paths.txt
+# are left out.
 
 usage() {
   cat <<'EOF'
@@ -71,6 +72,21 @@ fi
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/galley-managed-ga-build.XXXXXX")"
 trap 'rm -rf "$STAGE"' EXIT
 git -C "$SOURCE" archive "$EXPECTED_COMMIT" | tar -x -C "$STAGE"
+
+# Upstream media the payload leaves out, one named path per line (single
+# source of truth: scripts/managed-ga-excluded-paths.txt, also read by the
+# payload gates). A path the baseline no longer has stops the build, so the
+# list is pruned at the upgrade that makes an entry stale.
+while IFS= read -r rel; do
+  [[ -z "$rel" || "$rel" == \#* ]] && continue
+  if ! git -C "$SOURCE" cat-file -e "${EXPECTED_COMMIT}:${rel}" 2>/dev/null; then
+    echo "Excluded upstream path is not in the baseline: $rel" >&2
+    echo "Remove it from scripts/managed-ga-excluded-paths.txt (and the docs that name it)." >&2
+    exit 2
+  fi
+  rm -rf "${STAGE:?}/$rel"
+  echo "Excluded upstream path: $rel"
+done < "$ROOT/scripts/managed-ga-excluded-paths.txt"
 
 mkdir -p "$DEST"
 find "$DEST" -mindepth 1 -maxdepth 1 \
