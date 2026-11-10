@@ -970,7 +970,32 @@ Release-scope truth is `git log v0.7.7..HEAD`. Merged since `v0.7.7`:
 the release docs; the README's Windows minimum (Windows 10 or later, both
 READMEs); the dispatch workflow (`docs/agents/dispatch.md`,
 `scripts/new-ticket-worktree.sh`, the `AGENTS.md` and docs-index routing,
-ticket `.scratch/dispatch-workflow/issues/01`). None of it changes the app.
+ticket `.scratch/dispatch-workflow/issues/01`). None of that changes the app.
+
+Also merged, and it does change the app: the 2026-11-10 whole-project audit's
+confident fixes (22 commits, `24c82a6f` … `9621f326`). User-visible: the
+effort picked on the new-chat screen reaches the conversation it starts; day
+labels and the to-do panel's today group keep rolling over after a 25-hour
+day; three runner-start errors follow the UI language; default filenames for
+a saved reply or image use the local date; a token count just under a
+million no longer reads "1000k". Packaging and security: the unused Tauri
+shell plugin and its Python spawn / stdin / kill grants are gone
+(`core/capabilities/default.json`, `core/Cargo.toml`), so the next release
+needs one launch that shows no capability error. Core and runner: three
+Tauri commands with no caller, four spawn inputs nothing read (`--sop-path`
+among them, removed on both sides, so the IM channels must be seen starting),
+one search-index delete per message write that could never match, the
+safe-rebuild preflight list back at 033, and the runner's copy of the
+ChatGPT `minimal` → `medium` rule (the engine's, patch `0007`, stays).
+Remote groundwork: unpair forgets push devices, the relay bounds its control
+replies, a blank APNs key path counts as not set. Tests: full-schema
+fixtures use the app's own migration list. Docs: about forty stale
+statements in living docs, and the version gate now checks `core/Cargo.lock`.
+No migration, no Agent API change. Gates on the merged branch: `cargo test
+--workspace` (47 binaries, 1,346 tests), vitest in three time zones (263
+files, 2,961 tests), pytest (765), the six gate scripts. Nothing was walked
+in the app before the merge; the findings left for JC's ruling are not in
+the repo yet.
 
 **Owed from the `v0.7.7` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. The database shows the draft's
