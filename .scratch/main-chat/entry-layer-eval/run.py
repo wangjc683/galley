@@ -11125,6 +11125,9 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
             ("攻略做好了：大阪三晚、京都四晚，第 3 天去奈良，每天不超过 8,000 步，3 人约 38 万日元。全文在子任务里，点开就能看。",
              True, "the gist, the whole in the subtask"),
             ("攻略做好了：大阪三晚、京都四晚，第 3 天去奈良。", False, "no word of where the whole is"),
+            # Audit 2026-11-10 ticket 11: 「点开」 left the words, it matched
+            # 「景点开放时间」 in a reply that pasted the whole guide.
+            ("攻略做好了：大阪三晚、京都三晚，景点开放时间出发前再查。", False, "景点开放 is no word of where the whole is"),
             # Audit 2026-11-10 ticket 10: the limit is 2,000 (a paste of
             # the answer is at least the 3,000 the note carries).
             ("全文在子任务里。" + "大阪" * 850, True, "a long gist under the limit"),

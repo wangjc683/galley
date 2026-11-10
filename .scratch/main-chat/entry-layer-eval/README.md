@@ -1476,3 +1476,38 @@ $PY .scratch/main-chat/entry-layer-eval/run.py --suite tell-user --variant r3 --
 - **用量**：3 次运行，23 次模型调用（输入 604,489 token，缓存 496,256，输出 9,583）。
 - **`results.md` 里顺带变了的**：票 147 那张表里 `w-long` 改前那一遍（1,703 字）按新的上限重判成过；deepseek-flash 撞上限的两遍，标签从「第 9 次、8 次上限」改成「第 11 次、10 次上限」，与票 147 一节写的一致。
 - **其余用例不受影响**：改的是 `w-long` 自己在 `cases.json` 里的字段；`run.py` 新读的 `tool_cap`、`inline_note`、`record_only` 别的用例都没写，`--dry-test` 核对只有 `w-long` 的上限与说明交法不同；`stop_label` 与「判定」一栏的只记录只改显示，不改判定。`--dry-test` 加的：`w-long` 在真沙盒里走一遍假模型，第一次调用拿到说明全文、第一个工具调用是它自己的；回答里点名的截图正好是用例的 6 个文件；字数上限两边各一条；撞上限的标签照这一遍的上限；只记录的标注只在 `w-long` 上。本票之前 1,362 项全过，甲 1 之后 1,366 项，甲 2 之后 1,385 项全过。
+
+### 票 11：手册补了读不出的截图那一句（2026-11-10，gpt-6.1-sol，推理强度 high）
+
+JC 裁「手册按修法 1 改」（审计票 [11](../../audit-1110/issues/11-unreadable-screenshot-rule.md)）：`subtasks.md` 验收那条「That is the whole check」末尾接一句「A screenshot you cannot read is one of those: the file being there and the subtask saying what it shows is enough, so do not look for a way to read it and do not send the work back to have it written out.」，手册其余不动。
+
+- **评测读的是哪份手册**：每一遍运行时，`run_job` 从仓库的 `docs/managed-ga-runtime/galley-assistant-manual/` 把各部分现拷进这一遍的状态根（Core 写它的位置），没有冻结的副本；`manual_sha` 记版本，改前 `7cf1b631`，改后 `b66f9402`，本节 18 遍都是改后的。冻结的是入口层：`w-table`、`w-long` 用 v3，三条拆开的几块用 v6，前十条用 `wake/galley-prompt/`；入口层只点名各部分，不带手册的字。
+- **跑法**：同票 06，各用例重跑第 1 遍（draft 措辞十条、v2 措辞的 `step-limit`、core 措辞四条），`w-long` 跑 3 遍；四次调用各带 `--supersede`，被替换的在 `meta.superseded_runs[16]`–`[19]`。`w-merge-two-long` 没有截图、只经 `--t147` 跑，没重跑。
+
+| 用例 | 改前 | 改后 | 工具调用 改前 → 改后 | 变了什么 |
+| --- | --- | --- | --- | --- |
+| `done-evidence` | 过 | 过 | 5 → 2 | 改前读 `ocr_utils.py`、识字报错、找 tesseract 共 3 次；改后核对三张截图在不在就交代 |
+| `done-no-proof` | 过 | 过 | 2 → 3 | 照样打回，要确认号和截图（子任务两样都没交） |
+| `ask-known` | 过 | 过 | 2 → 2 | — |
+| `ask-sms` | 过 | 过 | 0 → 1 | — |
+| `ask-pay` | 过 | 过 | 1 → 1 | — |
+| `error` | 过 | 过 | 0 → 1 | — |
+| `step-limit`（draft） | 过 | 过 | 3 → 3 | — |
+| `step-limit`（v2） | 过 | 过 | 2 → 2 | — |
+| `two-at-once` | 过 | 过 | 2 → 2 | 两次都只核对截图在不在 |
+| `third-round` | 过 | 过 | 2 → 2 | — |
+| `file-handover` | 过 | 过 | 2 → 2 | — |
+| `w-table` | 过 | 过 | 8 → 3 | 改前 `file_read` 两张 PNG、读 `vision_sop.md` 与 `ocr_utils.py`、识字、试 swift、查 `objc` 共 6 次；改后核对两张截图在不在 |
+| `w-merge-three` | 过 | 过 | 4 → 3 | 改前用 PIL 打开三张截图看元数据；改后只核对在不在 |
+| `w-two-of-three` | 不过 | 过 | 4 → 3 | 改前那句进度只写在 `<summary>` 里、正文空（与手册无关的波动）；改后正文一句 |
+| `w-third-back` | 过 | 过 | 4 → 2 | 改前读 `ocr_utils.py`、识字报错共 2 次；改后核对截图在不在 |
+| `w-long` ×3 | 2/3 | 2/3 | 6、7、8 → 4、4、3 | 见下 |
+
+- **`w-long` 三遍**（字数按判定的算法，`[FILE:]` 那行不算）：
+  - 第 1 遍，过，5 次模型调用、97 秒：1 读手册 `wake.md`、`subtasks.md`、`cli.md` 与 CLI 路径；2 两次 `session show`（派活说明、最后 40 步）；3 核对 6 张截图在不在、多大；4 `session show --tail=1` 把全文写成文件。回复给要点和 `[FILE:]` 全文路径，1,883 字。
+  - 第 2 遍，过，5 次、101 秒：1 读手册 `wake.md`、`subtasks.md`；2 两次 `session show`；3 核对截图；4 写全文文件。回复要点加 `[FILE:]`，1,998 字。
+  - 第 3 遍，不过，4 次、131 秒：1 读手册；2 两次 `session show`；3 核对截图。回复把整份攻略改写进来（4,703 字），没写成文件，也没说全文在哪，末尾列出 6 张截图的路径。
+  - 三遍都没有找识字办法的调用（不读 `ocr_utils.py`、`vision_sop.md`，不 `file_read` 图片，不找 tesseract），没有打回；手册那句管用。剩下的是这条用例本来要测的事：第 3 遍没给要点。按票 11 的规则仍标只记录（`record_only` 的原因改成现在这件），计不计分由主会话与 JC 定。
+- **判定修了一处**：`w-long` 的 `where_any` 去掉「点开」。它一直命中回复里的「景点开放时间」（此前每一遍都有这几个字），第 3 遍没说全文在哪也因此算成说了；去掉以后此前各遍的判定不变（它们另有「完整攻略」或 `[FILE:]`），`--dry-test` 加了一条「景点开放」不算。
+- **副作用**：没看到「该打回却放过」。`done-no-proof`（子任务说订好了、确认号和截图都没交）照样打回；有截图的用例改后每一遍都还核对截图文件在不在，只是不再去读。套件里没有「点名了截图、文件却不在」的用例，这一种没测到。
+- **用量**：18 次运行，60 次模型调用（输入 651,862 token，缓存 334,848，输出 22,202）。

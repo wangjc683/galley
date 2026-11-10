@@ -13,7 +13,7 @@ Before each tool call, reason: current phase, whether the last result met expect
 - Failure escalation: 1st fail → read error and understand cause; 2nd → probe environment state; 3rd → deep analysis then switch approach or ask user. Never repeat an action without new information.
 Today: 2026-11-10 Tue
 
-cwd = $TMPDIR/entry-layer-eval-mx5ifdf8/done-evidence.draft-1/sandbox/managed-ga-state/temp (./)
+cwd = $TMPDIR/entry-layer-eval-p6w5bg2m/done-evidence.draft-1/sandbox/managed-ga-state/temp (./)
 
 [Memory] (../memory)
 Facts(L2): ../memory/global_mem.txt | CodeRoot: ../ | SOPs(L3): ../memory/*.md or *.py | META-SOP(L0): ../memory/memory_management_sop.md
@@ -256,7 +256,7 @@ unasked, then say what you did; offer nothing you have not done (see
 `[FILE:<absolute path>]` on a line of its own and say what it is: the
 desktop shows it as a card.
 
-Your manual is in `$TMPDIR/entry-layer-eval-mx5ifdf8/done-evidence.draft-1/sandbox/managed-ga-state/assistant/reference/manual`, one file per part. Before a Galley CLI
+Your manual is in `$TMPDIR/entry-layer-eval-p6w5bg2m/done-evidence.draft-1/sandbox/managed-ga-state/assistant/reference/manual`, one file per part. Before a Galley CLI
 write (a session, project, model, schedule or to-do command), read the
 parts it needs, together: `todos.md` and `unasked.md` to note a to-do;
 `todos-change.md` to change, tick off or list to-dos; `reminders.md` for
