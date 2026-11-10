@@ -1116,9 +1116,20 @@ describe("the open row's time line goes onto a second line (ticket 159)", () => 
         ),
         step,
       ).toBeNull();
-      expect(line.textContent, step).toContain("每周");
+      // The glyph alone where the short words would stand (PRD ruling
+      // 207 point 8); the rule whole in its hover.
+      expect(line.textContent, step).not.toContain("每周");
+      expect(
+        line
+          .querySelector('[data-role="todo-meta-repeat"]')!
+          .getAttribute("title"),
+        step,
+      ).toMatch(/^重复：每周/);
       expect(line.textContent, step).toContain("前一天 09:00");
     }
+    // Open, the words are there.
+    click(row(container, "todo_long"));
+    expect(meta(container).textContent).toContain("每周");
   });
 
   it("opens the popover from any of its parts, and on Enter or Space", async () => {

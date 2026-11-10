@@ -361,6 +361,35 @@ describe("a to-do's second line (ruling 97)", () => {
       expect(marks(late)).toEqual(["逾期 4 天", "↻每周一"]);
     });
 
+    it("folded, draws the glyph alone where the short words would stand (ruling 207 point 8)", () => {
+      const folded = (item: TodoItem) =>
+        todoMetaParts(item, false, TODAY, "zh-CN", zh, { folded: true }).map(
+          (p) => (p.bell ? `🔔${p.text}` : p.repeat ? `↻${p.text}` : p.text),
+        );
+      // The short words go; the hover keeps the rule whole.
+      expect(folded(weekly)).toEqual(["周一", "↻", "🔔09:00"]);
+      expect(
+        todoMetaParts(weekly, false, TODAY, "zh-CN", zh, { folded: true })[1]
+          .title,
+      ).toBe("重复：每周一");
+      // Words the line needs stay: a rule that says more than the day...
+      const fortnight = todo({
+        ...weekly,
+        todoRepeat: { kind: "weekly", weekdays: [1, 4], every: 2 },
+      });
+      expect(folded(fortnight)[1]).toBe("↻每 2 周的周一·四");
+      // ...and an overdue period's, whose warning says no day.
+      const late = todo({
+        ...weekly,
+        due: { date: "2026-10-12", hasTime: false },
+        reminder: undefined,
+        overdue: true,
+      });
+      expect(folded(late)).toEqual(["逾期 4 天", "↻每周一"]);
+      // Not folded, as before.
+      expect(marks(weekly)).toEqual(["周一", "↻每周", "🔔09:00"]);
+    });
+
     it("says none on a to-do that does not repeat, one checked or one cancelled", () => {
       const plain = todo({ ...weekly, todoRepeat: undefined });
       expect(marks(plain)).toEqual(["周一", "🔔09:00"]);

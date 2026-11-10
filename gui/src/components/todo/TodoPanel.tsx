@@ -858,7 +858,11 @@ function YourRow({
   const subitemAdds = useAssistantTodoStore((s) => s.subitemAdds[item.id]);
   const subitemOrder = useAssistantTodoStore((s) => s.subitemOrders[item.id]);
   const checked = held || todoChecked(item, flip);
-  const parts = todoMetaParts(item, checked, todayStartMs, language, copy);
+  // Folded, the repeat glyph without the short words (PRD ruling 207
+  // point 8).
+  const parts = todoMetaParts(item, checked, todayStartMs, language, copy, {
+    folded: !open,
+  });
   // The items under it (ticket 111): as drawn, their count on the time
   // line folded or open — the ones added here and on their way included,
   // in the order a drag on its way leaves them (ticket 112).

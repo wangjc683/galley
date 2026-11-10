@@ -24,6 +24,7 @@ import { repeatSummary } from "@/lib/scheduled-tasks";
 import {
   reminderMovedOn,
   reminderOnRule,
+  repeatFitsDay,
   todoRepeatLineWords,
   todoRepeatWords,
 } from "@/lib/todo-date";
@@ -236,6 +237,13 @@ export function todoOverdueDays(
  * that does not repeat reads as before, word for word. Overdue by a day or
  * more the rule is in full again (「逾期 3 天 ↻ 每周五」): the part before it
  * no longer says the day, so the short words would leave out which.
+ *
+ * `folded` (PRD ruling 207 point 8): a folded row draws the repeat glyph
+ * alone where the short words would stand (「11月20日 ↻ 🔔 前一天 09:00
+ * 2/5 项」), as a card does — with the count of its items the line did
+ * not fit, and of the three the rule is what its owner knows best. Words
+ * the line needs (a rule that says more than the due day, or an overdue
+ * period's) stay; the hover and the open row keep them all.
  */
 export function todoMetaParts(
   item: TodoItem,
@@ -243,6 +251,7 @@ export function todoMetaParts(
   todayStartMs: number,
   language: ResolvedLanguage,
   copy: AppCopy,
+  { folded = false }: { folded?: boolean } = {},
 ): TodoMetaPart[] {
   const parts: TodoMetaPart[] = [];
   const due = item.due;
@@ -261,9 +270,12 @@ export function todoMetaParts(
   const repeating = rule !== undefined && !checked && !todoCancelled(item);
   if (repeating) {
     // 「逾期 N 天」 says no day: the rule says it, in full (ticket 159).
-    const dayShown = overdue === null || overdue < 1;
+    const day = overdue === null || overdue < 1 ? due?.date : undefined;
     parts.push({
-      text: todoRepeatLineWords(rule, dayShown ? due?.date : undefined, copy),
+      text:
+        folded && repeatFitsDay(rule, day)
+          ? ""
+          : todoRepeatLineWords(rule, day, copy),
       tone: "muted",
       repeat: true,
       title: copy.todo.repeats(todoRepeatWords(rule, copy)),

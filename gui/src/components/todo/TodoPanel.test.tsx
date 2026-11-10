@@ -504,15 +504,15 @@ describe("the panel's rows", () => {
     });
     const weekly = row(html, "todo_weekly");
     const meta = weekly.slice(weekly.indexOf('data-role="todo-meta"'));
+    // Folded, on the due day's weekday: the glyph alone (PRD ruling 207
+    // point 8; open, 「每周」 after it, TodoPanel.date.test.tsx), the rule
+    // whole in its hover and name.
     const mark = meta.match(
-      /<span title="([^"]*)" aria-label="([^"]*)" data-role="todo-meta-repeat" class="ml-2 whitespace-nowrap"><svg[^]*?<\/svg><span aria-hidden="true" class="ml-\[3px\]">([^<]*)<\/span><\/span>/,
+      /<span title="([^"]*)" aria-label="([^"]*)" data-role="todo-meta-repeat" class="ml-2 whitespace-nowrap"><svg[^]*?<\/svg><\/span>/,
     );
     expect(mark).not.toBeNull();
     expect(mark![1]).toBe(`重复：${WEEKLY_RULE}`);
     expect(mark![2]).toBe(`重复：${WEEKLY_RULE}`);
-    // On the due day's weekday: 「每周」 alone (ticket 159), the rule whole
-    // in its hover and name.
-    expect(mark![3]).toBe("每周");
     // After when it is due, before the bell; no 「·」 either side.
     expect(meta.indexOf("todo-meta-repeat")).toBeLessThan(
       meta.indexOf('aria-label="提醒 '),
@@ -558,9 +558,11 @@ describe("the panel's rows", () => {
       expect(meta, id).not.toContain("data-wrap");
       expect(meta, id).not.toContain("whitespace-normal");
     }
-    // The words shorter all the same: 「每周」, 「前一天 09:00」, the count.
+    // Shorter all the same: the repeat glyph alone (PRD ruling 207 point
+    // 8), 「前一天 09:00」, the count.
     const weekly = row(html, "todo_weekly");
-    expect(weekly).toContain('aria-hidden="true" class="ml-[3px]">每周<');
+    expect(weekly).toContain('data-role="todo-meta-repeat"');
+    expect(weekly).not.toContain('class="ml-[3px]">每周<');
     expect(weekly).toContain(
       'aria-hidden="true" class="ml-[3px]">前一天 09:00<',
     );
