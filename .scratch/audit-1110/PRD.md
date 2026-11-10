@@ -64,5 +64,6 @@
 | [06](./issues/06-hygiene.md) | 开源卫生：D20 |
 | [07](./issues/07-payload-slimming.md) | 内置内核载荷：D22、D23 |
 | [08](./issues/08-palette-ask-directly.md) | ⌘K「Enter 直接发问？」接线：A6 |
+| [09](./issues/09-hygiene-sweep.md) | 开源卫生补扫：D20 在测试、文档与夹具里剩下的引用 |
 
 第一波 01、02、04、05 与 08 已于 2026-11-10 合入；第二波 03、06、07 同日派出。
