@@ -1,11 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build the source-tree managed GA code payload from a local GenericAgent
-# checkout. This script copies code only; user state and secrets are excluded.
+# Build the source-tree managed GA code payload from a GenericAgent clone.
+# The payload is read from the pinned baseline commit itself (`git archive`),
+# never from the clone's working tree, so ignored, untracked or uncommitted
+# files there cannot reach it. This script copies code only; user state and
+# secrets are excluded.
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/build-managed-ga.sh <genericagent-clone>
+
+  <genericagent-clone>  Any clone of upstream GenericAgent that contains the
+                        baseline commit named by upstream.commit in
+                        managed-ga/manifest.json. Its checked-out branch and
+                        working tree do not matter: the payload is read from
+                        that commit. A fresh clone is the expected source:
+
+    git clone https://github.com/lsdefine/GenericAgent.git <genericagent-clone>
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+if [[ $# -ne 1 || -z "$1" ]]; then
+  usage >&2
+  exit 2
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE="${1:-$HOME/Documents/GenericAgent}"
+SOURCE="$1"
 DEST="$ROOT/managed-ga/code"
 STATE_SEED_ROOT="$ROOT/managed-ga/state-seed"
 MEMORY_SEED_DEST="$STATE_SEED_ROOT/memory"
@@ -26,26 +52,25 @@ with open(sys.argv[1], encoding="utf-8") as f:
 PY
 )
 
-if [[ ! -d "$SOURCE/.git" ]]; then
-  echo "Source is not a git checkout: $SOURCE" >&2
+if ! git -C "$SOURCE" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "Source is not a git repository: $SOURCE" >&2
+  usage >&2
   exit 2
 fi
 
-ACTUAL_COMMIT="$(git -C "$SOURCE" rev-parse HEAD)"
-if [[ "$ACTUAL_COMMIT" != "$EXPECTED_COMMIT" ]]; then
-  echo "GenericAgent baseline mismatch:" >&2
-  echo "  expected: $EXPECTED_COMMIT" >&2
-  echo "  actual:   $ACTUAL_COMMIT" >&2
+if ! git -C "$SOURCE" cat-file -e "${EXPECTED_COMMIT}^{commit}" 2>/dev/null; then
+  echo "GenericAgent baseline commit not found in $SOURCE:" >&2
+  echo "  expected: $EXPECTED_COMMIT (managed-ga/manifest.json upstream.commit)" >&2
+  echo "Fetch it into that clone, or clone upstream afresh." >&2
   echo "Update managed-ga/manifest.json only after a baseline audit." >&2
   exit 2
 fi
 
-if [[ -n "$(git -C "$SOURCE" status --porcelain)" ]]; then
-  echo "GenericAgent source checkout must be clean before building managed GA." >&2
-  echo "Use a clean temporary clone at the audited upstream commit." >&2
-  git -C "$SOURCE" status --short >&2
-  exit 2
-fi
+# The baseline commit's tracked tree, unpacked outside the repo. Only what
+# upstream committed is here, whatever the clone's working tree holds.
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/galley-managed-ga-build.XXXXXX")"
+trap 'rm -rf "$STAGE"' EXIT
+git -C "$SOURCE" archive "$EXPECTED_COMMIT" | tar -x -C "$STAGE"
 
 mkdir -p "$DEST"
 find "$DEST" -mindepth 1 -maxdepth 1 \
@@ -67,7 +92,7 @@ rsync -a \
   --exclude 'skills' \
   --exclude 'temp' \
   --exclude 'model_responses' \
-  "$SOURCE"/ "$DEST"/
+  "$STAGE"/ "$DEST"/
 
 # Single source of truth for the normalize list is
 # scripts/managed-ga-normalize-files.txt — shared with
@@ -116,6 +141,18 @@ done
 find "$DEST" -name '*.py' -print0 | xargs -0 python3 -m py_compile
 find "$DEST" -name '__pycache__' -type d -prune -exec rm -rf {} +
 echo "Managed GA payload compile sweep: OK"
+
+# managed-ga/code carries upstream's own .gitignore. A new upstream file
+# under a path it ignores lands on disk here (so dev works), but a plain
+# `git add` skips it and CI and releases ship without it. Stop until it is
+# force-added; once tracked it no longer shows up here.
+IGNORED_OUTPUT="$(git -C "$ROOT" ls-files --others --ignored --exclude-standard -- managed-ga/code managed-ga/state-seed)"
+if [[ -n "$IGNORED_OUTPUT" ]]; then
+  echo "The built payload has files git ignores (managed-ga/code carries upstream's .gitignore):" >&2
+  printf '%s\n' "$IGNORED_OUTPUT" >&2
+  echo "Stage them with 'git add -f' so CI and releases ship them." >&2
+  exit 2
+fi
 
 echo "Managed GA code copied to $DEST"
 echo "Managed GA memory seed copied to $MEMORY_SEED_DEST"

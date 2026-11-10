@@ -1667,14 +1667,19 @@ Upgrade is event-driven, not calendar-driven.
 git ls-remote https://github.com/lsdefine/GenericAgent.git refs/heads/main
 ```
 
-2. Prepare a clean source checkout at the target SHA. Do not build managed GA
-   from a dirty user checkout. A local temporary clone is fine:
+2. Prepare a fresh clone of upstream at the target SHA. Do not use, or write
+   into, a GenericAgent checkout someone works in (AGENTS.md Rule 1):
 
 ```bash
-git clone ~/Documents/GenericAgent /tmp/galley-ga-upgrade
+git clone https://github.com/lsdefine/GenericAgent.git /tmp/galley-ga-upgrade
 git -C /tmp/galley-ga-upgrade checkout <target_sha>
 git -C /tmp/galley-ga-upgrade status --short
 ```
+
+   `build-managed-ga.sh` takes this clone as a required argument and reads
+   the commit named in `managed-ga/manifest.json` with `git archive`, never
+   the working tree. The compatibility matrix (step 6) runs against the
+   working tree (`GA_PATH`), so keep it checked out at the target SHA.
 
 3. Triage the delta shape BEFORE reading any diff. Raw commit counts
    mislead (the 2026-07-15 range was "362 commits" of which ~350 were an

@@ -160,12 +160,19 @@ runtime behavior:
    `managed-ga/manifest.json` (`patchStack.patches`), and add a row to
    [`managed-ga/patches/manifest.md`](../../managed-ga/patches/manifest.md) with
    reason, touched upstream files, rebase risk, and removal condition.
-3. Verify the stack replays: `scripts/build-managed-ga.sh <checkout>` regenerates
+3. Verify the stack replays: `scripts/build-managed-ga.sh <clone>` regenerates
    `code/` from the pinned upstream baseline and applies every patch in
-   manifest order via `git apply --unidiff-zero`. Pass a clean, throwaway
-   clone of `upstream.source` checked out at `upstream.commit` (both in
-   `managed-ga/manifest.json`): the script's default checkout path may hold
-   a fork without that commit, and it refuses a dirty or mismatched one.
+   manifest order via `git apply --unidiff-zero`. The clone argument is
+   required (there is no default path). Pass a fresh clone of
+   `upstream.source` (`git clone https://github.com/lsdefine/GenericAgent.git
+   <clone>`) that contains `upstream.commit` (both in
+   `managed-ga/manifest.json`), not a GenericAgent checkout someone uses day
+   to day. The script reads that commit with `git archive`, so the clone's
+   checked-out branch, uncommitted edits and ignored files (upstream's
+   scheduled tasks, frontend temp files, `*.egg-info`) never reach the
+   payload. It stops if the built payload holds a file Galley's git would
+   ignore (`managed-ga/code` carries upstream's `.gitignore`): force-add it,
+   or CI and releases ship without it.
    A replay that leaves `git status` clean proves payload and stack agree.
 4. Mind ordering dependencies between patches touching the same upstream
    file (for example, the fsapp patches rebase `0009` first); record them in
