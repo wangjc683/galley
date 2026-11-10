@@ -25,7 +25,6 @@ import { LocalFileReference } from "@/components/conversation/LocalFileReference
 import { ReadingPanelHeader } from "@/components/conversation/reading/ReadingPanelHeader";
 import { Button, IconButton } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { TooltipLabel } from "@/components/ui/tooltip";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { revealInList, useTodoPanelFlash } from "@/hooks/useTodoPanelFlash";
 import {
@@ -82,6 +81,7 @@ import { useUiStore, type TodoPanelPage } from "@/stores/ui";
 import { GroupLabel } from "./GroupLabel";
 import { MemoPage } from "./MemoPage";
 import { TodoCheck } from "./TodoCheck";
+import { TodoDateButton } from "./TodoDatePopover";
 import { TodoMetaText } from "./TodoMetaText";
 import {
   TodoRowContextMenu,
@@ -113,9 +113,10 @@ export interface TodoPanelProps {
 /**
  * The to-do panel (main chat ticket 42, PRD ruling 91): Galley's
  * notebook, where the user can tick off their own things and, since
- * ticket 107, change the words of one opened — new things and new times
- * are said to Galley (ruling 91 points 3 and 6, ruling 153 point 5), so
- * there is no box for a new one here. In the reading
+ * ticket 107, change the words of one opened, since ticket 156 (PRD
+ * ruling 205) its day, reminder and rule too — new things are said to
+ * Galley (ruling 91 point 6, ruling 202 point 6), so there is no box for
+ * a new one here. In the reading
  * panel's place (LocalFileWorkspace), its own width, beside whichever
  * conversation is open (ticket 46, ruling 95): looking is for anywhere,
  * noting and changing stay with Galley.
@@ -155,8 +156,9 @@ export interface TodoPanelProps {
  *
  * One of your to-dos not done opens in place on a click (main chat
  * ticket 107, PRD ruling 153 points 2–4; `YourRow`): one at a time, its
- * title and notes in full and changed in place, its time a way to
- * Galley, its foot the day it was noted and 「在对话里查看」 — the jump
+ * title and notes in full and changed in place, its time line the way
+ * into the date popover (ticket 156, `TodoDateButton`), its foot the day
+ * it was noted and 「在对话里查看」 — the jump
  * its title made before. Which one is open is this panel's own state
  * (`openId`), not remembered: closed and opened again, or turned to 备忘
  * and back, none is. It folds on Esc (out of a text box), on a click in
@@ -808,8 +810,10 @@ function useTodoWrite(id: string) {
  *
  *   the box and the title     the title whole, wrapped; a click changes
  *                             it in place
- *   when it is due            a button: 「说说这件」 (「改时间跟 Galley
- *                             说」), the time is said, not set here
+ *   when it is due            a button that opens the date popover
+ *                             (「改日期」, ticket 156, PRD ruling 205;
+ *                             ticket 107 had it do 「说说这件」); with
+ *                             no time to say, 「添加日期」
  *   the notes                 (none folded) whole, their own lines
  *                             kept; a click changes them; none:
  *                             「添加备注」
@@ -1118,7 +1122,7 @@ function YourRow({
           parts={parts}
           checked={checked}
           count={count}
-          onTalk={open ? () => onTalkAbout(item) : undefined}
+          date={editable ? item : undefined}
           after={
             canCancelReminder && (
               <CancelReminder
@@ -1330,31 +1334,34 @@ function CancelReminder({
  * folded, the title and when, in two inks (ticket 152: no notes folded);
  * open, the notes in `ink-muted` a step under it; ticked
  * and holding its place it goes `ink-muted` with the struck title. With
- * `onTalk` (an open row, ticket 107, PRD ruling 153 point 5) the words
- * are a button, 「改时间跟 Galley 说」 on hover, that does 「说说这件」:
- * the time is said to Galley, not set here. None drawn without a time.
+ * `date` (an open row not ticked, main chat ticket 156, PRD ruling 205)
+ * the words are the button that opens the date popover, 「改日期」 on
+ * hover (`TodoDateButton`); with no time to say, 「添加日期」 in their
+ * place. From ticket 107 until then (ruling 153 point 5) they were a
+ * button that did 「说说这件」, 「改时间跟 Galley 说」 on hover. None
+ * drawn without a time but on an open row.
  *
  * `count` (main chat ticket 111, PRD ruling 157 point 6): how many of the
  * items under it are ticked, 「2/5 项」, at the line's end before `after`,
  * 8px from the time as the bell's part is set apart, no 「·」; the line's
  * own ink, never warning (that is overdue's), the digits tabular. Outside
- * the open row's time button: it is not a time to say to Galley. With no
- * time it is the line alone. */
+ * the open row's date button: it is not a time. With no time it is the
+ * line alone; on an open row, after 「添加日期」. */
 function MetaLine({
   parts,
   checked,
   count = null,
   after,
-  onTalk,
+  date,
 }: {
   parts: readonly TodoMetaPart[];
   checked: boolean;
   count?: string | null;
   after?: ReactNode;
-  onTalk?: () => void;
+  date?: TodoItem;
 }) {
   const copy = useCopy();
-  if (parts.length === 0 && !count) return null;
+  if (parts.length === 0 && !count && !date) return null;
   return (
     <div
       data-role="todo-meta"
@@ -1363,18 +1370,15 @@ function MetaLine({
         checked ? "text-ink-muted" : "text-ink-soft",
       )}
     >
-      {parts.length === 0 ? null : onTalk ? (
-        <TooltipLabel text={copy.todo.timeTalkHint}>
-          <button
-            type="button"
-            data-role="todo-meta-talk"
-            onClick={onTalk}
-            className="min-w-0 truncate rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
-          >
+      {date ? (
+        <TodoDateButton item={date} empty={parts.length === 0}>
+          {parts.length === 0 ? (
+            copy.todo.addDate
+          ) : (
             <TodoMetaText parts={parts} />
-          </button>
-        </TooltipLabel>
-      ) : (
+          )}
+        </TodoDateButton>
+      ) : parts.length === 0 ? null : (
         <span className="min-w-0 truncate">
           <TodoMetaText parts={parts} />
         </span>
@@ -1384,7 +1388,7 @@ function MetaLine({
           data-role="todo-item-count"
           className={cn(
             "shrink-0 whitespace-nowrap",
-            parts.length > 0 && "ml-2",
+            (parts.length > 0 || date) && "ml-2",
           )}
         >
           {count}

@@ -98,6 +98,35 @@ export interface TodoSubitem {
   done: boolean;
 }
 
+/** Mirror of Core `TodoRepeatKind` (main chat ticket 154): a repeating
+ * to-do's rule. A quarter is monthly every 3. */
+export type TodoRepeatKind = "daily" | "weekly" | "monthly" | "yearly";
+
+/** Mirror of Core `TodoRepeatRule` (ticket 154): `weekdays` (ISO, 1 is
+ * Monday) only for weekly, `monthdays` (1–31) only for monthly; `every`
+ * absent is 1. */
+export interface TodoRepeatRule {
+  kind: TodoRepeatKind;
+  weekdays?: number[];
+  monthdays?: number[];
+  every?: number;
+}
+
+/** Mirror of Core `TodoRepeatRemind` (ticket 154): a reminder `daysBefore`
+ * the due day (0 the same day, below 0 after it) at local `time`
+ * `HH:MM` — each period's, and since ticket 156 what the date popover
+ * sends for a to-do's reminder. */
+export interface TodoRepeatRemind {
+  daysBefore: number;
+  time: string;
+}
+
+/** Mirror of Core `TodoRepeat` (ticket 154): the rule a to-do is a period
+ * of, while it has not ended, with the reminder each period gets. */
+export interface TodoRepeat extends TodoRepeatRule {
+  remind?: TodoRepeatRemind;
+}
+
 /** Mirror of Core `TodoItem`. */
 export interface TodoItem {
   kind: TodoKind;
@@ -141,6 +170,14 @@ export interface TodoItem {
   /** To-dos: the items under it, in their order (ticket 111); absent
    * when it has none. */
   items?: TodoSubitem[];
+  /** To-dos that repeat (ticket 154): the rule it is a period of, while
+   * the rule has not ended. Not `repeat`, which is a task's rule. */
+  todoRepeat?: TodoRepeat;
+  /** To-dos: the rule it is (or was) a period of, `series_<16 hex>`. */
+  seriesId?: string;
+  /** To-dos: a period skipped (cancelled; only `listNotedTodos` returns
+   * one), so its card can tell a skip from a delete. */
+  skipped?: boolean;
 }
 
 /** Mirror of Core `YourTodos`: the user's to-dos not done. */
@@ -223,6 +260,13 @@ export interface TodoBrief {
   })[];
   /** How many items, how many ticked. */
   itemCount?: { done: number; total: number };
+  /** The rule it is a period of, while the rule has not ended (ticket
+   * 154). */
+  repeat?: TodoRepeat;
+  /** The rule it is or was a period of. */
+  seriesId?: string;
+  /** A period skipped. */
+  skipped?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -253,15 +297,50 @@ export interface TodoWordsChange {
   notes?: string;
 }
 
-/** Change a to-do's title or notes (`update_todo`, main chat ticket
- * 107): its due date and reminder stay as they are (ruling 153 point 5,
- * they are said to Galley). Core sends `todos:changed`; `not_found` for
- * one cancelled or gone. */
+/** What the to-do panel's date popover changes (main chat ticket 156, PRD
+ * ruling 205): only what is given. */
+export interface TodoWhenChange {
+  /** A day `YYYY-MM-DD`, or a local `YYYY-MM-DDTHH:MM`; empty takes the
+   * due date away (「不定日子」). */
+  due?: string;
+  /** The reminder, days before the due day at a local time. */
+  remind?: TodoRepeatRemind;
+  /** 「不提醒」: the reminder taken away. */
+  noRemind?: boolean;
+  /** Give it this rule, or change its rule, counted from its due date. */
+  repeat?: TodoRepeatRule;
+}
+
+/** Any change `update_todo` takes from the panel. */
+export type TodoChange = TodoWordsChange & TodoWhenChange;
+
+/** Change a to-do (`update_todo`): its title or notes (main chat ticket
+ * 107), and since ticket 156 its due date, reminder and rule. Neither
+ * `remind` nor `noRemind`, the reminder moves with the due day; Core
+ * works that out, hangs no reminder whose time has passed (a repeating
+ * period's goes to the next time still ahead) and leaves a period's rule
+ * as it is. Core sends `todos:changed`; `not_found` for one cancelled or
+ * gone, `invalid_args` (`repeat_needs_due:`) for taking a repeating
+ * one's due date away. */
 export async function updateTodo(
   id: string,
-  change: TodoWordsChange,
+  change: TodoChange,
 ): Promise<TodoBrief> {
   return invoke<TodoBrief>("update_todo", { id, ...change });
+}
+
+/** 「不重复」 (`stop_todo_repeat`, main chat ticket 154): the rule ends,
+ * the to-do stays as it is, an ordinary one. `invalid_args`
+ * (`not_repeating:`) for one that does not repeat. */
+export async function stopTodoRepeat(id: string): Promise<TodoBrief> {
+  return invoke<TodoBrief>("stop_todo_repeat", { id });
+}
+
+/** 「跳过这一次」 (`skip_todo`, main chat ticket 154): this period is
+ * skipped and the next one made at once. Returns the skipped period. Not
+ * wired to the panel yet (a later ticket draws the menu item). */
+export async function skipTodo(id: string): Promise<TodoBrief> {
+  return invoke<TodoBrief>("skip_todo", { id });
 }
 
 /** Delete a to-do (`cancel_todo`, main chat ticket 88, PRD ruling 132):

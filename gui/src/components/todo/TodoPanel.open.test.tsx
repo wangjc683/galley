@@ -321,18 +321,23 @@ describe("opening a row (ruling 153 points 2 and 3)", () => {
     expect(openRows(container)).toEqual([]);
   });
 
-  it("its time line says 「说说这件」: the title quoted into Galley's composer", () => {
+  it("its time line opens the date popover, not Galley's composer (ticket 156)", () => {
     const container = mount();
     click(row(container, "todo_hotel")!);
     const time = row(container, "todo_hotel")!.querySelector(
-      '[data-role="todo-meta-talk"]',
+      '[data-role="todo-meta-date"]',
     )!;
     click(time);
-    expect(useUiStore.getState().quoteRequest).toMatchObject({
-      sessionId: "s-main",
-      text: HOTEL.text,
-    });
+    expect(
+      document.querySelector('[data-role="todo-date-popover"]'),
+    ).not.toBeNull();
+    // No quote: since ruling 205 the time is changed here.
+    expect(useUiStore.getState().quoteRequest).toBeNull();
     expect(isOpen(container, "todo_hotel")).toBe(true);
+    // Folded, the line is words, no button (TodoPanel.date.test.tsx).
+    expect(
+      row(container, "todo_soil")!.querySelector('[data-role="todo-meta"]'),
+    ).toBeNull();
   });
 
   it("「在对话里查看」 makes the jump its title used to; with nowhere to go, only the day", () => {

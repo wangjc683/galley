@@ -14,16 +14,17 @@ import {
   removeTodoSubitem,
   reopenTodo,
   reopenTodoSubitem,
+  stopTodoRepeat,
   todoFailureKind,
   updateTodo,
   updateTodoSubitem,
   todoToastTitle,
   withoutDailyReview,
   type AssistantTodo,
+  type TodoChange,
   type TodoFailure,
   type TodoItem,
   type TodoSubitem,
-  type TodoWordsChange,
 } from "@/lib/assistant-todo";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
@@ -99,7 +100,13 @@ import { makeAppError } from "@/types/app-error";
  *   (`editing`, counted: a title and the notes can be on their way
  *   together), so the row does not light. What failed comes back to the
  *   caller, not into `failures`: the panel keeps the words typed in their
- *   box and says why under it.
+ *   box and says why under it. Since ticket 156 (PRD ruling 205) the
+ *   date popover's writes go the same way — the due date, the reminder,
+ *   a rule given or changed — and 「不重复」 (`stopTodoRepeat`) too, the
+ *   failure handed back to the popover's block. A to-do's writes here go
+ *   to Core one after another (`todoWriteChains`): each of Core's reads
+ *   the to-do before it writes, so two on their way together could undo
+ *   each other.
  *
  * - **The items under a to-do** (main chat ticket 111, PRD ruling 157):
  *   a tick or untick (`toggleSubitem`) is drawn at once and sent at once
@@ -172,12 +179,13 @@ interface AssistantTodoState {
   /** Before a send into the main chat: commit, and the promise to wait
    * for; null when no deletion is waiting or on its way. */
   flushDeletes: () => Promise<void> | null;
-  /** Change a to-do's title or notes (ticket 107); resolves once Core
-   * has it and the list is read again, with why it failed, or null. */
-  editTodo: (
-    id: string,
-    change: TodoWordsChange,
-  ) => Promise<TodoFailure | null>;
+  /** Change a to-do's title or notes (ticket 107), and since ticket 156
+   * its due date, reminder or rule; resolves once Core has it and the
+   * list is read again, with why it failed, or null. */
+  editTodo: (id: string, change: TodoChange) => Promise<TodoFailure | null>;
+  /** 「不重复」 (ticket 156): the rule ends, the to-do stays; as
+   * `editTodo` resolves. */
+  stopTodoRepeat: (id: string) => Promise<TodoFailure | null>;
   /** Items' ticks on their way (ticket 111), by item id. */
   subitemTicks: Record<string, SubitemTick>;
   /** Why an item's last tick failed, by item id. */
@@ -299,6 +307,9 @@ const subitemAddChains = new Map<string, Promise<unknown>>();
 // Each to-do's moves one after another (ticket 112): each one's place is
 // counted on the order the ones before it leave.
 const subitemMoveChains = new Map<string, Promise<void>>();
+// Each to-do's changes (words, ticket 107; day, reminder, rule, ticket
+// 156) one after another: Core reads the to-do before each write.
+const todoWriteChains = new Map<string, Promise<unknown>>();
 let subitemAddKeys = 0;
 let subitemAddRefusals = 0;
 let subitemStaging = 0;
@@ -415,6 +426,45 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
         failures: { ...s.failures, ...refused },
       };
     });
+  };
+
+  // A change of a to-do on its way (ticket 107's words, ticket 156's day,
+  // reminder and rule), counted (`editing`) and after the ones before it
+  // on the same to-do: none left, the id is off the record in the same
+  // set as the fresh list, so the row never lights for its own change.
+  const writeTodo = (
+    id: string,
+    write: () => Promise<unknown>,
+  ): Promise<TodoFailure | null> => {
+    set((s) => ({
+      editing: { ...s.editing, [id]: (s.editing[id] ?? 0) + 1 },
+    }));
+    // One fewer on its way; none left, the id is off the record.
+    const done = (editing: Record<string, number>) => {
+      const left = (editing[id] ?? 1) - 1;
+      return left > 0 ? { ...editing, [id]: left } : without(editing, id);
+    };
+    const run = async (): Promise<TodoFailure | null> => {
+      try {
+        await write();
+      } catch (e) {
+        set((s) => ({ editing: done(s.editing) }));
+        return todoFailureKind(e);
+      }
+      const lists = await read();
+      set((s) => ({
+        ...(lists ? { ...lists, loaded: true } : {}),
+        editing: done(s.editing),
+      }));
+      return null;
+    };
+    const before = todoWriteChains.get(id);
+    const next = before ? before.then(run) : run();
+    todoWriteChains.set(id, next);
+    void next.finally(() => {
+      if (todoWriteChains.get(id) === next) todoWriteChains.delete(id);
+    });
+    return next;
   };
 
   // A write of items on its way (add, words), counted by to-do: none
@@ -628,30 +678,9 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
       return todos ?? items;
     },
 
-    editTodo: async (id, change) => {
-      set((s) => ({
-        editing: { ...s.editing, [id]: (s.editing[id] ?? 0) + 1 },
-      }));
-      // One fewer on its way; none left, the id is off the record.
-      const done = (editing: Record<string, number>) => {
-        const left = (editing[id] ?? 1) - 1;
-        return left > 0 ? { ...editing, [id]: left } : without(editing, id);
-      };
-      try {
-        await updateTodo(id, change);
-      } catch (e) {
-        set((s) => ({ editing: done(s.editing) }));
-        return todoFailureKind(e);
-      }
-      // The fresh words and this write off the record in one set: the
-      // row never lights for its own change.
-      const lists = await read();
-      set((s) => ({
-        ...(lists ? { ...lists, loaded: true } : {}),
-        editing: done(s.editing),
-      }));
-      return null;
-    },
+    editTodo: (id, change) => writeTodo(id, () => updateTodo(id, change)),
+
+    stopTodoRepeat: (id) => writeTodo(id, () => stopTodoRepeat(id)),
 
     toggleSubitem: (todoId, item) => {
       const id = item.id;

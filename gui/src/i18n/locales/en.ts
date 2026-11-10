@@ -1,5 +1,22 @@
 import type { AppCopy } from "@/i18n/types";
 
+/** The to-do date popover's month title and day names (main chat ticket
+ * 156). */
+const EN_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 export const enCopy: AppCopy = {
   gitReview: {
     openChanges: "View worktree changes",
@@ -2092,7 +2109,74 @@ export const enCopy: AppCopy = {
     notedToday: "today",
     notedYesterday: "yesterday",
     viewInChat: "View in chat",
-    timeTalkHint: "Tell Galley to change the time",
+    dateHint: "Change date",
+    addDate: "Add date",
+    date: {
+      today: "Today",
+      tomorrow: "Tomorrow",
+      nextMonday: "Next Monday",
+      noDate: "No date",
+      time: "Time",
+      remind: "Reminder",
+      repeat: "Repeat",
+      noTime: "None",
+      noRemind: "No reminder",
+      remindDays: (daysBefore: number) =>
+        daysBefore === 0
+          ? "Same day"
+          : daysBefore === 7
+            ? "1 week before"
+            : daysBefore > 0
+              ? daysBefore === 1
+                ? "1 day before"
+                : `${daysBefore} days before`
+              : daysBefore === -1
+                ? "1 day after"
+                : `${-daysBefore} days after`,
+      remindTime: "Reminder time",
+      repeatNone: "Never",
+      repeatDaily: "Daily",
+      repeatWeekly: "Weekly",
+      repeatMonthly: "Monthly",
+      repeatYearly: "Yearly",
+      repeatTalk: "Tell Galley to change the rule",
+      monthTitle: (year: number, month: number) =>
+        `${EN_MONTHS[month - 1] ?? ""} ${year}`,
+      weekdayHead: (isoDay: number) => "MTWTFSS"[isoDay - 1] ?? "",
+      dayName: (year: number, month: number, day: number) =>
+        `${EN_MONTHS[month - 1] ?? ""} ${day}, ${year}`,
+      previousMonth: "Previous month",
+      nextMonth: "Next month",
+      rule: {
+        daily: (every: number) =>
+          every === 1 ? "Daily" : `Every ${every} days`,
+        weekly: (every: number, days: string) =>
+          every === 1 ? `Weekly on ${days}` : `Every ${every} weeks on ${days}`,
+        monthly: (every: number, days: string) =>
+          every === 1
+            ? `Monthly on the ${days}`
+            : `Every ${every} months on the ${days}`,
+        yearly: (every: number) =>
+          every === 1 ? "Yearly" : `Every ${every} years`,
+        weekday: (isoDay: number) =>
+          ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][isoDay - 1] ?? "?",
+        monthday: (day: number) => {
+          const tens = day % 100;
+          const suffix =
+            tens >= 11 && tens <= 13
+              ? "th"
+              : day % 10 === 1
+                ? "st"
+                : day % 10 === 2
+                  ? "nd"
+                  : day % 10 === 3
+                    ? "rd"
+                    : "th";
+          return `${day}${suffix}`;
+        },
+        joinDays: ", ",
+      },
+    },
     addNotes: "Add notes",
     editTitle: "Title",
     editNotes: "Notes",

@@ -342,11 +342,13 @@ describe("changing a title or notes", () => {
     expect(useAssistantTodoStore.getState().editing).toEqual({});
   });
 
-  it("counts two on their way: the record goes with the last", async () => {
+  it("counts two on their way, sent one after another: the record goes with the last", async () => {
     let finish: (() => void)[] = [];
+    const sent: unknown[] = [];
     const { invoke } = getTauriMocks();
-    invoke.mockImplementation(async (command) => {
+    invoke.mockImplementation(async (command, args) => {
       if (command === "update_todo") {
+        sent.push(args);
         await new Promise<void>((resolve) => finish.push(resolve));
         return { id: "todo_1" };
       }
@@ -357,14 +359,32 @@ describe("changing a title or notes", () => {
     const title = editTodo("todo_1", { title: "交初稿" });
     const notes = editTodo("todo_1", { notes: "带 U 盘" });
     expect(useAssistantTodoStore.getState().editing).toEqual({ todo_1: 2 });
-    await vi.waitFor(() => expect(finish).toHaveLength(2));
+    // The second waits for the first (ticket 156): Core reads the to-do
+    // before each write, so two at once could undo each other.
+    await vi.waitFor(() => expect(finish).toHaveLength(1));
+    expect(sent).toEqual([{ id: "todo_1", title: "交初稿" }]);
     finish[0]();
     await title;
     expect(useAssistantTodoStore.getState().editing).toEqual({ todo_1: 1 });
+    await vi.waitFor(() => expect(finish).toHaveLength(2));
+    expect(sent).toEqual([
+      { id: "todo_1", title: "交初稿" },
+      { id: "todo_1", notes: "带 U 盘" },
+    ]);
     finish[1]();
     await notes;
     expect(useAssistantTodoStore.getState().editing).toEqual({});
     finish = [];
+  });
+
+  it("「不重复」 goes the same way: `stop_todo_repeat`, read again, this window's own", async () => {
+    const invoke = answer([before]);
+    const stopped = useAssistantTodoStore.getState().stopTodoRepeat("todo_1");
+    expect(useAssistantTodoStore.getState().editing).toEqual({ todo_1: 1 });
+    await expect(stopped).resolves.toBeNull();
+    expect(calls(invoke)).toEqual(["stop_todo_repeat", ...READ]);
+    expect(invoke).toHaveBeenCalledWith("stop_todo_repeat", { id: "todo_1" });
+    expect(useAssistantTodoStore.getState().editing).toEqual({});
   });
 
   it("gives back why it failed, not into `failures`, the list as it was", async () => {

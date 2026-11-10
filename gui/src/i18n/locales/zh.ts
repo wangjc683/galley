@@ -2147,8 +2147,61 @@ export const zhCopy = {
     notedYesterday: "昨天",
     /** 打开后最下面那一行与「⋯」菜单里：跳回记下它的那句，原来点标题做的事。 */
     viewInChat: "在对话里查看",
-    /** 打开后时间那一行的悬停提示：点了同「说说这件」。 */
-    timeTalkHint: "改时间跟 Galley 说",
+    /** 打开后时间那一行的悬停提示（主聊天票 156，裁决 205）：点了打开改日期的浮层。
+     * 此前（票 107）是「改时间跟 Galley 说」，点了同「说说这件」。也是浮层的无障碍名。 */
+    dateHint: "改日期",
+    /** 没有日子也没有提醒的事打开后，时间那一行的位置多的那一行：点了打开同一个浮层。 */
+    addDate: "添加日期",
+    /** 改日期的浮层（票 156）：快捷项、小月历、时刻、提醒、重复。 */
+    date: {
+      today: "今天",
+      tomorrow: "明天",
+      nextMonday: "下周一",
+      noDate: "不定日子",
+      time: "时刻",
+      remind: "提醒",
+      repeat: "重复",
+      /** 时刻那一格旁边那颗按钮：清掉时刻，只留日子。 */
+      noTime: "不设",
+      noRemind: "不提醒",
+      /** 提醒的选单：当天、提前 1 / 2 / 3 天、提前 1 周；读出来不在选单里的照实写。 */
+      remindDays: (daysBefore: number) =>
+        daysBefore === 0
+          ? "当天"
+          : daysBefore === 7
+            ? "提前 1 周"
+            : daysBefore > 0
+              ? `提前 ${daysBefore} 天`
+              : `到期后 ${-daysBefore} 天`,
+      /** 提醒那一行时间输入的无障碍名。 */
+      remindTime: "提醒的时刻",
+      repeatNone: "不重复",
+      repeatDaily: "每天",
+      repeatWeekly: "每周",
+      repeatMonthly: "每月",
+      repeatYearly: "每年",
+      /** 规则不是那四种之一时，只读的那一句下面的小字。 */
+      repeatTalk: "改规则跟 Galley 说",
+      monthTitle: (year: number, month: number) => `${year}年${month}月`,
+      weekdayHead: (isoDay: number) => "一二三四五六日"[isoDay - 1] ?? "",
+      /** 月历一格的无障碍名。 */
+      dayName: (year: number, month: number, day: number) =>
+        `${year}年${month}月${day}日`,
+      previousMonth: "上个月",
+      nextMonth: "下个月",
+      /** 规则写成字，照 Core repeat_words 的口径：「每 2 周的周一·四」「每 3 个月的 15 日」。 */
+      rule: {
+        daily: (every: number) => (every === 1 ? "每天" : `每 ${every} 天`),
+        weekly: (every: number, days: string) =>
+          every === 1 ? `每周${days}` : `每 ${every} 周的周${days}`,
+        monthly: (every: number, days: string) =>
+          every === 1 ? `每月 ${days} 日` : `每 ${every} 个月的 ${days} 日`,
+        yearly: (every: number) => (every === 1 ? "每年" : `每 ${every} 年`),
+        weekday: (isoDay: number) => "一二三四五六日"[isoDay - 1] ?? "?",
+        monthday: (day: number) => String(day),
+        joinDays: "·",
+      },
+    },
     /** 打开后没有备注时画的那一行：点了就是加。 */
     addNotes: "添加备注",
     /** 就地改的两个输入框的无障碍名。 */
