@@ -231,6 +231,10 @@ SCHED_MD = SCHED_DIR / "results.md"
 SCHED_COMPOSED_DIR = SCHED_DIR / "composed"
 SCHED_DUMP_CASES = ("already-set", "wake-late")
 SCHED_TOOL_CAP = 10
+# Ticket 153: the main chat prompts under which a schedule / to-do case is
+# offered tell_user (v7 on: the prompt tells the model to use it). The
+# cases under v4 and v5 ran without it and stay so.
+SCHED_TELL_USER_PROMPTS = ("v7", "v7r2", "v8", "v9")
 SCHED_REPEATS = 2
 # The wake suite's programs, plus `date`: the manual tells the model to read
 # the clock for a time relative to now.
@@ -4843,6 +4847,10 @@ def make_sched_jobs(cases: list[dict[str, Any]], now: datetime, mykeys: dict[str
                 # wake suite's do (the to-do whose quotes are there).
                 "wake": {"fixture": sched_fixture(case, now), "files": case.get("files") or {},
                          "help": str(SCHED_CLI_HELP), "extra_exec": list(SCHED_EXTRA_EXEC)},
+                # Ticket 153: a case under today's main chat prompt (v9)
+                # is offered tell_user, as the main chat's runner offers it
+                # (the prompt names it; an unknown tool ends a run).
+                "tell_user": case.get("prompt") in SCHED_TELL_USER_PROMPTS,
             })
     return jobs
 
@@ -5787,6 +5795,11 @@ def manual_column(calls: list[dict[str, Any]], write_at: int | None) -> tuple[st
 
 
 RERUN_INTROS = {
+    "153": "上一次是这一套原有各条最近一次的第 1 遍（待办套件多为票 111、112 的回归，定时套件多为票 105，到点提醒几条是票 134、"
+           "139），这一次是票 153 改了手册之后（`todos.md`「Noting a to-do」开头加一段：记之前问这件事里有没有只有用户能做的一步，"
+           "没有、现在能办的是差事，没有、要等的是它自己的提醒，有才是带方框的待办，分不清时算用户的；`--notes` 一条改成用户点开"
+           "这件待办时看到备注），同一个模型（API key 接入的 gpt-6.1-sol，`mm_1792576875658`）。入口层、Core 的叫醒说明、"
+           "`galley-prompt/`、`rust-samples.json`、`cli-help.json` 都没动，原有用例照旧跑各自的提示词。两次都用现在的判定重判。",
     "59": "上一次是被这次替换的运行（整本手册），这一次是按部分拆开之后。",
     "60": "上一次是票 59 重跑之后的结果（手册拆开之后），这一次是票 60 改了手册（`todos.md`、`reminders.md`、"
           "`todos-change.md`）与入口层的待办那一段之后。只比两次都有的用例，票 60 新加的用例只有这一次。",
@@ -6839,7 +6852,8 @@ def render_sched_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     # line was not asked for before it); ticket 105's own says whether the
     # earlier rules went back, and its first lines have a section of their
     # own.
-    out += (rerun_section(data, cases, sched_facts_before_105, "105") + first_line_section(data, cases)
+    out += (rerun_section(data, cases, sched_facts, "153")
+            + rerun_section(data, cases, sched_facts_before_105, "105") + first_line_section(data, cases)
             + rerun_section(data, cases, sched_facts_before_105, "73")
             + rerun_section(data, cases, sched_facts_before_105, "63")
             + rerun_section(data, cases, sched_facts_before_105, "60")
@@ -7655,6 +7669,10 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
                 if exp["due"] is None:
                     if t.get("dueAt") or t.get("dueDate"):
                         reasons.append("不该写截止：" + str(t.get("dueAt") or t.get("dueDate")))
+                elif exp["due"].get("optional") and not (t.get("dueAt") or t.get("dueDate")):
+                    # Ticket 153: a due date it may leave out (noted);
+                    # written, it is in the window.
+                    flags.append("没写截止")
                 else:
                     bad = due_ok(t, exp["due"])
                     if bad:
@@ -7796,6 +7814,25 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
     extra = sorted({n for n in writes if n not in allowed})
     if extra:
         reasons.append("多余的写命令：" + "、".join(extra))
+    errand = exp.get("errand")
+    if errand:
+        # Ticket 153 (main chat PRD ruling 203): handed something it can do
+        # now, with no step only the user can do, it is an errand: done
+        # this turn (a file it made, or the result in the reply: at least
+        # `min_names` of `names_any`) or handed to a subtask, and nothing
+        # goes on the list (`todo`, and no reminder of its own, as for any
+        # case without `schedule`). Asking instead, or only saying it will,
+        # fails.
+        made_here = r.get("home_added") or []
+        hits = [w for w in errand.get("names_any") or [] if w in body]
+        if subtask_tags:
+            flags.append(f"派了 {len(subtask_tags)} 件子任务")
+        elif stop == "ask_user":
+            reasons.append("没办：先问了一句（ask_user）")
+        elif made_here:
+            flags.append("做了文件：" + "、".join(os.path.basename(p) for p in made_here))
+        elif stop == "final_reply" and len(hits) < errand.get("min_names", 1):
+            reasons.append("没办：没派子任务，也没当场做出来（没做文件，回复里也没有整理出的内容）")
     if "review_advance" in exp:
         # Ticket 73: the morning review with something to move forward: a
         # step done, or at most two subtasks started; silent while they
@@ -7896,7 +7933,9 @@ def todo_facts(r: dict[str, Any], case: dict[str, Any], judge_memos: bool = True
             reasons.append("不该写 <no-reply/>")
         if stop == "final_reply" and not body.strip():
             reasons.append("回复正文是空的（话只写在 <summary> 里，主对话不显示）")
-        if exp.get("mentions_time") and timed and timed.get("fireAt"):
+        # Ticket 153: a run that stopped at the browser (`allow_web_stop`)
+        # never reached its reply, so the time it would say is not seen.
+        if exp.get("mentions_time") and timed and timed.get("fireAt") and stop != "web_tool":
             if not says_time(said, local(timed["fireAt"]), now, started):
                 reasons.append("回复没说出提醒时间（" + local_words(local(timed["fireAt"])) + "）")
         if exp.get("mentions_time_of"):
@@ -8137,6 +8176,94 @@ def moved_section(data: dict[str, Any], cases: list[dict[str, Any]]) -> list[str
     return out
 
 
+WHOSE_GROUP = "下一步在谁手里（票 153）"
+WHOSE_SOURCES = (("WITH（新手册）", None), ("WITHOUT（只拿掉那一段）", "ticket153w_control"))
+
+
+def whose_gist(f: dict[str, Any], r: dict[str, Any]) -> str:
+    """Ticket 153: what one run did, in a line: the to-dos it noted (due,
+    reminder), its own reminders, the subtasks (their briefs, cut), the
+    files, a browser stop, the reply (its tags taken out). Each text is
+    scrubbed before it is cut, so a cut never leaves half a path behind
+    (the render right after a run reads the unscrubbed results)."""
+
+    def cut(text: str, limit: int) -> str:
+        text = scrub(one_line(text))
+        return text if len(text) <= limit else text[:limit] + "…"
+
+    parts = []
+    tasks = f["made_tasks"]
+    for t in f["made_todos"]:
+        rem = next((x for x in tasks if x.get("todoId") == t["id"] and not x.get("cancelledAt")), None)
+        due = t.get("dueAt") or t.get("dueDate")
+        parts.append(f"记了待办「{t['title']}」（" + (f"截止 {str(due)[:16]}" if due else "没写截止")
+                     + (f"，提醒 {rem['fireAt'][:16]}" if rem and rem.get("fireAt") else "，没挂提醒") + "）")
+    for t in f["todos_after"]:
+        parts.append(f"改了已有待办「{t['title']}」")
+    mine = [x for x in tasks if not x.get("todoId") and not x.get("cancelledAt")]
+    if mine:
+        parts.append("给自己挂了提醒 " + "、".join(f"{str(x.get('fireAt') or '（不是一次性）')[:16]}「{cut(first_line(x['prompt']), 60)}」"
+                                                 for x in mine))
+    if f["subtasks"]:
+        parts.append("派了子任务 " + "、".join(f"「{cut(s, 160)}」" for s in f["subtasks"]))
+    if r.get("home_added"):
+        parts.append("做了文件 " + "、".join(os.path.basename(x) for x in r["home_added"]))
+    if f["stop"] == "web_tool":
+        parts.append("停在浏览器")
+    elif f["stop"] == "ask_user":
+        parts.append("ask_user 问了一句")
+    if not parts:
+        parts.append("什么都没记、没设、没派")
+    said = SUBTASK_TAG_RE.sub("", f["body"]).strip()
+    reply = f"「{cut(said, 160)}」" if said else "（正文空）" if not f["subtasks"] else "（只有子任务标签）"
+    parts.append("回复 " + reply)
+    return "，".join(parts)
+
+
+def whose_section(data: dict[str, Any], cases: list[dict[str, Any]]) -> list[str]:
+    """Ticket 153: the whose-step cases under the new manual (the
+    results) and the new manual with only the new paragraph taken out
+    (meta.ticket153w_control): passes per case, then what each run did."""
+    meta = data["meta"]
+    want = [c for c in cases if c.get("group") == WHOSE_GROUP]
+    if not want:
+        return []
+    by_id = {c["id"]: c for c in want}
+    sources = [(label, [r for r in (data["results"] if key is None else meta.get(key) or []) if r["id"] in by_id])
+               for label, key in WHOSE_SOURCES]
+    sources = [(label, runs) for label, runs in sources if runs]
+    if not sources:
+        return []
+    facts = {(label, r["id"], r["variant"]): todo_facts(r, by_id[r["id"]]) for label, runs in sources for r in runs}
+    out = ["## 票 153：下一步在谁手里", "",
+           "主聊天 PRD 裁决 203：记之前问一句，这件事里有没有只有用户能做的一步（用户的手、决定、钱、名义）；没有、现在能办的是"
+           "差事，这一轮办或派子任务，不上清单；没有、要等的是它自己的提醒（「Galley 在办」，没有方框）；有才是带方框的待办，它能做的"
+           "先做；分不清时算用户的。六条都跑今天的主对话提示词（`v9`，提供 `tell_user`），第 65、66 条复用第 5、3 条的内容。"
+           "WITH 是这一票的手册，WITHOUT 是同一份手册只拿掉 `todos.md`「Noting a to-do」开头那一段（`--notes` 那一句的改动留着）；"
+           "两组用同一套判定。每格是「过 / 运行」。", "",
+           "| # | 用例 | " + " | ".join(label for label, _ in sources) + " |",
+           "| --- | --- |" + " --- |" * len(sources)]
+    for case in want:
+        cells = []
+        for label, runs in sources:
+            mine = [r for r in runs if r["id"] == case["id"]]
+            ok = sum(1 for r in mine if facts[(label, r["id"], r["variant"])]["pass"])
+            cells.append(f"{ok} / {len(mine)}" if mine else "—")
+        out.append(f"| {case['no']} | {case['id']} | " + " | ".join(cells) + " |")
+    out += ["", "每一遍做了什么（子任务只摘说明的开头）：", ""]
+    for case in want:
+        out.append(f"- **{case['id']}**：")
+        for label, runs in sources:
+            for r in sorted((x for x in runs if x["id"] == case["id"]), key=lambda x: x.get("repeat", 0)):
+                f = facts[(label, r["id"], r["variant"])]
+                verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+                if f.get("flags"):
+                    verdict += "（注：" + "；".join(f["flags"]) + "）"
+                out.append(f"  - {label}第 {r.get('repeat', 1)} 遍：{whose_gist(f, r)}；{verdict}".replace("|", "/"))
+    out.append("")
+    return out
+
+
 def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     meta = data["meta"]
     by_case: dict[str, list[dict[str, Any]]] = {}
@@ -8185,7 +8312,8 @@ def render_todo_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
     for n, group in enumerate([sup] if isinstance(sup, dict) else sup, 1):
         out += [f"注 {n}：{group['reason']}被替换的 {len(group['runs'])} 次运行原样留在 results.json 的 "
                 f"`meta.superseded_runs[{n - 1}]` 里。", ""]
-    out += (rerun_section(data, cases, todo_facts, "112") + rerun_section(data, cases, todo_facts, "111")
+    out += (whose_section(data, cases) + rerun_section(data, cases, todo_facts, "153")
+            + rerun_section(data, cases, todo_facts, "112") + rerun_section(data, cases, todo_facts, "111")
             + moved_section(data, cases) + rerun_section(data, cases, todo_facts, "110")
             + progress_section(data, cases) + rerun_section(data, cases, todo_facts, "108")
             + rerun_section(data, cases, todo_facts, "73")
@@ -11940,6 +12068,134 @@ def dry_test_items(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
           f"no items: the trip with an item fails, record-only or not ({f['reasons']})")
 
 
+def dry_test_whose(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) -> None:
+    """Ticket 153: the six whose-step cases under v9 with tell_user
+    offered (the cases under the suite's own prompt, v4 and v5 without);
+    the two that reuse earlier cases match them; the judge on runs left by
+    hand: an errand done here, in a file or handed off, or not done; the
+    user's to-do noted, or only a reminder of its own, a send claimed; a
+    due date left out or in the wrong week; a subtask or a file where the
+    user's to-do was the thing; the section's two sources."""
+    print("todo: whose step it is (ticket 153)")
+    tz = mon.tzinfo
+    whose = [c for c in cases.values() if c.get("group") == WHOSE_GROUP]
+    check(sorted(c["id"] for c in whose) == sorted(["whose-reply-client", "whose-errand-minutes", "logistics-mon-v9",
+                                                     "note-landlord-v9", "whose-expense", "whose-trip-hotel"])
+          and all(c.get("prompt") == "v9" for c in whose), "the six cases, all under v9")
+    for copy_id, base_id in (("logistics-mon-v9", "logistics-mon"), ("note-landlord-v9", "note-landlord")):
+        a, b = cases[copy_id], cases[base_id]
+        check(a["message"] == b["message"] and a["history"] == b["history"] and a["expect"] == b["expect"]
+              and a.get("todos") == b.get("todos") and a.get("tasks") == b.get("tasks"),
+              f"{copy_id}: the message, history, fixture and judge of {base_id}")
+    sched_cases = {c["id"]: c for c in json.loads(SCHED_CASES.read_text(encoding="utf-8"))["cases"]}
+    jobs = make_sched_jobs([cases["whose-errand-minutes"], cases["logistics-mon"]], mon, {}, "en", set(), 1,
+                           suite="todo")
+    jobs += make_sched_jobs([sched_cases["rem-water-only-v5"]], mon, {}, "en", set(), 1)
+    check([j["tell_user"] for j in jobs] == [True, False, False],
+          "tell_user offered under v9 only (not the suite's own prompt, not v5)")
+    prompt = jobs[0]["galley_prompt"]
+    check("personal assistant, with a team behind you" in prompt and "`tell_user`" in prompt
+          and "__IN_HAND__" not in prompt and "__MEMO__" not in prompt and "__SESSION_ID__" not in prompt
+          and "__MANUAL_DIR__" in prompt and jobs[0]["wake"]["files"] == cases["whose-errand-minutes"]["files"],
+          "v9: today's main chat prompt filled as the suite fills its own; the minutes in ~/Downloads")
+
+    def run(case_id: str, reply: str, todos: tuple[dict[str, Any], ...] = (), tasks: tuple[dict[str, Any], ...] = (),
+            log: tuple[Any, ...] = (), home_added: list[str] | None = None, stop: str | None = None) -> dict[str, Any]:
+        r = synth_run(cases[case_id], mon, reply, todos=todos, tasks=tasks, log=log)
+        if home_added:
+            r["calls"] = [{"n": k + 1, "name": "file_write", "args": {"path": p}} for k, p in enumerate(home_added)]
+            r["home_added"] = home_added
+        if stop:
+            r["stop_reason"] = stop
+            if stop == "ask_user":
+                r["tool_call"] = {"name": "ask_user", "args": {"question": "要什么格式？"}}
+        return todo_facts(r, cases[case_id])
+
+    tag = '<subtask title="整理会议纪要">读 ~/Downloads/会议纪要/ 下三份纪要，整理成一页。</subtask>'
+    # An errand: done here or handed off, nothing on the list.
+    f = run("whose-errand-minutes", "交给子任务去整理了。\n" + tag)
+    check(f["pass"] is True and any("派了 1 件子任务" in x for x in f["flags"]),
+          f"errand: handed to a subtask passes ({f['reasons']} {f['flags']})")
+    f = run("whose-errand-minutes", "整理好了，一页纸在这里：\n[FILE:/dry-home/Documents/上周会议纪要.md]",
+            home_added=["/dry-home/Documents/上周会议纪要.md"])
+    check(f["pass"] is True and any("做了文件" in x for x in f["flags"]), f"errand: a file made passes ({f['reasons']})")
+    f = run("whose-errand-minutes", "青禾社区食堂改造：后厨按第二版平面，预算 186 万，招标分两包，目标 12 月 15 日开工。")
+    check(f["pass"] is True, f"errand: the page in the reply passes ({f['reasons']})")
+    for reply, kw, why in (
+            ("好的，我这就整理。", {}, "没办"),
+            ("", {"stop": "ask_user"}, "先问了一句"),
+            ("记下了：整理会议纪要。", {"todos": (synth_todo("整理会议纪要"),), "log": (SYNTH_ADD,)}, "不该记待办"),
+            ("明早 9 点我整理好给你。", {"tasks": (synth_reminder(datetime(2026, 10, 20, 9, 0, tzinfo=tz)),),
+                                          "log": (SYNTH_CREATE,)}, "不该建它自己的提醒"),
+            ("派了两件。\n" + tag + tag, {}, "最多派 1 件子任务")):
+        f = run("whose-errand-minutes", reply, **kw)
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"errand: {why} fails ({f['reasons']})")
+    # The user's to-do with groundwork: noted, not only its own reminder,
+    # nothing sent.
+    fri = sched_day({"next_weekday": 5}, mon)
+    mail = dict(synth_todo("回复周经理的报价邮件", due=fri))
+    thu = synth_reminder(datetime(2026, 10, 22, 15, 0, tzinfo=tz), todo_id=mail["id"])
+    ok = "记下了：周五前回周经理的邮件，周四下午 3 点提醒你。"
+    f = run("whose-reply-client", ok, todos=(mail,), tasks=(thu,), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"reply-client: the to-do with its reminder passes ({f['reasons']} {f['flags']})")
+    f = run("whose-reply-client", ok + "\n回信草稿写进了备注。", todos=(dict(mail, notes="草稿：周经理您好……"),), tasks=(thu,),
+            log=(SYNTH_ADD, ("todo", "update", mail["id"], "--notes=草稿", "--supervisor=galley-assistant")))
+    check(f["pass"] is True, f"reply-client: a draft into its notes passes ({f['reasons']})")
+    f = run("whose-reply-client", ok + "\n" + tag)
+    check(f["pass"] is False, f"reply-client: groundwork without the to-do fails ({f['reasons']})")
+    for reply, kw, why in (
+            ("周四下午 3 点我提醒你回邮件。", {"tasks": (synth_reminder(datetime(2026, 10, 22, 15, 0, tzinfo=tz)),),
+                                            "log": (SYNTH_CREATE,)}, "该记 1 件待办，记了 0 件"),
+            (ok + "回信已发送给周经理。", {"todos": (mail,), "tasks": (thu,), "log": (SYNTH_ADD,)}, "不该说"),
+            (ok, {"todos": (mail,), "tasks": (synth_reminder(datetime(2026, 10, 24, 9, 0, tzinfo=tz), todo_id=mail["id"]),),
+                  "log": (SYNTH_ADD,)}, "提醒时间不对")):
+        f = run("whose-reply-client", reply, **kw)
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"reply-client: {why} fails ({f['reasons']})")
+    # Unclear whose: the user's to-do, its due date optional.
+    f = run("whose-expense", "记下了：这周交报销单。", todos=(synth_todo("交报销单"),), log=(SYNTH_ADD,))
+    check(f["pass"] is True and "没写截止" in f["flags"], f"expense: no due date passes, noted ({f['reasons']} {f['flags']})")
+    f = run("whose-expense", "记下了：周五前交报销单。", todos=(synth_todo("交报销单", due=sched_day({"next_weekday": 5}, mon)),),
+            log=(SYNTH_ADD,))
+    check(f["pass"] is True and "没写截止" not in f["flags"], f"expense: due Friday passes ({f['reasons']})")
+    for reply, kw, why in (
+            ("记下了。", {"todos": (synth_todo("交报销单", due=sched_day({"week_after": 1}, mon)),), "log": (SYNTH_ADD,)},
+             "截止那天不对"),
+            ("记下了，也派人去填了。\n" + tag, {"todos": (synth_todo("交报销单"),), "log": (SYNTH_ADD,)}, "开了子任务"),
+            ("记下了，表填好了。", {"todos": (synth_todo("交报销单"),), "log": (SYNTH_ADD,),
+                                   "home_added": ["/dry-home/Documents/报销单.xlsx"]}, "做了新文件"),
+            ("周五我提醒你交报销单。", {"tasks": (synth_reminder(datetime(2026, 10, 23, 9, 0, tzinfo=tz)),),
+                                         "log": (SYNTH_CREATE,)}, "该记 1 件待办，记了 0 件")):
+        f = run("whose-expense", reply, **kw)
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"expense: {why} fails ({f['reasons']})")
+    f = run("whose-expense", "", stop="web_tool")
+    check(f["pass"] is False and any("没走到最终回复" in x for x in f["reasons"]), f"expense: off to the browser fails")
+    # Mixed: the hotel is the user's to-do; a comparison may go out.
+    tue = sched_day({"week_after": 2}, mon)
+    hotel = synth_todo("订上海的酒店", due=tue)
+    eve = synth_reminder(datetime(2026, 10, 22, 20, 0, tzinfo=tz), todo_id=hotel["id"])
+    ok = "记下了：下周二前订好上海的酒店，周四晚 8 点提醒你。"
+    f = run("whose-trip-hotel", ok + "\n" + tag, todos=(hotel,), tasks=(eve,), log=(SYNTH_ADD,))
+    check(f["pass"] is True, f"trip: the hotel to-do and one comparison pass ({f['reasons']} {f['flags']})")
+    f = run("whose-trip-hotel", "", todos=(hotel,), tasks=(eve,), log=(SYNTH_ADD,), stop="web_tool")
+    check(f["pass"] is True and any("停在浏览器" in x for x in f["flags"]), f"trip: a look at hotels is noted ({f['reasons']})")
+    for reply, kw, why in (
+            ("记下了：下周三去上海出差。", {"todos": (synth_todo("去上海出差", due=sched_day({"week_after": 3}, mon)),),
+                                             "log": (SYNTH_ADD,)}, "待办标题里没有"),
+            (ok + "已帮你订好全季。", {"todos": (hotel,), "tasks": (eve,), "log": (SYNTH_ADD,)}, "不该说"),
+            (ok, {"todos": (synth_todo("订上海的酒店", due=sched_day({"week_after": 4}, mon)),), "log": (SYNTH_ADD,)},
+             "截止那天不对")):
+        f = run("whose-trip-hotel", reply, **kw)
+        check(f["pass"] is False and any(why in x for x in f["reasons"]), f"trip: {why} fails ({f['reasons']})")
+    # The section: both sources, a pass count each.
+    r1 = dict(synth_run(cases["whose-expense"], mon, "记下了：这周交报销单。", todos=(synth_todo("交报销单"),),
+                        log=(SYNTH_ADD,)), id="whose-expense", variant="r1", repeat=1)
+    r2 = dict(synth_run(cases["whose-expense"], mon, ""), id="whose-expense", variant="r1", repeat=1)
+    text = "\n".join(whose_section({"meta": {"ticket153w_control": [r2]}, "results": [r1]}, list(cases.values())))
+    check("| 67 | whose-expense | 1 / 1 | 0 / 1 |" in text and "WITH（新手册）第 1 遍：记了待办「交报销单」（没写截止，没挂提醒）" in text
+          and "WITHOUT（只拿掉那一段）第 1 遍：什么都没记、没设、没派" in text,
+          f"section: WITH and WITHOUT side by side ({text[-400:]})")
+
+
 def dry_test_item_move(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) -> None:
     """Ticket 112: the two cases' fixture (seven items, one ticked, in In
     Hand as a count) and the judge on runs left by hand: an item moved to
@@ -12548,6 +12804,7 @@ def dry_test_todo(results: list[dict[str, Any]], scripts: dict[str, tuple[str, s
     dry_test_moved(cases, mon, check)
     dry_test_items(cases, mon, check)
     dry_test_item_move(cases, mon, check)
+    dry_test_whose(cases, mon, check)
     for r in sorted(results, key=lambda r: r["id"]):
         case_id, script = scripts[r["id"]]
         case = cases[case_id]
@@ -14657,7 +14914,10 @@ def main() -> int:
                       "meta.ticket110r_control); rerun for ticket 112 (todos-change.md: `todo item move` only when the "
                       "user asks for an order; a file's path in a to-do's notes in backticks, there and in todos.md's "
                       "--notes; two cases on the project's seven items, the three cases that write a file into the notes "
-                      "judged on the backticks)"
+                      "judged on the backticks); rerun for ticket 153 (todos.md's \"Noting a to-do\" opens with whose step "
+                      "it is: an errand, a reminder of its own, or the user's to-do, theirs when unclear; six cases under "
+                      "today's main chat prompt v9 with tell_user offered, two of them earlier cases' content; the same "
+                      "manual without that paragraph in meta.ticket153w_control)"
                       if todo else
                       "schedule (ticket 36, rerun for tickets 41 and 44): the main chat prompt with the ticket 41 "
                       "entry layer and its own configuration paragraph, In Hand lines (ticket 39's three groups) for "

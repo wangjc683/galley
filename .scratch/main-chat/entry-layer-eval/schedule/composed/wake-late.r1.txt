@@ -11,9 +11,9 @@ Before each tool call, reason: current phase, whether the last result met expect
 <summary> (<30 tokens) before reply text.
 - Probe first: on failure, gather sufficient info (logs/status/context), store key findings in working memory, then decide to retry or pivot. Ask the user before irreversible operations.
 - Failure escalation: 1st fail → read error and understand cause; 2nd → probe environment state; 3rd → deep analysis then switch approach or ask user. Never repeat an action without new information.
-Today: 2026-10-28 Wed
+Today: 2026-11-10 Tue
 
-cwd = $TMPDIR/entry-layer-eval-kbhh2n7i/wake-late.r1/sandbox/managed-ga-state/temp (./)
+cwd = $TMPDIR/entry-layer-eval-l8hadn1k/wake-late.r1/sandbox/managed-ga-state/temp (./)
 
 [Memory] (../memory)
 Facts(L2): ../memory/global_mem.txt | CodeRoot: ../ | SOPs(L3): ../memory/*.md or *.py | META-SOP(L0): ../memory/memory_management_sop.md
@@ -205,7 +205,7 @@ where available; otherwise ask the user to check the relevant Settings page.
 ## Main Chat
 
 This conversation is the user's main chat, session `s-mgn4k2x1-7q3z9w0e`. Your context
-holds it from turnIndex 42 on, a segment that began 2026-10-28. Earlier
+holds it from turnIndex 42 on, a segment that began 2026-11-10. Earlier
 parts are not in your context: when the user refers to them, look them up
 with the Galley CLI (search, then `session show <id> --around=<messageId>`).
 
@@ -259,7 +259,7 @@ unasked, then say what you did; offer nothing you have not done (see
 `[FILE:<absolute path>]` on a line of its own and say what it is: the
 desktop shows it as a card.
 
-Your manual is in `$TMPDIR/entry-layer-eval-kbhh2n7i/wake-late.r1/sandbox/managed-ga-state/assistant/reference/manual`, one file per part. Before a Galley CLI
+Your manual is in `$TMPDIR/entry-layer-eval-l8hadn1k/wake-late.r1/sandbox/managed-ga-state/assistant/reference/manual`, one file per part. Before a Galley CLI
 write (a session, project, model, schedule, to-do or memo command), read the
 parts it needs, together: `todos.md` and `unasked.md` to note a to-do;
 `todos-change.md` to change, tick off or list to-dos; `memo.md` to note or
@@ -279,7 +279,7 @@ The reply body should first include a minimal one-line (<30 words) physical snap
 ======== user ========
 [Galley — not a message from the user] A reminder you set came due. Act on it, then reply to the user. Do not mention this note.
 
-Reminder `sched_7b3d9e0f1a2c6548` (one-off) came due. Planned for 2026-10-28 05:45 (Wed), local time; it went off at 2026-10-28 14:45 (Wed), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:
+Reminder `sched_7b3d9e0f1a2c6548` (one-off) came due. Planned for 2026-11-10 09:49 (Tue), local time; it went off at 2026-11-10 18:49 (Tue), 9 hours late (the computer was asleep or Galley was closed). What you noted when you set it:
 <<<
 给王经理回电话
 
