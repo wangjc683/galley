@@ -168,7 +168,7 @@ pub trait RunnerPort: Send + Sync {
     async fn queue_snapshot(&self, _session_id: &str) -> Vec<QueuedMessage> {
         Vec::new()
     }
-    /// Live run-state snapshot (`session.run_state`). Default reads as
+    /// Live run-state snapshot (`sessions.run_state`). Default reads as
     /// fully idle, matching the no-queue-support fakes.
     async fn run_state(&self, _session_id: &str) -> RunState {
         RunState::default()

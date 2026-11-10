@@ -544,7 +544,7 @@ async fn next_run_complete(signals: &mut mpsc::UnboundedReceiver<RunSignal>) -> 
 /// child's run ends on `ask_user` with a supervisor message already held
 /// behind it. The next `session.send` must dispatch as the answer (it
 /// used to queue behind the hold forever), and the held message drains
-/// once the answer's run completes. `session.run_state` shows the
+/// once the answer's run completes. `sessions.run_state` shows the
 /// question and the last exit reason along the way.
 #[tokio::test]
 async fn session_send_answers_a_pending_question_ahead_of_held_messages() {
@@ -601,7 +601,7 @@ async fn session_send_answers_a_pending_question_ahead_of_held_messages() {
             json!({"sessionId": "s-ask", "content": content}),
         ))
     };
-    let run_state = || dispatch(req("session.run_state", json!({"sessionId": "s-ask"})));
+    let run_state = || dispatch(req("sessions.run_state", json!({"sessionIds": ["s-ask"]})));
 
     let first = send("start").await;
     assert_eq!(first.result.unwrap()["dispatch"], "dispatched");
@@ -611,7 +611,7 @@ async fn session_send_answers_a_pending_question_ahead_of_held_messages() {
     // The first run ends on the question: the drain holds the queue.
     let signal = next_run_complete(&mut signals).await;
     assert!(manager.queue_take_next(&signal).await.is_none());
-    let live = run_state().await.result.unwrap();
+    let live = run_state().await.result.unwrap()["sessions"][0].clone();
     assert_eq!(live["askPending"], true);
     assert_eq!(live["lastExit"], "EXITED");
     assert_eq!(live["openRun"], false);
@@ -621,70 +621,22 @@ async fn session_send_answers_a_pending_question_ahead_of_held_messages() {
     let answer = send("the answer").await.result.unwrap();
     assert_eq!(answer["dispatch"], "dispatched");
     assert_eq!(answer["message"]["content"], "the answer");
-    assert_eq!(run_state().await.result.unwrap()["askPending"], false);
+    assert_eq!(
+        run_state().await.result.unwrap()["sessions"][0]["askPending"],
+        false
+    );
 
     // The answer's run completes; the held message drains next.
     let signal = next_run_complete(&mut signals).await;
     let next = manager.queue_take_next(&signal).await.expect("held item");
     assert_eq!(next.text, "queued before the question");
-    let live = run_state().await.result.unwrap();
+    let live = run_state().await.result.unwrap()["sessions"][0].clone();
     assert_eq!(live["lastExit"], "CURRENT_TASK_DONE");
     assert_eq!(live["queuedCount"], 0);
 
     manager
         .shutdown_all(std::time::Duration::from_millis(500))
         .await;
-}
-
-// ---------------- session.checkpoint ----------------
-
-#[tokio::test]
-async fn session_checkpoint_persists_system_row_never_dispatches() {
-    let h = Harness::new(FakeRunner::default()).await;
-    h.seed_session("s-cp").await;
-
-    let resp = h
-        .dispatch(req(
-            "session.checkpoint",
-            json!({"sessionId": "s-cp", "content": "阶段小结"}),
-        ))
-        .await;
-
-    assert!(resp.ok, "{resp:?}");
-    assert_eq!(resp.result.as_ref().unwrap()["dispatch"], "persisted_only");
-    // Checkpoint never touches the runner.
-    assert!(h.runner.sent_commands.lock().unwrap().is_empty());
-    assert!(h.notifier.payload_of("user-message-persisted").is_some());
-}
-
-/// `goalId` left the args with Goal (2026-10-13). An old caller that
-/// still sends it is not refused (the args carry no
-/// `deny_unknown_fields`); the row is written unstamped and the answer
-/// carries no goal id.
-#[tokio::test]
-async fn session_checkpoint_ignores_a_stale_goal_id() {
-    let h = Harness::new(FakeRunner::default()).await;
-    h.seed_session("s-cp").await;
-
-    let resp = h
-        .dispatch(req(
-            "session.checkpoint",
-            json!({"sessionId": "s-cp", "content": "阶段小结", "goalId": "goal_old"}),
-        ))
-        .await;
-
-    assert!(resp.ok, "{resp:?}");
-    let result = resp.result.unwrap();
-    assert_eq!(result["message"]["role"], "system");
-    assert!(result["message"].get("goalId").is_none(), "{result}");
-    // The column is still in the schema (no migration); nothing fills it.
-    let mut tx = h.galley.begin_tx().await.unwrap();
-    let stamp: Option<String> =
-        sqlx::query_scalar("SELECT goal_id FROM messages WHERE session_id = 's-cp'")
-            .fetch_one(&mut *tx)
-            .await
-            .unwrap();
-    assert_eq!(stamp, None);
 }
 
 // ---------------- session.new (the rollback-narration branches) ----------------
@@ -1079,7 +1031,9 @@ async fn schemas_1_and_2_still_serve_unchanged_commands() {
 }
 
 /// The goal family is gone under every accepted version, with nothing
-/// persisted or dispatched (2026-10-13, .scratch/remove-goal).
+/// persisted or dispatched (2026-10-13, .scratch/remove-goal). So are the
+/// three undocumented session commands Goal added and nothing called
+/// after it went (2026-11-10).
 #[tokio::test]
 async fn the_goal_family_is_unknown_under_every_version() {
     let h = Harness::new(FakeRunner::default()).await;
@@ -1100,6 +1054,13 @@ async fn the_goal_family_is_unknown_under_every_version() {
                 json!({"sessionId": "s1", "dispatchContent": "x"}),
             ),
             ("session.new_goal_worker", json!({"taskTemplate": "x"})),
+            // Retired 2026-11-10: no caller left after Goal's removal.
+            (
+                "session.checkpoint",
+                json!({"sessionId": "s1", "content": "x"}),
+            ),
+            ("session.run_state", json!({"sessionId": "s1"})),
+            ("session.shutdown_runner", json!({"sessionId": "s1"})),
         ] {
             let resp = h.dispatch(req_at(schema, command, args)).await;
             assert!(!resp.ok, "{command} under {schema} must fail");
@@ -1113,7 +1074,7 @@ async fn the_goal_family_is_unknown_under_every_version() {
     assert!(h.runner.sent_commands.lock().unwrap().is_empty());
     let rows = h
         .galley
-        .session_messages_including_internal(SessionId("s1".into()), None)
+        .session_messages(SessionId("s1".into()), None)
         .await
         .unwrap();
     assert!(rows.is_empty(), "an unknown command persists nothing");
@@ -1129,10 +1090,10 @@ async fn schema_outside_the_accepted_set_is_a_mismatch() {
     }
 }
 
-// ---------------- session.run_state ----------------
+// ---------------- sessions.run_state ----------------
 
 #[tokio::test]
-async fn session_run_state_reports_manager_truth() {
+async fn sessions_run_state_reports_manager_truth() {
     let h = Harness::new(FakeRunner::with_run_state(RunState {
         runner_alive: true,
         agent_running: false,
@@ -1145,11 +1106,11 @@ async fn session_run_state_reports_manager_truth() {
     h.seed_session("s-live").await;
 
     let resp = h
-        .dispatch(req("session.run_state", json!({"sessionId": "s-live"})))
+        .dispatch(req("sessions.run_state", json!({"sessionIds": ["s-live"]})))
         .await;
 
     assert!(resp.ok, "expected ok, got {resp:?}");
-    let result = resp.result.unwrap();
+    let result = resp.result.unwrap()["sessions"][0].clone();
     assert_eq!(result["sessionId"], "s-live");
     assert_eq!(result["runnerAlive"], true);
     assert_eq!(result["agentRunning"], false);
@@ -1203,16 +1164,4 @@ async fn sessions_run_state_without_ids_scopes_to_known_sessions() {
 
     assert!(resp.ok, "expected ok, got {resp:?}");
     assert_eq!(resp.result.unwrap()["sessions"], json!([]));
-}
-
-#[tokio::test]
-async fn session_run_state_unknown_session_is_not_found() {
-    let h = Harness::new(FakeRunner::default()).await;
-
-    let resp = h
-        .dispatch(req("session.run_state", json!({"sessionId": "s-nope"})))
-        .await;
-
-    assert!(!resp.ok);
-    assert_eq!(resp.error.as_deref(), Some("not_found"));
 }

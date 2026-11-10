@@ -289,10 +289,8 @@ export function applyReadySnapshot(
  *                       "waiting for you" notification
  *   system_message    → append a system turn
  *   tell_user         → append the main chat's mid-run line as a turn
- *   tool_call_start / tool_call_progress / tool_call_end,
  *   history_loaded, interject_delivered / interject_returned,
- *   title_generated   → log only (turn_end carries the tools' results;
- *                       Core acts on the others)
+ *   title_generated   → log only (Core acts on them)
  *
  * Tool ids: turn_end's toolCalls / toolResults are positional, so we
  * walk them in order with synthetic ids when none is supplied.
@@ -575,13 +573,6 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       return;
     }
 
-    case "tool_call_end": {
-      // turn_end carries the same toolResults; we don't need an
-      // independent state shape for finished tools.
-      console.debug("[ipc] tool_call_end", event);
-      return;
-    }
-
     case "run_complete": {
       console.debug("[ipc] run_complete", event);
       if (eventVisibility(event) === "internal") {
@@ -718,12 +709,6 @@ export function dispatchIPCEvent(event: IPCEvent): void {
 
     case "history_loaded": {
       // Core's ensure waits for this itself (ticket 02b).
-      console.debug(`[ipc] ${event.kind}`, event);
-      return;
-    }
-
-    case "tool_call_start":
-    case "tool_call_progress": {
       console.debug(`[ipc] ${event.kind}`, event);
       return;
     }

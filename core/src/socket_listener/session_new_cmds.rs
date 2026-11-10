@@ -241,7 +241,6 @@ async fn dispatch_session_new_inner(
             &IpcCommand::UserMessage(UserMessageCommand {
                 text: task,
                 images: vec![],
-                visibility: None,
                 absolute_turn_index: msg.turn_index.map(i64::from),
                 wake: false,
             }),

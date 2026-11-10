@@ -451,25 +451,13 @@ impl SqliteGalley {
             .collect())
     }
 
-    pub async fn session_messages_including_internal(
-        &self,
-        id: SessionId,
-        tail: Option<usize>,
-    ) -> Result<Vec<MessageBrief>> {
-        self.session_messages_inner(id, tail, true).await
-    }
-
+    /// Visible rows only: an old database still holds the internal rows
+    /// Goal wrote, and no read returns them.
     pub(super) async fn session_messages_inner(
         &self,
         id: SessionId,
         tail: Option<usize>,
-        include_internal: bool,
     ) -> Result<Vec<MessageBrief>> {
-        let visibility_clause = if include_internal {
-            ""
-        } else {
-            " AND visibility = 'visible'"
-        };
         let rows = if let Some(n) = tail {
             let limit = i64::try_from(n).unwrap_or(i64::MAX);
             let sql = format!(
@@ -477,7 +465,7 @@ impl SqliteGalley {
                         created_via, supervisor, origin_note, visibility, created_at, \
                         {ASK_USER_TOOL_CALLS_COL} \
                  FROM messages \
-                 WHERE session_id = ?{visibility_clause} \
+                 WHERE session_id = ? AND visibility = 'visible' \
                  ORDER BY turn_index DESC, sequence DESC \
                  LIMIT ?"
             );
@@ -495,7 +483,7 @@ impl SqliteGalley {
                         created_via, supervisor, origin_note, visibility, created_at, \
                         {ASK_USER_TOOL_CALLS_COL} \
                  FROM messages \
-                 WHERE session_id = ?{visibility_clause} \
+                 WHERE session_id = ? AND visibility = 'visible' \
                  ORDER BY turn_index ASC, sequence ASC"
             );
             sqlx::query_as::<_, MessageRow>(&sql)
@@ -735,7 +723,7 @@ impl SqliteGalley {
         id: SessionId,
         tail: Option<usize>,
     ) -> Result<Vec<MessageBrief>> {
-        self.session_messages_inner(id, tail, false).await
+        self.session_messages_inner(id, tail).await
     }
 
     pub(super) async fn status_db(&self) -> Result<StatusSummary> {
@@ -1111,48 +1099,6 @@ impl SqliteGalley {
             self.index_message_fts(&id).await;
         }
         Ok(written)
-    }
-
-    pub(super) async fn send_message_with_visibility_db(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: crate::api::Origin,
-        visibility: MessageVisibility,
-    ) -> Result<MessageBrief> {
-        let mut tx = self
-            .pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await
-            .map_err(map_sqlx_err)?;
-        let msg =
-            insert_user_message_inner(&mut tx, session_id, content, origin, visibility).await?;
-        tx.commit().await.map_err(map_sqlx_err)?;
-        Ok(msg)
-    }
-
-    pub(super) async fn send_system_message_db(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: crate::api::Origin,
-    ) -> Result<MessageBrief> {
-        let mut tx = self
-            .pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await
-            .map_err(map_sqlx_err)?;
-        let msg = insert_message_inner(
-            &mut tx,
-            session_id,
-            MessageRole::System,
-            content,
-            origin,
-            MessageVisibility::Visible,
-        )
-        .await?;
-        tx.commit().await.map_err(map_sqlx_err)?;
-        Ok(msg)
     }
 
     pub(super) async fn create_session_db(

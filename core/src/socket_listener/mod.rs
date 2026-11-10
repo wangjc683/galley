@@ -63,9 +63,8 @@ use crate::db::SqliteGalley;
 use crate::ipc::{IpcCommand, SetLlmCommand, UserMessageCommand};
 use crate::protocol::{
     LlmSetArgs, ProjectCreateArgs, ProjectDeleteArgs, SessionArchiveArgs, SessionBtwArgs,
-    SessionCheckpointArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult, SessionRestoreArgs,
-    SessionRunStateArgs, SessionSendArgs, SessionShutdownRunnerArgs, SessionStopArgs,
-    SessionWatchArgs, SessionsRunStateArgs,
+    SessionMoveArgs, SessionNewArgs, SessionNewResult, SessionRestoreArgs, SessionSendArgs,
+    SessionStopArgs, SessionWatchArgs, SessionsRunStateArgs,
 };
 use crate::runner_manager::{
     BroadcastItem, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError,
@@ -641,12 +640,6 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         "session.send" => {
             DispatchResult::Unary(dispatch_session_send(request_id, req.args, ctx).await)
         }
-        "session.checkpoint" => {
-            DispatchResult::Unary(dispatch_session_checkpoint(request_id, req.args, ctx).await)
-        }
-        "session.run_state" => {
-            DispatchResult::Unary(dispatch_session_run_state(request_id, req.args, ctx).await)
-        }
         "sessions.run_state" => {
             DispatchResult::Unary(dispatch_sessions_run_state(request_id, req.args, ctx).await)
         }
@@ -660,9 +653,6 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         }
         "session.stop" => {
             DispatchResult::Unary(dispatch_session_stop(request_id, req.args, ctx).await)
-        }
-        "session.shutdown_runner" => {
-            DispatchResult::Unary(dispatch_session_shutdown_runner(request_id, req.args, ctx).await)
         }
         "session.archive" => {
             DispatchResult::Unary(dispatch_session_archive(request_id, req.args, ctx).await)
@@ -1077,25 +1067,6 @@ mod tests {
         let resp = expect_unary(dispatch_line(line, None, &mgr).await);
         assert!(!resp.ok);
         assert_eq!(resp.error.as_deref(), Some("not_found"));
-    }
-
-    #[tokio::test]
-    async fn dispatch_session_shutdown_runner_rejects_bad_args() {
-        let mgr = RunnerManager::new();
-        let line = r#"{"command":"session.shutdown_runner","args":{"sessionId":123}}"#;
-        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
-        assert!(!resp.ok);
-        assert_eq!(resp.error.as_deref(), Some("invalid_args"));
-    }
-
-    #[tokio::test]
-    async fn dispatch_session_checkpoint_rejects_empty_content() {
-        let mgr = RunnerManager::new();
-        let line =
-            r#"{"command":"session.checkpoint","args":{"sessionId":"s-test","content":"   "}}"#;
-        let resp = expect_unary(dispatch_line(line, None, &mgr).await);
-        assert!(!resp.ok);
-        assert_eq!(resp.error.as_deref(), Some("invalid_args"));
     }
 
     #[test]

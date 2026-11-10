@@ -55,9 +55,6 @@ pub const PROTOCOL_VERSION: &str = "0.1";
 pub enum IpcEvent {
     Ready(ReadyEvent),
     TurnStart(TurnStartEvent),
-    ToolCallStart(ToolCallStartEvent),
-    ToolCallEnd(ToolCallEndEvent),
-    ToolCallProgress(ToolCallProgressEvent),
     TurnEnd(TurnEndEvent),
     TurnProgress(TurnProgressEvent),
     AskUser(AskUserEvent),
@@ -80,9 +77,6 @@ impl IpcEvent {
         match self {
             IpcEvent::Ready(e) => &e.session_id,
             IpcEvent::TurnStart(e) => &e.session_id,
-            IpcEvent::ToolCallStart(e) => &e.session_id,
-            IpcEvent::ToolCallEnd(e) => &e.session_id,
-            IpcEvent::ToolCallProgress(e) => &e.session_id,
             IpcEvent::TurnEnd(e) => &e.session_id,
             IpcEvent::TurnProgress(e) => &e.session_id,
             IpcEvent::AskUser(e) => &e.session_id,
@@ -145,41 +139,6 @@ pub struct TurnStartEvent {
     pub turn_index: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visibility: Option<String>,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ToolCallStartEvent {
-    pub session_id: String,
-    pub tool_call_id: String,
-    pub turn_index: i64,
-    #[serde(default)]
-    pub absolute_turn_index: Option<i64>,
-    pub tool_name: String,
-    pub args: Value,
-    pub args_preview: String,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ToolCallEndEvent {
-    pub session_id: String,
-    pub tool_call_id: String,
-    /// "success" | "failed" | "denied" | "cancelled"
-    pub status: String,
-    pub result_preview: String,
-    pub elapsed_ms: i64,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ToolCallProgressEvent {
-    pub session_id: String,
-    pub tool_call_id: String,
-    pub text: String,
     pub timestamp: String,
 }
 
@@ -443,8 +402,6 @@ pub struct UserMessageCommand {
     pub text: String,
     #[serde(default)]
     pub images: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub visibility: Option<String>,
     #[serde(default)]
     pub absolute_turn_index: Option<i64>,
     /// Core wakes the main chat with this message (a subtask report, a
@@ -738,7 +695,6 @@ mod tests {
         let cmd = IpcCommand::UserMessage(UserMessageCommand {
             text: "hello".to_string(),
             images: vec![],
-            visibility: None,
             absolute_turn_index: None,
             wake: false,
         });
@@ -746,10 +702,6 @@ mod tests {
         // The wire format uses "kind" tag + snake_case variants.
         assert!(s.contains("\"kind\":\"user_message\""));
         assert!(s.contains("\"text\":\"hello\""));
-        assert!(
-            !s.contains("visibility"),
-            "None visibility should be omitted so Python uses its default: {s}"
-        );
         // Verify Python side can parse this — round-trip back.
         let parsed: IpcCommand = serde_json::from_str(&s).unwrap();
         match parsed {
@@ -761,7 +713,6 @@ mod tests {
         let woken = IpcCommand::UserMessage(UserMessageCommand {
             text: "report".to_string(),
             images: vec![],
-            visibility: None,
             absolute_turn_index: Some(3),
             wake: true,
         });

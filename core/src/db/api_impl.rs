@@ -55,27 +55,6 @@ impl GalleyApi for SqliteGalley {
         self.send_message_db(session_id, content, origin).await
     }
 
-    async fn send_message_with_visibility(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: crate::api::Origin,
-        visibility: MessageVisibility,
-    ) -> Result<MessageBrief> {
-        self.send_message_with_visibility_db(session_id, content, origin, visibility)
-            .await
-    }
-
-    async fn send_system_message(
-        &self,
-        session_id: SessionId,
-        content: String,
-        origin: crate::api::Origin,
-    ) -> Result<MessageBrief> {
-        self.send_system_message_db(session_id, content, origin)
-            .await
-    }
-
     async fn create_session(
         &self,
         input: CreateSessionInput,

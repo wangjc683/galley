@@ -120,36 +120,6 @@ export interface TurnStartEvent {
   timestamp: string;
 }
 
-export interface ToolCallStartEvent {
-  kind: "tool_call_start";
-  sessionId: string;
-  toolCallId: string;
-  turnIndex: number;
-  absoluteTurnIndex?: number | null;
-  toolName: string;
-  args: Record<string, unknown>;
-  argsPreview: string;
-  timestamp: string;
-}
-
-export interface ToolCallEndEvent {
-  kind: "tool_call_end";
-  sessionId: string;
-  toolCallId: string;
-  status: "success" | "failed" | "denied" | "cancelled";
-  resultPreview: string;
-  elapsedMs: number;
-  timestamp: string;
-}
-
-export interface ToolCallProgressEvent {
-  kind: "tool_call_progress";
-  sessionId: string;
-  toolCallId: string;
-  text: string;
-  timestamp: string;
-}
-
 export interface TurnEndEvent {
   kind: "turn_end";
   sessionId: string;
@@ -380,9 +350,6 @@ export interface TellUserEvent {
 export type IPCEvent =
   | ReadyEvent
   | TurnStartEvent
-  | ToolCallStartEvent
-  | ToolCallEndEvent
-  | ToolCallProgressEvent
   | TurnEndEvent
   | TurnProgressEvent
   | AskUserEvent
@@ -403,7 +370,6 @@ export interface UserMessageCommand {
   kind: "user_message";
   text: string;
   images?: string[];
-  visibility?: MessageVisibility;
   absoluteTurnIndex?: number | null;
   /** Core woke the main chat with it (main chat ticket 142); only when true. */
   wake?: boolean;

@@ -130,7 +130,6 @@ pub async fn dispatch_queued_item(
         IpcCommand::UserMessage(UserMessageCommand {
             text: item.text.clone(),
             images: vec![],
-            visibility: None,
             absolute_turn_index,
             wake: false,
         })

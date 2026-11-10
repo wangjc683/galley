@@ -17,8 +17,6 @@ from runner.ipc import (
     RunCompleteEvent,
     SetLLMCommand,
     ShutdownCommand,
-    ToolCallEndEvent,
-    ToolCallStartEvent,
     TurnEndEvent,
     TurnProgressEvent,
     TurnStartEvent,
@@ -117,26 +115,6 @@ def test_turn_progress_handles_empty_source() -> None:
     ev = TurnProgressEvent(sessionId="s1", delta="…", source="")
     decoded = decode_event(encode(ev))
     assert decoded == ev
-
-
-def test_tool_call_start_and_end_round_trip() -> None:
-    start = ToolCallStartEvent(
-        sessionId="s1",
-        toolCallId="tc1",
-        turnIndex=1,
-        toolName="file_read",
-        args={"path": "x"},
-        argsPreview="path=x",
-    )
-    end = ToolCallEndEvent(
-        sessionId="s1",
-        toolCallId="tc1",
-        status="success",
-        resultPreview="ok",
-        elapsedMs=42,
-    )
-    assert decode_event(encode(start)) == start
-    assert decode_event(encode(end)) == end
 
 
 def test_turn_end_round_trip_no_exit_reason() -> None:

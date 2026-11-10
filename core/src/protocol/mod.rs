@@ -32,12 +32,11 @@ pub use commands::{
     MemoListArgs, MemoUpdateArgs, ProjectArchiveSessionsArgs, ProjectCreateArgs, ProjectDeleteArgs,
     ProjectPinArgs, ProjectUnpinArgs, ProjectUpdateArgs, ScheduleCreateArgs, ScheduleDeleteArgs,
     ScheduleDisableArgs, ScheduleEnableArgs, ScheduleListArgs, ScheduleRunArgs, ScheduleShowArgs,
-    ScheduleUpdateArgs, SessionArchiveArgs, SessionBtwArgs, SessionCheckpointArgs,
-    SessionDeleteArgs, SessionMoveArgs, SessionNewArgs, SessionNewResult, SessionPinArgs,
-    SessionRenameArgs, SessionRestoreArgs, SessionRunStateArgs, SessionSendArgs,
-    SessionShutdownRunnerArgs, SessionStopArgs, SessionUnpinArgs, SessionWatchArgs,
-    SessionsRunStateArgs, SocketCommand, TodoAddArgs, TodoCancelArgs, TodoDoneArgs, TodoListArgs,
-    TodoReopenArgs, TodoShowArgs, TodoSubitemAddArgs, TodoSubitemDoneArgs, TodoSubitemMoveArgs,
+    ScheduleUpdateArgs, SessionArchiveArgs, SessionBtwArgs, SessionDeleteArgs, SessionMoveArgs,
+    SessionNewArgs, SessionNewResult, SessionPinArgs, SessionRenameArgs, SessionRestoreArgs,
+    SessionSendArgs, SessionStopArgs, SessionUnpinArgs, SessionWatchArgs, SessionsRunStateArgs,
+    SocketCommand, TodoAddArgs, TodoCancelArgs, TodoDoneArgs, TodoListArgs, TodoReopenArgs,
+    TodoShowArgs, TodoSubitemAddArgs, TodoSubitemDoneArgs, TodoSubitemMoveArgs,
     TodoSubitemRemoveArgs, TodoSubitemReopenArgs, TodoSubitemUpdateArgs, TodoUpdateArgs,
 };
 pub use envelope::{

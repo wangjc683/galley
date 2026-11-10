@@ -85,39 +85,6 @@ class TurnStartEvent:
 
 
 @dataclass
-class ToolCallStartEvent:
-    sessionId: str
-    toolCallId: str
-    turnIndex: int
-    toolName: str
-    args: dict[str, Any]
-    argsPreview: str
-    absoluteTurnIndex: int | None = None
-    timestamp: str = field(default_factory=_now_iso)
-    kind: str = "tool_call_start"
-
-
-@dataclass
-class ToolCallEndEvent:
-    sessionId: str
-    toolCallId: str
-    status: str  # "success" | "failed" | "denied" | "cancelled"
-    resultPreview: str
-    elapsedMs: int
-    timestamp: str = field(default_factory=_now_iso)
-    kind: str = "tool_call_end"
-
-
-@dataclass
-class ToolCallProgressEvent:
-    sessionId: str
-    toolCallId: str
-    text: str
-    timestamp: str = field(default_factory=_now_iso)
-    kind: str = "tool_call_progress"
-
-
-@dataclass
 class TurnEndEvent:
     sessionId: str
     turnIndex: int
@@ -350,9 +317,6 @@ class TellUserEvent:
 Event = (
     ReadyEvent
     | TurnStartEvent
-    | ToolCallStartEvent
-    | ToolCallEndEvent
-    | ToolCallProgressEvent
     | TurnEndEvent
     | TurnProgressEvent
     | AskUserEvent
@@ -376,7 +340,6 @@ Event = (
 class UserMessageCommand:
     text: str
     images: list[str] = field(default_factory=list)
-    visibility: str = "visible"
     absoluteTurnIndex: int | None = None
     # Core woke the main chat with this message (a subtask report, a
     # reminder, the morning review; main chat ticket 142): not the user's.
@@ -479,9 +442,6 @@ Command = (
 EVENT_KINDS: dict[str, type] = {
     "ready": ReadyEvent,
     "turn_start": TurnStartEvent,
-    "tool_call_start": ToolCallStartEvent,
-    "tool_call_end": ToolCallEndEvent,
-    "tool_call_progress": ToolCallProgressEvent,
     "turn_end": TurnEndEvent,
     "turn_progress": TurnProgressEvent,
     "ask_user": AskUserEvent,

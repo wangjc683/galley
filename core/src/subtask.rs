@@ -706,7 +706,6 @@ async fn run_instructions(
                 &IpcCommand::UserMessage(UserMessageCommand {
                     text: message.content.clone(),
                     images: Vec::new(),
-                    visibility: None,
                     absolute_turn_index: message.turn_index.map(i64::from),
                     wake: false,
                 }),

@@ -124,9 +124,10 @@ export function rowsToTurns(rows: MessageRow[]): Turn[] {
       }
       turns.push(turn);
     } else if (row.role === "system") {
-      // The only `system` rows persisted to `messages` are Galley
-      // narration (`session.checkpoint`). /btw and other bridge system
-      // messages are transient and never hit SQLite, so a restored
+      // The only `system` rows in `messages` are Galley narration an
+      // older Galley wrote (Goal, and `session.checkpoint` until it went
+      // on 2026-11-10); nothing writes them now. /btw and other bridge
+      // system messages are transient and never hit SQLite, so a restored
       // system row is always narration → "narration" variant.
       const systemTurn: SystemTurn = {
         role: "system",

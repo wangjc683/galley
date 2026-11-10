@@ -1041,7 +1041,7 @@ impl RunnerManager {
     /// Live run-state snapshot for one session — the truthful busy
     /// signal `sessions.status` in SQLite cannot provide (transient
     /// statuses are in-memory only; the DB column persists as `idle`).
-    /// Serves the `session.run_state` socket command a Supervisor polls
+    /// Serves the `sessions.run_state` socket command a Supervisor polls
     /// between turns.
     pub async fn run_state(&self, session_id: &str) -> RunState {
         let (open_run, queued_count, ask_pending, last_exit) = {

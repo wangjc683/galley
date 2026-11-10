@@ -6,7 +6,7 @@
 //! and queue, the ask-user hold, the runner process and its mid-turn
 //! flag — and until now nothing announced its changes: the GUI infers
 //! "running / asking / queued" from runner events, the socket polls
-//! `session.run_state`. A phone needs it pushed.
+//! `sessions.run_state`. A phone needs it pushed.
 //!
 //! Every place in the manager that can change one of the fields reports
 //! the session id on a [`RunStateFeed`]; one publisher task

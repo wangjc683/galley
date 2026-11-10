@@ -369,16 +369,18 @@ session.
 ```bash
 $ galley session watch sess_abc
 {"stream":"event","requestId":null,"data":{"kind":"turn_start","sessionId":"sess_abc",…}}
-{"stream":"event","requestId":null,"data":{"kind":"tool_call_start",…}}
-{"stream":"event","requestId":null,"data":{"kind":"tool_call_end",…}}
+{"stream":"event","requestId":null,"data":{"kind":"turn_progress",…}}
 {"stream":"event","requestId":null,"data":{"kind":"turn_end",…}}
+{"stream":"event","requestId":null,"data":{"kind":"run_complete",…}}
 {"stream":"end","requestId":null,"reason":"subprocess_exited"}
 $ # exit 0
 ```
 
 The `data` payload mirrors the runner ↔ Galley Core IPC event shape
 defined in [`docs/ipc-protocol.md`](../ipc-protocol.md) §4 — same
-`kind` discriminator and per-event field set.
+`kind` discriminator and per-event field set. There is no per-tool
+event: a step's tool calls and their results arrive together on that
+step's `turn_end` (`toolCalls` / `toolResults`).
 
 **No backlog support yet.** Subscribers see events from subscribe-time
 forward only. Catching up on the recent history requires

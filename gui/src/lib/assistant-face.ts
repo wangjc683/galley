@@ -144,9 +144,8 @@ export interface LiveToolCall {
  * `inFlightContent`): the last dispatch line in it, or null before any.
  * GA prints the line just before it dispatches the call and the stream
  * keeps it until the step's turn_end clears the buffer, so while a tool
- * runs this is that tool. (The runner's protocol has a `tool_call_start`
- * event, but the bridge never sends it; the dispatch line is what the
- * page has.)
+ * runs this is that tool. (The runner reports a step's tool calls only
+ * with its turn_end; the dispatch line is what the page has.)
  */
 export function liveToolCall(inFlightContent: string): LiveToolCall | null {
   if (!inFlightContent || !inFlightContent.includes("🛠")) return null;

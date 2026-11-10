@@ -248,10 +248,6 @@ async fn a_legacy_goal_id_is_neither_written_nor_read_back() {
         .send_message(sid("s1"), "plain".into(), Origin::gui())
         .await
         .expect("send");
-    let narrated = galley
-        .send_system_message(sid("s1"), "narration".into(), Origin::gui())
-        .await
-        .expect("system row");
     // A row written before the removal still carries its stamp.
     sqlx::query(
         "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, \
@@ -273,7 +269,6 @@ async fn a_legacy_goal_id_is_neither_written_nor_read_back() {
         stamps,
         vec![
             (sent.id.0.clone(), None),
-            (narrated.id.0.clone(), None),
             ("m_legacy".to_string(), Some("goal_legacy".to_string())),
         ]
     );
@@ -282,12 +277,12 @@ async fn a_legacy_goal_id_is_neither_written_nor_read_back() {
         .session_messages(sid("s1"), None)
         .await
         .expect("briefs");
-    assert_eq!(briefs.len(), 3);
+    assert_eq!(briefs.len(), 2);
     let rows = galley
         .persisted_message_rows(&sid("s1"))
         .await
         .expect("rows");
-    assert_eq!(rows.len(), 3);
+    assert_eq!(rows.len(), 2);
     let wire = serde_json::to_string(&(briefs, rows)).expect("serialize");
     assert!(!wire.contains("goal"), "{wire}");
 }

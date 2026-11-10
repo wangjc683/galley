@@ -321,6 +321,19 @@ and error discriminants unchanged):
   default (§1.2). Socket answers carry no `schemaVersion` field, so the
   wire is unchanged. No command, flag, field name, exit code or error
   changed. See §1.2.
+- 2026-11-10 — Three socket commands that were never part of this API
+  now answer `unknown_command` under every pin: `session.checkpoint`,
+  `session.shutdown_runner` and the single-session `session.run_state`.
+  Goal added them for its own use and nothing has called them since it
+  was removed; no CLI command sent them and no page here documented them
+  (the 2026-10-01 entry in §7.2 names `session.run_state` in passing).
+  The bulk `sessions.run_state`, which the CLI reads for `live`, is
+  unchanged. In the same change the runner IPC protocol dropped the
+  `tool_call_start` / `tool_call_end` / `tool_call_progress` events,
+  which the runner never sent, so `session watch` never carried them;
+  the example in §5.5b of [session-commands.md](./session-commands.md)
+  that showed them is corrected. No documented command, flag, field,
+  exit code or error changed.
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 

@@ -62,33 +62,10 @@ socket_command!(SessionSendArgs, "session.send");
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SessionCheckpointArgs {
-    pub session_id: String,
-    pub content: String,
-    #[serde(default)]
-    pub supervisor: Option<String>,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-socket_command!(SessionCheckpointArgs, "session.checkpoint");
-
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct SessionWatchArgs {
     pub session_id: String,
 }
 socket_command!(SessionWatchArgs, "session.watch");
-
-/// Live busy probe for one session (additive since v1). A Supervisor
-/// polls this between turns — the DB `sessions.status` column persists
-/// transient statuses as `idle`, so it cannot answer "is a run still
-/// open".
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionRunStateArgs {
-    pub session_id: String,
-}
-socket_command!(SessionRunStateArgs, "session.run_state");
 
 /// Bulk live busy probe (additive since v0.4.13). `sessionIds` scopes the
 /// answer; omit it to get every session the RunnerManager currently knows
@@ -161,20 +138,6 @@ pub struct SessionStopArgs {
     pub reason: Option<String>,
 }
 socket_command!(SessionStopArgs, "session.stop");
-
-/// Same shape as [`SessionStopArgs`] — distinct type so the command name
-/// binds at the type level (stop aborts the turn, shutdown kills the
-/// bridge; see sub-plan §1.4).
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SessionShutdownRunnerArgs {
-    pub session_id: String,
-    #[serde(default)]
-    pub supervisor: Option<String>,
-    #[serde(default)]
-    pub reason: Option<String>,
-}
-socket_command!(SessionShutdownRunnerArgs, "session.shutdown_runner");
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -725,19 +688,6 @@ mod legacy_equivalence {
     }
 
     #[test]
-    fn session_checkpoint() {
-        assert_matches_legacy(
-            &SessionCheckpointArgs {
-                session_id: "s1".into(),
-                content: "cp".into(),
-                supervisor: None,
-                reason: None,
-            },
-            json!({"sessionId": "s1", "content": "cp", "supervisor": null, "reason": null}),
-        );
-    }
-
-    #[test]
     fn session_watch() {
         assert_matches_legacy(
             &SessionWatchArgs {
@@ -776,18 +726,10 @@ mod legacy_equivalence {
     }
 
     #[test]
-    fn session_stop_and_shutdown_and_archive_family() {
+    fn session_stop_and_archive_family() {
         for legacy in [json!({"sessionId": "s1", "supervisor": null, "reason": null})] {
             assert_matches_legacy(
                 &SessionStopArgs {
-                    session_id: "s1".into(),
-                    supervisor: None,
-                    reason: None,
-                },
-                legacy.clone(),
-            );
-            assert_matches_legacy(
-                &SessionShutdownRunnerArgs {
                     session_id: "s1".into(),
                     supervisor: None,
                     reason: None,
@@ -869,12 +811,10 @@ mod legacy_equivalence {
     fn command_names_are_the_dispatch_names() {
         // One place to eyeball the full name↔type table.
         assert_eq!(SessionSendArgs::NAME, "session.send");
-        assert_eq!(SessionCheckpointArgs::NAME, "session.checkpoint");
         assert_eq!(SessionWatchArgs::NAME, "session.watch");
         assert_eq!(SessionNewArgs::NAME, "session.new");
         assert_eq!(SessionBtwArgs::NAME, "session.btw");
         assert_eq!(SessionStopArgs::NAME, "session.stop");
-        assert_eq!(SessionShutdownRunnerArgs::NAME, "session.shutdown_runner");
         assert_eq!(SessionArchiveArgs::NAME, "session.archive");
         assert_eq!(SessionRestoreArgs::NAME, "session.restore");
         assert_eq!(SessionMoveArgs::NAME, "session.move");

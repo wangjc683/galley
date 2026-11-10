@@ -492,7 +492,7 @@ def test_managed_model_config_api_key_models_get_no_codex_backend(
     assert "galley_credential_ipc" not in cfg
 
 
-def test_ask_user_response_resets_visibility_to_visible() -> None:
+def test_ask_user_response_opens_a_run_at_step_one() -> None:
     class FakeAgent:
         def __init__(self) -> None:
             self.tasks: list[tuple[str, str]] = []
@@ -505,11 +505,9 @@ def test_ask_user_response_resets_visibility_to_visible() -> None:
     bridge.agent = FakeAgent()
     bridge._btw_handler = None
     bridge._start_progress_drain = lambda _queue, _generation: None  # type: ignore[assignment]
-    bridge._current_message_visibility = "hidden"
 
     bridge.dispatch_command(AskUserResponseCommand(text="yes", absoluteTurnIndex=4))
 
-    assert bridge._current_message_visibility == "visible"
     assert bridge._current_message_turn_base == 4
     assert bridge._last_emitted_turn == 1
     assert bridge.agent.tasks == [("yes", "workbench")]
@@ -551,7 +549,6 @@ def test_user_message_emits_turn_start_before_progress_drain(
                 sessionId="s1",
                 delta="early prose",
                 source="workbench",
-                visibility=bridge._current_message_visibility,
             )
         )
 

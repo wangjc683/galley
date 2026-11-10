@@ -187,69 +187,11 @@ agent 进入一轮步骤。Bridge 会在普通 `user_message` / `ask_user_respon
 
 2026-10-05 随审批移除，见 §6。编号保留，避免文内外引用错位。
 
-### 4.4 `tool_call_start`
+### 4.4–4.6（已删除）
 
-工具开始执行。
+`tool_call_start`、`tool_call_end`、`tool_call_progress` 三条事件 2026-11-10 删除：runner 从没发过它们，三处镜像里只有定义和构造它们的测试。一步里调了哪些工具、结果是什么，随这一步的 `turn_end` 的 `toolCalls` / `toolResults` 到（§4.7，`runner/workbench_bridge.py` 的 `_on_turn_end`）；一步里流出的文字走 `turn_progress`（§4.7a）。编号保留，避免文内外引用错位。
 
-**现状（2026-10-20 照代码核对，2026-11-10 复核）：runner 不发这个事件。** 它只在协议里定义着：`runner/ipc.py` 的 `ToolCallStartEvent` 与 `EVENT_KINDS` 登记，Core（`core/src/ipc.rs` 的 `ToolCallStartEvent`）与 GUI（`gui/src/types/ipc.ts` 的 `ToolCallStartEvent`）都认得它，GUI 收到也只记一条 debug 日志（`gui/src/lib/ipc-handlers.ts` 的 `dispatchIPCEvent`）；bridge 里没有任何地方构造它。一步里调了哪些工具，要到这一步的 `turn_end` 才随 `toolCalls` 一起到（§4.7，`runner/workbench_bridge.py` 的 `_on_turn_end`）。§4.5 `tool_call_end`、§4.6 `tool_call_progress` 同样如此。
-
-GUI 要知道「此刻正在调哪个工具」时（侧栏助理卡片那张脸的神态，主聊天票 65），不靠这个事件，读的是这一步正在流出的原始文字（消息缓存的 `inFlightContent`）里 GA 打出的最后一条派发行：GA 在派发每个工具前先打一行（`managed-ga/code/agent_loop.py` 的 `agent_runner_loop` 里，详细格式：`🛠️ Tool:` 后接反引号里的工具名，再接参数块；紧凑格式：`🛠️ name(args)`），bridge 原样转发，这一步的 `turn_end` 才清掉，所以工具在跑时最后一条派发行就是它。解析在 `gui/src/lib/assistant-face.ts` 的 `liveToolCall`，归类在同文件的 `classifyTool`。这是一处读 GA 输出格式的耦合点：GA 改了派发行的写法，脸会退回「在想」，不影响别的界面。协议本身不改；哪天 runner 真发了这个事件，GUI 可以改读它、去掉这处耦合。
-
-下面是协议定义的形状：
-
-```json
-{
-  "kind": "tool_call_start",
-  "sessionId": "sess_abc123",
-  "toolCallId": "tc_001",
-  "turnIndex": 1,
-  "toolName": "file_read",
-  "args": { "path": "agentmain.py" },
-  "argsPreview": "path=agentmain.py",
-  "timestamp": "..."
-}
-```
-
-`toolCallId` 由 bridge 生成（uuid 短形式），用于 `tool_call_end` 关联。
-
-### 4.5 `tool_call_end`
-
-工具执行结束。
-
-**现状（2026-11-10 照代码核对）：runner 不发这个事件**，同 §4.4：只在四处镜像（`runner/ipc.py`、`core/src/ipc.rs`、`gui/src/types/ipc.ts`、本文）里定义着，GUI 收到只记 debug 日志；工具结果随 `turn_end` 的 `toolResults` 到（§4.7）。下面是协议定义的形状：
-
-```json
-{
-  "kind": "tool_call_end",
-  "sessionId": "sess_abc123",
-  "toolCallId": "tc_001",
-  "status": "success",
-  "resultPreview": "[FILE] 268 lines | ...",
-  "elapsedMs": 124,
-  "timestamp": "..."
-}
-```
-
-字段说明：
-- `status`：`"success" | "failed" | "denied" | "cancelled"`
-- `resultPreview`：≤500 字符的结果摘要
-- `denied` 是审批时代的取值，2026-10-05 审批移除后不再产生
-
-### 4.6 `tool_call_progress`（兜底）
-
-bridge 解析 GA yield 出来的 markdown 字符串得到的非结构化进度，用于 raw view。**不**作为 desktop 渲染主链路的依据。
-
-**现状（2026-11-10 照代码核对）：runner 不发这个事件**，同 §4.4：只定义、没有构造它的地方。一步里流出的文字走 `turn_progress`（§4.7a）。下面是协议定义的形状：
-
-```json
-{
-  "kind": "tool_call_progress",
-  "sessionId": "sess_abc123",
-  "toolCallId": "tc_001",
-  "text": "[Action] Running python in temp: print('hi')...",
-  "timestamp": "..."
-}
-```
+GUI 要知道「此刻正在调哪个工具」时（侧栏助理卡片那张脸的神态，主聊天票 65），读的是这一步正在流出的原始文字（消息缓存的 `inFlightContent`）里 GA 打出的最后一条派发行：GA 在派发每个工具前先打一行（`managed-ga/code/agent_loop.py` 的 `agent_runner_loop` 里，详细格式：`🛠️ Tool:` 后接反引号里的工具名，再接参数块；紧凑格式：`🛠️ name(args)`），bridge 原样转发，这一步的 `turn_end` 才清掉，所以工具在跑时最后一条派发行就是它。解析在 `gui/src/lib/assistant-face.ts` 的 `liveToolCall`，归类在同文件的 `classifyTool`。这是一处读 GA 输出格式的耦合点：GA 改了派发行的写法，脸会退回「在想」，不影响别的界面。
 
 ### 4.7 `turn_end`
 
@@ -799,7 +741,7 @@ bridge:   { kind: "turn_start", ... }
 ## 10. Open Items（实现阶段确认）
 
 - [x] **`load_history` messages 数据结构** — 已 e2e 验证：`NativeClaudeSession` 的 `backend.history` 是 `[{role, content: [{type:"text", text:str}, ...]}]`（Anthropic native messages 格式）。string content → native blocks 的适配自 2026-07-11 起住在 `runner/ga_session.py`（`set_history` / `message_to_content_blocks`，GA 集成缝的一部分）。**未验证**：`NativeOAISession` / `ClaudeSession` / `LLMSession` / `MixinSession` 的 history 形态可能不同，需要对应 adapter——对这些后端 `set_history` 会照写并发出响亮 warning（而非静默），见 PRD §10。当前只在 `NativeClaudeSession` 下保证恢复语义。
-- [ ] `tool_call_progress` 字符串解析规则（GA 当前 yield 的 emoji 前缀格式）需在 runner 实现时记录到 `runner/handlers.py` 注释，避免 GA 升级时格式变化无人知晓 — V0.1 暂不实现 progress 事件，turn_end 已含完整 toolCalls/toolResults
+- [x] ~~`tool_call_progress` 字符串解析规则~~ — 不再需要：这条事件从没实现，2026-11-10 随 `tool_call_start` / `tool_call_end` 一起删除（§4.4–4.6），`turn_end` 已含完整 toolCalls/toolResults
 - [x] images 字段的传递路径（user_message → GA put_task）：managed GA 由补丁 0008 消费 `put_task(images=)`；external GA 上游 `run()` 不消费该参数，bridge 改在 `put_task` 前给 `backend.ask` 套一次性 wrapper 追加图片块（§4.1 `imagesSupported`，2026-09-18）
 - [x] **`abort` 路径** — GA 的 `abort()` 设 `stop_sig` 让 worker 跳出循环，但**不**触发 `turn_end_callback`。bridge 在 `dispatch_command` 收到 `AbortCommand` 时主动合成 `RunCompleteEvent` with `exitReason.result = "ABORTED"`。e2e 已验证。
 - [x] **`error` 事件结构化字段** — `category` / `severity` / `retryable` / `hint` 四字段在 v0.1 落地（见 §4.10）。runner 端 LLM 调用错误的 hint 推断逻辑见 `runner/workbench_bridge.py` 的 `_classify_error`。

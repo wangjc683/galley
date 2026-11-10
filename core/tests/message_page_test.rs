@@ -187,15 +187,16 @@ async fn only_this_sessions_visible_rows_with_their_attachments() {
     session(&galley, "other").await;
     exchange(&galley, "s", 0).await;
     exchange(&galley, "other", 0).await;
-    galley
-        .send_message_with_visibility(
-            SessionId("s".into()),
-            "internal".into(),
-            Origin::cli(None, None),
-            MessageVisibility::Internal,
-        )
-        .await
-        .unwrap();
+    // An internal row as an old (Goal-era) database holds one; nothing
+    // writes them any more.
+    sqlx::query(
+        "INSERT INTO messages (id, session_id, turn_index, sequence, role, content, \
+            created_at, visibility) \
+         VALUES ('msg_s_1_user', 's', 1, 0, 'user', 'internal', 'x', 'internal')",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
     exchange(&galley, "s", 1).await;
     sqlx::query(
         "INSERT INTO message_attachments (id, message_id, session_id, kind, file_path, \

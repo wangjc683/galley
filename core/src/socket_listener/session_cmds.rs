@@ -1,10 +1,10 @@
-//! Session commands against an **existing** session: send / checkpoint /
-//! watch / btw / stop / shutdown_runner / archive / restore / move /
-//! list, plus the Tauri event payloads and id minting shared with the
-//! sibling command modules. Session creation lives in
-//! `session_new_cmds`. Starting a runner — spawn-config resolution,
-//! "ensure a runner", the `runner-spawned-external` broadcast — moved
-//! to Core's shared path, [`crate::session_runner`]
+//! Session commands against an **existing** session: send / watch / btw /
+//! stop / archive / restore / move / list / run state, plus the Tauri
+//! event payloads and id minting shared with the sibling command modules.
+//! Session creation lives in `session_new_cmds`. Starting a runner —
+//! spawn-config resolution, "ensure a runner", the
+//! `runner-spawned-external` broadcast — moved to Core's shared path,
+//! [`crate::session_runner`]
 //! (ticket 02a); `common::SocketResponseLite::from_session_runner` keeps
 //! its errors worded as before.
 //!
@@ -275,7 +275,6 @@ async fn send_now(
                 &IpcCommand::UserMessage(UserMessageCommand {
                     text: content,
                     images: vec![],
-                    visibility: None,
                     absolute_turn_index: brief.turn_index.map(i64::from),
                     wake: false,
                 }),
@@ -331,60 +330,6 @@ pub(super) async fn emit_queue_changed(ctx: &HandlerCtx<'_>, session_id: &str) {
             items,
         },
     );
-}
-
-pub(super) async fn dispatch_session_checkpoint(
-    request_id: Option<String>,
-    args: Value,
-    ctx: &HandlerCtx<'_>,
-) -> SocketResponse {
-    let parsed: SessionCheckpointArgs = match serde_json::from_value(args) {
-        Ok(a) => a,
-        Err(e) => {
-            return SocketResponse::err(
-                request_id,
-                ErrorTag::InvalidArgs,
-                format!("session.checkpoint args: {e}"),
-            );
-        }
-    };
-    let content = parsed.content.trim().to_string();
-    if content.is_empty() {
-        return SocketResponse::err(
-            request_id,
-            ErrorTag::InvalidArgs,
-            "session.checkpoint: content is empty",
-        );
-    }
-
-    let galley = match ctx.db.get().await {
-        Ok(g) => g,
-        Err(e) => {
-            return SocketResponse::err(request_id, ErrorTag::DbUnavailable, format!("open: {e}"));
-        }
-    };
-    let origin = origin_from_args(parsed.supervisor.clone(), parsed.reason.clone());
-    let session_id = SessionId(parsed.session_id.clone());
-    // Checkpoints are Galley-authored narration, not the human
-    // operator's input — persist them as a `system` row so the GUI
-    // renders neutral narration instead of a user bubble. Still
-    // `persisted_only`: never dispatched to the runner.
-    let brief = match galley
-        .send_system_message(session_id, content, origin)
-        .await
-    {
-        Ok(b) => b,
-        Err(e) => return map_galley_err(request_id, e),
-    };
-
-    emit_user_message_persisted(ctx, &parsed.session_id, &brief, "persisted_only");
-    SocketResponse::ok(
-        request_id,
-        serde_json::json!({
-            "message": brief,
-            "dispatch": "persisted_only",
-        }),
-    )
 }
 
 pub(super) async fn dispatch_session_watch(
@@ -465,7 +410,6 @@ pub(super) async fn dispatch_session_btw(
     let cmd = IpcCommand::UserMessage(UserMessageCommand {
         text: format!("/btw {question}"),
         images: vec![],
-        visibility: None,
         absolute_turn_index: None,
         wake: false,
     });
@@ -544,46 +488,8 @@ pub(super) async fn dispatch_session_stop(
     }
 }
 
-/// `session.run_state` — the live busy signal for one session, read
-/// straight from the RunnerManager (runner registry + outbound-queue run
-/// gate). Poll target for a Supervisor's turn-completion waits:
-/// `sessions.status` in SQLite persists transient statuses as `idle`, so
-/// a DB read can never answer "is the dispatched run still open".
-pub(super) async fn dispatch_session_run_state(
-    request_id: Option<String>,
-    args: Value,
-    ctx: &HandlerCtx<'_>,
-) -> SocketResponse {
-    let parsed: SessionRunStateArgs = match serde_json::from_value(args) {
-        Ok(a) => a,
-        Err(e) => {
-            return SocketResponse::err(
-                request_id,
-                ErrorTag::InvalidArgs,
-                format!("session.run_state args: {e}"),
-            );
-        }
-    };
-    let galley = match ctx.db.get().await {
-        Ok(g) => g,
-        Err(e) => {
-            return SocketResponse::err(request_id, ErrorTag::DbUnavailable, format!("open: {e}"));
-        }
-    };
-    if let Err(e) = galley
-        .session_brief(SessionId(parsed.session_id.clone()))
-        .await
-    {
-        return map_galley_err(request_id, e);
-    }
-    drop(galley);
-
-    let state = ctx.runner.run_state(&parsed.session_id).await;
-    SocketResponse::ok(request_id, run_state_json(&parsed.session_id, state))
-}
-
-/// One session's live state as the wire object shared by
-/// `session.run_state` and `sessions.run_state`. `busy` is the derived
+/// One session's live state as the wire object of `sessions.run_state`
+/// (one per session in its answer). `busy` is the derived
 /// verdict `openRun || agentRunning || queuedCount > 0`, exposed so
 /// Supervisors don't each re-derive it. `askPending` / `lastExit` (additive,
 /// galley#30) let a Supervisor see that the run ended on a question it
@@ -601,7 +507,10 @@ pub(super) fn run_state_json(session_id: &str, state: RunState) -> Value {
     })
 }
 
-/// `sessions.run_state` — bulk form of `session.run_state`. With
+/// `sessions.run_state` — the live busy signal, read straight from the
+/// RunnerManager (runner registry + outbound-queue run gate):
+/// `sessions.status` in SQLite persists transient statuses as `idle`, so a
+/// DB read can never answer "is the dispatched run still open". With
 /// `sessionIds`, answers for exactly those ids (unknown ids read as idle;
 /// no DB existence check, so a `sessions list` caller can pass its whole
 /// page in one round-trip). Without ids, answers for every session the
@@ -631,52 +540,6 @@ pub(super) async fn dispatch_sessions_run_state(
         sessions.push(run_state_json(id, state));
     }
     SocketResponse::ok(request_id, serde_json::json!({ "sessions": sessions }))
-}
-
-pub(super) async fn dispatch_session_shutdown_runner(
-    request_id: Option<String>,
-    args: Value,
-    ctx: &HandlerCtx<'_>,
-) -> SocketResponse {
-    let parsed: SessionShutdownRunnerArgs = match serde_json::from_value(args) {
-        Ok(a) => a,
-        Err(e) => {
-            return SocketResponse::err(
-                request_id,
-                ErrorTag::InvalidArgs,
-                format!("session.shutdown_runner args: {e}"),
-            );
-        }
-    };
-
-    let galley = match ctx.db.get().await {
-        Ok(g) => g,
-        Err(e) => {
-            return SocketResponse::err(request_id, ErrorTag::DbUnavailable, format!("open: {e}"));
-        }
-    };
-    if let Err(e) = galley
-        .session_brief(SessionId(parsed.session_id.clone()))
-        .await
-    {
-        return map_galley_err(request_id, e);
-    }
-    drop(galley);
-
-    match ctx
-        .runner
-        .shutdown(&parsed.session_id, Some(Duration::from_millis(1500)))
-        .await
-    {
-        Ok(()) => SocketResponse::ok(
-            request_id,
-            serde_json::json!({ "dispatch": "shutdown_sent" }),
-        ),
-        Err(ShutdownError::NotFound { .. }) => SocketResponse::ok(
-            request_id,
-            serde_json::json!({ "dispatch": "already_stopped" }),
-        ),
-    }
 }
 
 pub(super) async fn dispatch_session_archive(

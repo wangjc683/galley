@@ -5,8 +5,7 @@
 //! other writer, and never part of the CLI's JSON (Rule 3).
 
 use galley_core_lib::api::{
-    CreateSessionInput, GalleyApi, MessageVisibility, Origin, OriginClient, OriginVia, RuntimeKind,
-    SessionId,
+    CreateSessionInput, GalleyApi, Origin, OriginClient, RuntimeKind, SessionId,
 };
 use galley_core_lib::db::SqliteGalley;
 use galley_core_lib::message_queue::dispatch_queued_message;
@@ -116,28 +115,6 @@ async fn messages_record_the_app_a_human_sent_them_from() {
         .send_message(sid(), "from an agent".into(), Origin::cli(None, None))
         .await
         .unwrap();
-    let system = galley
-        .send_system_message(
-            sid(),
-            "narration".into(),
-            Origin {
-                via: OriginVia::System,
-                supervisor: None,
-                reason: None,
-                client: None,
-            },
-        )
-        .await
-        .unwrap();
-    let internal = galley
-        .send_message_with_visibility(
-            sid(),
-            "hidden".into(),
-            Origin::desktop(),
-            MessageVisibility::Internal,
-        )
-        .await
-        .unwrap();
 
     assert_eq!(
         message_client(&pool, &desktop.id.0).await.as_deref(),
@@ -148,11 +125,6 @@ async fn messages_record_the_app_a_human_sent_them_from() {
         Some("ios")
     );
     assert_eq!(message_client(&pool, &cli.id.0).await, None);
-    assert_eq!(message_client(&pool, &system.id.0).await, None);
-    assert_eq!(
-        message_client(&pool, &internal.id.0).await.as_deref(),
-        Some("desktop")
-    );
     // `via` is unchanged: `gui` still means "a human".
     let via: String = sqlx::query_scalar("SELECT created_via FROM messages WHERE id = ?")
         .bind(&phone.id.0)

@@ -161,7 +161,7 @@
 
 （2026-10-13 Goal 移除，见 [devlog](../../devlog/2026-10-13-remove-goal.md)）委派标记、收口标记与暂停 / 受阻尾标随 Goal 一起删除，历史 Goal 会话按普通的用户 / 智能体轮次显示。
 
-叙述 callout 保留：系统行（`session.checkpoint` 写的叙述，以及 Goal v1 留在历史线程里的旁白）走 `SystemMessageBubble` `variant="narration"`（原名 `goal`），形态不变——细 brand 左规线（`border-l-[3px] border-brand-strong/30` + `pl-4`，无底色）+ 无字的小 `Target` 图标（thin 11px），正文 `[&_p]/[&_li]` 降到 `text-ink-soft`、字号走 `--conversation-narration-size`；「Galley」不逐条显示，归属挂在图标的 `aria-label`；连续叙述簇只在首条显示图标。
+叙述 callout 保留：系统行（老库里的：socket `session.checkpoint` 写的叙述，以及 Goal v1 留在历史线程里的旁白；`session.checkpoint` 2026-11-10 删除，此后没有写入方）走 `SystemMessageBubble` `variant="narration"`（原名 `goal`），形态不变——细 brand 左规线（`border-l-[3px] border-brand-strong/30` + `pl-4`，无底色）+ 无字的小 `Target` 图标（thin 11px），正文 `[&_p]/[&_li]` 降到 `text-ink-soft`、字号走 `--conversation-narration-size`；「Galley」不逐条显示，归属挂在图标的 `aria-label`；连续叙述簇只在首条显示图标。
 
 #### 停在步数上限 = 可恢复态（2026-10-01，[galley#29](https://github.com/wangjc683/galley/issues/29)）
 

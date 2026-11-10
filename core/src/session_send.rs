@@ -365,7 +365,6 @@ async fn send_reserved(host: &RunnerHost<'_>, req: SendRequest) -> Result<SendOu
         IpcCommand::UserMessage(UserMessageCommand {
             text: req.text,
             images: message.attachments.iter().map(|a| a.path.clone()).collect(),
-            visibility: None,
             absolute_turn_index,
             wake: false,
         })
@@ -431,7 +430,6 @@ async fn send_side_question(
             &IpcCommand::UserMessage(UserMessageCommand {
                 text: req.text,
                 images: vec![],
-                visibility: None,
                 absolute_turn_index: None,
                 wake: false,
             }),

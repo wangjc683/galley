@@ -397,7 +397,6 @@ async fn send_command_reaches_subprocess() {
         &IpcCommand::UserMessage(galley_core_lib::ipc::UserMessageCommand {
             text: "hello".into(),
             images: vec![],
-            visibility: None,
             absolute_turn_index: None,
             wake: false,
         }),
@@ -442,7 +441,6 @@ async fn agent_running_toggles_with_turn_lifecycle() {
         &IpcCommand::UserMessage(galley_core_lib::ipc::UserMessageCommand {
             text: "go".into(),
             images: vec![],
-            visibility: None,
             absolute_turn_index: None,
             wake: false,
         }),
@@ -749,7 +747,6 @@ fn huge_user_message() -> IpcCommand {
     IpcCommand::UserMessage(galley_core_lib::ipc::UserMessageCommand {
         text: "x".repeat(4 * 1024 * 1024),
         images: vec![],
-        visibility: None,
         absolute_turn_index: None,
         wake: false,
     })
@@ -847,7 +844,6 @@ async fn wedged_session_does_not_block_other_sessions() {
             &IpcCommand::UserMessage(galley_core_lib::ipc::UserMessageCommand {
                 text: "still alive?".into(),
                 images: vec![],
-                visibility: None,
                 absolute_turn_index: None,
                 wake: false,
             }),
@@ -880,8 +876,11 @@ use sqlx::SqlitePool;
 use tokio::sync::mpsc;
 
 /// Mock runner that plays a scripted run per `user_message` text and
-/// echoes the dispatch's `absoluteTurnIndex` / `visibility` the way the
-/// real bridge does (`base + step - 1`).
+/// echoes the dispatch's `absoluteTurnIndex` the way the real bridge does
+/// (`base + step - 1`). A text that starts with `internal ` plays its run
+/// with every event marked `"visibility": "internal"`: nothing sends such a
+/// run any more (the command's `visibility` went with Goal), but Core
+/// still handles the events' field, and these tests pin how.
 fn write_persisting_runner(dir: &std::path::Path) {
     let runner_dir = dir.join("runner");
     fs::create_dir_all(&runner_dir).expect("mkdir runner");
@@ -943,7 +942,10 @@ for line in sys.stdin:
         continue
     text = cmd.get("text", "")
     base = cmd.get("absoluteTurnIndex")
-    vis = cmd.get("visibility") or "visible"
+    vis = "visible"
+    if text.startswith("internal "):
+        vis = "internal"
+        text = text[len("internal "):]
     emit({"kind": "turn_start", "turnIndex": 1, "visibility": vis})
     if text.startswith("run:"):
         steps = int(text.split(":")[1])
@@ -1036,15 +1038,9 @@ fn persisting_manager(
 
 /// Persist the user row (as every dispatch path does) and send the
 /// message carrying its turn index, like the GUI / socket / queue do.
-async fn dispatch(
-    mgr: &RunnerManager,
-    galley: &SqliteGalley,
-    sid: &str,
-    text: &str,
-    visibility: MessageVisibility,
-) -> u32 {
+async fn dispatch(mgr: &RunnerManager, galley: &SqliteGalley, sid: &str, text: &str) -> u32 {
     let user = galley
-        .send_message_with_visibility(
+        .send_message(
             SessionId(sid.into()),
             text.into(),
             Origin {
@@ -1053,7 +1049,6 @@ async fn dispatch(
                 reason: None,
                 client: None,
             },
-            visibility,
         )
         .await
         .expect("persist user row");
@@ -1063,7 +1058,6 @@ async fn dispatch(
         &IpcCommand::UserMessage(UserMessageCommand {
             text: text.into(),
             images: vec![],
-            visibility: (visibility == MessageVisibility::Internal).then(|| "internal".into()),
             absolute_turn_index: Some(i64::from(base)),
             wake: false,
         }),
@@ -1127,7 +1121,7 @@ async fn core_persists_every_turn_without_a_gui() {
     let (mgr, mut signals) = persisting_manager(&galley);
     spawn_persisting(&mgr, "s-run", bridge.path()).await;
 
-    let base = dispatch(&mgr, &galley, "s-run", "run:3", MessageVisibility::Visible).await;
+    let base = dispatch(&mgr, &galley, "s-run", "run:3").await;
     assert_eq!(next_run_complete(&mut signals).await, "s-run");
 
     // Read right after the gate-closing signal, no grace: the watcher
@@ -1194,7 +1188,7 @@ async fn core_persists_ask_user_step_limit_and_done_without_exit_runs() {
     spawn_persisting(&mgr, "s-end", bridge.path()).await;
 
     // ask_user: the asking step lands, and the read side sees the question.
-    let ask_base = dispatch(&mgr, &galley, "s-end", "ask", MessageVisibility::Visible).await;
+    let ask_base = dispatch(&mgr, &galley, "s-end", "ask").await;
     next_run_complete(&mut signals).await;
     let rows = assistant_rows(&galley, "s-end").await;
     assert_eq!(rows.len(), 1);
@@ -1216,7 +1210,7 @@ async fn core_persists_ask_user_step_limit_and_done_without_exit_runs() {
 
     // The answer arrives as the next message; a step-limit stop lands
     // both steps, the half-done last one included.
-    let limit_base = dispatch(&mgr, &galley, "s-end", "limit", MessageVisibility::Visible).await;
+    let limit_base = dispatch(&mgr, &galley, "s-end", "limit").await;
     next_run_complete(&mut signals).await;
     let rows = assistant_rows(&galley, "s-end").await;
     assert_eq!(rows.len(), 3);
@@ -1227,14 +1221,7 @@ async fn core_persists_ask_user_step_limit_and_done_without_exit_runs() {
 
     // DONE_WITHOUT_EXIT: no final turn_end, but the step before the
     // crash is persisted.
-    let nofinal_base = dispatch(
-        &mgr,
-        &galley,
-        "s-end",
-        "nofinal",
-        MessageVisibility::Visible,
-    )
-    .await;
+    let nofinal_base = dispatch(&mgr, &galley, "s-end", "nofinal").await;
     next_run_complete(&mut signals).await;
     let rows = assistant_rows(&galley, "s-end").await;
     assert_eq!(rows.len(), 4);
@@ -1258,7 +1245,7 @@ async fn internal_turns_are_persisted_without_bumping_the_session() {
     let (mgr, mut signals) = persisting_manager(&galley);
     spawn_persisting(&mgr, "s-int", bridge.path()).await;
 
-    let base = dispatch(&mgr, &galley, "s-int", "run:2", MessageVisibility::Internal).await;
+    let base = dispatch(&mgr, &galley, "s-int", "internal run:2").await;
     next_run_complete(&mut signals).await;
 
     // Hidden from the visible read path, present in the table.
@@ -1328,7 +1315,6 @@ async fn turn_without_absolute_index_keys_on_the_latest_user_row() {
         &IpcCommand::UserMessage(UserMessageCommand {
             text: "run:2".into(),
             images: vec![],
-            visibility: None,
             absolute_turn_index: None,
             wake: false,
         }),
@@ -1374,14 +1360,7 @@ async fn concurrent_runners_persist_independently() {
         let galley = galley.clone();
         let sid = sid.to_string();
         sends.push(tokio::spawn(async move {
-            dispatch(
-                &mgr,
-                &galley,
-                &sid,
-                &format!("run:{}", i + 3),
-                MessageVisibility::Visible,
-            )
-            .await
+            dispatch(&mgr, &galley, &sid, &format!("run:{}", i + 3)).await
         }));
     }
     for send in sends {
@@ -2219,7 +2198,7 @@ async fn each_visible_turn_bump_is_announced_with_the_bumped_row() {
     let (mgr, mut signals, notifier) = announcing_manager(&galley);
     spawn_persisting(&mgr, "s-ann", bridge.path()).await;
 
-    dispatch(&mgr, &galley, "s-ann", "run:3", MessageVisibility::Visible).await;
+    dispatch(&mgr, &galley, "s-ann", "run:3").await;
     next_run_complete(&mut signals).await;
 
     let bumps: Vec<serde_json::Value> = payloads_of(&notifier, "session-updated-external")
@@ -2245,7 +2224,7 @@ async fn each_visible_turn_bump_is_announced_with_the_bumped_row() {
     assert_eq!(last["lastActivityAt"], brief.last_activity_at.as_str());
 
     // Internal turns bump nothing, so announce nothing.
-    dispatch(&mgr, &galley, "s-ann", "run:2", MessageVisibility::Internal).await;
+    dispatch(&mgr, &galley, "s-ann", "internal run:2").await;
     next_run_complete(&mut signals).await;
     let after = payloads_of(&notifier, "session-updated-external");
     assert_eq!(after.len(), 3);
@@ -2282,7 +2261,7 @@ async fn run_state_events_follow_a_run_and_an_ask_without_repeats() {
     );
 
     // A turn left going is seen going …
-    dispatch(&mgr, &galley, "s-rs", "hold", MessageVisibility::Visible).await;
+    dispatch(&mgr, &galley, "s-rs", "hold").await;
     wait_run_states(&notifier, "s-rs", |s| {
         s.last()
             .is_some_and(|p| p["agentRunning"] == true && p["openRun"] == true)
@@ -2292,7 +2271,7 @@ async fn run_state_events_follow_a_run_and_an_ask_without_repeats() {
     // when it gets to a report, so a run this mock finishes within a
     // millisecond may show no `agentRunning: true` of its own: events
     // carry states, not every edge; the last one is always current.
-    dispatch(&mgr, &galley, "s-rs", "release", MessageVisibility::Visible).await;
+    dispatch(&mgr, &galley, "s-rs", "release").await;
     next_run_complete(&mut signals).await;
     settle(&mgr, "s-rs").await;
     let states = wait_run_states(&notifier, "s-rs", |s| {
@@ -2314,7 +2293,7 @@ async fn run_state_events_follow_a_run_and_an_ask_without_repeats() {
     );
 
     // An ask_user run ends asking; the answer's dispatch clears it.
-    dispatch(&mgr, &galley, "s-rs", "ask", MessageVisibility::Visible).await;
+    dispatch(&mgr, &galley, "s-rs", "ask").await;
     next_run_complete(&mut signals).await;
     settle(&mgr, "s-rs").await;
     let states = wait_run_states(&notifier, "s-rs", |s| {
@@ -2566,7 +2545,7 @@ async fn an_interjection_lands_after_the_step_that_read_it() {
     }
     let sid = "s-interject";
     let (bridge, _db, galley, mgr, mut signals, notifier) = interjecting_main_chat(sid).await;
-    let base = dispatch(&mgr, &galley, sid, "work", MessageVisibility::Visible).await;
+    let base = dispatch(&mgr, &galley, sid, "work").await;
     let base = i64::from(base);
 
     // Sent mid-run: queued, marked, and handed to the run — not a run of
@@ -2657,7 +2636,7 @@ async fn a_line_told_mid_run_lands_after_its_step() {
     }
     let sid = "s-tell";
     let (_bridge, _db, galley, mgr, mut signals, _notifier) = interjecting_main_chat(sid).await;
-    let base = i64::from(dispatch(&mgr, &galley, sid, "tell", MessageVisibility::Visible).await);
+    let base = i64::from(dispatch(&mgr, &galley, sid, "tell").await);
     assert_eq!(next_run_complete(&mut signals).await, sid);
 
     // After the step that said it (its row is `sequence` 1), before the
@@ -2721,7 +2700,7 @@ async fn a_line_said_in_a_step_shows_once_and_replays_once() {
     }
     let sid = "s-said";
     let (bridge, _db, galley, mgr, mut signals, _notifier) = interjecting_main_chat(sid).await;
-    let base = i64::from(dispatch(&mgr, &galley, sid, "said", MessageVisibility::Visible).await);
+    let base = i64::from(dispatch(&mgr, &galley, sid, "said").await);
     assert_eq!(next_run_complete(&mut signals).await, sid);
 
     // A line told mid-run like any (ticket 137): after its step, no index
@@ -2801,7 +2780,7 @@ async fn a_line_told_outside_the_managed_main_chat_is_dropped() {
     let (tx, mut signals) = mpsc::unbounded_channel();
     mgr.set_run_signal(tx);
     spawn_persisting(&mgr, sid, bridge.path()).await;
-    dispatch(&mgr, &galley, sid, "tell", MessageVisibility::Visible).await;
+    dispatch(&mgr, &galley, sid, "tell").await;
     assert_eq!(next_run_complete(&mut signals).await, sid);
     let rows = galley
         .persisted_message_rows(&SessionId(sid.into()))
@@ -2820,7 +2799,7 @@ async fn an_interjection_the_run_never_read_goes_out_next_exactly_once() {
     }
     let sid = "s-returned";
     let (_bridge, _db, galley, mgr, mut signals, notifier) = interjecting_main_chat(sid).await;
-    let base = i64::from(dispatch(&mgr, &galley, sid, "quick", MessageVisibility::Visible).await);
+    let base = i64::from(dispatch(&mgr, &galley, sid, "quick").await);
     let outcome = send_as_desktop(&mgr, &galley, &notifier, sid, "顺便说下星期几", "crq-2").await;
     let SendOutcome::Interjected { queue_id, .. } = outcome else {
         panic!("expected Interjected, got {outcome:?}");
@@ -2887,7 +2866,7 @@ async fn an_interjection_unread_when_the_run_asks_is_the_answer() {
     }
     let sid = "s-answer";
     let (bridge, _db, galley, mgr, mut signals, notifier) = interjecting_main_chat(sid).await;
-    dispatch(&mgr, &galley, sid, "askme", MessageVisibility::Visible).await;
+    dispatch(&mgr, &galley, sid, "askme").await;
     send_as_desktop(&mgr, &galley, &notifier, sid, "上海的", "crq-3").await;
     let done = next_run_complete(&mut signals).await;
     assert!(mgr.run_state(sid).await.ask_pending);
@@ -2926,7 +2905,7 @@ async fn a_workbench_session_still_queues() {
     let (tx, _rx) = mpsc::unbounded_channel();
     mgr.set_run_signal(tx);
     spawn_persisting(&mgr, "s-bench", bridge.path()).await;
-    dispatch(&mgr, &galley, "s-bench", "work", MessageVisibility::Visible).await;
+    dispatch(&mgr, &galley, "s-bench", "work").await;
 
     let outcome = send_as_desktop(&mgr, &galley, &notifier, "s-bench", "再看看", "crq-4").await;
     assert!(matches!(outcome, SendOutcome::Queued { .. }), "{outcome:?}");

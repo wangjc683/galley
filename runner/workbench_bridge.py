@@ -641,7 +641,6 @@ class Bridge:
         self.shutdown_event = threading.Event()
         self.run_in_progress = threading.Event()
         self.current_turn: int = 0
-        self._current_message_visibility: str = "visible"
         self._current_message_turn_base: int | None = None
         self._agent_thread_name = f"galley-agent-{self.session_id}"
         self._current_run_started_at: float | None = None
@@ -1226,7 +1225,6 @@ class Bridge:
                         turnIndex=turn,
                         index=index,
                         absoluteTurnIndex=self._current_absolute_turn_index(turn),
-                        visibility=self._current_message_visibility,
                         stepText=from_step,
                     )
                 )
@@ -1277,7 +1275,6 @@ class Bridge:
             TurnStartEvent(
                 sessionId=self.session_id,
                 turnIndex=turn_index,
-                visibility=self._current_message_visibility,
             )
         )
 
@@ -1381,7 +1378,6 @@ class Bridge:
                                     sessionId=self.session_id,
                                     delta=tail,
                                     source=str(item.get("source", "")),
-                                    visibility=self._current_message_visibility,
                                 )
                             )
                         # `source='system'` is GA's signal that this
@@ -1438,11 +1434,9 @@ class Bridge:
                                             },
                                             finalContent="",
                                             totalTurns=self.current_turn,
-                                            visibility=self._current_message_visibility,
                                         )
                                     )
                                     self.run_in_progress.clear()
-                                    self._current_message_visibility = "visible"
                                     self._current_message_turn_base = None
                                     self._end_run_tracking()
                         else:
@@ -1467,7 +1461,6 @@ class Bridge:
                                 sessionId=self.session_id,
                                 delta=filtered,
                                 source=str(item.get("source", "")),
-                                visibility=self._current_message_visibility,
                             )
                         )
             except Exception as e:
@@ -1563,11 +1556,9 @@ class Bridge:
                     exitReason={"result": "DONE_WITHOUT_EXIT", "data": None},
                     finalContent="",
                     totalTurns=self.current_turn,
-                    visibility=self._current_message_visibility,
                 )
             )
             self.run_in_progress.clear()
-            self._current_message_visibility = "visible"
             self._current_message_turn_base = None
             self._end_run_tracking()
 
@@ -1602,7 +1593,6 @@ class Bridge:
                     hint=hint,
                     context=context,
                     traceback=tb,
-                    visibility=self._current_message_visibility,
                 )
             )
 
@@ -1675,7 +1665,6 @@ class Bridge:
                     responseContent=response_content,
                     exitReason=safe_exit,
                     telemetry=telemetry,
-                    visibility=self._current_message_visibility,
                     absoluteTurnIndex=self._current_absolute_turn_index(turn),
                     nextSuggestion=next_suggestion,
                     responseThinking=response_thinking,
@@ -1728,11 +1717,9 @@ class Bridge:
                                 exitReason=safe_exit or {},
                                 finalContent=final_content,
                                 totalTurns=turn,
-                                visibility=self._current_message_visibility,
                             )
                         )
                         self.run_in_progress.clear()
-                        self._current_message_visibility = "visible"
                         self._current_message_turn_base = None
                         self._end_run_tracking()
             else:
@@ -1841,7 +1828,6 @@ class Bridge:
             # Nothing of an earlier run may reach this one's first step
             # (main chat ticket 136); its end already cleared it.
             self._return_unread_interjections()
-            self._current_message_visibility = cmd.visibility or "visible"
             self._current_message_turn_base = cmd.absoluteTurnIndex
             self._run_from_user = not cmd.wake
             self._begin_run_tracking()
@@ -1872,7 +1858,6 @@ class Bridge:
             # fresh agent_runner_loop with turn counter restarting at 1.
             self._last_emitted_turn = 0
             self._return_unread_interjections()
-            self._current_message_visibility = "visible"
             self._current_message_turn_base = cmd.absoluteTurnIndex
             # The user's answer to the model's question (ticket 142).
             self._run_from_user = True
@@ -1904,11 +1889,9 @@ class Bridge:
                             exitReason={"result": "ABORTED", "data": None},
                             finalContent="",
                             totalTurns=self.current_turn,
-                            visibility=self._current_message_visibility,
                         )
                     )
                     self.run_in_progress.clear()
-                    self._current_message_visibility = "visible"
                     self._current_message_turn_base = None
                     self._end_run_tracking()
         elif isinstance(cmd, LoadHistoryCommand):
