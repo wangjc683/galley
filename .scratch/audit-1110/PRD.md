@@ -17,14 +17,14 @@
 | A3 | `session watch` / `follow` 把 runner 安静 120 秒当成 Core 无响应 | 做：只改 CLI，线上协议不变 | 01 |
 | A4 | Windows 安装前钩子匹配 `Galley.exe`，主程序是 `galley-core.exe` | 做：等 Windows 真机验 | 04 |
 | A5 | 错误提示的重试、切换模型等按钮从未接线 | 删掉死分支，设计文档改成现状 | 02 |
-| A6 | ⌘K 的「Enter 直接发问？」是没接线的桩，会丢输入 | 待 JC 重新裁决：当时建议「删」，派单前发现 `docs/design/overlays-and-settings.md` 的命令面板一节把它定为要做的功能（回车开新对话并把输入当第一句） | — |
+| A6 | ⌘K 的「Enter 直接发问？」是没接线的桩，会丢输入 | 按设计接线：回车开新对话并把输入当第一句。主会话最初建议「删」，派单前发现 `docs/design/overlays-and-settings.md` 的命令面板一节把它定为要做的功能，退回后 JC 当天改裁 | 08 |
 | A7 | 归档、改名、项目写操作失败时照样提示成功 | 做：回滚并提示 | 02 |
 | A8 | runner 意外退出、浏览器桥错误两处写死中文 | 做：文案先给 JC 确认 | 02 |
 | B9 | 文档要求校验 IPC `protocolVersion`，无人校验 | 改文档，不加校验 | 03 |
 | B10 | 用 `--schema=1` / `2` 请求时帧里永远写 3 | 做：回显请求的版本 | 01 |
 | B11 | `tool_call_*` 三个事件无发射方，公开示例里有 | 文档改，代码随 C14 删 | 03 |
-| B12 | Supervisor SOP 与参考文档三处过时 | 做：diff 先给 JC 看 | 05 |
-| B13 | `docs/temperament.md` 拒绝清单被产品推翻 | 主会话起草，JC 改 | 05 |
+| B12 | Supervisor SOP 与参考文档三处过时 | 做（文字 JC 已过目） | 05 |
+| B13 | `docs/temperament.md` 拒绝清单被产品推翻 | 气泡那一条按裁决改写（JC 已过目）；「不 toast」「不设保存按钮」两条查无推翻它们的裁决，原意比审计转述的窄，JC：「暂不用」改 | 05 |
 | C14 | Goal 遗留的三个 socket 命令与写入侧 `visibility` | 删 | 03 |
 | C15 | `core/experiments/` 与 `experiments` feature | 删 | 03 |
 | C16 | `docs/galley-native/` 已于 2026-06-17 放弃，仍被索引为在途 | 归档 | 05 |
@@ -38,7 +38,7 @@
 | D24 | 四个未跟踪的 `release-v0.7.0` 结果文件 | 已移到仓库外（2026-11-10，主会话） | — |
 | E25 | `docs/PRD.md` 多处过时 | 小修加横幅；全面重写暂缓 | 05 |
 | E26 | `docs/project-status.md`、`docs/design/conversation.md` 超过约 1,000 行的拆分线 | 做 | 05 |
-| E27 | README 与截图停在 v0.7.1 之前 | 文字现在改；截图暂缓到下次发版前 | 05 |
+| E27 | README 与截图停在 v0.7.1 之前 | 文字现在改（JC 已过目）；截图暂缓到下次发版前 | 05 |
 | E28 | `docs/release-workflow.md` 的手动兜底流程照着跑不通 | 删，留说明 | 05 |
 
 **不做**：改写 git 历史（D20、D21 都涉及）。泄露的是临时路径里的登录名与一个私有仓名，敏感度低；改写公开仓库的历史会让所有克隆与 release tag 对不上。
@@ -63,5 +63,6 @@
 | [05](./issues/05-docs.md) | 文档：B12、B13、C16、D21、E25–E28 |
 | [06](./issues/06-hygiene.md) | 开源卫生：D20 |
 | [07](./issues/07-payload-slimming.md) | 内置内核载荷：D22、D23 |
+| [08](./issues/08-palette-ask-directly.md) | ⌘K「Enter 直接发问？」接线：A6 |
 
 第一波 01、02、04、05；第二波 03、06、07（03 与 01、02 改同一批 Core 文件，等它们合入后再开）。
