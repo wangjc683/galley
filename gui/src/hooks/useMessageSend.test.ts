@@ -958,6 +958,56 @@ describe("useMessageSend handlers", () => {
     );
   });
 
+  it("submitFromPalette: a new ordinary chat, the typed text its first message", async () => {
+    // ⌘K's 直接发问 from inside a conversation, with a project context
+    // left over: neither the open session nor the project takes it.
+    const open = seed("s-palette-open", { projectId: "proj_a" });
+    useSessionsStore.setState({ activeProjectFilter: "proj_a" });
+    core((args) => {
+      const message = row(args.sessionId, 0, args.text);
+      broadcast({
+        sessionId: args.sessionId,
+        message,
+        dispatch: "pending",
+        clientRequestId: args.clientRequestId,
+      });
+      return dispatched(message);
+    });
+    const { api } = mountSend(open);
+
+    api.submitFromPalette("  明天上海会下雨吗  ");
+    await settle();
+
+    const created = calls("create_session");
+    expect(created).toHaveLength(1);
+    const input = created[0]?.input as { id: string; projectId?: string };
+    expect(input.projectId).toBeUndefined();
+    const sid = useSessionsStore.getState().activeSessionId;
+    expect(sid).toBe(input.id);
+    expect(sid).not.toBe(open.id);
+    expect(calls("send_user_message")).toEqual([
+      expect.objectContaining({ sessionId: sid, text: "明天上海会下雨吗" }),
+    ]);
+    expect(userTurns(sid!)).toHaveLength(1);
+    expect(userTurns(open.id)).toHaveLength(0);
+    expect(useSessionsStore.getState().activeProjectFilter).toBeUndefined();
+    expect(useUiStore.getState().screen).toBe("main");
+  });
+
+  it("submitFromPalette: blank text sends nothing and leaves the screen alone", async () => {
+    const open = seed("s-palette-blank");
+    useUiStore.getState().setScreen("main");
+    const { api } = mountSend(open);
+
+    api.submitFromPalette("   ");
+    await settle();
+
+    expect(calls("create_session")).toHaveLength(0);
+    expect(calls("send_user_message")).toHaveLength(0);
+    expect(useSessionsStore.getState().activeSessionId).toBe(open.id);
+    expect(useUiStore.getState().screen).toBe("main");
+  });
+
   it("the Browser Control demo waits for Core's row before it activates", async () => {
     useSessionsStore.setState({ sessions: [], activeSessionId: undefined });
     let commitRow: () => void = () => {};

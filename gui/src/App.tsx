@@ -377,14 +377,19 @@ function App() {
     : undefined;
   const activeSessionBusy =
     screen === "main" && (isRunning || pendingAskUser !== null);
-  const { sendUserMessage, submitFromEmpty, stopRun, runBrowserControlDemo } =
-    useMessageSend({
-      activeSession,
-      requiresManagedModelConfig,
-      copy,
-      showImageBlockedToast,
-      openModelsForMissingConfig,
-    });
+  const {
+    sendUserMessage,
+    submitFromEmpty,
+    submitFromPalette,
+    stopRun,
+    runBrowserControlDemo,
+  } = useMessageSend({
+    activeSession,
+    requiresManagedModelConfig,
+    copy,
+    showImageBlockedToast,
+    openModelsForMissingConfig,
+  });
   const {
     activeProject,
     assignSessionToProjectWithToast,
@@ -878,10 +883,7 @@ function App() {
         // store; the palette renders outside its provider.
         onReviewChanges={requestReview}
         onOpenSettings={(tab) => openSettings(tab)}
-        onSubmitFreeText={(text) => {
-          console.info("[palette] free-text submit:", text);
-          setScreen("main");
-        }}
+        onSubmitFreeText={submitFromPalette}
       />
 
       <SettingsHost

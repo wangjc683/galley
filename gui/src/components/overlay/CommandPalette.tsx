@@ -85,9 +85,10 @@ export interface CommandPaletteProps {
    * external runtime: no item. */
   onOpenTodo?: () => void;
 
-  /** Called when the user presses Enter on an empty/no-match palette
-   * (DESIGN.md §8 "Empty state") — typically: open new chat with this
-   * text as the first message. */
+  /** 「没找到。Enter 直接发问？」: Enter or a click on that row, shown
+   * when the typed text matches nothing (DESIGN.md §8 "Empty state"; not
+   * in a scope, where Enter finds). App starts a new chat with the text
+   * as its first message; the palette closes. */
   onSubmitFreeText?: (text: string) => void;
 
   /** One conversation to search (⌘F, the title menu's 查找聊天记录;
@@ -246,23 +247,34 @@ export function CommandPalette(props: CommandPaletteProps) {
         <Command.Input
           value={search}
           onValueChange={setSearch}
-          onKeyDown={
-            scope
-              ? (e) => {
-                  if (
-                    dropsScope({
-                      scoped: true,
-                      key: e.key,
-                      value: search,
-                      composing: isImeCompositionKeydown(e),
-                    })
-                  ) {
-                    e.preventDefault();
-                    props.onDropScope?.();
-                  }
-                }
-              : undefined
-          }
+          onKeyDown={(e) => {
+            if (scope) {
+              if (
+                dropsScope({
+                  scoped: true,
+                  key: e.key,
+                  value: search,
+                  composing: isImeCompositionKeydown(e),
+                })
+              ) {
+                e.preventDefault();
+                props.onDropScope?.();
+              }
+              return;
+            }
+            // With nothing matched, cmdk has no item for Enter: it
+            // presses the 直接发问 row on screen, so Enter and a click
+            // are one path. The row is there only when the list is
+            // empty and the text is not blank (`EmptyHint`).
+            if (e.key !== "Enter" || isImeCompositionKeydown(e)) return;
+            const ask = e.currentTarget
+              .closest("[cmdk-root]")
+              ?.querySelector<HTMLButtonElement>(ASK_DIRECTLY_SELECTOR);
+            if (ask) {
+              e.preventDefault();
+              ask.click();
+            }
+          }}
           className={scope ? "cmdk-input-scoped" : undefined}
           placeholder={
             scope
@@ -568,6 +580,8 @@ function RootPage({
   );
 }
 
+const ASK_DIRECTLY_SELECTOR = '[data-role="palette-ask-directly"]';
+
 function EmptyHint({
   search,
   onSubmit,
@@ -590,6 +604,7 @@ function EmptyHint({
       </div>
       <button
         type="button"
+        data-role="palette-ask-directly"
         onClick={onSubmit}
         className="inline-flex items-center gap-1.5 rounded-sm text-[13px] font-medium text-brand-strong hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
       >

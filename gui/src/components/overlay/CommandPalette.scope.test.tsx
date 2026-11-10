@@ -182,7 +182,15 @@ describe("the palette inside one conversation", () => {
       '<input data-test-input="" readOnly="" placeholder="搜索对话或输入命令…" value=""/>',
     );
     expect(html).not.toContain("cmdk-input-scoped");
-    expect(input.props?.onKeyDown).toBeUndefined();
+    // No scope to drop: Backspace in the empty input is the input's own.
+    // (Its one key is Enter on the 直接发问 row: CommandPalette.ask.dom.)
+    const preventDefault = vi.fn();
+    input.props?.onKeyDown?.({
+      key: "Backspace",
+      preventDefault,
+      nativeEvent: { isComposing: false, keyCode: 8 },
+    } as unknown as KeyboardEvent<HTMLInputElement>);
+    expect(preventDefault).not.toHaveBeenCalled();
   });
 });
 

@@ -448,9 +448,27 @@ export function useMessageSend({
     })();
   };
 
+  /**
+   * ⌘K's 「没找到。Enter 直接发问？」 (DESIGN.md §8 "Empty state"): the
+   * typed text is the first message of a new, ordinary chat. Like the
+   * palette's 新对话 it leaves the open conversation and the project
+   * context first, then sends the way the empty screen sends its first
+   * message. Blank text sends nothing.
+   */
+  const submitFromPalette = (text: string) => {
+    const first = text.trim();
+    if (!first) return;
+    const sessions = useSessionsStore.getState();
+    sessions.setActiveProjectFilter(undefined);
+    sessions.setActiveSession(undefined);
+    useUiStore.getState().setScreen("empty");
+    submitFromEmpty(first, []);
+  };
+
   return {
     sendUserMessage,
     submitFromEmpty,
+    submitFromPalette,
     stopRun,
     runBrowserControlDemo,
   };
