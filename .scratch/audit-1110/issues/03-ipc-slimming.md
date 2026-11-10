@@ -1,6 +1,6 @@
 # 03 瘦身：没人发的事件、Goal 遗留的命令、实验目录、演示会话清理
 
-Status: ready-for-agent（第二波：等票 01、02 合入后再派，三张票改同一批 Core 文件）
+Status: ready-for-agent
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 B9、B11、C14、C15、C17（JC：「按建议推进」）。
 
@@ -33,6 +33,11 @@ Status: ready-for-agent（第二波：等票 01、02 合入后再派，三张票
 **C15 实验目录**
 
 `core/experiments/` 下两个探索各自的 README 都说是一次性的。删掉目录、`Cargo.toml` 里的 `experiments` feature、`bridge-owner-experiment` 这个 `[[bin]]`、只被它们用到的 `anyhow`（先确认没有别的使用者）与 `default-run` 那段因此过时的注释；活文档与代码注释里指向 `core/experiments/` 的地方改掉；`scripts/check-docs-links.mjs` 如果有跳过该目录的规则，一起去掉。
+
+**顺带的两处过时文字**（票 02、05 留下的）
+
+- `docs/ipc-protocol.md` 讲运行错误的一节仍写着错误在对话里内联显示、`retryable` 会出重试按钮、traceback 默认折叠。票 02 已把错误卡片收成只有 toast、删掉了重试按钮（GUI 里已没有代码读 `retryable`）。把这一节改成现状；`retryable` 字段本身留在线上，不删。
+- 「180 步，计划模式 100」：内置内核自 2026-10-18 的基线升级起没有计划模式的单独上限（`managed-ga/code` 里核实现在的数）。SOP 与参考文档票 05 已改；剩下的改掉：`docs/ipc-protocol.md`、`docs/design/conversation/turns.md`、`docs/ga-baseline.md` 的现行说明，以及 `runner/workbench_bridge.py`、`runner/tests/test_workbench_bridge.py`、`gui/src/lib/step-limit.ts`、`gui/src/components/conversation/StepLimitTail.tsx` 里的注释。只改说法，不改任何判断逻辑；外置 GA 的版本各不相同，别替它下断言。
 
 **C17 v0.1 演示会话清理**
 

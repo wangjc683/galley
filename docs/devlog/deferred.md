@@ -1473,3 +1473,15 @@
 - **关联**：主聊天 PRD 裁决 123，票 [72](../../.scratch/main-chat/issues/72-main-chat-switch-cost.md)；探针做法见那篇 devlog。
 
 ---
+
+---
+
+## 浏览器控制报错时显示诊断原文
+
+- **状态**：暂缓（2026-11-10 全仓审计裁决 A8，JC：「诊断原文先这样」；票 [02](../../.scratch/audit-1110/issues/02-behavior-fixes.md)）。
+- **提出**：票 02 把浏览器桥的错误改成由界面按错误类型出文案（此前 Core 给的是一整句中文，英文界面下原样显示）。代价：对界面认得的错误类型，Core 那句话里带的退出码、stderr 尾巴、Python 路径不再显示，只在界面不认得的类型下兜底。
+- **启动信号**：有用户报浏览器控制启动失败，而界面上的信息不够定位；或 JC 自己排查浏览器桥问题时要去翻 Core 的日志。
+- **方案**：Core 把错误类型与原始系统报错分成两个字段传；界面的文案照旧按类型出，原始报错放进可复制的详情行（英文与中文界面都原样显示，它是诊断信息）。
+- **实施要点**：`core/src/browser_bridge.rs`、`core/src/browser_control.rs` 的错误构造处；`gui/src/stores/browser-control.ts` 的状态字段要加一项；外置 GA 模式没有内置浏览器桥，不受影响。
+- **待定**：详情默认展开还是折叠；「反馈问题」页的环境信息要不要带上最近一次的原始报错。
+- **关联**：`docs/managed-ga-runtime/browser-control.md`；`.scratch/audit-1110/PRD.md` 裁决 A8。

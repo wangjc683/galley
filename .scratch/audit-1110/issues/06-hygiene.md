@@ -1,6 +1,6 @@
 # 06 开源卫生：测试夹具里的家目录、私有仓名、手册里的真实例子
 
-Status: ready-for-agent（第二波）
+Status: ready-for-agent
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 D20（JC：「按建议推进」）。git 历史不改写。
 

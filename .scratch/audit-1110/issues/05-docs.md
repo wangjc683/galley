@@ -1,6 +1,6 @@
 # 05 文档：SOP 过时事实、章程、归档、评测输出、PRD、超长文档、README、手动兜底流程
 
-Status: ready-for-agent
+Status: done（2026-11-10 合入；B12、B13、E27 的文字 JC 已过目）
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 B12、B13、C16、D21、E25、E26、E27、E28（JC：「按建议推进」）。
 
@@ -99,3 +99,13 @@ wc -l docs/project-status.md docs/design/conversation.md
 | 读 diff；合入前把主工作树里的 `results.json` 备份到仓库外、合入后放回（合入一个「移出索引」的提交会把主工作树里的文件删掉） | B12、B13、E27 的文字 |
 
 ## Comments
+
+**2026-11-10 合入（主会话）**
+
+- C16 改了两篇 devlog 里 11 条链接的目标路径（正文没动）：目录一挪这些链接就断，链接门禁的头注释与当年归档 `refactor` 的做法都是这样处理。票面有一个前提不成立：它说 devlog 里记录了放弃原生运行时，实际没有这样的条目（只有 2026-06-16 那篇写的是计划），横幅改用迁移 025 的头注释与提交 `81418db6` 作出处。
+- B13 只改了气泡那一条。「不 toast」「不设保存按钮」查无推翻它们的裁决，原意比审计转述的窄；JC：「暂不用」改。
+- E26 保留了 v0.6.1、v0.4.16 两段旧发版段落，各有一条 devlog 里找不回的事实。
+- D21 没处理的：`dispatch-results-firststop.json` 仍在跟踪；`.scratch/im-polish/entry-layer-eval/results.json` 在另一个目录。
+- 「计划模式 100」的说法还留在 `docs/ipc-protocol.md`、`docs/design/conversation/turns.md`、`docs/ga-baseline.md` 与四处代码注释里，交给票 03。
+- `.scratch/goal-simplify/PRD.md` 有一条链接仍指向归档前的路径。
+- 合入时主工作树里的 12 个 `results.json` 先备份到仓库外、合入后放回，现在是被忽略的本地文件。

@@ -396,8 +396,30 @@ statements in living docs, and the version gate now checks `core/Cargo.lock`.
 No migration, no Agent API change. Gates on the merged branch: `cargo test
 --workspace` (47 binaries, 1,346 tests), vitest in three time zones (263
 files, 2,961 tests), pytest (765), the six gate scripts. Nothing was walked
-in the app before the merge; the findings left for JC's ruling are not in
-the repo yet.
+in the app before the merge.
+
+The audit's 28 open findings were ruled on the same day (`.scratch/audit-1110/PRD.md`)
+and a first wave merged (tickets 01, 02, 04, 05, 08; `2898a7d4` … `f864da9a`).
+CLI, all inside schema 3 and recorded as behavior fixes in the Agent API's
+stability chapter: `project follow --until-idle` and `project brief`'s
+`runningSessions` read Core's live run state instead of a status column Core
+never writes as running; a watch stream no longer times out after 120 quiet
+seconds (a `ping` proves Core first); payloads and frames echo the `--schema`
+pin. Core and GUI: the search index keeps one rule (non-empty final answers
+and user messages), so a launch no longer rebuilds it, and every existing
+database rebuilds it once after the upgrade; a session or project write Core
+refuses rolls back and says so; the error card is a toast only; ⌘K's
+「Enter 直接发问？」 starts a new chat with what was typed; a runner that
+quits and a browser-bridge error follow the UI language. Build: the NSIS
+pre-install hook closes `galley-core.exe` and the CLI (Windows machine check
+owed, in the Windows checklist), CI prepares the CLI sidecar with the Node
+script and `release.yml` drops its unused host Python (a `release.yml`
+dry-run is owed before the next tag), the two `format` scripts are gone.
+Docs: `docs/galley-native/` archived, `docs/design/conversation.md` split
+into a directory, this file trimmed to the latest three releases, the
+entry-layer eval's raw `results.json` no longer tracked, README text for
+memos. The main session verified the CLI fixes and the index in dev against
+the real database; the GUI changes wait for JC's dogfood (tickets 02, 08).
 
 **Owed from the `v0.7.7` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. The database shows the draft's

@@ -1,6 +1,6 @@
 # 04 构建管道：Windows 安装前钩子、CI 的 sidecar 脚本、format 脚本
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-10 合入；等推送后的 CI、`release.yml` dry-run 与 JC 的 Windows 真机）
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 A4、C18、C19（JC：「按建议推进」）。
 
@@ -63,3 +63,10 @@ grep -rn "prepare-cli-sidecar.sh\|pnpm format\|gui format" . --include="*.md" --
 | 手动触发一次 `release.yml` 的 dry-run，确认到构建产物为止都通过 | |
 
 ## Comments
+
+**2026-11-10 合入（主会话）**
+
+- 本机没装 `actionlint`，也没在本票里跑 `.mjs`；`check.yml` 的 Core job 补了一步 `setup-node`。
+- 删掉 Setup Python 的依据是读完了它之后的每一步，没有 CI 运行作实证，要靠 dry-run。
+- 钩子现在会在复制文件前结束主程序；应用内更新时会不会打断更新后的重启，只有 Windows 真机能确认（检查清单里加了一条）。
+- 票外：`release.yml` 里一条注释与 `docs/release-workflow.md` 里一句话仍说「bash-only repo scripts」，已过时，没改。

@@ -1,6 +1,6 @@
 # 01 CLI 契约：项目空闲判断、watch 首帧超时、回显 schema 版本
 
-Status: ready-for-agent
+Status: done（2026-11-10 合入；主会话在 dev 里用 CLI 代验三条，无 JC 步骤）
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 A2、A3、B10（JC：「按建议推进」）。
 
@@ -74,3 +74,11 @@ git diff --check main..HEAD
 | `--schema=1 status` 的应答里是 1 | |
 
 ## Comments
+
+**2026-11-10 合入与代验（主会话）**
+
+- 票面前提有一处不成立：Core 的 socket 应答与流帧里本来就没有 `schemaVersion` 字段，恒为 3 的数字是 CLI 自己拼输出时写的。B10 因此是纯 CLI 改动，Core 的应答没动。`galley version` 在任何 pin 下仍报 3，依据是稳定性一章已有的说法（它报告二进制的默认版本，pin 被校验不被回显）。
+- A2 代验：用 CLI 建一个一次性项目与会话，让它用工具睡 40 秒再回一个词。运行期间库里的 `sessions.status` 一直是 `idle`（正是旧实现会误判的条件）；`project follow --until-idle` 等了 56 秒，在回复落库后 2 秒以 `project_idle` 退出。测试会话与项目已永久删除。
+- A3 代验：对同一个 runner 活着但安静的会话 `session watch` 130 秒，零帧、无报错，由代验脚本自己的定时器结束。
+- B10 代验：`session wait` 在 pin 1、2、3 下分别回显 1、2、3，不 pin 是 3，非法 pin 报 `schema_mismatch`。票面第 6 节写的 `--schema=1 status` 走不通（`status` 的输出里没有这个字段）。
+- 留下的风险：Core 的 runner 管理器锁若在 `ping` 之后卡死，watch 会无声挂住，以前会在 120 秒后以退出码 4 报错（只改 CLI 的方案固有的代价）；`project follow` 里哪些会话得到 `not_live` / `core_unavailable` 结束帧仍按库里状态判；Windows 的命名管道分支本机没编译，等 CI。

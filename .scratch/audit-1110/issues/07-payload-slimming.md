@@ -1,6 +1,6 @@
 # 07 内置内核载荷：不带演示媒体与测试，从指定提交取源
 
-Status: ready-for-agent（第二波）
+Status: ready-for-agent
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 D22、D23（JC：「按建议推进」）。
 
