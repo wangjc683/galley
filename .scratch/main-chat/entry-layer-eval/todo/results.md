@@ -234,11 +234,11 @@
   - 反向检查（只拿掉 wake.md 新加那一条）第 2 遍：备注补了「10月29日：资料收集模板已完成并核验，含项目概况、分轮资料清单、首轮9问、索取资料消息草稿和登记表；文件：$TMPDIR/entry-layer-eval-i16lsk2_/review-done-not-noted.r2/sandbox/home/Downloads/松岚湾酒店资料收集模板.md。待收集业主实际资料，消息草稿称呼需按实际对接人修改。」，回复 「今早把松岚湾资料收集模板的文件入口补上了，也同步进待办备注；实际资料还没收齐，待办保持未完成。模板可直接填写，里面的消息草稿称呼“王总”要按实际对接人改。 ⏎ 」；过（注：开口交出了文件（也算过）：今早把松岚湾资料收集模板的文件入口补上了，也同步进待办备注；实际资料还没收齐，待办保持未完成。模板可直接填写，里面的消息）
   - 反向检查（只拿掉 wake.md 新加那一条）第 3 遍：备注补了「10月29日：资料收集模板已完成并核验，含项目概况、三轮资料清单、9个首轮问题、索资消息草稿和资料登记表；文件：$TMPDIR/entry-layer-eval-i16lsk2_/review-done-not-noted.r3/sandbox/home/Downloads/松岚湾酒店资料收集模板.md。项目实际资料仍待收集。」，回复 「早上把松岚湾资料收集模板补进了待办备注，下面也放上文件，方便直接打开。模板已做好，实际资料仍待收集，待办没有勾掉。 ⏎ [FILE:$TMPDIR/entry-」；过（注：开口交出了文件（也算过）：早上把松岚湾资料收集模板补进了待办备注，下面也放上文件，方便直接打开。模板已做好，实际资料仍待收集，待办没有勾掉。）
 - **review-user-news-on-top**：
-  - 新手册第 1 遍：备注补了「11月10日：已按业主新信息整理项目资料更新版，填入地址与2027年6月开业计划，列出后续缺口并改好追问草稿（未发送）：`$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店项目资料更新-2026-11-10.md`」，做了文件 松岚湾酒店项目资料更新-2026-11-10.md，回复 「今天把松岚湾的地址和 **2027 年 6 月开业计划**填进了一份资料更新版，也改好了下一轮向业主索取资料的消息草稿，不再重复问地址和开业月份。重点还缺业主主」；不过：开口了却没说做了什么（注：没说是早上做的）
-  - 新手册第 2 遍：备注没动，派了 「推进「松岚湾酒店项目上下文资料收集」（待办 todo_4c8e1a7d2b9f3605）。用户刚提供了新线索：业主发来的项目地址为厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业。这是用户转述的业主信息，不是已公开核实的事实。 ⏎ 已有资料收集模板：$TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r2/sandbox/home/Downloads/松岚湾酒店资料收集模板.md。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。模板完成后，用户才补充了上述地址和开业计划，因此现在针对新线索做一轮公开资料核查，而不是重新制作空白模板。 ⏎ 通过 Browser Control 的真实浏览器检索，优先官方品牌、政府规划和土地公告、项目业主公开资料。核查该地址及原会展北片区能否对应到具体松岚湾项目，尽可能找到项目正式名称、业主主体、品牌档次、客房数及建设或开业进度。注意区分同名酒店、门牌对应和地块归属；没有可靠依据的内容标为待核实，不能用相似项目补齐。预算、人员编制和非公开证照情况查不到就列为缺口，不向任何人发消息。 ⏎ 把有依据的发现、来源链接及日期、用户提供但未公开证实的信息、尚缺的关键资料，整理为一份简洁核查简报，保存到上述 Downloads 目录中的新文件，不改原模板。新文件使用完整绝对路径交付。若新线索不足以定位项目，明确说明冲突和缺少什么，不强行认定。 ⏎ 完成后按手册 todos-change.md：先读取该待办，再在备注最前面新增一行本次成果和新文件绝对路径，原备注逐字保留。不要改待办期限、设置开业提醒或勾掉待办。CLI 写操作先读所需手册并带 --supervisor=galley-assistant 和具体 --reason。回报主要结论、可核查的来源链接、完整文件路径和待办更新结果。」，回复 「<subtask> ⏎ 推进「松岚湾酒店项目上下文资料收集」（待办 todo_4c8e1a7d2b9f3605）。用户刚提供了新线索：业主发来的项目地址为厦门市」；过（注：派的子任务提到了「模板」（读它、不改它，不是重做）；这一轮没做成什么，备注没动（进展这一条没用上））
-  - 新手册第 3 遍：备注没动，派了 「推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目地址为厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业。以上为业主口径，尚未公开核实。 ⏎ 已读取当前待办、日程和会话：无正在运行的相关子任务。待办 todo_4c8e1a7d2b9f3605 最新备注是上述业主新消息；其下一行是 10月28日已做好资料收集模板，故现在是有新地址可据此推进，不要只重做模板。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。 ⏎ 请通过 Browser Control 的真实浏览器搜索公开资料，优先政府公告、规划及土地信息、松岚湾官方公告，核查此地址、原会展北片区和松岚湾项目能否对应，尽量查到业主/开发主体、准确品牌和项目名称、体量客房数、建设筹开及证照进度。不要把同片区或同品牌的其他酒店误配；有矛盾明确列出，不要为了凑信息认定项目。不要推测内部预算、人员编制或把业主给的开业计划写成已获官方确认。若无法匹配，也交回可靠排查结果和需要业主补充的最少信息。 ⏎ 写一份独立的中文核查简报到可用的 Downloads 路径，不修改用户已有模板或文件。已知模板路径仅供必要时只读参考： ⏎ $TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r3/sandbox/home/Downloads/松岚湾酒店资料收集模板.md ⏎ 报告区分“业主提供”“公开核实”“仍待确认”，附每项重要结论的来源链接、来源名称和发布日期（能取得时），给出一小段可供用户向业主确认的文字草稿，不发送。不要联系任何人、付费、写入其他会话、设置提醒或勾掉待办。 ⏎ 完成后返回主要发现、证据链接及报告绝对路径。主会话负责核对并把成果加到待办备注顶部。」，回复 「<subtask> ⏎ 推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目地址为厦门市思明区环岛东路 1999 号，原会展北片区那」；不过：重做了「模板」：推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目（注：这一轮没做成什么，备注没动（进展这一条没用上））
-  - 旧手册（同日对照）第 1 遍：备注没动，派了 「推进“松岚湾酒店项目上下文资料收集”（待办 todo_4c8e1a7d2b9f3605）。用户刚提供的最新业主信息：项目地址是厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业。这些信息已在待办备注最前面保存，不要重复添加；以这些新信息为检索起点，不要沿用未经核实的同名酒店资料。 ⏎ 通过 Browser Control 的真实浏览器查找项目公开资料，优先政府、业主和松岚湾官方来源，核对该地址对应的项目、业主或开发主体、具体品牌、客房规模，以及建设与筹开进度。明确区分“业主提供的信息”“公开来源证实的信息”和“尚未确认的信息”；不同地址、旧项目、同名酒店不得混作本项目，开业时间无公开证据时保留为业主计划，不要推断。查不到确切匹配就如实列出检索结果与缺口，不要硬凑。 ⏎ 已有资料收集模板在 $TMPDIR/entry-layer-eval-g2_537xu/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店资料收集模板.md，可读取了解资料范围，但不要修改原文件。将有依据的结果另存为该 Downloads 目录下的新 Markdown 文件，附来源链接、来源日期或查阅日期，并给出下一轮向业主补充索取的关键资料清单，重点是业主主体、品牌与客房数量、筹开里程碑、证照、预算和编制。不要联系业主或对外发消息，不花钱，不改用户其他文件。 ⏎ 完成后先按手册读取待办现有内容，在备注顶部加一条 10月29日的成果记录，包含新文件绝对路径，原备注逐字保留；操作前读取相关手册 todos-change.md 和 cli.md，所有 CLI 写操作携带 --supervisor=galley-assistant 和准确的 --reason。交回简明结论、新文件绝对路径、关键证据链接及待办更新是否成功。仅在存在真实阻碍时提问。」，回复 「<subtask>推进“松岚湾酒店项目上下文资料收集”（待办 todo_4c8e1a7d2b9f3605）。用户刚提供的最新业主信息：项目地址是厦门市思明区环岛」；过（注：派的子任务提到了「模板」（读它、不改它，不是重做）；这一轮没做成什么，备注没动（进展这一条没用上））
-  - 反向检查（只拿掉 wake.md 新加那一条）第 1 遍：备注没动，派了 「推进待办「松岚湾酒店项目上下文资料收集」（todo_4c8e1a7d2b9f3605），做一份有来源的项目公开资料核对简报。用户刚提供的业主消息：地址为厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业。这些是业主提供的信息，不要当成已经公开核实的事实。 ⏎ 先读待办当前备注和既有模板，避免重做通用资料收集模板。模板路径：$TMPDIR/entry-layer-eval-18geagb0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店资料收集模板.md。当前备注第一行已经保存了上述地址和开业计划，不需要再重复记一次。 ⏎ 通过真实浏览器查找该地址、片区及松岚湾项目的公开资料，优先政府规划、土地或建设公告、松岚湾官方及业主官方来源。重点确认项目正式名称、业主/开发主体、酒店品牌定位、客房规模、建设或筹开进展，以及能否与业主所说的地块对应。不要把厦门其他松岚湾酒店的信息套过来；地址和片区可能有历史别名，不能唯一对应时明确说明。每项发现附链接、来源日期及证据摘录；未查到就写未核实，不推断。2027 年 6 月仅在有独立依据时才能标为公开确认。 ⏎ 整理为一份新的中文 Markdown 简报，保存在上述 Downloads 目录，不改动原模板或用户其他文档。包括已知信息、公开核实结果和仍需向业主补齐的关键材料。不要联系业主、发送消息或花钱。完成后按手册更新该待办备注：先读 todo show，再在最前加一行日期、实质结果及简报绝对路径，下面旧备注逐字保留；不更改待办截止日，不标完成。Galley CLI 写入前读取相关手册，带 --supervisor=galley-assistant 及 --reason。返回简报绝对路径、关键发现和主要证据链接；若没有可靠的新发现，说明检索范围与缺口即可，不虚构结果。」，回复 「<subtask> ⏎ 推进待办「松岚湾酒店项目上下文资料收集」（todo_4c8e1a7d2b9f3605），做一份有来源的项目公开资料核对简报。用户刚提供的」；过（注：派的子任务提到了「模板」（读它、不改它，不是重做）；这一轮没做成什么，备注没动（进展这一条没用上））
+  - 新手册第 1 遍：备注补了「11月10日：已按业主新信息整理项目资料更新版，填入地址与2028年9月开业计划，列出后续缺口并改好追问草稿（未发送）：`$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店项目资料更新-2026-11-10.md`」，做了文件 松岚湾酒店项目资料更新-2026-11-10.md，回复 「今天把松岚湾的地址和 **2028 年 9 月开业计划**填进了一份资料更新版，也改好了下一轮向业主索取资料的消息草稿，不再重复问地址和开业月份。重点还缺业主主」；不过：开口了却没说做了什么（注：没说是早上做的）
+  - 新手册第 2 遍：备注没动，派了 「推进「松岚湾酒店项目上下文资料收集」（待办 todo_4c8e1a7d2b9f3605）。用户刚提供了新线索：业主发来的项目地址为澜川市云麓区望汐东路 1726 号，原苇塘北片区那块地，计划 2028 年 9 月开业。这是用户转述的业主信息，不是已公开核实的事实。 ⏎ 已有资料收集模板：$TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r2/sandbox/home/Downloads/松岚湾酒店资料收集模板.md。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。模板完成后，用户才补充了上述地址和开业计划，因此现在针对新线索做一轮公开资料核查，而不是重新制作空白模板。 ⏎ 通过 Browser Control 的真实浏览器检索，优先官方品牌、政府规划和土地公告、项目业主公开资料。核查该地址及原苇塘北片区能否对应到具体松岚湾项目，尽可能找到项目正式名称、业主主体、品牌档次、客房数及建设或开业进度。注意区分同名酒店、门牌对应和地块归属；没有可靠依据的内容标为待核实，不能用相似项目补齐。预算、人员编制和非公开证照情况查不到就列为缺口，不向任何人发消息。 ⏎ 把有依据的发现、来源链接及日期、用户提供但未公开证实的信息、尚缺的关键资料，整理为一份简洁核查简报，保存到上述 Downloads 目录中的新文件，不改原模板。新文件使用完整绝对路径交付。若新线索不足以定位项目，明确说明冲突和缺少什么，不强行认定。 ⏎ 完成后按手册 todos-change.md：先读取该待办，再在备注最前面新增一行本次成果和新文件绝对路径，原备注逐字保留。不要改待办期限、设置开业提醒或勾掉待办。CLI 写操作先读所需手册并带 --supervisor=galley-assistant 和具体 --reason。回报主要结论、可核查的来源链接、完整文件路径和待办更新结果。」，回复 「<subtask> ⏎ 推进「松岚湾酒店项目上下文资料收集」（待办 todo_4c8e1a7d2b9f3605）。用户刚提供了新线索：业主发来的项目地址为澜川市」；过（注：派的子任务提到了「模板」（读它、不改它，不是重做）；这一轮没做成什么，备注没动（进展这一条没用上））
+  - 新手册第 3 遍：备注没动，派了 「推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目地址为澜川市云麓区望汐东路 1726 号，原苇塘北片区那块地，计划 2028 年 9 月开业。以上为业主口径，尚未公开核实。 ⏎ 已读取当前待办、日程和会话：无正在运行的相关子任务。待办 todo_4c8e1a7d2b9f3605 最新备注是上述业主新消息；其下一行是 10月28日已做好资料收集模板，故现在是有新地址可据此推进，不要只重做模板。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。 ⏎ 请通过 Browser Control 的真实浏览器搜索公开资料，优先政府公告、规划及土地信息、松岚湾官方公告，核查此地址、原苇塘北片区和松岚湾项目能否对应，尽量查到业主/开发主体、准确品牌和项目名称、体量客房数、建设筹开及证照进度。不要把同片区或同品牌的其他酒店误配；有矛盾明确列出，不要为了凑信息认定项目。不要推测内部预算、人员编制或把业主给的开业计划写成已获官方确认。若无法匹配，也交回可靠排查结果和需要业主补充的最少信息。 ⏎ 写一份独立的中文核查简报到可用的 Downloads 路径，不修改用户已有模板或文件。已知模板路径仅供必要时只读参考： ⏎ $TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r3/sandbox/home/Downloads/松岚湾酒店资料收集模板.md ⏎ 报告区分“业主提供”“公开核实”“仍待确认”，附每项重要结论的来源链接、来源名称和发布日期（能取得时），给出一小段可供用户向业主确认的文字草稿，不发送。不要联系任何人、付费、写入其他会话、设置提醒或勾掉待办。 ⏎ 完成后返回主要发现、证据链接及报告绝对路径。主会话负责核对并把成果加到待办备注顶部。」，回复 「<subtask> ⏎ 推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目地址为澜川市云麓区望汐东路 1726 号，原苇塘北片区那」；不过：重做了「模板」：推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目（注：这一轮没做成什么，备注没动（进展这一条没用上））
+  - 旧手册（同日对照）第 1 遍：备注没动，派了 「推进“松岚湾酒店项目上下文资料收集”（待办 todo_4c8e1a7d2b9f3605）。用户刚提供的最新业主信息：项目地址是澜川市云麓区望汐东路 1726 号，原苇塘北片区那块地，计划 2028 年 9 月开业。这些信息已在待办备注最前面保存，不要重复添加；以这些新信息为检索起点，不要沿用未经核实的同名酒店资料。 ⏎ 通过 Browser Control 的真实浏览器查找项目公开资料，优先政府、业主和松岚湾官方来源，核对该地址对应的项目、业主或开发主体、具体品牌、客房规模，以及建设与筹开进度。明确区分“业主提供的信息”“公开来源证实的信息”和“尚未确认的信息”；不同地址、旧项目、同名酒店不得混作本项目，开业时间无公开证据时保留为业主计划，不要推断。查不到确切匹配就如实列出检索结果与缺口，不要硬凑。 ⏎ 已有资料收集模板在 $TMPDIR/entry-layer-eval-g2_537xu/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店资料收集模板.md，可读取了解资料范围，但不要修改原文件。将有依据的结果另存为该 Downloads 目录下的新 Markdown 文件，附来源链接、来源日期或查阅日期，并给出下一轮向业主补充索取的关键资料清单，重点是业主主体、品牌与客房数量、筹开里程碑、证照、预算和编制。不要联系业主或对外发消息，不花钱，不改用户其他文件。 ⏎ 完成后先按手册读取待办现有内容，在备注顶部加一条 10月29日的成果记录，包含新文件绝对路径，原备注逐字保留；操作前读取相关手册 todos-change.md 和 cli.md，所有 CLI 写操作携带 --supervisor=galley-assistant 和准确的 --reason。交回简明结论、新文件绝对路径、关键证据链接及待办更新是否成功。仅在存在真实阻碍时提问。」，回复 「<subtask>推进“松岚湾酒店项目上下文资料收集”（待办 todo_4c8e1a7d2b9f3605）。用户刚提供的最新业主信息：项目地址是澜川市云麓区望汐」；过（注：派的子任务提到了「模板」（读它、不改它，不是重做）；这一轮没做成什么，备注没动（进展这一条没用上））
+  - 反向检查（只拿掉 wake.md 新加那一条）第 1 遍：备注没动，派了 「推进待办「松岚湾酒店项目上下文资料收集」（todo_4c8e1a7d2b9f3605），做一份有来源的项目公开资料核对简报。用户刚提供的业主消息：地址为澜川市云麓区望汐东路 1726 号，原苇塘北片区那块地，计划 2028 年 9 月开业。这些是业主提供的信息，不要当成已经公开核实的事实。 ⏎ 先读待办当前备注和既有模板，避免重做通用资料收集模板。模板路径：$TMPDIR/entry-layer-eval-18geagb0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店资料收集模板.md。当前备注第一行已经保存了上述地址和开业计划，不需要再重复记一次。 ⏎ 通过真实浏览器查找该地址、片区及松岚湾项目的公开资料，优先政府规划、土地或建设公告、松岚湾官方及业主官方来源。重点确认项目正式名称、业主/开发主体、酒店品牌定位、客房规模、建设或筹开进展，以及能否与业主所说的地块对应。不要把澜川其他松岚湾酒店的信息套过来；地址和片区可能有历史别名，不能唯一对应时明确说明。每项发现附链接、来源日期及证据摘录；未查到就写未核实，不推断。2028 年 9 月仅在有独立依据时才能标为公开确认。 ⏎ 整理为一份新的中文 Markdown 简报，保存在上述 Downloads 目录，不改动原模板或用户其他文档。包括已知信息、公开核实结果和仍需向业主补齐的关键材料。不要联系业主、发送消息或花钱。完成后按手册更新该待办备注：先读 todo show，再在最前加一行日期、实质结果及简报绝对路径，下面旧备注逐字保留；不更改待办截止日，不标完成。Galley CLI 写入前读取相关手册，带 --supervisor=galley-assistant 及 --reason。返回简报绝对路径、关键发现和主要证据链接；若没有可靠的新发现，说明检索范围与缺口即可，不虚构结果。」，回复 「<subtask> ⏎ 推进待办「松岚湾酒店项目上下文资料收集」（todo_4c8e1a7d2b9f3605），做一份有来源的项目公开资料核对简报。用户刚提供的」；过（注：派的子任务提到了「模板」（读它、不改它，不是重做）；这一轮没做成什么，备注没动（进展这一条没用上））
 - **review-look-again-later**：
   - 新手册第 1 遍：备注没动，停在浏览器，回复 （正文空）；不过：没走到最终回复：要用浏览器工具，运行停在这里（没有执行）；该建 1 个它自己的提醒（schedule create），建了 0 个；回复不是只有 <no-reply/>
   - 新手册第 2 遍：备注没动，给自己挂了提醒 2026-11-04T02:00「查签证审批进度」，回复 <no-reply/>；过
@@ -767,9 +767,9 @@
 收集要点：项目地址与业主方；品牌定位与客房数量；…；todo show todo_4c8e1a7d2b9f3605 | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、todos-change.md、times.md；2 次 2 轮，12492 字节 | 查了 | 过 |
 | 51 | review-done-not-noted | 3 | todo list；schedule list；sessions list --runtime all --all；todo show todo_4c8e1a7d2b9f3605；session show s-…1x4z --around=msg_s-mgv8h2k5-3n7q1x4z_0_user；session show s-…1x4z --tail=40；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：资料收集模板已做好并已告知，文件：`$TMPDIR/entry-layer-eval-bh8gd5ov/review-done-not-noted.r3/sandbox/home/Downloads/松岚湾酒店资料收集模板.md`，待拿到业主资料后填写。
 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹…；todo show todo_4c8e1a7d2b9f3605 | <no-reply/> | 11 | 读了（第 1 次调用）：wake.md、todos-change.md、subtasks.md；1 次 1 轮，12248 字节 | 查了 | 过 |
-| 52 | review-user-news-on-top | 1 | todo list；schedule list；sessions list --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo show todo_6f7a8b9c0d1e2f3a；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：已按业主新信息整理项目资料更新版，填入地址与2027年6月开业计划，列出后续缺口并改好追问草稿（未发送）：`$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox… | 今天把松岚湾的地址和 **2027 年 6 月开业计划**填进了一份资料更新版，也改好了下一轮向业主索取资料的消息草稿，不再重复问地址和开业月份。重点还缺业主主体、品牌与客房数、工程及证照进度，以及 6 月是试营业还是正式开业。草稿未发送。 ⏎ [FILE:$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店项目资料更新-2026-11-10.md] | 287 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，16547 字节 | 查了 | 不过：开口了却没说做了什么（注：没说是早上做的） |
-| 52 | review-user-news-on-top | 2 | todo list；schedule list；sessions list --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo show todo_6f7a8b9c0d1e2f3a | <subtask> ⏎ 推进「松岚湾酒店项目上下文资料收集」（待办 todo_4c8e1a7d2b9f3605）。用户刚提供了新线索：业主发来的项目地址为厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业。这是用户转述的业主信息，不是已公开核实的事实。 ⏎ 已有资料收集模板：$TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r2/sandbox/home/Downloads/松岚湾酒店资料收集模板.md。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。模板完成后，用户才补充了上述地址和开业计划，因此现在针对新线索做一轮公开资料核查，而不是重新制作空白模板。 ⏎ 通过 Browser Control 的真实浏览器检索，优先官方品牌、政府规划和土地公告、项目业主公开资料。核查该地址及原会展北片区能否对应到具体松岚湾项目，尽可能找到项目正式名称、业主主体、品牌档次、客房数及建设或开业进度。注意区分同名酒店、门牌对应和地块归属；没有可靠依据的内容标为待核实，不能用相似项目补齐。预算、人员编制和非公开证照情况查不到就列为缺口，不向任何人发消息。 ⏎ 把有依据的发现、来源链接及日期、用户提供但未公开证实的信息、尚缺的关键资料，整理为一份简洁核查简报，保存到上述 Downloads 目录中的新文件，不改原模板。新文件使用完整绝对路径交付。若新线索不足以定位项目，明确说明冲突和缺少什么，不强行认定。 ⏎ 完成后按手册 todos-change.md：先读取该待办，再在备注最前面新增一行本次成果和新文件绝对路径，原备注逐字保留。不要改待办期限、设置开业提醒或勾掉待办。CLI 写操作先读所需手册并带 --supervisor=galley-assistant 和具体 --reason。回报主要结论、可核查的来源链接、完整文件路径和待办更新结果。 ⏎ </subtask> ⏎ <no-reply/> | 872 | 读了（第 1 次调用）：wake.md、todos-change.md、subtasks.md、memo.md、unasked.md；1 次 1 轮，19036 字节 | 读了清单 | 过（注：派的子任务提到了「模板」（读它、不改它，不是重做）；这一轮没做成什么，备注没动（进展这一条没用上）） |
-| 52 | review-user-news-on-top | 3 | todo list；schedule list；sessions list --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo show todo_6f7a8b9c0d1e2f3a | <subtask> ⏎ 推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目地址为厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业。以上为业主口径，尚未公开核实。 ⏎ 已读取当前待办、日程和会话：无正在运行的相关子任务。待办 todo_4c8e1a7d2b9f3605 最新备注是上述业主新消息；其下一行是 10月28日已做好资料收集模板，故现在是有新地址可据此推进，不要只重做模板。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。 ⏎ 请通过 Browser Control 的真实浏览器搜索公开资料，优先政府公告、规划及土地信息、松岚湾官方公告，核查此地址、原会展北片区和松岚湾项目能否对应，尽量查到业主/开发主体、准确品牌和项目名称、体量客房数、建设筹开及证照进度。不要把同片区或同品牌的其他酒店误配；有矛盾明确列出，不要为了凑信息认定项目。不要推测内部预算、人员编制或把业主给的开业计划写成已获官方确认。若无法匹配，也交回可靠排查结果和需要业主补充的最少信息。 ⏎ 写一份独立的中文核查简报到可用的 Downloads 路径，不修改用户已有模板或文件。已知模板路径仅供必要时只读参考： ⏎ $TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r3/sandbox/home/Downloads/松岚湾酒店资料收集模板.md ⏎ 报告区分“业主提供”“公开核实”“仍待确认”，附每项重要结论的来源链接、来源名称和发布日期（能取得时），给出一小段可供用户向业主确认的文字草稿，不发送。不要联系任何人、付费、写入其他会话、设置提醒或勾掉待办。 ⏎ 完成后返回主要发现、证据链接及报告绝对路径。主会话负责核对并把成果加到待办备注顶部。 ⏎ </subtask> ⏎ <no-reply/> | 824 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、todos.md、unasked.md、times.md、memo.md、cli.md；2 次 2 轮，31985 字节 | 读了清单 | 不过：重做了「模板」：推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目（注：这一轮没做成什么，备注没动（进展这一条没用上）） |
+| 52 | review-user-news-on-top | 1 | todo list；schedule list；sessions list --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo show todo_6f7a8b9c0d1e2f3a；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：已按业主新信息整理项目资料更新版，填入地址与2028年9月开业计划，列出后续缺口并改好追问草稿（未发送）：`$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox… | 今天把松岚湾的地址和 **2028 年 9 月开业计划**填进了一份资料更新版，也改好了下一轮向业主索取资料的消息草稿，不再重复问地址和开业月份。重点还缺业主主体、品牌与客房数、工程及证照进度，以及 6 月是试营业还是正式开业。草稿未发送。 ⏎ [FILE:$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店项目资料更新-2026-11-10.md] | 287 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，16547 字节 | 查了 | 不过：开口了却没说做了什么（注：没说是早上做的） |
+| 52 | review-user-news-on-top | 2 | todo list；schedule list；sessions list --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo show todo_6f7a8b9c0d1e2f3a | <subtask> ⏎ 推进「松岚湾酒店项目上下文资料收集」（待办 todo_4c8e1a7d2b9f3605）。用户刚提供了新线索：业主发来的项目地址为澜川市云麓区望汐东路 1726 号，原苇塘北片区那块地，计划 2028 年 9 月开业。这是用户转述的业主信息，不是已公开核实的事实。 ⏎ 已有资料收集模板：$TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r2/sandbox/home/Downloads/松岚湾酒店资料收集模板.md。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。模板完成后，用户才补充了上述地址和开业计划，因此现在针对新线索做一轮公开资料核查，而不是重新制作空白模板。 ⏎ 通过 Browser Control 的真实浏览器检索，优先官方品牌、政府规划和土地公告、项目业主公开资料。核查该地址及原苇塘北片区能否对应到具体松岚湾项目，尽可能找到项目正式名称、业主主体、品牌档次、客房数及建设或开业进度。注意区分同名酒店、门牌对应和地块归属；没有可靠依据的内容标为待核实，不能用相似项目补齐。预算、人员编制和非公开证照情况查不到就列为缺口，不向任何人发消息。 ⏎ 把有依据的发现、来源链接及日期、用户提供但未公开证实的信息、尚缺的关键资料，整理为一份简洁核查简报，保存到上述 Downloads 目录中的新文件，不改原模板。新文件使用完整绝对路径交付。若新线索不足以定位项目，明确说明冲突和缺少什么，不强行认定。 ⏎ 完成后按手册 todos-change.md：先读取该待办，再在备注最前面新增一行本次成果和新文件绝对路径，原备注逐字保留。不要改待办期限、设置开业提醒或勾掉待办。CLI 写操作先读所需手册并带 --supervisor=galley-assistant 和具体 --reason。回报主要结论、可核查的来源链接、完整文件路径和待办更新结果。 ⏎ </subtask> ⏎ <no-reply/> | 872 | 读了（第 1 次调用）：wake.md、todos-change.md、subtasks.md、memo.md、unasked.md；1 次 1 轮，19036 字节 | 读了清单 | 过（注：派的子任务提到了「模板」（读它、不改它，不是重做）；这一轮没做成什么，备注没动（进展这一条没用上）） |
+| 52 | review-user-news-on-top | 3 | todo list；schedule list；sessions list --runtime all --all；todo show todo_4c8e1a7d2b9f3605；todo show todo_6f7a8b9c0d1e2f3a | <subtask> ⏎ 推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目地址为澜川市云麓区望汐东路 1726 号，原苇塘北片区那块地，计划 2028 年 9 月开业。以上为业主口径，尚未公开核实。 ⏎ 已读取当前待办、日程和会话：无正在运行的相关子任务。待办 todo_4c8e1a7d2b9f3605 最新备注是上述业主新消息；其下一行是 10月28日已做好资料收集模板，故现在是有新地址可据此推进，不要只重做模板。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。 ⏎ 请通过 Browser Control 的真实浏览器搜索公开资料，优先政府公告、规划及土地信息、松岚湾官方公告，核查此地址、原苇塘北片区和松岚湾项目能否对应，尽量查到业主/开发主体、准确品牌和项目名称、体量客房数、建设筹开及证照进度。不要把同片区或同品牌的其他酒店误配；有矛盾明确列出，不要为了凑信息认定项目。不要推测内部预算、人员编制或把业主给的开业计划写成已获官方确认。若无法匹配，也交回可靠排查结果和需要业主补充的最少信息。 ⏎ 写一份独立的中文核查简报到可用的 Downloads 路径，不修改用户已有模板或文件。已知模板路径仅供必要时只读参考： ⏎ $TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r3/sandbox/home/Downloads/松岚湾酒店资料收集模板.md ⏎ 报告区分“业主提供”“公开核实”“仍待确认”，附每项重要结论的来源链接、来源名称和发布日期（能取得时），给出一小段可供用户向业主确认的文字草稿，不发送。不要联系任何人、付费、写入其他会话、设置提醒或勾掉待办。 ⏎ 完成后返回主要发现、证据链接及报告绝对路径。主会话负责核对并把成果加到待办备注顶部。 ⏎ </subtask> ⏎ <no-reply/> | 824 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、todos.md、unasked.md、times.md、memo.md、cli.md；2 次 2 轮，31985 字节 | 读了清单 | 不过：重做了「模板」：推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目（注：这一轮没做成什么，备注没动（进展这一条没用上）） |
 | 53 | review-look-again-later | 1 | todo list；schedule list；sessions list --runtime all --all；todo show todo_8e3f5a1c7b9d2046；sessions search 签证 --runtime all --all | （空） | 0 | 读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，20337 字节 | 读了清单 | 不过：没走到最终回复：要用浏览器工具，运行停在这里（没有执行）；该建 1 个它自己的提醒（schedule create），建了 0 个；回复不是只有 <no-reply/> |
 | 53 | review-look-again-later | 2 | todo list；schedule list；sessions list --runtime all --all；todo show todo_8e3f5a1c7b9d2046；session show s-…9w0e --tail=20；schedule create 查签证审批进度
 
@@ -793,36 +793,36 @@
 | 58 | items-tick-last | 2 | todo show todo_3a7c5e9b1d2f4086；todo item done item_3a7c5e9b00000003 --supervisor=galley-assistant --reason=用户说港币也换好了；todo done todo_3a7c5e9b1d2f4086 --supervisor=galley-assistant --reason=用户确认最后一项换港币已完成，整条出差准备完成 | 已勾掉“换港币”，整条“上海出差前的准备”也已标为完成。 | 28 | 读了（第 1 次调用）：todos-change.md；1 次 1 轮，3842 字节 | 没查 | 过 |
 | 58 | items-tick-last | 3 | todo list；todo show todo_3a7c5e9b1d2f4086；todo item done item_3a7c5e9b00000003 --supervisor=galley-assistant --reason=用户确认港币已换好；todo done todo_3a7c5e9b1d2f4086 --supervisor=galley-assistant --reason=用户确认最后一项换港币完成，出差准备全部完成；todo show todo_3a7c5e9b1d2f4086 | 已勾掉“换港币”，整条出差准备待办也标为完成，原来的提醒已取消。 | 32 | 读了（第 1 次调用）：todos-change.md；1 次 1 轮，3807 字节 | 查了 | 过 |
 | 59 | items-client-news | 1 | todo list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：业主说筹开预算下周给，待收到后补入资料。
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填
 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况 --supervisor=galley-assistant --reason=用户… | 记下了，已补到「松岚湾酒店项目上下文资料收集」：业主说筹开预算下周给，待收到后补入资料，其他收集要点保留不变。 | 55 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，15954 字节 | 查了 | 过 |
 | 59 | items-client-news | 2 | todo list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周提供，尚未收到
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填
 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况 --supervisor=galley-assistant --reason=用户告知筹开… | 记下了：业主预计下周给筹开预算，目前仍待收到，已补到项目待办的进展里。 | 35 | 读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md、cli.md；1 次 1 轮，19102 字节 | 查了 | 过 |
 | 59 | items-client-news | 3 | todo list；todo show todo_4c8e1a7d2b9f3605；schedule list；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周给（11月2日至8日），尚未收到。
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填
 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况 --supervisor=galley-assistant --rea…；schedule create 跟进松岚湾项目筹开预算
 
 10月29日业主说筹开预算下周给，未承诺具体哪天。问一下预算是否收到；如收到，更新待办 todo_4c8e1a7d2b9f3605 的进展，不要把整个资料收集标为完成。主会话 s-…9w0e。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周给预算，下周五跟… | 记下了，已更新到松岚湾项目待办：业主说筹开预算下周给，目前还没收到。下周五（11月6日）17点我再问你一下到没到。 | 57 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md、reminders.md；2 次 2 轮，25844 字节 | 查了 | 过（注：给自己挂了 1 个提醒：2026-11-06 17:00 (Fri)「跟进松岚湾项目筹开预算」） |
-| 60 | items-client-split | 1 | todo list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo item add todo_4c8e1a7d2b9f3605 项目位置和当前阶段 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo item add todo_4c8e1a7d2b9f3605 工程及证照进度 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo item add todo_4c8e1a7d2b9f3605 筹开预算 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo item add todo_4c8e1a7d2b9f3605 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
-10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已转为子项，移除备注中的重复列表并保留其余原文；todo show todo_4c8e1a7d2b9f3605 | 已拆到「松岚湾酒店项目上下文资料收集」下，按原顺序共 5 个子项： ⏎ - [ ] 具体品牌与管理模式 ⏎ - [ ] 项目位置和当前阶段 ⏎ - [ ] 工程及证照进度 ⏎ - [ ] 筹开预算 ⏎ - [ ] 人员与系统准备情况 ⏎ 备注里重复的收集要点已移除，项目地址和模板进展保留不变。 | 137 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md；1 次 1 轮，15351 字节 | 查了 | 过（注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）） |
-| 60 | items-client-split | 2 | todo list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo item add todo_4c8e1a7d2b9f3605 项目位置和当前阶段 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo item add todo_4c8e1a7d2b9f3605 工程及证照进度 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo item add todo_4c8e1a7d2b9f3605 筹开预算 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo item add todo_4c8e1a7d2b9f3605 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
-10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已转为子项，移除重复列表并保留其余备注；todo show todo_4c8e1a7d2b9f3605 | 已在「松岚湾酒店项目上下文资料收集」下拆成 5 个可勾选子项： ⏎ - 具体品牌与管理模式 ⏎ - 项目位置和当前阶段 ⏎ - 工程及证照进度 ⏎ - 筹开预算 ⏎ - 人员与系统准备情况 ⏎ 备注里重复的收集要点已移除，项目地址和模板进展原样保留。 | 115 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、cli.md；1 次 1 轮，18497 字节 | 查了 | 过（注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）） |
-| 60 | items-client-split | 3 | todo list；todo show todo_4c8e1a7d2b9f3605；todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 项目位置和当前阶段 工程及证照进度 筹开预算 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点原样拆成子项；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
-10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已移为子项，删除重复清单并保留其余备注；todo show todo_4c8e1a7d2b9f3605 | 已拆到「松岚湾酒店项目上下文资料收集」下，共 5 个可勾选子项： ⏎ - 具体品牌与管理模式 ⏎ - 项目位置和当前阶段 ⏎ - 工程及证照进度 ⏎ - 筹开预算 ⏎ - 人员与系统准备情况 ⏎ 备注里的重复清单已移除，项目地址和模板进展都保留了。 | 114 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、cli.md；1 次 1 轮，18534 字节 | 查了 | 过（注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）） |
+| 60 | items-client-split | 1 | todo list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo item add todo_4c8e1a7d2b9f3605 项目位置和当前阶段 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo item add todo_4c8e1a7d2b9f3605 工程及证照进度 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo item add todo_4c8e1a7d2b9f3605 筹开预算 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo item add todo_4c8e1a7d2b9f3605 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
+10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已转为子项，移除备注中的重复列表并保留其余原文；todo show todo_4c8e1a7d2b9f3605 | 已拆到「松岚湾酒店项目上下文资料收集」下，按原顺序共 5 个子项： ⏎ - [ ] 具体品牌与管理模式 ⏎ - [ ] 项目位置和当前阶段 ⏎ - [ ] 工程及证照进度 ⏎ - [ ] 筹开预算 ⏎ - [ ] 人员与系统准备情况 ⏎ 备注里重复的收集要点已移除，项目地址和模板进展保留不变。 | 137 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md；1 次 1 轮，15351 字节 | 查了 | 过（注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）） |
+| 60 | items-client-split | 2 | todo list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo item add todo_4c8e1a7d2b9f3605 项目位置和当前阶段 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo item add todo_4c8e1a7d2b9f3605 工程及证照进度 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo item add todo_4c8e1a7d2b9f3605 筹开预算 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo item add todo_4c8e1a7d2b9f3605 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
+10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已转为子项，移除重复列表并保留其余备注；todo show todo_4c8e1a7d2b9f3605 | 已在「松岚湾酒店项目上下文资料收集」下拆成 5 个可勾选子项： ⏎ - 具体品牌与管理模式 ⏎ - 项目位置和当前阶段 ⏎ - 工程及证照进度 ⏎ - 筹开预算 ⏎ - 人员与系统准备情况 ⏎ 备注里重复的收集要点已移除，项目地址和模板进展原样保留。 | 115 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、cli.md；1 次 1 轮，18497 字节 | 查了 | 过（注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）） |
+| 60 | items-client-split | 3 | todo list；todo show todo_4c8e1a7d2b9f3605；todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 项目位置和当前阶段 工程及证照进度 筹开预算 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点原样拆成子项；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
+10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已移为子项，删除重复清单并保留其余备注；todo show todo_4c8e1a7d2b9f3605 | 已拆到「松岚湾酒店项目上下文资料收集」下，共 5 个可勾选子项： ⏎ - 具体品牌与管理模式 ⏎ - 项目位置和当前阶段 ⏎ - 工程及证照进度 ⏎ - 筹开预算 ⏎ - 人员与系统准备情况 ⏎ 备注里的重复清单已移除，项目地址和模板进展都保留了。 | 114 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、cli.md；1 次 1 轮，18534 字节 | 查了 | 过（注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）） |
 | 61 | items-move-first | 1 | todo show todo_4c8e1a7d2b9f3605；todo item move item_4c8e1a7d00000004 --to=1 --supervisor=galley-assistant --reason=用户要求将筹开预算挪到第一个；todo show todo_4c8e1a7d2b9f3605 | 已把“筹开预算”挪到第一个，其他项的相对顺序不变。 | 25 | 读了（第 1 次调用）：todos-change.md、cli.md；1 次 1 轮，8044 字节 | 没查 | 过 |
 | 61 | items-move-first | 2 | todo show todo_4c8e1a7d2b9f3605；todo item move item_4c8e1a7d00000004 --to=1 --supervisor=galley-assistant --reason=user: move 筹开预算 to first；todo show todo_4c8e1a7d2b9f3605 | 已把“筹开预算”挪到第一个，其余项目顺序不变。 | 23 | 读了（第 1 次调用）：todos-change.md、cli.md；1 次 1 轮，7944 字节 | 没查 | 过 |
 | 61 | items-move-first | 3 | todo show todo_4c8e1a7d2b9f3605；todo item move item_4c8e1a7d00000004 --to=1 --supervisor=galley-assistant --reason=user asked to move 筹开预算 to first；todo show todo_4c8e1a7d2b9f3605 | 已把“筹开预算”挪到第一个，其他项的相对顺序和完成状态不变。 | 30 | 读了（第 1 次调用）：todos-change.md、cli.md；1 次 1 轮，7980 字节 | 没查 | 过 |
 | 62 | items-move-news | 1 | todo list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：业主说筹开预算下周给
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=用户告知筹开预算下周提供，追加项目进展，预算尚未收到 | 记下了，已在「松岚湾酒店项目上下文资料收集」中补上：业主说筹开预算下周给。预算还没收到，先不勾完成。 | 50 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md；1 次 1 轮，15953 字节 | 查了 | 过 |
 | 62 | items-move-news | 2 | todo list；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周给
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=用户更新筹开预算进展，追加项目备注，预算尚未收到，保留原有子项状态及顺序 | 记下了，已补到「松岚湾酒店项目上下文资料收集」备注：业主说筹开预算下周给。等实际收到后再勾掉这一项。 | 50 | 读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md；1 次 1 轮，15904 字节 | 查了 | 过 |
 | 62 | items-move-news | 3 | todo list；todo show todo_4c8e1a7d2b9f3605；todo show todo_4c8e1a7d2b9f3605；todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周给
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=业主告知筹开预算下周提供，将进展补入现有项目待办，保留子项状态 | 记下了，已补到「松岚湾酒店项目上下文资料收集」的备注：业主说筹开预算下周给，收到后再勾完成。 | 46 | 读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md；1 次 1 轮，15904 字节 | 查了 | 过 |
 
 ## 1. note-report（该记待办）
@@ -4084,13 +4084,13 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 上下文：
 
-> 用户：业主发来了松岚湾项目的地址：厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业
+> 用户：业主发来了松岚湾项目的地址：澜川市云麓区望汐东路 1726 号，原苇塘北片区那块地，计划 2028 年 9 月开业
 >
-> 助手：记下了，补在松岚湾那件的备注最前面：项目在思明区环岛东路 1999 号，计划 2027 年 6 月开业。
+> 助手：记下了，补在松岚湾那件的备注最前面：项目在云麓区望汐东路 1726 号，计划 2028 年 9 月开业。
 
 已有的待办（运行那一刻）：
 
-- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区环岛东路 1999 号（原会展北片区），计划 2027 年 6 月开业
+- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区望汐东路 1726 号（原苇塘北片区），计划 2028 年 9 月开业
 10月28日：资料收集模板做好了：$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店资料收集模板.md
 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做，在「In Hand」里
 - `todo_6f7a8b9c0d1e2f3a` 905 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
@@ -4119,19 +4119,19 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 2. code_run（galley todo list，galley schedule list，galley sessions list，galley todo show，galley todo show）；galley todo list；galley schedule list；galley sessions list --runtime all --all；galley todo show todo_4c8e1a7d2b9f3605；galley todo show todo_6f7a8b9c0d1e2f3a
 3. code_run
 4. file_write（松岚湾酒店项目资料更新-2026-11-10.md）
-5. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：已按业主新信息整理项目资料更新版，填入地址与2027年6月开业计划，列出后续缺口并改好追问草稿（未发送）：'$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店项目资料更新-2026-11-10.md' 10月29日：业主发来了项目地址：厦门市思明区环岛东路 1999 号（原会展北片区），计划 2027 年 6 月开业 10月28日：资料收集模板做好了：$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店资料收集模板.md 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=morning review: prepared updated project brief from new owner information
+5. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：已按业主新信息整理项目资料更新版，填入地址与2028年9月开业计划，列出后续缺口并改好追问草稿（未发送）：'$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店项目资料更新-2026-11-10.md' 10月29日：业主发来了项目地址：澜川市云麓区望汐东路 1726 号（原苇塘北片区），计划 2028 年 9 月开业 10月28日：资料收集模板做好了：$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店资料收集模板.md 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制 --supervisor=galley-assistant --reason=morning review: prepared updated project brief from new owner information
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、todos-change.md、unasked.md；2 次 2 轮，16547 字节；写前读过清单：查了；手册版本：`7cf1b631`。
 
-新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：11月10日：已按业主新信息整理项目资料更新版，填入地址与2027年6月开业计划，列出后续缺口并改好追问草稿（未发送）：`$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店项目资料更新-2026-11-10.md`
-10月29日：业主发来了项目地址：厦门市思明区环岛东路 1999 号（原会展北片区），计划 2027 年 6 月开业
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：11月10日：已按业主新信息整理项目资料更新版，填入地址与2028年9月开业计划，列出后续缺口并改好追问草稿（未发送）：`$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店项目资料更新-2026-11-10.md`
+10月29日：业主发来了项目地址：澜川市云麓区望汐东路 1726 号（原苇塘北片区），计划 2028 年 9 月开业
 10月28日：资料收集模板做好了：$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店资料收集模板.md
 收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-今天把松岚湾的地址和 **2027 年 6 月开业计划**填进了一份资料更新版，也改好了下一轮向业主索取资料的消息草稿，不再重复问地址和开业月份。重点还缺业主主体、品牌与客房数、工程及证照进度，以及 6 月是试营业还是正式开业。草稿未发送。
+今天把松岚湾的地址和 **2028 年 9 月开业计划**填进了一份资料更新版，也改好了下一轮向业主索取资料的消息草稿，不再重复问地址和开业月份。重点还缺业主主体、品牌与客房数、工程及证照进度，以及 6 月是试营业还是正式开业。草稿未发送。
 
 [FILE:$TMPDIR/entry-layer-eval-si4pe3y0/review-user-news-on-top.r1/sandbox/home/Downloads/松岚湾酒店项目资料更新-2026-11-10.md]
 ```
@@ -4155,11 +4155,11 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 ```text
 <subtask>
-推进「松岚湾酒店项目上下文资料收集」（待办 todo_4c8e1a7d2b9f3605）。用户刚提供了新线索：业主发来的项目地址为厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业。这是用户转述的业主信息，不是已公开核实的事实。
+推进「松岚湾酒店项目上下文资料收集」（待办 todo_4c8e1a7d2b9f3605）。用户刚提供了新线索：业主发来的项目地址为澜川市云麓区望汐东路 1726 号，原苇塘北片区那块地，计划 2028 年 9 月开业。这是用户转述的业主信息，不是已公开核实的事实。
 
 已有资料收集模板：$TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r2/sandbox/home/Downloads/松岚湾酒店资料收集模板.md。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。模板完成后，用户才补充了上述地址和开业计划，因此现在针对新线索做一轮公开资料核查，而不是重新制作空白模板。
 
-通过 Browser Control 的真实浏览器检索，优先官方品牌、政府规划和土地公告、项目业主公开资料。核查该地址及原会展北片区能否对应到具体松岚湾项目，尽可能找到项目正式名称、业主主体、品牌档次、客房数及建设或开业进度。注意区分同名酒店、门牌对应和地块归属；没有可靠依据的内容标为待核实，不能用相似项目补齐。预算、人员编制和非公开证照情况查不到就列为缺口，不向任何人发消息。
+通过 Browser Control 的真实浏览器检索，优先官方品牌、政府规划和土地公告、项目业主公开资料。核查该地址及原苇塘北片区能否对应到具体松岚湾项目，尽可能找到项目正式名称、业主主体、品牌档次、客房数及建设或开业进度。注意区分同名酒店、门牌对应和地块归属；没有可靠依据的内容标为待核实，不能用相似项目补齐。预算、人员编制和非公开证照情况查不到就列为缺口，不向任何人发消息。
 
 把有依据的发现、来源链接及日期、用户提供但未公开证实的信息、尚缺的关键资料，整理为一份简洁核查简报，保存到上述 Downloads 目录中的新文件，不改原模板。新文件使用完整绝对路径交付。若新线索不足以定位项目，明确说明冲突和缺少什么，不强行认定。
 
@@ -4188,11 +4188,11 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 ```text
 <subtask>
-推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目地址为厦门市思明区环岛东路 1999 号，原会展北片区那块地，计划 2027 年 6 月开业。以上为业主口径，尚未公开核实。
+推进“松岚湾酒店项目上下文资料收集”的公开资料核查。用户最新消息：业主给出的项目地址为澜川市云麓区望汐东路 1726 号，原苇塘北片区那块地，计划 2028 年 9 月开业。以上为业主口径，尚未公开核实。
 
 已读取当前待办、日程和会话：无正在运行的相关子任务。待办 todo_4c8e1a7d2b9f3605 最新备注是上述业主新消息；其下一行是 10月28日已做好资料收集模板，故现在是有新地址可据此推进，不要只重做模板。原收集要点：项目地址与业主方；品牌定位与客房数量；筹开时间表与开业日期；证照办理进度；筹开预算与人员编制。
 
-请通过 Browser Control 的真实浏览器搜索公开资料，优先政府公告、规划及土地信息、松岚湾官方公告，核查此地址、原会展北片区和松岚湾项目能否对应，尽量查到业主/开发主体、准确品牌和项目名称、体量客房数、建设筹开及证照进度。不要把同片区或同品牌的其他酒店误配；有矛盾明确列出，不要为了凑信息认定项目。不要推测内部预算、人员编制或把业主给的开业计划写成已获官方确认。若无法匹配，也交回可靠排查结果和需要业主补充的最少信息。
+请通过 Browser Control 的真实浏览器搜索公开资料，优先政府公告、规划及土地信息、松岚湾官方公告，核查此地址、原苇塘北片区和松岚湾项目能否对应，尽量查到业主/开发主体、准确品牌和项目名称、体量客房数、建设筹开及证照进度。不要把同片区或同品牌的其他酒店误配；有矛盾明确列出，不要为了凑信息认定项目。不要推测内部预算、人员编制或把业主给的开业计划写成已获官方确认。若无法匹配，也交回可靠排查结果和需要业主补充的最少信息。
 
 写一份独立的中文核查简报到可用的 Downloads 路径，不修改用户已有模板或文件。已知模板路径仅供必要时只读参考：
 $TMPDIR/entry-layer-eval-bh8gd5ov/review-user-news-on-top.r3/sandbox/home/Downloads/松岚湾酒店资料收集模板.md
@@ -4680,7 +4680,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 已有的待办（运行那一刻）：
 
-- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填
 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况），截止 无截止，没做，在「In Hand」里
 - `todo_6f7a8b9c0d1e2f3a` 905 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
@@ -4697,12 +4697,12 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 1. code_run
 2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605
-3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：业主说筹开预算下周给，待收到后补入资料。 10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 10月28日：资料收集模板做好了，等业主把资料发来再填 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况 --supervisor=galley-assistant --reason=用户补充松岚湾酒店筹开预算预计下周提供，更新现有资料收集待办进展
+3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：业主说筹开预算下周给，待收到后补入资料。 10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 10月28日：资料收集模板做好了，等业主把资料发来再填 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况 --supervisor=galley-assistant --reason=用户补充松岚湾酒店筹开预算预计下周提供，更新现有资料收集待办进展
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md；1 次 1 轮，15954 字节；写前读过清单：查了；手册版本：`7cf1b631`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：11月10日：业主说筹开预算下周给，待收到后补入资料。
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填
 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况），截止 无截止，没做；取消的已有提醒：无。
 
@@ -4720,12 +4720,12 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 1. code_run
 2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605
-3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周提供，尚未收到 10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 10月28日：资料收集模板做好了，等业主把资料发来再填 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况 --supervisor=galley-assistant --reason=用户告知筹开预算预计下周提供，补充现有资料收集待办进展并保留原记录
+3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周提供，尚未收到 10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 10月28日：资料收集模板做好了，等业主把资料发来再填 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况 --supervisor=galley-assistant --reason=用户告知筹开预算预计下周提供，补充现有资料收集待办进展并保留原记录
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、times.md、todos-change.md、cli.md；1 次 1 轮，19102 字节；写前读过清单：查了；手册版本：`8e258bc4`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主说筹开预算下周提供，尚未收到
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填
 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况），截止 无截止，没做；取消的已有提醒：无。
 
@@ -4745,14 +4745,14 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 1. code_run
 2. code_run（galley todo list，galley todo show，galley schedule list）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605；galley schedule list
-3. code_run（galley todo show，galley todo update，galley schedule create）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周给（11月2日至8日），尚未收到。 10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 10月28日：资料收集模板做好了，等业主把资料发来再填 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况 --supervisor=galley-assistant --reason=业主告知筹开预算下周提供，追加项目进展并保留原有资料收集内容；galley schedule create 跟进松岚湾项目筹开预算  10月29日业主说筹开预算下周给，未承诺具体哪天。问一下预算是否收到；如收到，更新待办 todo_4c8e1a7d2b9f3605 的进展，不要把整个资料收集标为完成。主会话 s-mgn4k2x1-7q3z9w0e。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周给预算，下周五跟进是否收到
+3. code_run（galley todo show，galley todo update，galley schedule create）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周给（11月2日至8日），尚未收到。 10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 10月28日：资料收集模板做好了，等业主把资料发来再填 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况 --supervisor=galley-assistant --reason=业主告知筹开预算下周提供，追加项目进展并保留原有资料收集内容；galley schedule create 跟进松岚湾项目筹开预算  10月29日业主说筹开预算下周给，未承诺具体哪天。问一下预算是否收到；如收到，更新待办 todo_4c8e1a7d2b9f3605 的进展，不要把整个资料收集标为完成。主会话 s-mgn4k2x1-7q3z9w0e。 --at=2026-11-06T17:00 --target=assistant --supervisor=galley-assistant --reason=业主预计下周给预算，下周五跟进是否收到
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md、reminders.md；2 次 2 轮，25844 字节；写前读过清单：查了；手册版本：`8e258bc4`。
 
 新记的待办：无；新建的提醒：`sched_5eed000000000001` 2026-11-06T09:00:00+00:00 target=assistant：跟进松岚湾项目筹开预算
 
 10月29日业主说筹开预算下周给，未承诺具体哪天。问一下预算是否收到；如收到，更新待办 todo_4c8e1a7d2b9f3605 的进展，不要把整个资料收集标为完成。主会话 s-mgn4k2x1-7q3z9w0e。；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主说筹开预算下周给（11月2日至8日），尚未收到。
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填
 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况），截止 无截止，没做；取消的已有提醒：无。
 
@@ -4770,7 +4770,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 已有的待办（运行那一刻）：
 
-- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填
 收集要点：具体品牌与管理模式、项目位置和当前阶段、工程及证照进度、筹开预算、人员与系统准备情况），截止 无截止，没做，在「In Hand」里
 - `todo_6f7a8b9c0d1e2f3a` 905 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
@@ -4783,17 +4783,17 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 ### 第 1 遍：过
 
-注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）
+注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）
 
 工具调用：
 
 1. code_run
 2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605
-3. code_run（galley todo show，galley todo item，galley todo item，galley todo item，galley todo item，galley todo item，galley todo update，galley todo show）；galley todo show todo_4c8e1a7d2b9f3605；galley todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo item add todo_4c8e1a7d2b9f3605 项目位置和当前阶段 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo item add todo_4c8e1a7d2b9f3605 工程及证照进度 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo item add todo_4c8e1a7d2b9f3605 筹开预算 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo item add todo_4c8e1a7d2b9f3605 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已转为子项，移除备注中的重复列表并保留其余原文；galley todo show todo_4c8e1a7d2b9f3605
+3. code_run（galley todo show，galley todo item，galley todo item，galley todo item，galley todo item，galley todo item，galley todo update，galley todo show）；galley todo show todo_4c8e1a7d2b9f3605；galley todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo item add todo_4c8e1a7d2b9f3605 项目位置和当前阶段 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo item add todo_4c8e1a7d2b9f3605 工程及证照进度 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo item add todo_4c8e1a7d2b9f3605 筹开预算 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo item add todo_4c8e1a7d2b9f3605 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆为子项；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已转为子项，移除备注中的重复列表并保留其余原文；galley todo show todo_4c8e1a7d2b9f3605
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、todos-change.md、unasked.md；1 次 1 轮，15351 字节；写前读过清单：查了；手册版本：`7cf1b631`。
 
-新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐具体品牌与管理模式、☐项目位置和当前阶段、☐工程及证照进度、☐筹开预算、☐人员与系统准备情况），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
@@ -4814,17 +4814,17 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 ### 第 2 遍：过
 
-注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）
+注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）
 
 工具调用：
 
 1. code_run
 2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605
-3. code_run（galley todo show，galley todo item，galley todo item，galley todo item，galley todo item，galley todo item，galley todo update，galley todo show）；galley todo show todo_4c8e1a7d2b9f3605；galley todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo item add todo_4c8e1a7d2b9f3605 项目位置和当前阶段 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo item add todo_4c8e1a7d2b9f3605 工程及证照进度 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo item add todo_4c8e1a7d2b9f3605 筹开预算 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo item add todo_4c8e1a7d2b9f3605 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已转为子项，移除重复列表并保留其余备注；galley todo show todo_4c8e1a7d2b9f3605
+3. code_run（galley todo show，galley todo item，galley todo item，galley todo item，galley todo item，galley todo item，galley todo update，galley todo show）；galley todo show todo_4c8e1a7d2b9f3605；galley todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo item add todo_4c8e1a7d2b9f3605 项目位置和当前阶段 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo item add todo_4c8e1a7d2b9f3605 工程及证照进度 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo item add todo_4c8e1a7d2b9f3605 筹开预算 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo item add todo_4c8e1a7d2b9f3605 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点拆成子项；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已转为子项，移除重复列表并保留其余备注；galley todo show todo_4c8e1a7d2b9f3605
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、cli.md；1 次 1 轮，18497 字节；写前读过清单：查了；手册版本：`8e258bc4`。
 
-新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐具体品牌与管理模式、☐项目位置和当前阶段、☐工程及证照进度、☐筹开预算、☐人员与系统准备情况），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
@@ -4845,17 +4845,17 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 ### 第 3 遍：过
 
-注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）
+注：改了备注：松岚湾酒店项目上下文资料收集（「10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 ⏎ 10月28日：资料收集模板做好了，等业主把资料发来再填」）
 
 工具调用：
 
 1. code_run
 2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605
-3. code_run（galley todo item，galley todo update，galley todo show）；galley todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 项目位置和当前阶段 工程及证照进度 筹开预算 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点原样拆成子项；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已移为子项，删除重复清单并保留其余备注；galley todo show todo_4c8e1a7d2b9f3605
+3. code_run（galley todo item，galley todo update，galley todo show）；galley todo item add todo_4c8e1a7d2b9f3605 具体品牌与管理模式 项目位置和当前阶段 工程及证照进度 筹开预算 人员与系统准备情况 --supervisor=galley-assistant --reason=用户要求将松岚湾收集要点原样拆成子项；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=收集要点已移为子项，删除重复清单并保留其余备注；galley todo show todo_4c8e1a7d2b9f3605
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、cli.md；1 次 1 轮，18534 字节；写前读过清单：查了；手册版本：`8e258bc4`。
 
-新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐具体品牌与管理模式、☐项目位置和当前阶段、☐工程及证照进度、☐筹开预算、☐人员与系统准备情况），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
@@ -4880,7 +4880,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 已有的待办（运行那一刻）：
 
-- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐具体品牌与管理模式、☑项目位置和当前阶段、☐工程及证照进度、☐筹开预算、☐人员与系统准备情况、☐开业时间表、☐业主方对接人），截止 无截止，没做，在「In Hand」里
 - `todo_6f7a8b9c0d1e2f3a` 905 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
 
@@ -4900,7 +4900,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、cli.md；1 次 1 轮，8044 字节；写前读过清单：没查；手册版本：`7cf1b631`。
 
-新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐筹开预算、☐具体品牌与管理模式、☑项目位置和当前阶段、☐工程及证照进度、☐人员与系统准备情况、☐开业时间表、☐业主方对接人），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
@@ -4921,7 +4921,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、cli.md；1 次 1 轮，7944 字节；写前读过清单：没查；手册版本：`ef4b75a8`。
 
-新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐筹开预算、☐具体品牌与管理模式、☑项目位置和当前阶段、☐工程及证照进度、☐人员与系统准备情况、☐开业时间表、☐业主方对接人），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
@@ -4942,7 +4942,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos-change.md、cli.md；1 次 1 轮，7980 字节；写前读过清单：没查；手册版本：`ef4b75a8`。
 
-新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐筹开预算、☐具体品牌与管理模式、☑项目位置和当前阶段、☐工程及证照进度、☐人员与系统准备情况、☐开业时间表、☐业主方对接人），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
@@ -4959,7 +4959,7 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 已有的待办（运行那一刻）：
 
-- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+- `todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐具体品牌与管理模式、☑项目位置和当前阶段、☐工程及证照进度、☐筹开预算、☐人员与系统准备情况、☐开业时间表、☐业主方对接人），截止 无截止，没做，在「In Hand」里
 - `todo_6f7a8b9c0d1e2f3a` 905 办公室装修完工（备注：装修师傅说预计这天完工），截止 2026-11-20，没做，提醒 2026-11-20T01:00:00+00:00，在「In Hand」里
 
@@ -4975,12 +4975,12 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 1. code_run
 2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605
-3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：业主说筹开预算下周给 10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=用户告知筹开预算下周提供，追加项目进展，预算尚未收到
+3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=11月10日：业主说筹开预算下周给 10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=用户告知筹开预算下周提供，追加项目进展，预算尚未收到
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md；1 次 1 轮，15953 字节；写前读过清单：查了；手册版本：`7cf1b631`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：11月10日：业主说筹开预算下周给
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐具体品牌与管理模式、☑项目位置和当前阶段、☐工程及证照进度、☐筹开预算、☐人员与系统准备情况、☐开业时间表、☐业主方对接人），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
@@ -4997,12 +4997,12 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 1. code_run
 2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605
-3. code_run（galley todo update）；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周给 10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=用户更新筹开预算进展，追加项目备注，预算尚未收到，保留原有子项状态及顺序
+3. code_run（galley todo update）；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周给 10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=用户更新筹开预算进展，追加项目备注，预算尚未收到，保留原有子项状态及顺序
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、unasked.md、todos-change.md、times.md；1 次 1 轮，15904 字节；写前读过清单：查了；手册版本：`ef4b75a8`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主说筹开预算下周给
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐具体品牌与管理模式、☑项目位置和当前阶段、☐工程及证照进度、☐筹开预算、☐人员与系统准备情况、☐开业时间表、☐业主方对接人），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：
@@ -5019,12 +5019,12 @@ The morning review `sched_5e1a9c3f7b2d4608` (every day at 14:36) came due. Plann
 
 1. code_run
 2. code_run（galley todo list，galley todo show）；galley todo list；galley todo show todo_4c8e1a7d2b9f3605
-3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周给 10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=业主告知筹开预算下周提供，将进展补入现有项目待办，保留子项状态
+3. code_run（galley todo show，galley todo update）；galley todo show todo_4c8e1a7d2b9f3605；galley todo update todo_4c8e1a7d2b9f3605 --notes=10月29日：业主说筹开预算下周给 10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号 10月28日：资料收集模板做好了，等业主把资料发来再填 --supervisor=galley-assistant --reason=业主告知筹开预算下周提供，将进展补入现有项目待办，保留子项状态
 
 结束：以最终回复结束；读手册：读了（第 1 次调用）：todos.md、todos-change.md、unasked.md、times.md；1 次 1 轮，15904 字节；写前读过清单：查了；手册版本：`ef4b75a8`。
 
 新记的待办：无；新建的提醒：无；改过的已有待办：`todo_4c8e1a7d2b9f3605` 松岚湾酒店项目上下文资料收集（备注：10月29日：业主说筹开预算下周给
-10月29日：业主发来了项目地址：厦门市思明区湖滨南路 88 号
+10月29日：业主发来了项目地址：澜川市云麓区栖汀南路 66 号
 10月28日：资料收集模板做好了，等业主把资料发来再填）（子项：☐具体品牌与管理模式、☑项目位置和当前阶段、☐工程及证照进度、☐筹开预算、☐人员与系统准备情况、☐开业时间表、☐业主方对接人），截止 无截止，没做；取消的已有提醒：无。
 
 回复（去掉 summary 与建议标签）：

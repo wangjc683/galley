@@ -11520,7 +11520,7 @@ def dry_test_moved(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
     f = run(news, "<no-reply/>", log=(("todo", "list"), show))
     check(f["pass"] is True and any("什么都没做" in x for x in f["flags"]),
           f"news on top: nothing done passes, noted ({f['reasons']} {f['flags']})")
-    f = run(news, "<subtask>查环岛东路 1999 号地块的公开规划信息</subtask>\n<no-reply/>", log=(show,))
+    f = run(news, "<subtask>查望汐东路 1726 号地块的公开规划信息</subtask>\n<no-reply/>", log=(show,))
     check(f["pass"] is True, f"news on top: a subtask for it passes ({f['reasons']} {f['flags']})")
     for brief in ("按新地址查公开资料，已有资料收集模板可先读，不要修改它，另写一份核对简报",
                   "已有资料收集模板，不要重做模板；这次按新地址查公开资料", "按新地址查公开资料，不要再做一份空模板",
@@ -11533,7 +11533,7 @@ def dry_test_moved(cases: dict[str, dict[str, Any]], mon: datetime, check: Any) 
     check(f["pass"] is True, f"news on top: 「已记录」 inside a subtask's brief is no claim ({f['reasons']})")
     f = run(news, "", log=(show,), stop="web_tool")
     check(f["pass"] is True, f"news on top: a look in the browser passes ({f['reasons']} {f['flags']})")
-    found = f"{day}：查了环岛东路 1999 号地块：已取得规划许可，周边两家竞品酒店（文件：/sandbox/home/Downloads/松岚湾项目周边.md）"
+    found = f"{day}：查了望汐东路 1726 号地块：已取得规划许可，周边两家竞品酒店（文件：/sandbox/home/Downloads/松岚湾项目周边.md）"
     f = run(news, "松岚湾那件我早上查了一下项目地块：规划许可已下，周边有两家同档竞品。\n[FILE:/sandbox/home/Downloads/松岚湾项目周边.md]",
             {hid: found + "\n" + nbase}, (show, upd(hid, found + "\n" + nbase)),
             home_added=["/sandbox/home/Downloads/松岚湾项目周边.md"])
