@@ -1,6 +1,6 @@
 # 154 重复的待办：规则加「这一期」（Core 与命令）
 
-Status: ready-for-agent
+Status: done（2026-11-10 代理两轮交回，rebase 后快进合入 `be549439`（Core 与 CLI）、`38752983`（Agent API 文档）、`6adbdb91`（第二轮：重挂从到期日起数、没有任务的这一期补挂）。主会话验收：读过 `todo_repeat.rs` 的日期计算、`db/todo.rs` 的了结与生成、每个 tick 的那一遍、巡看判据与「最近不要的跟进」的改动；在 worktree 复跑 `cargo test --workspace` 本机与 `TZ=UTC` 各 1,395 条全过，协议漂移、文档链接、`git diff --check` 过，新增行没有本机路径。合入前 `busy:0`、库先备份；合入后迁移 057 在真实库上跑完，待办条数不变；dev 的 CLI 已重编替换。dev 真机走查（CLI，测试数据标明是本票的）：建每天重复的一件（规则与「提前 1 天 08:00」记对）→ 到期日挪到今天、勾掉 → 下一期到期明天、自己的提醒时刻已过所以没挂 → 55 秒后调度器真实的 tick 给它补挂到次日 08:00（记成 `galley-repeat` 建的，待办的 `updated_at` 没动）→ 跳过它，再下一期当场带提醒 → 已勾掉的一期跳过被拒 → 取消勾后两期并存 → 删掉其中一期，规则结束，另一期成了普通待办、提醒还在 → 规则结束后再跳过报 `not_repeating:` → 删掉。走完后三件都是取消的样子（软删，与票 87 的测试数据同样留在库里，面板与「最近不要的跟进」都不显示）、规则已结束、三个提醒任务都已取消，没有一个响过。给人看的部分随手册票 155 与面板票一起验）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 204（JC 2026-11-10），定位见裁决 202（那一条一定在：日子、提醒、下一期由 Core 算）。本票只做 Core、CLI、给面板的数据与文档；手册与评测、面板各另有一张票。只在内置运行时；外置运行时没有主对话与待办，写命令照旧 `assistant_unavailable:`，零变化。Agent API 在 `schemaVersion: 3` 内只做加法（先读 [agent-api](../../../docs/agent-api/README.md) 与 [todo-commands](../../../docs/agent-api/todo-commands.md)）。
 
@@ -133,3 +133,12 @@ git diff --check
 | 用 dev 的 CLI 建一件每周重复的测试待办（`--reason` 标明是票 154 的测试数据），勾掉、查库看下一期与提醒，跳过，删除，逐步查库；测完清掉 | 面板与手册的票合入之前没有要 JC 看的；之后在面板上勾一件重复的事，看下一期出现得对不对 |
 
 ## Comments
+
+### 2026-11-10 代理回报摘要（主会话记）
+
+- **票面一处前提错了**：`gui/src/types/ipc.ts` 是 Core 与 runner 的协议镜像，没有待办的类型；待办的 TS 镜像在 `gui/src/lib/assistant-todo.ts`。代理没动 GUI，`TodoItem.todoRepeat` / `seriesId` / `skipped`、`TodoBrief.repeat` / `seriesId` / `skipped` 与 `skip_todo`、`stop_todo_repeat` 的封装由票 156 补。
+- **代理自己定的边界**：四种规则旗标互斥，`--every` 要和其一同给，`--no-repeat` 与规则旗标、`--every`、`--series` 互斥；`--every` 1–365；每周不给星期就拒绝，不替用户取到期日的星期；下一期从「今天、这条规则名下每一期到期日」里最晚的一天之后算（取消勾再勾时不会生出同一天）；已勾掉的一期不能跳过、不能 `--series`；提醒可以在到期日之后（偏移为负）；规则没结束时每一期（含已勾掉、已跳过的）都带 `repeat`；Core 生成的一期被用户删掉算「最近不要的跟进」，跳过的不算；`TodoItem` 也带 `skipped`，卡片分得出跳过与删除。
+- **「在办的事」那一行**：规则写在到期与逾期之后、提醒之前，如 `due 2026-10-19 (Mon), repeats weekly on Mon, reminder 2026-10-18 20:00 (Sun): 交周报`；另有 `repeats daily`、`repeats every 2 weeks on Mon, Thu`、`repeats every 3 months on the 15th`、`repeats yearly` 等。规则结束的不写。评测里照它写的镜像（`run.py` 的 `in_hand_block`、`schedule/rust-samples.json`、两份 `cli-help.json`）由票 155 跟上。
+- **没验证到的**（原样）：每个 tick 的那一遍在真实运行的调度器里没跑过（主会话合入后在 dev 里补验了「没有任务的这一期补挂」这一支，「响过之后重挂」这一支要等一个提醒真的响，没有在真实库里做）；夏令时只在纯函数测试里覆盖；补挂与重挂的提醒时刻必须按真实时钟在未来（任务那条路查的是真实时间）；数据库测试若跨本地零点运行，期望日期可能差一天；`skip_todo`、`stop_todo_repeat` 两个 Tauri 命令没经桌面调用过。
+- **一个显示上的后果**：提醒响过会立刻被挂到下一期的时刻，一件还没逾期的事，行上的铃铛可能指向到期日之后；面板怎么画留给面板票。
+- **票外**：手册 `todos-change.md` 与设计文档 `reply-cards.md` 列着 `todo` 的命令，都没动（分别归票 155、面板票）。
