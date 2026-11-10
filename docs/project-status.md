@@ -468,11 +468,11 @@ interest (from `v0.7.2`).
 **Owed from the 10-28 trial review** (run in the `v0.7.4` pre-flight, verdict
 do not tighten; the report is in the release devlog). JC's answers: whether
 the two times it spoke unasked were useful (10-21 21:50, the NBA answer it
-thought was missing; 10-28 23:53, the Hilton intake template); whether the
+thought was missing; 10-28 23:53, the client-project intake template); whether the
 10-28 invoice run counts as 「别这样」 (a ticket 106 test sentence meant to
 note a to-do; it renamed six real invoice files in the Downloads folder,
 wrote a summary sheet and put the folder rule into GA memory; the memory
-goes, JC 2026-11-02, main chat PRD ruling 163); why 702's reminder was cancelled on 10-29; and the
+goes, JC 2026-11-02, main chat PRD ruling 163); why 905's reminder was cancelled on 10-29; and the
 feelings the remaining deferred signals ask for. One mismatch to settle: the
 10-28 23:53 reply's `content` does carry a `[FILE:]` line, while ruling 154
 point 7 and the deferred 「Galley 做的文件放哪」 say it did not; if JC saw no
@@ -493,7 +493,7 @@ reported. Not done: W1, a Windows install, which would also be the first
 packaged build to run migration 054 on an older database (dev migrated the
 Mac's database on 10-29) and the first Windows run of the item drag. Ticket
 110's first morning ran on the first draft: the catch-up at launch woke (the
-Hilton to-do changed on 10-29; the review log records only `woke`), read the
+client-project to-do changed on 10-29; the review log records only `woke`), read the
 lists, wrote nothing and ended `<no-reply/>`.
 
 **Owed from the `v0.7.3` smoke** (JC approved publish without reporting
