@@ -139,6 +139,7 @@ use crate::session_runner::{
 };
 use crate::session_send::{UserMessagePersistedPayload, USER_MESSAGE_PERSISTED_EVENT};
 use crate::socket_listener::RunnerPort;
+use crate::todo_repeat::{parse_hhmm, period_on, repeat_words, RemindOffset};
 use chrono::{DateTime, TimeZone, Utc};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -278,27 +279,77 @@ pub struct DueTodo {
     /// (main chat ticket 111): what is still open of it. Ticked ones are
     /// left out; empty when it has none or every one is ticked.
     pub open_items: Vec<String>,
+    /// The rule it repeats by, in words (`repeats weekly on Mon`,
+    /// [`crate::todo_repeat::repeat_words`]; main chat ticket 158), while
+    /// the rule has not ended; `None` for one that does not repeat.
+    pub repeat: Option<String>,
+    /// How many days its due day is before the day the reminder went off,
+    /// both read in this machine's zone (ticket 158); `None` when it is
+    /// not overdue so (no due date, due that day or later).
+    pub overdue_days: Option<i64>,
+    /// The reminder went off for a later period's time, not this one's
+    /// own (ticket 154 behaviour 13, ticket 158): it repeats with a
+    /// reminder, and the day the reminder was planned for is after the day
+    /// of this period's own reminder under its rule.
+    pub rang_again: bool,
 }
 
 impl DueTodo {
-    /// The to-do as `tz` reads its due date.
-    pub fn from_todo<Tz: TimeZone>(todo: &crate::api::TodoBrief, tz: &Tz) -> Self
+    /// The to-do as `tz` reads its due date, for a reminder planned for
+    /// `planned` that went off at `went_off`.
+    pub fn from_todo<Tz: TimeZone>(
+        todo: &crate::api::TodoBrief,
+        planned: DateTime<Utc>,
+        went_off: DateTime<Utc>,
+        tz: &Tz,
+    ) -> Self
     where
         Tz::Offset: std::fmt::Display,
     {
+        let due = todo.stored_due();
+        let overdue_days = due
+            .as_ref()
+            .map(|due| (went_off.with_timezone(tz).date_naive() - due.local_date(tz)).num_days())
+            .filter(|days| *days > 0);
+        let own_reminder = match (&due, todo.repeat.as_ref().and_then(|r| r.remind.as_ref())) {
+            (Some(due), Some(remind)) => parse_hhmm(&remind.time).and_then(|time| {
+                let offset = RemindOffset {
+                    days_before: remind.days_before,
+                    time,
+                };
+                period_on(due.local_date(tz), None, Some(offset), tz).remind_at
+            }),
+            _ => None,
+        };
         Self {
             id: todo.id.as_str().to_string(),
             title: todo.title.clone(),
             notes: todo.notes.clone(),
-            due: todo.stored_due().map(|due| due.words(tz)),
+            due: due.as_ref().map(|due| due.words(tz)),
             open_items: todo
                 .items
                 .iter()
                 .filter(|item| !item.done)
                 .map(|item| item.text.clone())
                 .collect(),
+            repeat: todo.repeat.as_ref().map(|r| repeat_words(&r.rule)),
+            overdue_days,
+            rang_again: own_reminder.is_some_and(|own| {
+                planned.with_timezone(tz).date_naive() > own.with_timezone(tz).date_naive()
+            }),
         }
     }
+}
+
+/// When `task`'s last fire was planned for and when it went off, as
+/// [`DueReminder::from_task`] reads them (a fire without its planned
+/// instant counts as on time); `None` when it has not fired.
+fn last_fire(task: &ScheduledTaskBrief) -> Option<(DateTime<Utc>, DateTime<Utc>)> {
+    let fired_at = task.last_fired_at.as_deref()?;
+    let due_at = task.last_due_at.as_deref().unwrap_or(fired_at);
+    let fired = DateTime::parse_from_rfc3339(fired_at).ok()?;
+    let due = DateTime::parse_from_rfc3339(due_at).ok()?;
+    Some((due.with_timezone(&Utc), fired.with_timezone(&Utc)))
 }
 
 impl DueReminder {
@@ -618,7 +669,12 @@ fn due_when_and_act(due: &DueReminder) -> (String, String) {
 /// to-do open until the user says it is done. Main chat ticket 111: the
 /// items under it not ticked yet follow its words, one a line in their
 /// own block (what is left of it); nothing when there are none or every
-/// one is ticked.
+/// one is ticked. Main chat ticket 158: one overdue says how long ago it
+/// was due; one that repeats, its rule; one that repeats and is overdue,
+/// when the reminder went off for a later period's time, that it is this
+/// one left unticked ringing again — what `wake.md` asks the model to
+/// read off `todo show` before. One that does not repeat and is not
+/// overdue reads as before, byte for byte.
 fn todo_due_paragraph(due: &DueReminder, todo: &DueTodo) -> String {
     let id = &due.task_id;
     let (when, act) = due_when_and_act(due);
@@ -634,10 +690,23 @@ fn todo_due_paragraph(due: &DueReminder, todo: &DueTodo) -> String {
             todo.open_items.join("\n")
         )
     };
-    let due_line = match &todo.due {
-        Some(at) => format!("It is due {at}, local time."),
-        None => "It has no due date.".to_string(),
+    let mut due_line = match (&todo.due, todo.overdue_days) {
+        (Some(at), Some(1)) => format!("It was due {at}, local time, 1 day ago."),
+        (Some(at), Some(days)) => format!("It was due {at}, local time, {days} days ago."),
+        (Some(at), None) => format!("It is due {at}, local time."),
+        (None, _) => "It has no due date.".to_string(),
     };
+    if let Some(rule) = &todo.repeat {
+        due_line.push_str(&format!(" It {rule}"));
+        if todo.overdue_days.is_some() && todo.rang_again {
+            due_line.push_str(
+                ": this one was left unticked, and its reminder came again at a later one's \
+                 time.",
+            );
+        } else {
+            due_line.push('.');
+        }
+    }
     format!(
         "Reminder `{id}` on the user's to-do `{}` came due. {when} The to-do is on the user's \
          list, something to do or something coming up they want to hear about:\n\
@@ -2133,16 +2202,18 @@ pub async fn restore_pending_reminders(
     };
     let mut added = false;
     for task in &pending {
-        // A to-do's reminder says which to-do (ticket 39), as it reads now.
-        let todo = match task.todo_id.as_deref() {
-            Some(todo_id) => match galley.todo(todo_id).await {
-                Ok(todo) => Some(DueTodo::from_todo(&todo, &chrono::Local)),
+        // A to-do's reminder says which to-do (ticket 39), as it reads now;
+        // since ticket 158 whether it repeats and is overdue, read against
+        // the fire.
+        let todo = match (task.todo_id.as_deref(), last_fire(task)) {
+            (Some(todo_id), Some((planned, went_off))) => match galley.todo(todo_id).await {
+                Ok(todo) => Some(DueTodo::from_todo(&todo, planned, went_off, &chrono::Local)),
                 Err(e) => {
                     eprintln!("[subtask-report] reading to-do {todo_id} failed: {e}");
                     None
                 }
             },
-            None => None,
+            _ => None,
         };
         // A morning review names the memos new since the one before it
         // (ticket 95), as they read now.
@@ -2381,6 +2452,9 @@ mod tests {
             notes: Some("发给王总".into()),
             due: Some("2026-10-21 15:00 (Wed)".into()),
             open_items: Vec::new(),
+            repeat: None,
+            overdue_days: None,
+            rang_again: false,
         });
         let text = report_text(&[due_report(on_todo.clone())]);
         assert!(text.starts_with(OPENING_REMINDER));
@@ -2451,6 +2525,9 @@ mod tests {
             notes: Some("发给王总".into()),
             due: Some("2026-10-21 15:00 (Wed)".into()),
             open_items: vec!["订机票".into(), "换港币".into()],
+            repeat: None,
+            overdue_days: None,
+            rang_again: false,
         });
         assert_eq!(
             report_text(&[due_report(on_todo.clone())]),
@@ -2487,6 +2564,232 @@ mod tests {
              Do not tick it off until they say it is done or has happened. If it no longer \
              applies (the user already did it), end your reply with exactly <no-reply/>."
         );
+    }
+
+    /// Ticket 158: the four kinds of to-do a reminder is on. Not
+    /// repeating, not overdue: as before (pinned above). Not repeating,
+    /// overdue: how long ago it was due, in place of when it is due.
+    /// Repeating, not overdue: its rule after when it is due. Repeating and
+    /// overdue, the reminder gone off for a later period's time: the rule,
+    /// and that this is the one left unticked ringing again; gone off for
+    /// its own time (late, or a reminder after its day), the rule alone.
+    #[test]
+    fn a_to_dos_reminder_says_it_repeats_and_how_long_ago_it_was_due() {
+        let note = |due: &str, repeat: Option<&str>, overdue_days: Option<i64>, again: bool| {
+            let d = due_report_on(DueTodo {
+                id: "todo_1".into(),
+                title: "交周报".into(),
+                notes: None,
+                due: Some(due.into()),
+                open_items: Vec::new(),
+                repeat: repeat.map(str::to_string),
+                overdue_days,
+                rang_again: again,
+            });
+            let text = report_text(&[due_report(d)]);
+            let head = "<<<\n交周报\n>>>\n";
+            let from = text.find(head).expect("the to-do's words") + head.len();
+            let to = text
+                .find(" Act on it now: tell the user")
+                .expect("what to do");
+            text[from..to].to_string()
+        };
+        assert_eq!(
+            note("2026-11-03 (Tue)", None, Some(7), false),
+            "It was due 2026-11-03 (Tue), local time, 7 days ago."
+        );
+        assert_eq!(
+            note("2026-11-09 15:00 (Mon)", None, Some(1), false),
+            "It was due 2026-11-09 15:00 (Mon), local time, 1 day ago."
+        );
+        assert_eq!(
+            note(
+                "2026-11-17 (Tue)",
+                Some("repeats weekly on Tue"),
+                None,
+                false
+            ),
+            "It is due 2026-11-17 (Tue), local time. It repeats weekly on Tue."
+        );
+        assert_eq!(
+            note(
+                "2026-11-03 (Tue)",
+                Some("repeats weekly on Tue"),
+                Some(7),
+                true
+            ),
+            "It was due 2026-11-03 (Tue), local time, 7 days ago. It repeats weekly on Tue: this \
+             one was left unticked, and its reminder came again at a later one's time."
+        );
+        assert_eq!(
+            note(
+                "2026-11-03 (Tue)",
+                Some("repeats every 2 weeks on Tue"),
+                Some(2),
+                false
+            ),
+            "It was due 2026-11-03 (Tue), local time, 2 days ago. It repeats every 2 weeks on \
+             Tue."
+        );
+        // A rule's ring for a later period that is not overdue (a reminder
+        // days ahead of a daily one): the rule alone.
+        assert_eq!(
+            note("2026-11-11 (Wed)", Some("repeats daily"), None, true),
+            "It is due 2026-11-11 (Wed), local time. It repeats daily."
+        );
+        // The whole of one, late, with notes and items: the rest reads as
+        // before around it.
+        let mut late = due(true, Some("2 hours"));
+        late.todo = Some(DueTodo {
+            id: "todo_1".into(),
+            title: "交周报".into(),
+            notes: Some("发到部门群里".into()),
+            due: Some("2026-11-03 (Tue)".into()),
+            open_items: vec!["汇总数据".into()],
+            repeat: Some("repeats weekly on Tue".into()),
+            overdue_days: Some(7),
+            rang_again: true,
+        });
+        assert_eq!(
+            report_text(&[due_report(late)]),
+            "[Galley — not a message from the user] A reminder you set came due. Act on it, then \
+             reply to the user. Do not mention this note.\n\n\
+             Reminder `sched_a` on the user's to-do `todo_1` came due. Planned for 2026-10-20 \
+             20:00 (Tue), local time; it went off at 2026-10-22 09:15 (Thu), 2 hours late (the \
+             computer was asleep or Galley was closed). The to-do is on the user's list, \
+             something to do or something coming up they want to hear about:\n<<<\n交周报\n\
+             发到部门群里\n>>>\nIts items not ticked yet:\n<<<\n汇总数据\n>>>\nIt was due \
+             2026-11-03 (Tue), local time, 7 days ago. It repeats weekly on Tue: this one was \
+             left unticked, and its reminder came again at a later one's time. Act on it now, \
+             and say in the reply itself (the user does not see your summary) that it comes 2 \
+             hours late: tell the user what is of use to them now, in a sentence or two (not the \
+             to-do read back: ask whether it is done or has happened, or give the next step), \
+             look something up first, or start a subtask. Do not tick it off until they say it \
+             is done or has happened. If it no longer applies (the user already did it), end \
+             your reply with exactly <no-reply/>."
+        );
+    }
+
+    fn due_report_on(todo: DueTodo) -> DueReminder {
+        let mut d = due(true, None);
+        d.todo = Some(todo);
+        d
+    }
+
+    /// Ticket 158: what the note says of a to-do, read off it and the fire
+    /// (`DueTodo::from_todo`): overdue by the days between its due day and
+    /// the day the reminder went off, in the zone given; the rule while it
+    /// has not ended; rung again when the reminder was planned for a day
+    /// after this period's own reminder's under its rule.
+    #[test]
+    fn a_to_dos_reminder_reads_overdue_and_rang_again_off_the_fire() {
+        let shanghai = chrono::FixedOffset::east_opt(8 * 3600).unwrap();
+        let at = |iso: &str| {
+            DateTime::parse_from_rfc3339(iso)
+                .unwrap()
+                .with_timezone(&Utc)
+        };
+        let brief = |due: serde_json::Value, repeat: Option<serde_json::Value>| {
+            let mut json = serde_json::json!({
+                "id": "todo_1", "title": "交周报", "status": "open",
+                "origin": {"via": "supervisor", "supervisor": "galley-assistant"},
+                "items": [
+                    {"id": "item_1", "text": "汇总数据", "done": false,
+                     "createdAt": "2026-11-01T00:00:00+00:00"},
+                    {"id": "item_2", "text": "画图", "done": true,
+                     "createdAt": "2026-11-01T00:00:00+00:00"}
+                ],
+                "createdAt": "2026-11-01T00:00:00+00:00", "updatedAt": "2026-11-01T00:00:00+00:00"
+            });
+            json["due"] = due;
+            if let Some(repeat) = repeat {
+                json["repeat"] = repeat;
+                json["seriesId"] = "series_1".into();
+            }
+            serde_json::from_value::<crate::api::TodoBrief>(json).unwrap()
+        };
+        let tuesday = serde_json::json!({"date": "2026-11-03", "hasTime": false});
+        let weekly = serde_json::json!({"kind": "weekly", "weekdays": [2],
+                                        "remind": {"daysBefore": 0, "time": "09:00"}});
+        // Rung again a week on, at the next period's 09:00.
+        let again = DueTodo::from_todo(
+            &brief(tuesday.clone(), Some(weekly.clone())),
+            at("2026-11-10T01:00:00Z"),
+            at("2026-11-10T01:00:30Z"),
+            &shanghai,
+        );
+        assert_eq!(again.due.as_deref(), Some("2026-11-03 (Tue)"));
+        assert_eq!(again.open_items, ["汇总数据"]);
+        assert_eq!(again.repeat.as_deref(), Some("repeats weekly on Tue"));
+        assert_eq!(again.overdue_days, Some(7));
+        assert!(again.rang_again);
+        // Its own reminder, gone off two days late: overdue, not again.
+        let late = DueTodo::from_todo(
+            &brief(tuesday.clone(), Some(weekly.clone())),
+            at("2026-11-03T01:00:00Z"),
+            at("2026-11-05T02:00:00Z"),
+            &shanghai,
+        );
+        assert_eq!((late.overdue_days, late.rang_again), (Some(2), false));
+        // Its own day: not overdue.
+        let on_time = DueTodo::from_todo(
+            &brief(tuesday.clone(), Some(weekly)),
+            at("2026-11-03T01:00:00Z"),
+            at("2026-11-03T01:00:00Z"),
+            &shanghai,
+        );
+        assert_eq!((on_time.overdue_days, on_time.rang_again), (None, false));
+        // A rule with no reminder: never again; no rule: no words.
+        let bare = serde_json::json!({"kind": "weekly", "weekdays": [2]});
+        let no_remind = DueTodo::from_todo(
+            &brief(tuesday.clone(), Some(bare)),
+            at("2026-11-10T01:00:00Z"),
+            at("2026-11-10T01:00:00Z"),
+            &shanghai,
+        );
+        assert_eq!(
+            (no_remind.overdue_days, no_remind.rang_again),
+            (Some(7), false)
+        );
+        let once = DueTodo::from_todo(
+            &brief(tuesday, None),
+            at("2026-11-10T01:00:00Z"),
+            at("2026-11-10T01:00:00Z"),
+            &shanghai,
+        );
+        assert_eq!(
+            (once.repeat, once.overdue_days, once.rang_again),
+            (None, Some(7), false)
+        );
+        // A due time: by the day, in the zone given. Due 23:30 Monday,
+        // gone off 00:30 Tuesday in Shanghai: a day; 10:00 on its own day
+        // after 08:00: not overdue by the day.
+        let monday_night = serde_json::json!({"date": "2026-11-09", "hasTime": true,
+                                              "at": "2026-11-09T15:30:00+00:00", "time": "23:30"});
+        let night = DueTodo::from_todo(
+            &brief(monday_night.clone(), None),
+            at("2026-11-09T16:30:00Z"),
+            at("2026-11-09T16:30:00Z"),
+            &shanghai,
+        );
+        assert_eq!(night.due.as_deref(), Some("2026-11-09 23:30 (Mon)"));
+        assert_eq!(night.overdue_days, Some(1));
+        let utc_day = DueTodo::from_todo(
+            &brief(monday_night, None),
+            at("2026-11-09T16:30:00Z"),
+            at("2026-11-09T16:30:00Z"),
+            &Utc,
+        );
+        assert_eq!(utc_day.overdue_days, None);
+        let morning = serde_json::json!({"date": "2026-11-10", "hasTime": true,
+                                         "at": "2026-11-10T00:00:00+00:00", "time": "08:00"});
+        let same_day = DueTodo::from_todo(
+            &brief(morning, None),
+            at("2026-11-10T02:00:00Z"),
+            at("2026-11-10T02:00:00Z"),
+            &shanghai,
+        );
+        assert_eq!(same_day.overdue_days, None);
     }
 
     #[test]

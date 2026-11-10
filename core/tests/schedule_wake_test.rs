@@ -1161,6 +1161,17 @@ async fn todo_with_reminder(
         .expect("to-do with a reminder")
 }
 
+/// A day `n` days from today here: as `--due` takes it, and as the wake
+/// note writes it (`2026-10-21 (Wed)`). Ticket 158: a to-do whose day has
+/// passed says so, so a note pinned as "due" needs a day still ahead.
+fn day_ahead(n: i64) -> (String, String) {
+    let day = Local::now().date_naive() + ChronoDuration::days(n);
+    (
+        day.format("%Y-%m-%d").to_string(),
+        day.format("%Y-%m-%d (%a)").to_string(),
+    )
+}
+
 fn reminder_of(todo: &galley_core_lib::api::TodoBrief) -> String {
     todo.reminder
         .as_ref()
@@ -1177,8 +1188,8 @@ async fn a_to_dos_reminder_says_which_to_do_and_when_it_is_due() {
     let env = FakeEnv;
     let rec = Arc::new(Recorder::default());
     let reports = SubtaskReports::new();
-    let todo =
-        todo_with_reminder(&galley, "交季度报告", Some("发给王总"), Some("2026-10-21")).await;
+    let (due, due_words) = day_ahead(3);
+    let todo = todo_with_reminder(&galley, "交季度报告", Some("发给王总"), Some(&due)).await;
     let task = reminder_of(&todo);
     slept_through(&pool, &task, ChronoDuration::seconds(30)).await;
     assert_eq!(tick(&galley, &rec).await, 1);
@@ -1204,11 +1215,11 @@ async fn a_to_dos_reminder_says_which_to_do_and_when_it_is_due() {
         )),
         "{text}"
     );
-    assert!(text.contains(
+    assert!(text.contains(&format!(
         "The to-do is on the user's list, something to do or something coming up they want to \
-         hear about:\n<<<\n交季度报告\n发给王总\n>>>\nIt is due 2026-10-21 (Wed), local time. Act \
+         hear about:\n<<<\n交季度报告\n发给王总\n>>>\nIt is due {due_words}, local time. Act \
          on it now: tell the user what is of use to them now"
-    ));
+    )));
     let summary: Option<String> = sqlx::query_scalar("SELECT summary FROM messages WHERE id = ?")
         .bind(&message.id.0)
         .fetch_one(&pool)
@@ -1260,7 +1271,8 @@ async fn a_to_dos_reminder_carries_its_items_not_ticked_yet() {
     let env = FakeEnv;
     let rec = Arc::new(Recorder::default());
     let reports = SubtaskReports::new();
-    let todo = todo_with_reminder(&galley, "上海出差前的准备", None, Some("2026-11-04")).await;
+    let (due, due_words) = day_ahead(5);
+    let todo = todo_with_reminder(&galley, "上海出差前的准备", None, Some(&due)).await;
     let todo = galley
         .add_todo_subitems(
             &todo.id,
@@ -1287,14 +1299,79 @@ async fn a_to_dos_reminder_carries_its_items_not_ticked_yet() {
     ));
     let sent = runner.user_messages(MAIN);
     assert!(
-        sent[0].contains(
+        sent[0].contains(&format!(
             "<<<\n上海出差前的准备\n>>>\nIts items not ticked yet:\n<<<\n订机票\n换港币\n>>>\n\
-             It is due 2026-11-04 (Wed), local time."
-        ),
+             It is due {due_words}, local time."
+        )),
         "{}",
         sent[0]
     );
     assert!(!sent[0].contains("订酒店"));
+}
+
+/// Main chat ticket 158: a weekly to-do left unticked a week, its reminder
+/// gone off at a later period's time (behaviour 13 armed it there): the
+/// note says it repeats, how long ago it was due, and that this is the one
+/// left unticked ringing again, read when the wake is made.
+#[tokio::test]
+async fn a_repeating_to_dos_reminder_rung_again_says_so() {
+    let (pool, galley) = with_main_chat().await;
+    let runner = Runner::default();
+    let env = FakeEnv;
+    let rec = Arc::new(Recorder::default());
+    let reports = SubtaskReports::new();
+    let (due, due_words) = day_ahead(-7);
+    let weekday = Local::now().date_naive().format("%a").to_string();
+    let todo = galley
+        .create_todo(
+            galley_core_lib::api::CreateTodoInput {
+                title: "交周报".into(),
+                due: Some(due),
+                remind_at: Some(instant_to_utc_iso(
+                    &(Utc::now() + ChronoDuration::minutes(10)),
+                )),
+                repeat: Some(galley_core_lib::api::TodoRepeatRule {
+                    kind: galley_core_lib::api::TodoRepeatKind::Weekly,
+                    weekdays: vec![Local::now()
+                        .date_naive()
+                        .format("%u")
+                        .to_string()
+                        .parse()
+                        .unwrap()],
+                    monthdays: Vec::new(),
+                    every: 1,
+                }),
+                ..Default::default()
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .expect("a repeating to-do");
+    // Its rule reminds on the day at 09:00: its own reminder was a week
+    // ago, so the one going off today is a later period's.
+    sqlx::query("UPDATE todo_series SET remind_days_before = 0, remind_time = '09:00'")
+        .execute(&pool)
+        .await
+        .expect("the rule's reminder");
+    slept_through(&pool, &reminder_of(&todo), ChronoDuration::seconds(30)).await;
+    assert_eq!(tick(&galley, &rec).await, 1);
+    restore_pending_reminders(&reports, &galley).await;
+    let host = host(&galley, &runner, &env, rec.clone());
+    assert!(matches!(
+        wake_if_due(&reports, &host, MAIN).await,
+        Some(WakeOutcome::Delivered { .. })
+    ));
+    let sent = runner.user_messages(MAIN);
+    assert!(
+        sent[0].contains(&format!(
+            "<<<\n交周报\n>>>\nIt was due {due_words}, local time, 7 days ago. It repeats weekly \
+             on {weekday}: this one was left unticked, and its reminder came again at a later \
+             one's time. Act on it now:"
+        )),
+        "{}",
+        sent[0]
+    );
 }
 
 #[tokio::test]
