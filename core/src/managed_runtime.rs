@@ -15,6 +15,9 @@ use tauri::{AppHandle, Manager};
 const MANIFEST_JSON: &str = include_str!("../../managed-ga/manifest.json");
 const STATE_SCHEMA_VERSION: u32 = 1;
 const MEMORY_SEED_REL: &str = "state-seed/memory";
+// Same list as `criticalMemorySeedFiles` in
+// `scripts/managed-ga-payload-rules.mjs` (the payload and app-bundle gates);
+// a test below keeps the two equal.
 const CRITICAL_MEMORY_SEED_FILES: &[&str] = &[
     "memory_management_sop.md",
     "plan_sop.md",
@@ -23,6 +26,7 @@ const CRITICAL_MEMORY_SEED_FILES: &[&str] = &[
     "deliverable_audit_sop.md",
     "supervisor_sop.md",
     "project_mode_sop.md",
+    "ultraplan_sop.md",
     "L4_raw_sessions/salient_mining_sop.md",
     "L4_raw_sessions/compress_session.py",
 ];
@@ -777,6 +781,29 @@ mod tests {
                 "managed GA memory seed missing critical file: {rel}"
             );
         }
+    }
+
+    /// The gates' copy of the list (`scripts/managed-ga-payload-rules.mjs`)
+    /// and this one drifted once: the gates gained `ultraplan_sop.md`, the
+    /// reset's completeness check did not.
+    #[test]
+    fn critical_memory_seed_list_matches_the_gates_list() {
+        let rules = include_str!("../../scripts/managed-ga-payload-rules.mjs");
+        let start = rules
+            .find("export const criticalMemorySeedFiles = [")
+            .expect("the gates' rules name criticalMemorySeedFiles");
+        let block = &rules[start..];
+        let block = &block[..block.find("];").expect("the list closes")];
+        let gates: Vec<&str> = block
+            .lines()
+            .skip(1)
+            .filter_map(|line| {
+                let line = line.trim().trim_end_matches(',');
+                line.strip_prefix('"')?.strip_suffix('"')
+            })
+            .collect();
+        assert!(!gates.is_empty(), "parsed no entries from the gates' list");
+        assert_eq!(gates, CRITICAL_MEMORY_SEED_FILES);
     }
 
     // ---------------- resetting memory/ (main chat ticket 15) ----------------
