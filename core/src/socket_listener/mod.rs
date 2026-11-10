@@ -8,8 +8,8 @@
 //! sends a typed command; Rust dispatches via [`crate::api::GalleyApi`]
 //! (same trait Tauri commands use, per [invariants.md §I5]).
 //!
-//! For B2 M3 only the read commands (B1 surface) are wired through — write
-//! commands land in M4 together with the CLI binary side.
+//! Read and write commands both go through it ([`dispatch_line_with`]
+//! routes each command name); the Agent API docs list them.
 //!
 //! ## Localhost only
 //!
@@ -51,7 +51,7 @@
 //!     not stale, because starting a duplicate Core is the more damaging
 //!     failure mode.
 //!
-//! See [B2 playbook M3 G5](../../docs/refactor/B2-bridge-ownership.md) for
+//! See [B2 playbook M3 G5](../../docs/archive/refactor/B2-bridge-ownership.md) for
 //! the residual narrow race window between try-connect and the next
 //! process's bind (~ms; OS-level atomic bind would close this fully).
 

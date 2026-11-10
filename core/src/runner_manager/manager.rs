@@ -24,10 +24,11 @@ type ProcessMap = RwLock<HashMap<String, Arc<Mutex<RunnerProcess>>>>;
 type QueueMap = Mutex<HashMap<String, SessionQueueState>>;
 
 /// Default cap on concurrent alive runner subprocesses. Mirrored on the
-/// TS side as `LRU_CAP` in `gui/src/stores/runtime.ts` — keep the two in
-/// sync. Sized for modern Macs (incl. 8 GB Intel): each alive runner is
-/// roughly a bundled-Python process (~100 MB resident), 20 fits in <2 GB
-/// while covering virtually any realistic "today's active sessions" set.
+/// TS side as `LRU_CAP` in `gui/src/stores/runtime/bridge-slice.ts` —
+/// keep the two in sync. Sized for modern Macs (incl. 8 GB Intel): each
+/// alive runner is roughly a bundled-Python process (~100 MB resident),
+/// 20 fits in <2 GB while covering virtually any realistic "today's
+/// active sessions" set.
 pub const DEFAULT_LRU_CAP: usize = 20;
 
 /// Default graceful-shutdown timeout per process. Prototype measured ~2.5s

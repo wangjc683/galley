@@ -4,7 +4,7 @@
 //! against Galley Core are defined as [`GalleyApi`] trait methods.
 //! Both transports — Tauri's `invoke()` and the future Unix-socket /
 //! named-pipe daemon — thin-wrap this trait. See
-//! [invariants.md §I5](../../docs/refactor/invariants.md) for the
+//! [invariants.md §I5](../../docs/archive/refactor/invariants.md) for the
 //! corollary rule.
 //!
 //! **B1 scope:** read-only methods. Write methods (`send_message`,

@@ -477,8 +477,8 @@ class _FenceFilter:
     5-backtick fence markers (`\\`\\`\\`\\`\\`\\n` ... `\\`\\`\\`\\`\\`\\n`) before it
     crosses the IPC wire.
 
-    With `agent.verbose = True` GA's `agent_loop.py:79-81` wraps every
-    tool dispatch's stdout in those fences:
+    With `agent.verbose = True` GA's `agent_runner_loop` (`agent_loop.py`)
+    wraps every tool dispatch's stdout in those fences:
 
         `````
         [Action] Running python in temp: ...
@@ -2133,8 +2133,8 @@ class Bridge:
     def _load_history(self, messages: list[dict[str, Any]]) -> None:
         """Inject conversation history into the backend.
 
-        Desktop-facing schema (docs/ipc-protocol.md §8.4) uses simple
-        string content per message.
+        Desktop-facing schema (docs/ipc-protocol.md §5.5 `load_history`)
+        uses simple string content per message.
 
         The desktop-shape → GA-native-blocks adaptation lives in
         `GaSession.set_history` so the desktop never has to know GA's

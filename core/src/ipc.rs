@@ -26,7 +26,7 @@
 //!   3. Add the same variant + struct here, with the same wire-level field
 //!      names and types
 //!
-//! No codegen — manual sync. See [`docs/refactor/B2-bridge-ownership.md`]
+//! No codegen — manual sync. See [`docs/archive/refactor/B2-bridge-ownership.md`]
 //! gotcha G2 for why we accept the manual maintenance cost over introducing
 //! a codegen toolchain.
 //!

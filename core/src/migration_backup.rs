@@ -3,7 +3,7 @@
 //! When the on-disk SQLite schema version is older than the highest
 //! version Galley Core knows about, the Rust-side `tauri-plugin-sql`
 //! preload will run pending migrations. Per
-//! [B4-I6](../../docs/refactor/B4-cli-bg-artifact.md), Galley must
+//! [B4-I6](../../docs/archive/refactor/B4-cli-bg-artifact.md), Galley must
 //! snapshot the entire data directory **before** that happens so a
 //! botched migration is recoverable.
 //!

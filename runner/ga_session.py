@@ -129,7 +129,7 @@ def _image_path_to_content_block(path_value: Any) -> dict[str, Any] | None:
 
 def message_to_content_blocks(content: Any, images: Any = None) -> list[Any]:
     """Adapt one desktop-shape message (string content + image paths,
-    docs/ipc-protocol.md §8.4) into GA's native content-block list."""
+    docs/ipc-protocol.md §5.5 `load_history`) into GA's native content-block list."""
     if isinstance(content, str):
         blocks: list[Any] = [{"type": "text", "text": content}]
     elif isinstance(content, list):

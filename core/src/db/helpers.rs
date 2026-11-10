@@ -624,9 +624,10 @@ async fn write_message_row(
 /// creates that trim to empty don't end up with a literal blank.
 pub(super) const DEFAULT_NEW_SESSION_TITLE: &str = "新对话";
 
-/// Summary truncation budget. Matches `gui/src/stores/useAppStore.ts`
-/// `truncateSummary` (80 char cap then `…`). Sidebar layout assumes
-/// no wider than this for a single-line summary row.
+/// Summary truncation budget. Matches `truncateSummary` in
+/// `gui/src/stores/sessions/lifecycle-slice.ts` (80 char cap then `…`).
+/// Sidebar layout assumes no wider than this for a single-line summary
+/// row.
 const SUMMARY_TRUNCATE_LEN: usize = 80;
 
 pub(super) fn truncate_summary(s: &str) -> String {

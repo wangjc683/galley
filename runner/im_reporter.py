@@ -74,7 +74,7 @@ class ReporterCliError(RuntimeError):
 
 def resolve_cli_path() -> str | None:
     """Resolve the Galley CLI via the discovery file (public contract)."""
-    if os.name == "nt":  # pragma: no cover - Feishu reporter ships macOS-first
+    if os.name == "nt":  # pragma: no cover - Windows path; tests run on macOS / Linux
         base = os.environ.get("APPDATA")
         if not base:
             return None

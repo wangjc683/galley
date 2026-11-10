@@ -25,11 +25,11 @@ pub(crate) struct QueuedPlacement {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SendUserMessageResult {
-    /// `dispatched` | `queued` | `side_question`.
+    /// `dispatched` | `queued` | `interjected` | `side_question`.
     pub outcome: &'static str,
     /// The persisted row, on `dispatched`.
     pub message: Option<MessageBrief>,
-    /// On `queued`.
+    /// On `queued` and `interjected`.
     pub queue: Option<QueuedPlacement>,
     /// The runner the message went to, on `dispatched` / `side_question`;
     /// the same shape `ensure_session_runner` returns.

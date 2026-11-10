@@ -26,8 +26,7 @@ const BROADCAST_CAPACITY: usize = 1024;
 
 /// Max stderr lines retained in the rolling buffer. Sized for "show last N
 /// lines on abnormal exit" toasts — matches the TS-side
-/// `_STDERR_TAIL_MAX = 8` value being migrated from
-/// `gui/src/stores/useAppStore.ts`.
+/// `_STDERR_TAIL_MAX = 8` in `gui/src/stores/runtime/bridge-slice.ts`.
 const STDERR_TAIL_MAX: usize = 8;
 
 /// Bound on a single stdin write to the runner. The runner drains stdin on a
@@ -179,10 +178,11 @@ impl RunnerProcess {
     /// Spawn a new Python `runner.workbench_bridge` subprocess.
     ///
     /// On success the subprocess is alive with stdout/stderr being read on
-    /// background tasks. Subscribers should call [`subscribe`](Self::subscribe)
-    /// before the first event arrives if they want the `Ready` event — the
-    /// pre-subscribed receiver is held in the manager and handed to the
-    /// first subscriber (same pattern as the prototype's `preload_rx`).
+    /// background tasks. Nothing is subscribed yet: events go only to
+    /// receivers that exist when they are broadcast, so a caller that wants
+    /// the `Ready` event calls [`subscribe`](Self::subscribe) before
+    /// awaiting anything else. One that comes later reads the latest
+    /// `ready` from [`ready_snapshot`](Self::ready_snapshot).
     pub async fn spawn(args: SpawnArgs) -> Result<Self, RunnerSpawnError> {
         Self::spawn_with_gate(args, false).await
     }
@@ -522,19 +522,19 @@ impl RunnerProcess {
     /// receiver; messages buffered before subscribe are NOT delivered
     /// (broadcast channel is fan-out, not history).
     ///
-    /// **For the `Ready` event**: the manager pre-subscribes a receiver at
-    /// spawn time and hands it to the very first caller; the prototype
-    /// validated this idiom is necessary because the spawn-to-first-event
-    /// gap (~430ms for Python startup) is wide enough that a naive
-    /// `spawn().await; subscribe()` misses Ready. See
+    /// **For the `Ready` event**: no receiver is held from spawn time. A
+    /// caller subscribes right after the spawn returns, before awaiting
+    /// anything else; the ~430 ms of Python startup before `Ready` leaves
+    /// room for that, but not for an await in between. A late subscriber
+    /// reads [`Self::ready_snapshot`] instead. See
     /// [`RunnerManager::subscribe`](super::manager::RunnerManager::subscribe).
     pub fn subscribe(&self) -> broadcast::Receiver<BroadcastItem> {
         self.stdout_tx.subscribe()
     }
 
-    /// Internal helper used by the manager to capture the pre-spawn
-    /// receiver. Not exposed publicly because callers should go through
-    /// the manager's [`subscribe`](super::manager::RunnerManager::subscribe).
+    /// The sender the manager's
+    /// [`subscribe`](super::manager::RunnerManager::subscribe) subscribes
+    /// to. Not exposed publicly because callers should go through it.
     pub(super) fn broadcast_sender(&self) -> &broadcast::Sender<BroadcastItem> {
         &self.stdout_tx
     }

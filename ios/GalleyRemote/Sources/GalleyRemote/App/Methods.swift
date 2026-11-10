@@ -203,7 +203,7 @@ public struct SessionSendResult: Codable, Sendable, Hashable {
     public var outcome: SendOutcome
     /// The persisted row, on `dispatched`.
     public var message: Message?
-    /// On `queued`.
+    /// On `queued` and `interjected`.
     public var queue: QueuedPlacement?
 
     public func encode(to encoder: any Encoder) throws {

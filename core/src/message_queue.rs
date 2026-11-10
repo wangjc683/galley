@@ -64,10 +64,11 @@ pub async fn notify_queue_changed_via(
 
 /// Persist + dispatch one dequeued item. The caller must hold the run
 /// gate reservation (queue_take_next / QueueJump::DispatchNow /
-/// QueueOffer::DispatchNow all reserve it). On dispatch failure the
-/// item is re-queued at the front and the gate released, so nothing is
-/// lost; the persisted row stays (same "persisted_only" standing as a
-/// CLI send to a dead runner).
+/// QueueOffer::DispatchNow all reserve it). If persisting fails, the
+/// item goes back to the front of the queue and the gate is released, so
+/// nothing is lost. If the send fails, the gate is released and the item
+/// leaves the queue; its persisted row stays (same "persisted_only"
+/// standing as a CLI send to a dead runner).
 pub async fn dispatch_queued_message(
     galley: &SqliteGalley,
     manager: &RunnerManager,

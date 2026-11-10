@@ -30,7 +30,7 @@
 //! Subprocesses are spawned with `kill_on_drop(true)`. The host Cargo profile
 //! must keep `panic = "unwind"` (default) so a panic in the main thread runs
 //! every [`RunnerProcess`]'s `Drop` and SIGKILLs the child cleanly — otherwise
-//! orphans get reparented to init. See [`docs/refactor/invariants.md#i11`].
+//! orphans get reparented to init. See [`docs/archive/refactor/invariants.md#i11`].
 
 pub mod error;
 pub mod manager;

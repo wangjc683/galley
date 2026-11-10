@@ -13,7 +13,8 @@
 //! | [`push`] | push content sealed with `push_key` for the APNs `g` field | §4.3 |
 //! | [`app`] | end-to-end JSON protocol: envelope, methods, events, chunking | §6 |
 //!
-//! The relay depends on [`frame`] (and [`keys`] for the channel key) only;
+//! The relay depends on [`frame`], [`keys`] for the channel key, and
+//! [`push`] only for `apns_payload` (the APNs payload around a sealed push);
 //! it never holds a key that opens [`noise`] or [`push`] traffic. Nothing
 //! here does I/O: no sockets, no tokio, no Tauri, no Galley Core.
 

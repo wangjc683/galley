@@ -795,7 +795,7 @@ impl SqliteGalley {
         // 2. GA path (from prefs.ga_config JSON, field `gaPath`).
         // The pref key is snake_case (`ga_config`) but the inner JSON
         // uses camelCase to match the TS gaConfig shape — see
-        // gui/src/stores/useAppStore.ts setPref("ga_config", ...).
+        // gui/src/stores/prefs.ts setPref("ga_config", ...).
         let ga_path: Option<String> = sqlx::query_scalar::<_, Option<String>>(
             "SELECT json_extract(value, '$.gaPath') FROM prefs WHERE key = 'ga_config' LIMIT 1",
         )
