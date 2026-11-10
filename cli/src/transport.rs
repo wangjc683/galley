@@ -4,16 +4,18 @@ use std::time::Duration;
 
 // ---- socket transport helpers (B2 M4) ----
 
-/// Bound on establishing the socket/pipe connection. A live core
-/// accepts on localhost within milliseconds; anything past this means
-/// the core is wedged, and an agent driving the CLI needs "dead", not
-/// an infinite hang with zero output.
+/// Bound on establishing the socket/pipe connection, unary and watch
+/// alike. A live core accepts on localhost within milliseconds; anything
+/// past this means the core is wedged, and an agent driving the CLI needs
+/// "dead", not an infinite hang with zero output.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-/// Bound on the first response line (unary) / first frame (watch).
-/// Generous: some commands legitimately spawn a runner and wait for its
-/// ready event. After the first watch frame the stream is exempt —
-/// sessions may be quiet for arbitrarily long.
-const FIRST_RESPONSE_TIMEOUT: Duration = Duration::from_secs(120);
+/// Bound on a unary command's response line. Generous: some commands
+/// legitimately spawn a runner and wait for its ready event. A watch
+/// stream has no read bound at all: Core writes nothing when it accepts a
+/// subscription and nothing while the runner is quiet, so silence on a
+/// stream says nothing about Core. `SocketClient::open_watch` proves Core
+/// answers with a `ping` round trip under this bound before subscribing.
+const UNARY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// `ERROR_PIPE_BUSY` (same constant / detection idiom as
 /// `core/src/socket_listener/mod.rs`). Core's accept loop creates the
@@ -63,7 +65,7 @@ fn core_unresponsive(what: &str) -> GalleyError {
     GalleyError::DbUnavailable {
         message: format!(
             "Galley Core is not responding ({what} exceeded {}s)",
-            FIRST_RESPONSE_TIMEOUT.as_secs()
+            UNARY_RESPONSE_TIMEOUT.as_secs()
         ),
     }
 }
@@ -108,7 +110,7 @@ pub(crate) async fn socket_send_recv(line: String) -> Result<String, GalleyError
             message: format!("socket flush: {e}"),
         })?;
     let mut lines = BufReader::new(read_half).lines();
-    let resp = tokio::time::timeout(FIRST_RESPONSE_TIMEOUT, lines.next_line())
+    let resp = tokio::time::timeout(UNARY_RESPONSE_TIMEOUT, lines.next_line())
         .await
         .map_err(|_| core_unresponsive("socket response"))?
         .map_err(|e| GalleyError::DbUnavailable {
@@ -148,7 +150,7 @@ pub(crate) async fn socket_send_recv(line: String) -> Result<String, GalleyError
             message: format!("pipe flush: {e}"),
         })?;
     let mut lines = BufReader::new(read_half).lines();
-    let resp = tokio::time::timeout(FIRST_RESPONSE_TIMEOUT, lines.next_line())
+    let resp = tokio::time::timeout(UNARY_RESPONSE_TIMEOUT, lines.next_line())
         .await
         .map_err(|_| core_unresponsive("pipe response"))?
         .map_err(|e| GalleyError::DbUnavailable {
@@ -163,59 +165,45 @@ pub(crate) async fn socket_send_recv(line: String) -> Result<String, GalleyError
 type RawWatchLines =
     tokio::io::Lines<tokio::io::BufReader<Box<dyn tokio::io::AsyncRead + Unpin + Send>>>;
 
-/// Watch subscription stream. The FIRST frame is read under
-/// [`FIRST_RESPONSE_TIMEOUT`] — a wedged core otherwise hangs the
-/// watcher forever with zero output. Later frames are exempt: a quiet
-/// session legitimately produces nothing for hours.
+/// Watch subscription stream. No read is bounded, the first included:
+/// Core sends nothing when it accepts a subscription and nothing while
+/// the runner is quiet, which can last for hours (a run that ended with
+/// the runner left alive, a long tool call). Whether Core is alive was
+/// settled before subscribing, by `SocketClient::open_watch`'s `ping`.
 pub(crate) struct WatchLines {
     lines: RawWatchLines,
-    awaiting_first_frame: bool,
 }
 
 impl WatchLines {
-    /// Test seam: a stream fed from canned in-memory lines instead of a
-    /// live socket. Same type, same `next_line` path — replace, don't
-    /// layer.
-    #[cfg(test)]
-    pub(crate) fn from_canned_lines(lines: &[&str]) -> Self {
+    /// The one constructor: the live socket in production, an in-memory
+    /// reader in tests — same type, same `next_line` path.
+    pub(crate) fn from_reader(reader: Box<dyn tokio::io::AsyncRead + Unpin + Send>) -> Self {
         use tokio::io::AsyncBufReadExt;
-        let joined = lines.join("\n") + "\n";
-        let reader: Box<dyn tokio::io::AsyncRead + Unpin + Send> =
-            Box::new(std::io::Cursor::new(joined.into_bytes()));
         Self {
             lines: tokio::io::BufReader::new(reader).lines(),
-            awaiting_first_frame: false,
         }
     }
 
-    /// Next raw line. The first line is read under
-    /// [`FIRST_RESPONSE_TIMEOUT`] (timeout surfaces as `TimedOut`);
-    /// later lines wait indefinitely — quiet sessions are legitimate.
+    /// Test seam: a stream fed from canned in-memory lines instead of a
+    /// live socket.
+    #[cfg(test)]
+    pub(crate) fn from_canned_lines(lines: &[&str]) -> Self {
+        let joined = lines.join("\n") + "\n";
+        Self::from_reader(Box::new(std::io::Cursor::new(joined.into_bytes())))
+    }
+
+    /// Next raw line; waits as long as the stream stays open and silent.
     pub(crate) async fn next_line(&mut self) -> std::io::Result<Option<String>> {
-        let next = if self.awaiting_first_frame {
-            match tokio::time::timeout(FIRST_RESPONSE_TIMEOUT, self.lines.next_line()).await {
-                Ok(result) => result,
-                Err(_) => Err(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    format!(
-                        "Galley Core is not responding (first watch frame exceeded {}s)",
-                        FIRST_RESPONSE_TIMEOUT.as_secs()
-                    ),
-                )),
-            }
-        } else {
-            self.lines.next_line().await
-        };
-        self.awaiting_first_frame = false;
-        next
+        self.lines.next_line().await
     }
 }
 
 /// Open a subscription stream: send `line` (a pre-serialized request —
 /// built by `crate::client::SocketClient`, never hand-assembled here)
-/// and return the response line stream.
+/// and return the response line stream. Only connecting is bounded
+/// ([`CONNECT_TIMEOUT`]); see [`WatchLines`] for why reads are not.
 pub(crate) async fn open_watch_lines_raw(line: String) -> Result<WatchLines, GalleyError> {
-    use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
+    use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
     #[cfg(unix)]
     let (read_half, mut write_half): (
@@ -272,10 +260,7 @@ pub(crate) async fn open_watch_lines_raw(line: String) -> Result<WatchLines, Gal
             message: format!("watch flush: {e}"),
         })?;
 
-    Ok(WatchLines {
-        lines: BufReader::new(read_half).lines(),
-        awaiting_first_frame: true,
-    })
+    Ok(WatchLines::from_reader(read_half))
 }
 
 // Envelope parsing, frame classification, and error-tag mapping live in

@@ -666,7 +666,9 @@ async fn session_send_without_core_running_exits_4() {
     assert_eq!(parsed["error"], "db_unavailable");
 }
 
-/// `galley session watch` same as above: no Core → exit 4.
+/// `galley session watch` same as above: no Core → exit 4, at once (the
+/// `ping` before subscribing fails on the missing socket; nothing waits
+/// for a 120 s bound).
 #[tokio::test]
 async fn session_watch_without_core_running_exits_4() {
     let td = tempdir();
@@ -674,45 +676,119 @@ async fn session_watch_without_core_running_exits_4() {
     let pool = seeded_db_at(&db).await;
     drop(pool);
 
+    let started = std::time::Instant::now();
     let (stdout, code) = run_galley_with_tmpdir(&db, td.path(), &["session", "watch", "s1"]);
     assert_eq!(code, Some(4), "exit code: stdout = {stdout}");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "took {:?}",
+        started.elapsed()
+    );
+}
+
+/// A fake Galley Core for `session watch`: it answers the CLI's `ping`
+/// (its own connection), then writes `watch_reply` lines on the
+/// `session.watch` connection, waiting `delay` before the first. Returns
+/// the command of each request line it read, in order.
+#[cfg(unix)]
+fn fake_watch_core(
+    socket_path: std::path::PathBuf,
+    delay: std::time::Duration,
+    watch_reply: &'static [&'static str],
+) -> tokio::task::JoinHandle<Vec<String>> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::net::UnixListener;
+    let listener = UnixListener::bind(&socket_path).expect("bind fake socket");
+    tokio::spawn(async move {
+        let mut commands = Vec::new();
+        loop {
+            let (stream, _) = listener.accept().await.expect("accept");
+            let (read_half, mut write_half) = stream.into_split();
+            let mut lines = BufReader::new(read_half).lines();
+            let line = lines
+                .next_line()
+                .await
+                .expect("read request")
+                .expect("request line");
+            let req: serde_json::Value = serde_json::from_str(&line).expect("request json");
+            let command = req["command"].as_str().expect("command").to_string();
+            commands.push(command.clone());
+            if command == "ping" {
+                write_half
+                    .write_all(b"{\"ok\":true,\"result\":{\"pong\":true}}\n")
+                    .await
+                    .expect("write pong");
+                continue;
+            }
+            assert_eq!(command, "session.watch");
+            tokio::time::sleep(delay).await;
+            for reply in watch_reply {
+                write_half
+                    .write_all(format!("{reply}\n").as_bytes())
+                    .await
+                    .expect("write watch reply");
+            }
+            return commands;
+        }
+    })
 }
 
 #[cfg(unix)]
 #[tokio::test(flavor = "multi_thread")]
 async fn session_watch_socket_error_emits_single_cli_error() {
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-    use tokio::net::UnixListener;
-
     let td = tempdir();
     let db = td.path().join("test.db");
     let pool = seeded_db_at(&db).await;
     drop(pool);
 
     let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
-    let listener = UnixListener::bind(&socket_path).expect("bind fake socket");
-    let server = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.expect("accept");
-        let (read_half, mut write_half) = stream.into_split();
-        let mut lines = BufReader::new(read_half).lines();
-        let _request = lines.next_line().await.expect("read request");
-        write_half
-            .write_all(
-                br#"{"ok":false,"requestId":null,"error":"not_found","message":"no live runner"}"#,
-            )
-            .await
-            .expect("write response");
-        write_half.write_all(b"\n").await.expect("write newline");
-    });
+    let server = fake_watch_core(
+        socket_path,
+        std::time::Duration::ZERO,
+        &[r#"{"ok":false,"requestId":null,"error":"not_found","message":"no live runner"}"#],
+    );
 
     let (stdout, code) = run_galley_with_tmpdir(&db, td.path(), &["session", "watch", "s1"]);
-    server.await.expect("fake socket task");
+    let commands = server.await.expect("fake socket task");
+    assert_eq!(commands, ["ping", "session.watch"]);
     assert_eq!(code, Some(3), "stdout = {stdout}");
     let lines: Vec<&str> = stdout.trim().lines().collect();
     assert_eq!(lines.len(), 1, "stdout should contain one error envelope");
     let parsed: serde_json::Value = serde_json::from_str(lines[0]).expect("json");
     assert_eq!(parsed["error"], "not_found");
     assert_eq!(parsed.get("ok"), None);
+}
+
+/// Core accepts a watch without sending a frame and sends nothing while
+/// the runner is quiet; the CLI waits for the frames instead of calling
+/// Core dead. (The quiet stretch here is short; the unit test in
+/// `client.rs` lets one run past the 120 s unary bound on a paused clock.)
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread")]
+async fn session_watch_on_a_quiet_runner_waits_for_its_frames() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    drop(pool);
+
+    let socket_path = td.path().join(format!("galley-{}.sock", current_uid()));
+    let server = fake_watch_core(
+        socket_path,
+        std::time::Duration::from_secs(2),
+        &[
+            r#"{"stream":"event","data":{"kind":"turn_start","sessionId":"s1"}}"#,
+            r#"{"stream":"end","reason":"subprocess_exited"}"#,
+        ],
+    );
+
+    let (stdout, code) = run_galley_with_tmpdir(&db, td.path(), &["session", "watch", "s1"]);
+    let commands = server.await.expect("fake socket task");
+    assert_eq!(commands, ["ping", "session.watch"]);
+    assert_eq!(code, Some(0), "stdout = {stdout}");
+    let lines = parse_ndjson(&stdout);
+    assert_eq!(lines.len(), 2, "stdout = {stdout}");
+    assert_eq!(lines[0]["data"]["kind"], "turn_start");
+    assert_eq!(lines[1]["reason"], "subprocess_exited");
 }
 
 // ---------------- `live` run-state decoration ----------------

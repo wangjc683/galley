@@ -357,6 +357,12 @@ connection stays open until either:
 - the subprocess exits (server sends `{"stream":"end","reason":"subprocess_exited"}` then closes), or
 - the client sends SIGINT (Ctrl-C) / the process exits
 
+A quiet runner is not an error: the stream waits without a timeout for
+as long as the runner sends nothing, for example after its run ended or
+during a long tool call. Before it subscribes the CLI checks that Galley
+Core answers (a `ping` round trip, [transports](./transports.md) §2A).
+The same holds for `session follow` (§5.5c) and `project follow`.
+
 Requires Galley Core to be running and a live runner for the target
 session.
 

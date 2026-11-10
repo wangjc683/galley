@@ -62,6 +62,19 @@ the best-effort `sessions.run_state` probe above.
 - **Windows**: Named pipe at `\\.\pipe\galley-$USERNAME`, scoped to
   the calling user's namespace.
 
+**Timeouts.** The CLI gives up on connecting after 10 seconds and on a
+unary answer after 120 seconds (generous, because some commands start a
+runner before they answer); either way it exits 4 (`db_unavailable`,
+"Galley Core is not responding"). A subscription has no read bound:
+Core writes nothing when it accepts `session.watch`, and nothing while
+the runner is quiet, so a healthy stream can stay silent for as long as
+the runner does. Before subscribing, `session watch`, `session follow`
+and `project follow` make one `ping` round trip under the 120-second
+bound, which proves Core answers; the wire format is unchanged. Until
+2026-11-10 the first stream frame was held to the 120-second bound
+instead, so a live runner that stayed quiet for two minutes ended the
+watch with exit 4 ([stability](./stability-and-versioning.md) §7.1).
+
 **No TCP, no token, no TLS.** Auth = filesystem permission (Unix) /
 user-scoped namespace (Windows). Cross-machine access never reaches
 this socket: it goes through Core's own outbound, end-to-end encrypted

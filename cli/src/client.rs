@@ -91,7 +91,16 @@ impl<T: Transport> SocketClient<T> {
     /// Open a `session.watch` subscription. Returns the raw line stream;
     /// callers classify each line with [`WatchFrame::parse`] and apply
     /// their own policy to the degenerate variants (see `WatchFrame` docs).
+    ///
+    /// Core writes nothing when it accepts a subscription and nothing
+    /// while the runner is quiet, so the stream cannot tell a quiet runner
+    /// from a wedged Core, and its reads are unbounded. Whether Core
+    /// answers is settled first, by a `ping` round trip under the unary
+    /// response bound: a Core that is not running fails here at once, one
+    /// that does not answer fails after that bound, and the wire stays as
+    /// it was.
     pub(crate) async fn open_watch(&self, session_id: &str) -> Result<WatchLines, GalleyError> {
+        self.call(PingArgs {}).await?;
         let args = SessionWatchArgs {
             session_id: session_id.to_string(),
         };
@@ -108,6 +117,17 @@ impl<T: Transport> SocketClient<T> {
         })?;
         self.transport.open_stream(line).await
     }
+}
+
+/// `ping`: answers `{"pong": true}`. Core reads no arguments for it, so
+/// there is no shared shape to keep in `galley_core_lib::protocol`; the
+/// CLI uses it only for the liveness round trip in
+/// [`SocketClient::open_watch`].
+#[derive(serde::Serialize)]
+struct PingArgs {}
+
+impl SocketCommand for PingArgs {
+    const NAME: &'static str = "ping";
 }
 
 /// One-shot unary call returning the `result` payload.
@@ -189,35 +209,76 @@ mod tests {
     use galley_core_lib::protocol::SessionSendArgs;
     use std::sync::Mutex;
 
-    /// Canned-line fake: `round_trip` pops the next queued response line
-    /// and records the request line it was sent.
+    /// Canned-line fake: `round_trip` pops the next queued response and
+    /// `open_stream` hands out `stream` (once); both record the request
+    /// line they were sent.
     struct FakeTransport {
-        responses: Mutex<Vec<String>>,
+        responses: Mutex<Vec<Result<String, GalleyError>>>,
         sent: Mutex<Vec<String>>,
+        stream: Mutex<Option<WatchLines>>,
     }
 
     impl FakeTransport {
         fn replying(lines: &[&str]) -> Self {
             Self {
-                responses: Mutex::new(lines.iter().rev().map(|s| s.to_string()).collect()),
+                responses: Mutex::new(lines.iter().rev().map(|s| Ok(s.to_string())).collect()),
                 sent: Mutex::new(Vec::new()),
+                stream: Mutex::new(None),
             }
+        }
+
+        /// A Core that answers the `ping`, then serves `stream` as the
+        /// subscription.
+        fn streaming(stream: WatchLines) -> Self {
+            let fake = Self::replying(&[r#"{"ok":true,"result":{"pong":true}}"#]);
+            *fake.stream.lock().unwrap() = Some(stream);
+            fake
+        }
+
+        /// No Core: every round trip fails the way the real transport
+        /// reports a missing socket.
+        fn unreachable() -> Self {
+            let fake = Self::replying(&[]);
+            fake.responses
+                .lock()
+                .unwrap()
+                .push(Err(GalleyError::DbUnavailable {
+                    message: "Galley Core not running".into(),
+                }));
+            fake
+        }
+
+        /// The command of every request line sent, in order.
+        fn sent_commands(&self) -> Vec<String> {
+            self.sent
+                .lock()
+                .unwrap()
+                .iter()
+                .map(|line| {
+                    let req: serde_json::Value = serde_json::from_str(line).unwrap();
+                    req["command"].as_str().unwrap().to_string()
+                })
+                .collect()
         }
     }
 
     impl Transport for FakeTransport {
         async fn round_trip(&self, line: String) -> Result<String, GalleyError> {
             self.sent.lock().unwrap().push(line);
-            self.responses
-                .lock()
-                .unwrap()
-                .pop()
-                .ok_or_else(|| GalleyError::Internal {
+            self.responses.lock().unwrap().pop().unwrap_or_else(|| {
+                Err(GalleyError::Internal {
                     message: "fake transport: no canned response left".into(),
                 })
+            })
         }
-        async fn open_stream(&self, _line: String) -> Result<WatchLines, GalleyError> {
-            unimplemented!("unary tests only")
+        async fn open_stream(&self, line: String) -> Result<WatchLines, GalleyError> {
+            self.sent.lock().unwrap().push(line);
+            Ok(self
+                .stream
+                .lock()
+                .unwrap()
+                .take()
+                .expect("fake transport: no stream to open"))
         }
     }
 
@@ -333,5 +394,49 @@ mod tests {
         ]);
         let err = next_watch_frame_strict(&mut not_found).await.unwrap_err();
         assert!(matches!(err, GalleyError::NotFound { .. }));
+    }
+
+    /// A live runner that stays quiet is not a dead Core: Core sends no
+    /// frame when it accepts a watch, nor while the runner says nothing,
+    /// so the stream waits with no bound, far past the 120 s unary one.
+    /// The clock is paused, so the hour of silence passes at once.
+    #[tokio::test(start_paused = true)]
+    async fn quiet_watch_waits_past_the_unary_response_bound() {
+        use tokio::io::AsyncWriteExt;
+        // Core's end of the stream: open and silent until written to.
+        let (mut core, cli) = tokio::io::duplex(1024);
+        let client = SocketClient::with_transport(FakeTransport::streaming(
+            WatchLines::from_reader(Box::new(cli)),
+        ));
+        let mut watch = client.open_watch("s1").await.unwrap();
+        assert_eq!(client.transport.sent_commands(), ["ping", "session.watch"]);
+
+        let silence = tokio::time::timeout(
+            std::time::Duration::from_secs(3600),
+            next_watch_frame_strict(&mut watch),
+        )
+        .await;
+        assert!(
+            silence.is_err(),
+            "an hour of silence must not end the watch: {silence:?}"
+        );
+
+        core.write_all(b"{\"stream\":\"event\",\"data\":{\"kind\":\"turn_start\"}}\n")
+            .await
+            .unwrap();
+        let frame = next_watch_frame_strict(&mut watch).await.unwrap();
+        assert!(matches!(frame, Some(WatchFrame::Event(_))), "{frame:?}");
+    }
+
+    /// A Core that is not there still fails at once, at the `ping`,
+    /// without a subscription being opened.
+    #[tokio::test]
+    async fn watch_fails_at_the_ping_without_subscribing() {
+        let client = SocketClient::with_transport(FakeTransport::unreachable());
+        let Err(err) = client.open_watch("s1").await else {
+            panic!("expected the ping to fail");
+        };
+        assert!(matches!(err, GalleyError::DbUnavailable { .. }), "{err:?}");
+        assert_eq!(client.transport.sent_commands(), ["ping"]);
     }
 }

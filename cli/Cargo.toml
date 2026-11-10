@@ -47,8 +47,10 @@ sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio",
 # `#[tokio::test]` macro for async setup helpers; the CLI itself is
 # spawned via std::process::Command so the test runtime only drives
 # the seed phase — and, in `schedule_test.rs`, a Unix socket server
-# answering with Core's router (`net`, `io-util`).
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util"] }
+# answering with Core's router (`net`, `io-util`). `test-util` pauses the
+# clock, so a test can let a watch sit silent past the 120 s unary bound
+# without waiting for it (`client.rs`).
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util", "test-util"] }
 # Fire times relative to now in `schedule_test.rs`; same version and
 # features as galley-core.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

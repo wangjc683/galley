@@ -284,6 +284,19 @@ and error discriminants unchanged):
   before. No command, flag, field name or type, exit code or error
   changed. Also under `--schema=1` and `--schema=2`. See §5.15a and
   §5.15c in [project-and-llm-commands.md](./project-and-llm-commands.md).
+- 2026-11-10 — Behavior fix: a quiet runner no longer ends a watch.
+  `session watch`, `session follow` and `project follow` held the first
+  stream frame to the 120-second answer bound, but Core sends no frame
+  when it accepts a subscription, only when the runner has an event, so
+  a live runner quiet for two minutes (its run ended, or a long tool
+  call) ended the command with exit 4, "Galley Core is not responding".
+  The CLI now makes one `ping` round trip under that bound before it
+  subscribes and then waits for frames without a timeout. The wire
+  format is unchanged; a Core that is not running still fails at once,
+  and one that does not answer the `ping` still exits 4 after 120
+  seconds. No command, flag, field, exit code or error changed. Also
+  under `--schema=1` and `--schema=2`. See "Timeouts" in
+  [transports.md](./transports.md) §2A.
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 
