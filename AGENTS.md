@@ -282,6 +282,12 @@ Five canonical roles with default strings (`needs-triage`, `needs-info`,
 `ready-for-agent`, `ready-for-human`, `wontfix`). See
 [triage-labels](./docs/agents/triage-labels.md).
 
+### Dispatch
+
+The main session dispatches tickets to background executor agents, one git
+worktree per ticket (`scripts/new-ticket-worktree.sh`). See
+[dispatch](./docs/agents/dispatch.md).
+
 ### Domain docs
 
 Single-context: one root `CONTEXT.md` + `docs/adr/`. See

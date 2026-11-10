@@ -42,6 +42,7 @@ subset of the task table below; when the two disagree, this index wins and
 | Look up domain vocabulary (turn numbering, seams, protocol terms) | [CONTEXT.md](../CONTEXT.md) — the ubiquitous-language glossary; engineering skills read it before exploring |
 | Check whether a refactor direction was already decided against | [ADRs](./adr/) — accepted architecture decisions; reviews must not re-litigate them |
 | Track issues / PRDs for an in-flight feature | [issue tracker](./agents/issue-tracker.md) — local markdown under `.scratch/`, triage states in [triage labels](./agents/triage-labels.md) |
+| Dispatch a ticket to a background agent, or accept and merge one | [dispatch](./agents/dispatch.md) — roles, models and effort, limits, ticket shape, worktrees (`scripts/new-ticket-worktree.sh`), acceptance, merge |
 | Grow the domain model (glossary + ADRs) | [domain](./agents/domain.md) — how CONTEXT.md and `docs/adr/` are maintained |
 | Understand or change Galley's temperament / brand character | [temperament charter](./temperament.md) — the "why" above the execution specs |
 | Touch UI copy, terminology, or localization | [copy and language guidelines](./copy-language-guidelines.md) (what to call things), [copy austerity principles](./copy-austerity-principles.md) (how to say it) |

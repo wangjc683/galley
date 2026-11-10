@@ -98,7 +98,9 @@ A main session discusses, writes tickets, dispatches them to background agents
 (each in its own git worktree), verifies, merges, and commits. One main session
 covers one cluster of related tickets and closes when that cluster is merged
 and recorded. Record each ruling where it belongs (ticket Comments, PRD) when
-it is made; the closeout reconciles, it is not the first write.
+it is made; the closeout reconciles, it is not the first write. The dispatch
+rules (models, limits, worktrees, acceptance, merge) live in
+[dispatch](./agents/dispatch.md).
 
 Before step 7, also pass this close gate:
 
