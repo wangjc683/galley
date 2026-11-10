@@ -857,7 +857,10 @@ mod tests {
     /// `--no-repeat`, a new cycle, `--series`, the next day said on a
     /// tick. An overdue one's reminder asks whether it was done
     /// (`wake.md`). A stated cycle is not asked first (`authority.md`).
-    /// Single-line fragments only (CRLF on Windows).
+    /// Ticket 158: `--series` takes a reminder time already past, and the
+    /// wake note says it repeats and how long ago it was due, so it is not
+    /// looked up with `todo show` for that. Single-line fragments only
+    /// (CRLF on Windows).
     #[test]
     fn manual_teaches_repeating_to_dos() {
         let under = |name: &str, heading: &str, end: Option<&str>, rules: &[&str]| {
@@ -946,22 +949,33 @@ mod tests {
                 "its title, notes, day and reminder; add `--series` when the user means",
                 "every one from now on (「以后都叫……」, 「以后都提前两天提醒」): the later",
                 "ones then take this one's title, items and reminder, and its notes too",
-                "when you give `--notes` in the same command. When you tick one off, say",
+                "when you give `--notes` in the same command. Give this one's reminder",
+                // Ticket 158: a time already past is given all the same
+                // (Core takes it into the rule, `todo update` §5.32).
+                "time even when it has already passed (this one is due too soon):",
+                "Galley still changes the rule, and this one's reminder moves to the",
+                "first later one's time still ahead. When you tick one off, say",
                 "in a few words when the next is due (「已勾掉，下一次是 11 月 23 日。」).",
             ],
         );
         // Point 12: an overdue one rings again; ask, do not repeat it.
+        // Ticket 158: the note says it repeats and how long ago it was
+        // due, so it is not looked up for that.
         under(
             "wake.md",
             "A to-do's reminder only reminds: do not tick the to-do off until the",
             Some("A scheduled task that starts a new conversation"),
             &[
-                "- A repeating to-do's reminder (`todo show` has its `repeat`) on one due",
-                "before today: it was left unticked, and its reminder comes again at",
-                "ask in a sentence whether they did, rather than give the same reminder",
-                "again; when they say it is done, tick it off (`todos-change.md`), and",
+                "- A repeating to-do's reminder on one due before today (the note says",
+                "it repeats and how many days ago it was due, so you need not",
+                "`todo show` it for that): it was left unticked, and its reminder comes",
+                "again at each later one's time. The user may have done it and not",
+                "ticked it: ask in a sentence whether they did, rather than give the",
+                "same reminder again; when they say it is done, tick it off",
+                "(`todos-change.md`), and the next one follows.",
             ],
         );
+        assert!(!part("wake.md").contains("has its `repeat`"));
         under(
             "reminders.md",
             "- Repeating: `--daily`, `--weekly=<days>` (1 = Monday … 7 = Sunday) or",

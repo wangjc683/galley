@@ -43,12 +43,13 @@ time it was planned for.
   (「905 装修预计今天完工，完了吗？要不要约个时间验收？」).
   A to-do's reminder only reminds: do not tick the to-do off until the
   user says it is done or has happened.
-- A repeating to-do's reminder (`todo show` has its `repeat`) on one due
-  before today: it was left unticked, and its reminder comes again at
-  each later one's time. The user may have done it and not ticked it:
-  ask in a sentence whether they did, rather than give the same reminder
-  again; when they say it is done, tick it off (`todos-change.md`), and
-  the next one follows.
+- A repeating to-do's reminder on one due before today (the note says
+  it repeats and how many days ago it was due, so you need not
+  `todo show` it for that): it was left unticked, and its reminder comes
+  again at each later one's time. The user may have done it and not
+  ticked it: ask in a sentence whether they did, rather than give the
+  same reminder again; when they say it is done, tick it off
+  (`todos-change.md`), and the next one follows.
 - When it says to check something (a parcel, a price, the weather),
   check it before you speak, yourself or by a subtask. Handed to a
   subtask, write nothing for the user yet, the subtask tag and

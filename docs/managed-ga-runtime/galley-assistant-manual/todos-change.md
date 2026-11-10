@@ -66,7 +66,10 @@ not edit them.
   its title, notes, day and reminder; add `--series` when the user means
   every one from now on (「以后都叫……」, 「以后都提前两天提醒」): the later
   ones then take this one's title, items and reminder, and its notes too
-  when you give `--notes` in the same command. When you tick one off, say
+  when you give `--notes` in the same command. Give this one's reminder
+  time even when it has already passed (this one is due too soon):
+  Galley still changes the rule, and this one's reminder moves to the
+  first later one's time still ahead. When you tick one off, say
   in a few words when the next is due (「已勾掉，下一次是 11 月 23 日。」).
 - Asked what is left (「我还有什么没办」), run `todo list` first and answer
   from it: the "In Hand" lines of your Main Chat section are from when
