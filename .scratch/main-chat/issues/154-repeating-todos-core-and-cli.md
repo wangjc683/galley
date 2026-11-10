@@ -61,6 +61,10 @@ Status: ready-for-agent
 10. **巡看的叫醒判据**（`AssistantTodo::review_has_something_to_look_at`）：Core 生出的下一期，不因为「刚生出来」算动过；有人改过它（`updated_at` 晚于 `created_at`）才算。「到期日这次才进 3 天窗口」那一半照旧算。效果：每天重复的事不会让巡看天天醒；每周及更长的，每期进窗口时醒一次。写测试钉住这两种。
 11. **「最近不要的跟进」**（`declined_items`）：跳过的那一期（`skipped = 1`）不列。删除重复的待办照旧列。
 12. **「在办的事」**（`core/src/managed_prompt.rs` 的 `in_hand_section`）：重复的待办那一行带上规则（英文，照例行那一组写规则的口径，如 `repeats weekly on Mon`、`repeats every 3 months on the 15th`）。改了这一节的格式，grep `.scratch/main-chat/entry-layer-eval/` 里照它写的镜像，在回报里列出位置，不要改（手册与评测那张票改）。
+13. **没了结的这一期，到了后面每一期的日子照样提醒**（2026-11-10 派票后补，主会话已通知代理）：提醒挂在每一期上、只响一次，下一期又要等这一期了结才生出来；不补这一条，交了周报忘了勾、或每天的事漏了一天，之后就再也不响。规则有 `remind_*`、这一期还开着、它的提醒任务还在（没被取消）且已经响过并有了结果（送到了，或没送到、已转成系统通知）时，把这同一个提醒任务重新挂到规则下一个日子对应的提醒时刻：下一个日子照「规则怎么算下一期」算，`after` 取今天与这一期到期日里较晚的那一天；算出的提醒时刻已经过了就再往后取一期。这一期自己的到期日不动（照旧逾期），不生新的一行。
+    - 不重挂的：这一期了结了、被删了、规则结束或「不再重复」了；用户在面板上「取消提醒」或 `--no-remind` 去掉了这一期的提醒（任务已取消，不新建；下一期照规则挂）。
+    - 做法要是库里状态的纯函数：重启不丢，重复执行不多挂（建议在调度器现有的 tick 里扫一遍）。不改触发与送达的状态机；提醒还没有结果（`lastWake` 是 `pending`）时不许动它。
+    - 测试：每天的事没勾，第二天同一行再响；每周的事逾期两周，响过三次仍只有一行、到期日没动；了结之后只剩下一期自己的提醒；取消提醒后不重挂；连扫两遍不多挂。
 
 ## 命令（Agent API，`schemaVersion: 3` 内加法；`--schema=1`、`2` 照 `todo` 家族现状也认）
 
@@ -89,7 +93,7 @@ Status: ready-for-agent
 
 - 助理手册（`docs/managed-ga-runtime/galley-assistant-manual/`）与评测（`.scratch/main-chat/entry-layer-eval/`）：票 153 在改，重复的手册另有票。Core 里若有测试要求手册列全 CLI 命令，在回报里写，不要改手册。
 - `docs/design/` 与 GUI 的组件、store、文案：票 152 在改；面板怎么画另有票。GUI 只许动 `gui/src/types/ipc.ts`。
-- 定时任务（`scheduled_tasks`、`scheduler.rs` 的触发）不加新东西：下一期的生成不经过调度器。
+- 定时任务（`scheduled_tasks`、`scheduler.rs` 的触发）：下一期的生成不经过调度器；只许为第 13 条在现有的 tick 里加那一遍重挂，触发与送达的状态机不改。
 - 不做：日子串（Core 表达不了的规则）、规则的结束日期或次数、「连着跳过几期来问」。
 - `.scratch/main-chat/PRD.md` 与别的票。主工作树；不跑 `tauri dev`。
 
