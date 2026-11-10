@@ -3,7 +3,6 @@ export const zhCopy = {
     openChanges: "查看工作区改动",
     closeChanges: "关闭工作区改动",
     title: "工作区改动",
-    repository: "Git 仓库",
     chooseRepository: "选择仓库",
     changeRepository: "切换仓库",
     chooseHint: "选择一个本地 Git 仓库，查看未提交改动。",
@@ -22,8 +21,6 @@ export const zhCopy = {
     noCommits: "没有可选的提交。",
     loadingCommits: "正在读取提交…",
     invalidBase: "所选提交已不在此仓库中，请重新选择基线。",
-    files: (tracked: number, untracked: number) =>
-      `${tracked} 个已跟踪文件 · ${untracked} 个未跟踪文件`,
     tracked: "已跟踪文件的改动",
     untracked: "未跟踪文件",
     untrackedHint: "未跟踪列表省略 Git 忽略项、隐藏目录和系统数据目录。",
@@ -66,7 +63,6 @@ export const zhCopy = {
     renderFailed: "无法显示此差异，请使用外部工具查看。",
   },
   localFiles: {
-    resizePreview: "调整文件预览宽度",
     resizeHint: "拖动调整宽度，双击恢复默认比例",
     imageUnavailable: "图片无法预览",
     preview: "预览 Markdown",
@@ -114,7 +110,6 @@ export const zhCopy = {
     button: "Language",
     aria: "选择界面语言",
     system: "跟随系统",
-    systemHelper: "自动",
     zh: "简体中文",
     en: "English",
     current: (name: string) => `当前${name}`,
@@ -129,7 +124,6 @@ export const zhCopy = {
   },
   app: {
     unconfiguredModel: "未配置模型",
-    managedModelHint: "配置模型",
     externalModelHint: "修改 mykey.py 后重启 Galley 生效",
     chooseGAFolderTitle: "选择 GenericAgent 仓库目录",
     restoreTimeout: "历史会话恢复超时",
@@ -195,12 +189,9 @@ export const zhCopy = {
     projects: "项目",
     newProject: "新建项目",
     scheduled: "定时",
-    openScheduled: "管理定时任务",
     scheduledNeedsAction: (count: number) => `${count} 项定时任务需要处理`,
-    working: "正在工作",
     thinking: "思考中",
     waitingForYou: "等你回复",
-    unread: "未读",
     /** 标题右端的来源徽标（工作台对话 PRD 裁决 8）：Galley 自己经 CLI 开的（助理、聊天软件渠道）。 */
     galleyCreated: "Galley 创建",
     /** 其余经 Galley CLI 开的：提示只写名字，读屏多说一个「创建」。 */
@@ -233,9 +224,6 @@ export const zhCopy = {
     archiveRunningBody: (title: string) =>
       `「${title}」仍在运行。归档不会停止它，但它会从侧栏消失，你将看不到后续进展。`,
     archiveRunningConfirm: "仍要归档",
-    pendingAskPrefix: "⏸ 等你回复",
-    gaWaitingForReply: "GA 在等你回复",
-    errorBadge: (count: number) => `${count} 错误`,
     replyDone: "回复完成",
     // 系统通知标题：本次运行停在 GA 的单次步数上限，没有完成（#29）。
     // 与 replyDone 同一开关、同一节流键。
@@ -1059,8 +1047,6 @@ export const zhCopy = {
         "新模型立即用于新对话；已启动的对话重启 Galley 后生效。",
       defaultModel: "默认",
       defaultModelStatus: "默认模型",
-      moveUp: (name: string) => `上移 ${name}`,
-      moveDown: (name: string) => `下移 ${name}`,
       dragToReorder: (name: string) => `拖动调整 ${name} 的顺序`,
       moveUpAction: "上移",
       moveDownAction: "下移",
@@ -1653,7 +1639,6 @@ export const zhCopy = {
     modelWelcome: "配置好模型就能开始，大约一分钟。",
     advanced: "高级",
     connectExistingButton: "接入已有 GenericAgent",
-    testAndStart: "测试并开始使用 Galley",
     startUsingGalley: "开始使用 Galley",
     attachTitle: "接入已经安装的 GenericAgent",
     attachSubtitle: "指向本地 GA 目录 · Galley 用它启动 GA。",
@@ -1905,7 +1890,6 @@ export const zhCopy = {
       title: "API 配额耗尽",
       brief: "可切换其他模型继续。",
     },
-    details: "查看技术详情",
     copyDetails: "复制详情",
     copiedDetails: "已复制",
     switchLLM: "切换模型",
@@ -1996,7 +1980,6 @@ export const zhCopy = {
       "项目里的对话会共享这个文件夹里的 project_memory.md 作为项目记忆（没有会自动新建），AI 也会把草稿和产物放在这里。",
     folderHintExternal:
       "外置 GA 不启用项目记忆，文件夹只用来识别仓库、查看改动。",
-    close: "关闭",
     filterArchive: "按标题或摘要过滤…",
     archivedTitle: "已归档",
     earlierTitle: "更早",

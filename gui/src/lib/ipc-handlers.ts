@@ -57,12 +57,6 @@ import { useSessionsStore } from "@/stores/sessions";
 import { useSubtasksStore } from "@/stores/subtasks";
 import { useUiStore } from "@/stores/ui";
 
-export {
-  cleanPartialContent,
-  extractPreamble,
-  stripGATags,
-} from "@/lib/ipc/ga-output-cleaning";
-
 function eventVisibility(event: { visibility?: MessageVisibility }): MessageVisibility {
   return event.visibility ?? "visible";
 }

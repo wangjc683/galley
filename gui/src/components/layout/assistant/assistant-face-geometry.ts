@@ -313,8 +313,6 @@ export interface TonguePose {
   stretch: number;
 }
 
-export const TONGUE_REST: TonguePose = { t1: 0, t2: 0, t3: 0, stretch: 0 };
-
 export function tongueAtRest(p: TonguePose): boolean {
   return p.t1 === 0 && p.t2 === 0 && p.t3 === 0 && p.stretch === 0;
 }

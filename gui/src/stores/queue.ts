@@ -39,12 +39,3 @@ export const useQueueStore = create<QueueState>()((set) => ({
     }
   },
 }));
-
-/** Queue for one session (empty array when none). */
-export function useSessionQueue(sessionId: string | null): QueuedMessage[] {
-  return useQueueStore((s) =>
-    sessionId ? (s.bySession[sessionId] ?? EMPTY) : EMPTY,
-  );
-}
-
-const EMPTY: QueuedMessage[] = [];

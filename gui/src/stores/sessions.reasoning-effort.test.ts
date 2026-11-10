@@ -71,17 +71,15 @@ describe("sessionsStore · setSessionReasoningEffort", () => {
   });
 
   it("sends no bridge command — Core forwards to the live runner", () => {
-    let bridgeCommands = 0;
     seed("medium");
-    useRuntimeStore.setState({
-      sendIPCCommand: async () => {
-        bridgeCommands += 1;
-      },
-    });
 
     useSessionsStore.getState().setSessionReasoningEffort("s-test", "high");
 
-    expect(bridgeCommands).toBe(0);
+    expect(
+      getTauriMocks().invoke.mock.calls.filter(
+        (call) => call[0] === "send_to_runner",
+      ),
+    ).toHaveLength(0);
   });
 
   it("skips an archived session", () => {

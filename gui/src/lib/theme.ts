@@ -48,15 +48,6 @@ export function applyResolvedTheme(theme: ResolvedTheme): void {
   root.style.colorScheme = theme;
 }
 
-export function applyThemePreference(
-  preference: ThemePreference,
-  systemTheme: ResolvedTheme = resolveSystemTheme(),
-): ResolvedTheme {
-  const resolved = resolveThemePreference(preference, systemTheme);
-  applyResolvedTheme(resolved);
-  return resolved;
-}
-
 export function subscribeSystemTheme(
   callback: (theme: ResolvedTheme) => void,
 ): () => void {

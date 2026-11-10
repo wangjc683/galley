@@ -5,7 +5,6 @@ export const enCopy: AppCopy = {
     openChanges: "View worktree changes",
     closeChanges: "Close worktree changes",
     title: "Worktree changes",
-    repository: "Git repository",
     chooseRepository: "Choose repository",
     changeRepository: "Switch repository",
     chooseHint: "Choose a local Git repository to review uncommitted changes.",
@@ -27,8 +26,6 @@ export const enCopy: AppCopy = {
     loadingCommits: "Reading commits…",
     invalidBase:
       "The chosen commit is no longer in this repository. Pick a baseline again.",
-    files: (tracked: number, untracked: number) =>
-      `${tracked} tracked · ${untracked} untracked files`,
     tracked: "Tracked file changes",
     untracked: "Untracked files",
     untrackedHint: "Untracked files exclude Git-ignored entries, hidden directories, and system data directories.",
@@ -79,7 +76,6 @@ export const enCopy: AppCopy = {
       "Unable to display this diff. Use an external tool to review it.",
   },
   localFiles: {
-    resizePreview: "Resize file preview",
     resizeHint: "Drag to resize; double-click to restore the default split",
     imageUnavailable: "Image preview unavailable",
     preview: "Preview Markdown",
@@ -128,7 +124,6 @@ export const enCopy: AppCopy = {
     button: "Language",
     aria: "Choose interface language",
     system: "System",
-    systemHelper: "Follow system",
     zh: "简体中文",
     en: "English",
     current: (name) => `Currently ${name}`,
@@ -143,7 +138,6 @@ export const enCopy: AppCopy = {
   },
   app: {
     unconfiguredModel: "No model configured",
-    managedModelHint: "Configure models",
     externalModelHint: "Restart Galley after editing mykey.py",
     chooseGAFolderTitle: "Choose GenericAgent repository folder",
     restoreTimeout: "Restoring the conversation timed out",
@@ -203,15 +197,12 @@ export const enCopy: AppCopy = {
     projects: "Projects",
     newProject: "New project",
     scheduled: "Scheduled",
-    openScheduled: "Manage scheduled tasks",
     scheduledNeedsAction: (count: number) =>
       count === 1
         ? "1 scheduled item needs attention"
         : `${count} scheduled items need attention`,
-    working: "Working",
     thinking: "Thinking",
     waitingForYou: "Waiting for you",
-    unread: "New reply",
     galleyCreated: "Created by Galley",
     cliCreated: "Galley CLI",
     cliCreatedAria: "Created through Galley CLI",
@@ -235,9 +226,6 @@ export const enCopy: AppCopy = {
     archiveRunningBody: (title: string) =>
       `"${title}" is still running. Archiving won't stop it, but it will disappear from the sidebar and you won't see its progress.`,
     archiveRunningConfirm: "Archive anyway",
-    pendingAskPrefix: "Waiting for you",
-    gaWaitingForReply: "GA is waiting for your reply",
-    errorBadge: (count) => `${count} error${count === 1 ? "" : "s"}`,
     replyDone: "Reply finished",
     stepLimitReached: "Step limit reached",
     errored: "Error",
@@ -1016,8 +1004,6 @@ export const enCopy: AppCopy = {
         "New models apply to new conversations immediately; already-started conversations update after a Galley restart.",
       defaultModel: "Default",
       defaultModelStatus: "Default model",
-      moveUp: (name) => `Move ${name} up`,
-      moveDown: (name) => `Move ${name} down`,
       dragToReorder: (name) => `Drag to reorder ${name}`,
       moveUpAction: "Move up",
       moveDownAction: "Move down",
@@ -1628,7 +1614,6 @@ export const enCopy: AppCopy = {
     modelWelcome: "Set up a model and you're ready — about a minute.",
     advanced: "Advanced",
     connectExistingButton: "Connect existing GenericAgent",
-    testAndStart: "Test and start using Galley",
     startUsingGalley: "Start using Galley",
     attachTitle: "Connect an existing GenericAgent",
     attachSubtitle:
@@ -1850,7 +1835,6 @@ export const enCopy: AppCopy = {
       title: "API quota exhausted",
       brief: "Switch to another model to continue.",
     },
-    details: "Show technical details",
     copyDetails: "Copy details",
     copiedDetails: "Copied",
     switchLLM: "Switch model",
@@ -1950,7 +1934,6 @@ export const enCopy: AppCopy = {
       "The project's chats share project_memory.md in this folder as their project memory (created if missing); the AI also keeps drafts and outputs here.",
     folderHintExternal:
       "With an external GA, project memory is off; the folder only identifies the repository for reviewing changes.",
-    close: "Close",
     filterArchive: "Filter by title or summary…",
     archivedTitle: "Archived",
     earlierTitle: "Earlier",

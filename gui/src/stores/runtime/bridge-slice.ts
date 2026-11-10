@@ -30,7 +30,6 @@ import { useRuntimeStore } from "@/stores/runtime";
 import { useSessionsStore } from "@/stores/sessions";
 import { useUiStore } from "@/stores/ui";
 import { makeAppError } from "@/types/app-error";
-import type { IPCCommand } from "@/types/ipc";
 
 import {
   currentCopy,
@@ -117,10 +116,6 @@ export interface BridgeSlice {
   reattachLiveRunners: () => Promise<void>;
   /** Graceful shutdown. No-op if no bridge alive for `sid`. */
   shutdownBridge: (sid: string) => Promise<void>;
-  /** Send an IPC command to `sid`'s bridge over stdin. User-turn commands
-   * fail loudly when no live bridge is available; quiet background sync
-   * commands remain best-effort. */
-  sendIPCCommand: (sid: string, cmd: IPCCommand) => Promise<void>;
   /** True only when this JS runtime has a live client/listener handle. */
   hasBridgeClient: (sid: string) => boolean;
 }
@@ -153,13 +148,6 @@ const _bridgeSpawnStartedAt = new Map<string, number>();
 const _STDERR_TAIL_MAX = 8;
 const _lruOrder: string[] = [];
 const LRU_CAP = 20;
-const BRIDGE_CLIENT_WAIT_MS = 15_000;
-const CONNECTED_CLIENT_WAIT_MS = 1_000;
-const BRIDGE_READY_WAIT_MS = 30_000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
 
 function _lruTouch(sessionId: string): void {
   const idx = _lruOrder.indexOf(sessionId);
@@ -172,89 +160,11 @@ function _lruRemove(sessionId: string): void {
   if (idx !== -1) _lruOrder.splice(idx, 1);
 }
 
-async function _waitForBridgeClient(
-  sessionId: string,
-  timeoutMs: number = BRIDGE_CLIENT_WAIT_MS,
-): Promise<BridgeClient | undefined> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const client = _bridgeClients.get(sessionId);
-    if (client) return client;
-    const status =
-      useRuntimeStore.getState().byId[sessionId]?.bridgeStatus ?? "idle";
-    if (status !== "spawning" && status !== "connected") return undefined;
-    await sleep(50);
-  }
-  return _bridgeClients.get(sessionId);
-}
-
-async function _waitForBridgeReady(
-  sessionId: string,
-  timeoutMs: number = BRIDGE_READY_WAIT_MS,
-): Promise<boolean> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const status =
-      useRuntimeStore.getState().byId[sessionId]?.bridgeStatus ?? "idle";
-    if (status === "connected" && _bridgeClients.has(sessionId)) {
-      return true;
-    }
-    if (status === "idle" || status === "closed" || status === "error") {
-      return false;
-    }
-    await sleep(50);
-  }
-  return (
-    (useRuntimeStore.getState().byId[sessionId]?.bridgeStatus ?? "idle") ===
-      "connected" && _bridgeClients.has(sessionId)
-  );
-}
-
-async function bridgeStartupTimeoutMessage(sessionId: string): Promise<string> {
-  const base = currentCopy().app.bridgeStartupTimeout;
-  try {
-    const tail: string[] = await invoke("runner_stderr_tail", { sessionId });
-    if (tail.length === 0) return base;
-    return `${base}\n${tail.slice(-3).join("\n")}`;
-  } catch {
-    return base;
-  }
-}
-
-function missingBridgeMessage(
-  status: BridgeStatus,
-  bridgeError: string | null,
-): string {
-  if (bridgeError) return bridgeError;
-  switch (status) {
-    case "spawning":
-      return "Galley 运行时还没有启动完成，请稍后重试。";
-    case "error":
-      return "Galley 运行时启动失败。";
-    case "closed":
-      return "Galley 运行时已关闭，请重新发送这条消息。";
-    default:
-      return "Galley 运行时未启动，请重新发送这条消息。";
-  }
-}
-
 function actionableBridgeCrashMessage(message: string): string {
   if (!/mykey\.py.*failed to import/i.test(message)) return message;
   const moduleName =
     message.match(/No module named ['"]([^'"]+)['"]/)?.[1] ?? null;
   return currentCopy().errors.externalMyKeyImportFailed(moduleName);
-}
-
-function shouldFailWhenBridgeMissing(cmd: IPCCommand): boolean {
-  // Sends, ask_user replies and abort are direct user actions on a live
-  // run: silently dropping them leaves the UI showing a state (sent /
-  // stopping) the bridge never heard about. They must reject so the
-  // caller can roll back and tell the user.
-  return (
-    cmd.kind === "user_message" ||
-    cmd.kind === "ask_user_response" ||
-    cmd.kind === "abort"
-  );
 }
 
 async function _enforceLRUCap(): Promise<void> {
@@ -779,70 +689,6 @@ export const createBridgeSlice: RuntimeSliceCreator<BridgeSlice> = (
         },
       }));
     }
-  },
-
-  sendIPCCommand: async (sessionId, cmd) => {
-    const sendStartedAt = perfNow();
-    const userVisibleCommand = shouldFailWhenBridgeMissing(cmd);
-    let client = _bridgeClients.get(sessionId);
-    let clientWaitMs = 0;
-    let readyWaitMs = 0;
-    if (!client) {
-      const status = get().byId[sessionId]?.bridgeStatus ?? "idle";
-      if (status === "spawning" || status === "connected") {
-        const clientWaitStartedAt = perfNow();
-        client = await _waitForBridgeClient(
-          sessionId,
-          status === "connected"
-            ? CONNECTED_CLIENT_WAIT_MS
-            : BRIDGE_CLIENT_WAIT_MS,
-        );
-        clientWaitMs = Math.round((perfNow() - clientWaitStartedAt) * 10) / 10;
-      }
-    }
-    if (!client) {
-      const slot = get().byId[sessionId];
-      const status = slot?.bridgeStatus ?? "idle";
-      const message = missingBridgeMessage(status, slot?.bridgeError ?? null);
-      console.warn(
-        `[runtime] sendIPCCommand(${sessionId}) called but no bridge is alive:`,
-        cmd,
-      );
-      if (userVisibleCommand) {
-        throw new Error(message);
-      }
-      return;
-    }
-    if (userVisibleCommand) {
-      const readyWaitStartedAt = perfNow();
-      const ready = await _waitForBridgeReady(sessionId);
-      readyWaitMs = Math.round((perfNow() - readyWaitStartedAt) * 10) / 10;
-      if (!ready) {
-        const slot = get().byId[sessionId];
-        if (slot?.bridgeError) {
-          throw new Error(slot.bridgeError);
-        }
-        throw new Error(await bridgeStartupTimeoutMessage(sessionId));
-      }
-      client = _bridgeClients.get(sessionId);
-      if (!client) {
-        const slot = get().byId[sessionId];
-        throw new Error(
-          missingBridgeMessage(
-            slot?.bridgeStatus ?? "idle",
-            slot?.bridgeError ?? null,
-          ),
-        );
-      }
-    }
-    await client.send(cmd);
-    logPerf("runtime.sendIPCCommand", sendStartedAt, {
-      sessionId,
-      command: cmd.kind,
-      userVisibleCommand,
-      clientWaitMs,
-      readyWaitMs,
-    });
   },
 
   hasBridgeClient: (sid) => _bridgeClients.has(sid),

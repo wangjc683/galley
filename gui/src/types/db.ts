@@ -1,50 +1,13 @@
 /**
- * SQLite row shapes — direct mirror of the `migrations/001_init.sql`
- * column layout. `*Row` types use snake_case to match the schema; the
- * `lib/db.ts` mappers convert between row and domain (camelCase) types.
- *
- * Keep this file in sync when migrating columns. Adding a column means
- * a new migration file + a field on the Row + the mapper.
+ * The message row as Galley Core hands it to this page: the `rows` of
+ * `session_message_turns_page` (lib/db.ts), mirror of Core's
+ * `PersistedMessageRow` (core/src/db/rows.rs). Snake_case like the
+ * `messages` table it is read from; `stores/messages/rowsToTurns.ts`
+ * turns rows into conversation turns. A message column Core starts
+ * sending gets its field here.
  */
 
 import type { MessageTelemetry } from "@/types/conversation";
-
-export interface SessionRow {
-  id: string;
-  project_id: string | null;
-  title: string;
-  status: string;
-  summary: string | null;
-  turn_count: number;
-  current_tool: string | null;
-  error_count: number;
-  pid: number | null;
-  cwd: string | null;
-  pinned: number; // 0 / 1
-  llm_index: number | null;
-  llm_key: string | null;
-  llm_display_name: string | null;
-  ga_runtime_kind: "managed" | "external";
-  ga_runtime_id: string | null;
-  prompt_profile: string | null;
-  /** 0/1 — sessions.has_unread. See Session.hasUnread for semantics. */
-  has_unread: number;
-  last_activity_at: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface ProjectRow {
-  id: string;
-  name: string;
-  root_path: string | null;
-  icon: string | null;
-  color: string | null;
-  pinned: 0 | 1;
-  last_activity_at: string;
-  created_at: string;
-  updated_at: string;
-}
 
 export interface MessageRow {
   id: string;
@@ -96,10 +59,4 @@ export interface MessageAttachmentRow {
   width?: number;
   height?: number;
   createdAt: string;
-}
-
-export interface PrefRow {
-  key: string;
-  value: string; // JSON
-  updated_at: string;
 }

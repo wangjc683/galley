@@ -190,12 +190,3 @@ export function backfillRecentSessions(
     earlier: buckets.earlier.slice(RECENT_BACKFILL_COUNT),
   };
 }
-
-export const BUCKET_LABEL: Record<SessionBucket, string> = {
-  pinned: "Pinned",
-  today: "Today",
-  week: "This week",
-  month: "This month",
-  recent: "Recent",
-  earlier: "Earlier",
-};

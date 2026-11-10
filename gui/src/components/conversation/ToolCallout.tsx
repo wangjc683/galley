@@ -461,24 +461,24 @@ function ResultBlock({ content }: { content: string }) {
  * or empty when the tab is unknown.
  *
  * Unknown / future GA tools fall back to a name-only pill via
- * `TOOL_META[name] ?? null`; no icon, no Chinese label, just the
+ * `TOOL_META[name] ?? null`; no icon, no label, just the
  * raw GA name in mono — visually quieter than an arbitrary icon
  * picked under uncertainty. Lookups go through `canonicalToolName`
  * (lib/tool-name.ts), so a `Bash` / `PowerShell` call GA ran as
  * `code_run` draws as `code_run`; the mono name stays the model's.
  */
-const TOOL_META: Record<string, { icon: Icon; zh: string }> = {
-  web_scan: { icon: GlobeSimple, zh: "读取网页" },
-  web_execute_js: { icon: CursorClick, zh: "执行网页脚本" },
-  file_read: { icon: FileText, zh: "读取文件" },
-  file_write: { icon: FilePlus, zh: "写入文件" },
-  file_patch: { icon: PencilSimpleLine, zh: "修改文件" },
-  code_run: { icon: Terminal, zh: "运行代码" },
-  update_working_checkpoint: { icon: BookmarkSimple, zh: "保存关键上下文" },
-  start_long_term_update: { icon: Brain, zh: "写入长期记忆" },
+const TOOL_META: Record<string, { icon: Icon }> = {
+  web_scan: { icon: GlobeSimple },
+  web_execute_js: { icon: CursorClick },
+  file_read: { icon: FileText },
+  file_write: { icon: FilePlus },
+  file_patch: { icon: PencilSimpleLine },
+  code_run: { icon: Terminal },
+  update_working_checkpoint: { icon: BookmarkSimple },
+  start_long_term_update: { icon: Brain },
   // The main chat's own tool (main chat ticket 137): a line to the user
   // mid-run; the line is its bubble, this is its step's record.
-  tell_user: { icon: ChatCircleText, zh: "给你发消息" },
+  tell_user: { icon: ChatCircleText },
 };
 
 /**
@@ -517,8 +517,11 @@ function InlineToolPill({
   const toolName = canonicalToolName(tool.name);
   const meta = TOOL_META[toolName];
   const ToolIcon = meta?.icon;
-  const toolLabel =
-    (copy.tools as Record<string, string>)[toolName] ?? meta?.zh;
+  // Every TOOL_META name has its label in `copy.tools`; an unknown
+  // tool has neither, and shows its mono name only.
+  const toolLabel = (copy.tools as Record<string, string | undefined>)[
+    toolName
+  ];
   // Browser steps preview the site they touched, read from the results
   // across the session (lib/browser-site.ts) — GA's browser tools take
   // no URL argument, so previewArgs has nothing to offer them. A step

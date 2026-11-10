@@ -12,7 +12,6 @@ export function makeSession(overrides: Partial<Session> = {}): Session {
     createdAt: now,
     updatedAt: now,
     runtimeKind: "external",
-    runtimeLabel: "外部 GA",
     gaRuntimeKind: "external",
     ...overrides,
   };

@@ -5,7 +5,6 @@ import {
   type FaceField,
   type FacePose,
   faceAtRest,
-  fieldAt,
   NEUTRAL_POSE,
   poseAt,
 } from "@/lib/assistant-face-motion";
@@ -437,13 +436,4 @@ function segmentEase(
     if (before === t0) return keys[i].ease;
   }
   return "linear";
-}
-
-/** For tests and the harness: a field of a beat at a moment, as drawn. */
-export function displayedField(
-  beat: FaceBeat,
-  field: FaceField,
-  ms: number,
-): number {
-  return displayPose({ ...beat.end, [field]: fieldAt(beat, field, ms) })[field];
 }

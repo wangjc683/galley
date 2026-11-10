@@ -175,7 +175,6 @@ interface UiActions {
   /** Backspace in the empty input, or the scope's ×: back to ⌘K. */
   dropPaletteScope: () => void;
   setSettingsOpen: (o: boolean) => void;
-  toggleSettings: () => void;
 
   pushToast: (e: AppError) => void;
   dismissToast: (id: string) => void;
@@ -245,7 +244,6 @@ export const useUiStore = create<UiStore>((set, get) => ({
   },
   dropPaletteScope: () => set({ paletteScope: null }),
   setSettingsOpen: (o) => set({ settingsOpen: o }),
-  toggleSettings: () => set({ settingsOpen: !get().settingsOpen }),
 
   pushToast: (e) =>
     set((state) => ({

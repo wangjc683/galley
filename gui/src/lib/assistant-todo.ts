@@ -387,26 +387,6 @@ export function scheduleTime(
   );
 }
 
-/** A row's time: a repeating task still to come writes its rule
- * (「每天 08:00」); everything else its instant (「明天 09:00」). */
-export function todoTimeLabel(
-  item: TodoItem,
-  todayStartMs: number,
-  language: ResolvedLanguage,
-  copy: AppCopy,
-): string {
-  const upcoming = item.state === "scheduled" || item.state === "paused";
-  if (
-    item.kind === "task" &&
-    upcoming &&
-    item.repeat &&
-    item.repeat.kind !== "once"
-  ) {
-    return repeatSummary(copy, item.repeat, item.timeOfDay ?? "");
-  }
-  return item.at ? scheduleTime(item.at, todayStartMs, language, copy) : "";
-}
-
 /** A row's state, in words. A task that starts a session runs rather
  * than reminds. */
 export function todoStateLabel(item: TodoItem, copy: AppCopy): string {

@@ -188,18 +188,6 @@ describe("activateSession → Core's ensure_session_runner", () => {
     ).toBe(false);
     // History is Core's to restore: the page sends no load_history.
     expect(pageLoadHistories()).toHaveLength(0);
-
-    // No `ready` will come — a user-visible send goes straight through
-    // (the 30s ready wait would hit `window.setTimeout`, absent here).
-    await useRuntimeStore.getState().sendIPCCommand("s-ens-live", {
-      kind: "user_message",
-      text: "hi",
-      images: [],
-    });
-    expect(calls("send_to_runner")).toContainEqual({
-      sessionId: "s-ens-live",
-      command: { kind: "user_message", text: "hi", images: [] },
-    });
   });
 
   it("a real `ready` only updates the stores — Core replays, not the page", async () => {

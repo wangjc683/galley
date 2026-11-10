@@ -141,9 +141,8 @@ export interface Session {
    */
   selectedLlmDisplayName?: string;
 
-  /** Product-facing runtime ownership labels for CLI / diagnostics. */
+  /** Product-facing runtime ownership label for CLI / diagnostics. */
   runtimeKind: RuntimeKind;
-  runtimeLabel: string;
   /** GenericAgent runtime ownership captured when the session was created. */
   gaRuntimeKind: RuntimeKind;
   /** Stable runtime id for future multi-runtime support. */

@@ -65,7 +65,6 @@ interface AppUpdateStore {
   /** Install the downloaded update and relaunch. */
   restart: () => Promise<void>;
   noteAppLaunched: (currentVersion: string) => Promise<void>;
-  resetError: () => void;
 }
 
 // Emitted by core/src/app_update.rs during `download_app_update`
@@ -210,12 +209,6 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
       await setPref(PREF_LAST_SEEN_VERSION, currentVersion);
     } catch (error) {
       console.warn("[updates] last-seen version persistence failed", error);
-    }
-  },
-
-  resetError: () => {
-    if (get().status.kind === "error") {
-      set({ status: { kind: "idle" } });
     }
   },
 }));

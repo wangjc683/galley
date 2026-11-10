@@ -162,17 +162,6 @@ export function faceAtRest(pose: FacePose): boolean {
   return FACE_REST_FIELDS.every((k) => pose[k] === NEUTRAL_POSE[k]);
 }
 
-/** Whether the figure stands as drawn. */
-export function figureAtRest(pose: FacePose): boolean {
-  return (
-    pose.x === 0 &&
-    pose.y === 0 &&
-    pose.rot === 0 &&
-    pose.sx === 1 &&
-    pose.sy === 1
-  );
-}
-
 export function samePose(a: FacePose, b: FacePose): boolean {
   return FACE_FIELDS.every((k) => a[k] === b[k]);
 }

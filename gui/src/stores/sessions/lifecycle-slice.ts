@@ -236,12 +236,6 @@ export interface SessionLifecycleSlice {
     opts?: { runnerReported?: boolean },
   ) => Promise<void>;
   /**
-   * Used by IPC turn_end handler to refresh `lastStepIndex` on the
-   * session row. In-memory only — transient field, not persisted (see
-   * Session.lastStepIndex doc).
-   */
-  setLastStepIndex: (sessionId: string, step: number) => void;
-  /**
    * Used by the IPC `ready` / `llm_changed` handlers to record whether
    * the live runtime can deliver image attachments. In-memory only —
    * the flag describes the running bridge, not the durable row (see
@@ -502,7 +496,6 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
       createdAt: now,
       updatedAt: now,
       runtimeKind: gaRuntimeKind,
-      runtimeLabel: gaRuntimeKind === "managed" ? "内置内核" : "外部 GA",
       gaRuntimeKind,
       promptProfile,
       reasoningEffort: pendingReasoningEffort ?? null,
@@ -741,20 +734,6 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
     } catch (e) {
       console.debug("[sessions] set_session_llm invoke failed.", e);
     }
-  },
-
-  setLastStepIndex: (sessionId, step) => {
-    set((state) => {
-      const { sessions, changed } = patchSessionInList(
-        state.sessions,
-        sessionId,
-        (s) => {
-          if (s.lastStepIndex === step) return s;
-          return { ...s, lastStepIndex: step };
-        },
-      );
-      return changed ? { sessions } : {};
-    });
   },
 
   setSessionImagesSupported: (sessionId, supported) => {

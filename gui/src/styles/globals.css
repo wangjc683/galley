@@ -223,28 +223,24 @@
   --shadow-button-raised-hover:
     0 2px 0 rgba(31, 27, 23, 0.14), 0 3px 8px rgba(31, 27, 23, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.42);
-  --shadow-button-raised-active: inset 0 1px 3px rgba(31, 27, 23, 0.14);
   --shadow-button-primary:
     0 1px 0 rgba(31, 27, 23, 0.24), 0 2px 6px rgba(31, 27, 23, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   --shadow-button-primary-hover:
     0 2px 0 rgba(31, 27, 23, 0.24), 0 3px 9px rgba(31, 27, 23, 0.14),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --shadow-button-primary-active: inset 0 2px 5px rgba(0, 0, 0, 0.2);
   --shadow-brand-control:
     0 1px 0 rgba(198, 135, 98, 0.3), 0 2px 7px rgba(198, 135, 98, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
   --shadow-brand-control-hover:
     0 2px 0 rgba(198, 135, 98, 0.34), 0 3px 9px rgba(198, 135, 98, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.24);
-  --shadow-brand-control-active: inset 0 2px 5px rgba(31, 27, 23, 0.18);
   --shadow-neutral-control:
     0 1px 0 rgba(31, 27, 23, 0.04), 0 2px 7px rgba(31, 27, 23, 0.07),
     inset 0 1px 0 rgba(255, 255, 255, 0.22);
   --shadow-neutral-control-hover:
     0 2px 0 rgba(31, 27, 23, 0.07), 0 3px 9px rgba(31, 27, 23, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.26);
-  --shadow-neutral-control-active: inset 0 2px 5px rgba(31, 27, 23, 0.12);
   /* Deep contact inset for the pressed (active) state — the gap
      between a raised control and the surface collapses; pairs with a
      ~2px downward translate for perceptible key travel. All `*-hover`
@@ -534,28 +530,24 @@ html[data-theme="dark"] {
   --shadow-button-raised-hover:
     0 2px 0 rgba(229, 232, 236, 0.08), 0 3px 9px rgba(0, 0, 0, 0.3),
     inset 0 1px 0 rgba(229, 232, 236, 0.1);
-  --shadow-button-raised-active: inset 0 1px 3px rgba(0, 0, 0, 0.34);
   --shadow-button-primary:
     0 1px 0 rgba(229, 232, 236, 0.09), 0 2px 8px rgba(0, 0, 0, 0.32),
     inset 0 1px 0 rgba(229, 232, 236, 0.08);
   --shadow-button-primary-hover:
     0 2px 0 rgba(229, 232, 236, 0.1), 0 3px 9px rgba(0, 0, 0, 0.34),
     inset 0 1px 0 rgba(229, 232, 236, 0.1);
-  --shadow-button-primary-active: inset 0 2px 5px rgba(0, 0, 0, 0.44);
   --shadow-brand-control:
     0 1px 0 rgba(226, 174, 141, 0.18), 0 2px 8px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(229, 232, 236, 0.08);
   --shadow-brand-control-hover:
     0 2px 0 rgba(226, 174, 141, 0.22), 0 3px 9px rgba(0, 0, 0, 0.32),
     inset 0 1px 0 rgba(229, 232, 236, 0.1);
-  --shadow-brand-control-active: inset 0 2px 5px rgba(0, 0, 0, 0.38);
   --shadow-neutral-control:
     0 1px 0 rgba(229, 232, 236, 0.05), 0 2px 8px rgba(0, 0, 0, 0.22),
     inset 0 1px 0 rgba(229, 232, 236, 0.07);
   --shadow-neutral-control-hover:
     0 2px 0 rgba(229, 232, 236, 0.07), 0 3px 9px rgba(0, 0, 0, 0.26),
     inset 0 1px 0 rgba(229, 232, 236, 0.09);
-  --shadow-neutral-control-active: inset 0 2px 5px rgba(0, 0, 0, 0.34);
   --shadow-control-press: inset 0 3px 7px rgba(0, 0, 0, 0.5);
   --shadow-float: 0 10px 24px rgba(0, 0, 0, 0.38);
   --shadow-float-hover: 0 12px 30px rgba(0, 0, 0, 0.46);
@@ -1103,36 +1095,6 @@ code {
   }
 }
 
-/* Browser Control is a core managed-runtime setup item. While it is
-   missing, the TopBar badge jumps periodically so the incomplete state is
-   difficult to ignore without falling back to a modal interruption. */
-@keyframes browser-control-attention {
-  0%,
-  70%,
-  100% {
-    transform: translateY(0) scale(1);
-    box-shadow: 0 0 0 0 rgba(191, 122, 31, 0);
-    filter: none;
-  }
-  76% {
-    transform: translateY(-2px) scale(1.015);
-    box-shadow: 0 0 0 4px rgba(191, 122, 31, 0.12);
-    filter: drop-shadow(0 0 4px rgba(191, 122, 31, 0.18));
-  }
-  82% {
-    transform: translateY(0) scale(1);
-    box-shadow: 0 0 0 1px rgba(191, 122, 31, 0.08);
-  }
-  88% {
-    transform: translateY(-1px) scale(1.01);
-    box-shadow: 0 0 0 3px rgba(191, 122, 31, 0.1);
-    filter: drop-shadow(0 0 3px rgba(191, 122, 31, 0.14));
-  }
-}
-.browser-control-attention {
-  animation: browser-control-attention 4.4s ease-in-out infinite;
-}
-
 /* Sidebar session rows show liveness, not completion percentage. The
    rail breathes while a session is running; each completed GA step
    remounts the tick layer for one soft flash. */
@@ -1439,7 +1401,6 @@ code {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .browser-control-attention,
   .sidebar-liveness-rail,
   .sidebar-liveness-tick,
   .sidebar-step-tick,

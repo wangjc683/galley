@@ -179,8 +179,6 @@ export function sessionFromBrief(b: SessionBriefWire): Session {
     selectedLlmKey: b.selectedLlmKey ?? undefined,
     selectedLlmDisplayName: b.selectedLlmDisplayName ?? undefined,
     runtimeKind: b.runtimeKind ?? gaRuntimeKind,
-    runtimeLabel:
-      b.runtimeLabel ?? (gaRuntimeKind === "managed" ? "内置内核" : "外部 GA"),
     gaRuntimeKind,
     gaRuntimeId: b.gaRuntimeId ?? undefined,
     promptProfile: b.promptProfile ?? undefined,

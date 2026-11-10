@@ -22,7 +22,6 @@ import {
   todoFailureKind,
   todoRowTarget,
   todoStateLabel,
-  todoTimeLabel,
   todoToastTitle,
   TODO_REFRESH_EVENTS,
   TODO_TOAST_TITLE_CHARS,
@@ -94,55 +93,6 @@ function task(extra: Partial<ScheduledTask> = {}): ScheduledTask {
     ...extra,
   };
 }
-
-describe("a row's time", () => {
-  it("writes a one-off's instant with a day word, a weekday or a date", () => {
-    const at = (iso: string) =>
-      todoTimeLabel(item({ at: iso }), TODAY, "zh-CN", zh);
-    expect(at(local(2026, 10, 16, 21, 40))).toBe("今天 21:40");
-    expect(at(local(2026, 10, 17, 9, 0))).toBe("明天 09:00");
-    expect(at(local(2026, 10, 20, 9, 0))).toBe("周二 09:00");
-    expect(at(local(2026, 10, 30, 9, 0))).toBe("10月30日 09:00");
-  });
-
-  it("writes a repeating task's rule while it is still to come", () => {
-    const daily = item({
-      repeat: { kind: "daily" },
-      timeOfDay: "08:00",
-      at: local(2026, 10, 17, 8, 0),
-    });
-    expect(todoTimeLabel(daily, TODAY, "zh-CN", zh)).toBe("每天 08:00");
-    expect(
-      todoTimeLabel(
-        { ...daily, state: "paused", at: undefined },
-        TODAY,
-        "zh-CN",
-        zh,
-      ),
-    ).toBe("每天 08:00");
-    expect(todoTimeLabel(daily, TODAY, "en-US", en)).toBe("Daily 08:00");
-    // Its last run (最近做完): the instant.
-    const ran = {
-      ...daily,
-      state: "fired" as const,
-      at: local(2026, 10, 16, 8, 0),
-    };
-    expect(todoTimeLabel(ran, TODAY, "zh-CN", zh)).toBe("今天 08:00");
-  });
-
-  it("writes a subtask's latest activity, yesterday included", () => {
-    const sub = item({
-      kind: "subtask",
-      state: "running",
-      at: local(2026, 10, 15, 22, 5),
-      repeat: undefined,
-    });
-    expect(todoTimeLabel(sub, TODAY, "zh-CN", zh)).toBe("昨天 22:05");
-    expect(todoTimeLabel(sub, TODAY, "en-US", en).replace(/\s/g, " ")).toBe(
-      "Yesterday 10:05 PM",
-    );
-  });
-});
 
 describe("a row's state", () => {
   it("reminds or runs by what a fire does", () => {

@@ -7,7 +7,7 @@ import { logPerf, perfNow } from "@/lib/perf";
 import { isWindows } from "@/lib/platform";
 import { findCandidateByAlias } from "@/lib/python-probe";
 import { usePrefsStore } from "@/stores/prefs";
-import type { IPCCommand, IPCEvent, ReadyEvent } from "@/types/ipc";
+import type { IPCEvent, ReadyEvent } from "@/types/ipc";
 import type { RuntimeKind } from "@/types/session";
 
 /**
@@ -87,8 +87,6 @@ export interface BridgeSpawnArgs {
 export interface BridgeClient {
   /** Subprocess pid. Resolved after spawn(). */
   pid: number;
-  /** Send an IPCCommand to bridge stdin. */
-  send(cmd: IPCCommand): Promise<void>;
   /** Send {kind: "shutdown"} and wait for close. Rust force-kills if hung. */
   shutdown(timeoutMs?: number): Promise<void>;
 }
@@ -376,20 +374,6 @@ export async function spawnBridge(
 
   return {
     pid,
-    send: async (cmd) => {
-      try {
-        await invoke("send_to_runner", { sessionId, command: cmd });
-      } catch (e) {
-        const msg = formatInvokeError(e);
-        // Don't re-throw via the error handler — `send` is awaited by
-        // callers (e.g. composer submit) and the failure is best
-        // surfaced as an Error they can catch directly. Same rationale
-        // as spawn's catch: `msg` already contains the extracted
-        // discriminant + detail; attaching `cause` would be redundant.
-        // eslint-disable-next-line preserve-caught-error
-        throw new Error(msg);
-      }
-    },
     shutdown: async (timeoutMs = 3000) => {
       try {
         await invoke("shutdown_runner", { sessionId, timeoutMs });
@@ -461,15 +445,6 @@ async function listenToRunner(
 
   const clientFor = (pid: number): BridgeClient => ({
     pid,
-    send: async (cmd) => {
-      try {
-        await invoke("send_to_runner", { sessionId, command: cmd });
-      } catch (e) {
-        const msg = formatInvokeError(e);
-        // eslint-disable-next-line preserve-caught-error
-        throw new Error(msg);
-      }
-    },
     shutdown: async (timeoutMs = 3000) => {
       try {
         await invoke("shutdown_runner", { sessionId, timeoutMs });

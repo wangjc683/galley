@@ -57,7 +57,6 @@ function eventRow(
     selectedLlmKey: s.selectedLlmKey ?? null,
     selectedLlmDisplayName: s.selectedLlmDisplayName ?? null,
     runtimeKind: s.runtimeKind,
-    runtimeLabel: s.runtimeLabel,
     gaRuntimeKind: s.gaRuntimeKind,
     gaRuntimeId: s.gaRuntimeId ?? null,
     promptProfile: s.promptProfile ?? null,
@@ -767,13 +766,7 @@ describe("Core row events", () => {
 
 describe("the page sends no set_llm itself", () => {
   it("a pick reaches the runner through Core's set_session_llm", async () => {
-    let bridgeCommands = 0;
     seed([makeSession({ selectedLlmIndex: 1, selectedLlmKey: "b" })], "s-test");
-    useRuntimeStore.setState({
-      sendIPCCommand: async () => {
-        bridgeCommands += 1;
-      },
-    });
     useRuntimeStore.getState().ensureRuntime("s-test", {
       cachedLLMs: [
         { index: 0, key: "a", displayName: "A", isCurrent: false },
@@ -786,7 +779,7 @@ describe("the page sends no set_llm itself", () => {
     useRuntimeStore.getState().selectLLMForSession("s-test", 1);
     await Promise.resolve();
 
-    expect(bridgeCommands).toBe(0);
+    expect(invokesOf("send_to_runner")).toHaveLength(0);
     expect(invokesOf("set_session_llm")).toEqual([
       [
         "set_session_llm",
