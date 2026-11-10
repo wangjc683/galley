@@ -662,6 +662,34 @@ async fn a_next_reminder_whose_time_has_passed_is_not_hung() {
         .unwrap();
     assert_eq!(next.due.as_ref().unwrap().date, ymd(day(2)));
     assert!(next.reminder.is_none());
+    // Left unticked, the sweep hangs it one (behaviour 13): not its own
+    // (thirty days back), the first of the rule's later days' still ahead.
+    // Late tonight, tomorrow's day-31 period's reminder is the first.
+    let tonight = utc(&instant(day(0), 23, 0));
+    assert_eq!(
+        galley
+            .rearm_unsettled_period_reminders(tonight, &Local)
+            .await
+            .unwrap(),
+        1
+    );
+    let hung = galley.todo(next.id.as_str()).await.unwrap();
+    assert_eq!(hung.reminder.as_ref().unwrap().at, instant(day(1), 10, 0));
+    assert_eq!(hung.updated_at, hung.created_at, "hanging it is no move");
+    // A second sweep makes nothing more.
+    assert_eq!(
+        galley
+            .rearm_unsettled_period_reminders(tonight, &Local)
+            .await
+            .unwrap(),
+        0
+    );
+    let tasks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM scheduled_tasks WHERE todo_id = ?")
+        .bind(next.id.as_str())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(tasks, 1);
 }
 
 // ---------------- ending the rule ----------------
@@ -1500,4 +1528,249 @@ async fn the_scheduler_arms_them_again_only_while_there_is_an_assistant() {
         *rec.events.lock().unwrap(),
         [SCHEDULED_TASKS_CHANGED_EVENT, TODOS_CHANGED_EVENT]
     );
+}
+
+#[tokio::test]
+async fn a_period_first_looked_at_on_a_later_rule_day_rings_that_day() {
+    let (_pool, galley) = with_main_chat().await;
+    // Weekly, reminded the same day at 09:00; the period rang on its day
+    // and the computer stays off until the next of the rule's days, opened
+    // at 08:00: that morning's ring, not the week after's.
+    let report = galley
+        .create_todo(
+            CreateTodoInput {
+                title: "交周报".into(),
+                due: Some(ymd(day(2))),
+                remind_at: Some(local(day(2), 9, 0)),
+                repeat: Some(weekly_on(day(2))),
+                ..CreateTodoInput::default()
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .unwrap();
+    let task = report.reminder.clone().unwrap().task_id;
+    ring(
+        &galley,
+        &task,
+        utc(&instant(day(2), 9, 1)),
+        ScheduledWake::Delivered,
+    )
+    .await;
+    let opened = utc(&instant(day(9), 8, 0));
+    assert_eq!(
+        galley
+            .rearm_unsettled_period_reminders(opened, &Local)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        reminder_task(&galley, &task).await.fire_at.as_deref(),
+        Some(instant(day(9), 9, 0).as_str())
+    );
+    // Daily: rang on its day, first looked at the next morning before
+    // 09:00: that day's 09:00.
+    let pills = galley
+        .create_todo(
+            CreateTodoInput {
+                title: "吃药".into(),
+                due: Some(ymd(day(2))),
+                remind_at: Some(local(day(2), 9, 0)),
+                repeat: Some(daily()),
+                ..CreateTodoInput::default()
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .unwrap();
+    let pills_task = pills.reminder.clone().unwrap().task_id;
+    ring(
+        &galley,
+        &pills_task,
+        utc(&instant(day(2), 9, 1)),
+        ScheduledWake::Delivered,
+    )
+    .await;
+    let morning = utc(&instant(day(3), 7, 30));
+    assert_eq!(
+        galley
+            .rearm_unsettled_period_reminders(morning, &Local)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        reminder_task(&galley, &pills_task).await.fire_at.as_deref(),
+        Some(instant(day(3), 9, 0).as_str())
+    );
+}
+
+#[tokio::test]
+async fn a_period_left_with_no_reminder_gets_one_and_one_removed_gets_none() {
+    let (pool, galley) = with_main_chat().await;
+    // Weekly, reminded the evening before at 20:00.
+    let first = galley
+        .create_todo(
+            CreateTodoInput {
+                title: "交周报".into(),
+                due: Some(ymd(day(3))),
+                remind_at: Some(local(day(2), 20, 0)),
+                repeat: Some(weekly_on(day(3))),
+                ..CreateTodoInput::default()
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .unwrap();
+    let next = galley
+        .complete_todo_with_next(&id(&first), assistant())
+        .await
+        .unwrap()
+        .next
+        .unwrap();
+    assert_eq!(next.due.as_ref().unwrap().date, ymd(day(10)));
+    // Core stopped between making it and hanging its reminder: no task
+    // row for it at all.
+    sqlx::query("DELETE FROM scheduled_tasks WHERE todo_id = ?")
+        .bind(next.id.as_str())
+        .execute(&pool)
+        .await
+        .unwrap();
+    // Its own reminder time still ahead: its own.
+    let now = Utc::now();
+    assert_eq!(
+        galley
+            .rearm_unsettled_period_reminders(now, &Local)
+            .await
+            .unwrap(),
+        1
+    );
+    let hung = galley.todo(next.id.as_str()).await.unwrap();
+    let reminder = hung.reminder.clone().unwrap();
+    assert_eq!(reminder.at, instant(day(9), 20, 0));
+    let task = reminder_task(&galley, &reminder.task_id).await;
+    assert_eq!(
+        task.origin.as_ref().unwrap().supervisor.as_deref(),
+        Some(REPEAT_SUPERVISOR)
+    );
+    // Two sweeps in a row make one task.
+    assert_eq!(
+        galley
+            .rearm_unsettled_period_reminders(now, &Local)
+            .await
+            .unwrap(),
+        0
+    );
+    let tasks: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM scheduled_tasks WHERE todo_id = ?")
+        .bind(next.id.as_str())
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(tasks, 1);
+    // Its own time gone by the time it is looked at (made Sunday 21:00
+    // for Monday): the following Sunday's ring.
+    sqlx::query("DELETE FROM scheduled_tasks WHERE todo_id = ?")
+        .bind(next.id.as_str())
+        .execute(&pool)
+        .await
+        .unwrap();
+    let late = utc(&instant(day(9), 21, 0));
+    assert_eq!(
+        galley
+            .rearm_unsettled_period_reminders(late, &Local)
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        galley
+            .todo(next.id.as_str())
+            .await
+            .unwrap()
+            .reminder
+            .unwrap()
+            .at,
+        instant(day(16), 20, 0)
+    );
+    // A period whose reminder was let go (ticked, its reminder released,
+    // then unticked): a cancelled task is a removal, nothing is made.
+    let reopened = galley.reopen_todo(&id(&first), assistant()).await.unwrap();
+    assert!(reopened.reminder.is_none());
+    let before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM scheduled_tasks")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        galley
+            .rearm_unsettled_period_reminders(late, &Local)
+            .await
+            .unwrap(),
+        0
+    );
+    let after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM scheduled_tasks")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(after, before);
+    assert!(galley
+        .todo(first.id.as_str())
+        .await
+        .unwrap()
+        .reminder
+        .is_none());
+}
+
+#[tokio::test]
+async fn hanging_or_arming_a_reminder_leaves_the_period_unmoved() {
+    let (_pool, galley) = with_main_chat().await;
+    let pills = galley
+        .create_todo(
+            CreateTodoInput {
+                title: "吃药".into(),
+                due: Some(ymd(day(1))),
+                remind_at: Some(local(day(1), 9, 0)),
+                repeat: Some(daily()),
+                ..CreateTodoInput::default()
+            },
+            assistant(),
+            None,
+        )
+        .await
+        .unwrap();
+    // The next period, with its reminder hung after the settling commit.
+    let next = galley
+        .complete_todo_with_next(&id(&pills), assistant())
+        .await
+        .unwrap()
+        .next
+        .unwrap();
+    let read = galley.todo(next.id.as_str()).await.unwrap();
+    let task = read.reminder.clone().expect("its own reminder").task_id;
+    assert_eq!(read.updated_at, read.created_at);
+    // Its reminder rings, is delivered, and is armed again: still unmoved.
+    let now = utc(&instant(day(2), 9, 1));
+    ring(&galley, &task, now, ScheduledWake::Delivered).await;
+    assert_eq!(
+        galley
+            .rearm_unsettled_period_reminders(now, &Local)
+            .await
+            .unwrap(),
+        1
+    );
+    let read = galley.todo(next.id.as_str()).await.unwrap();
+    assert_eq!(read.updated_at, read.created_at);
+    // So the morning review, its day already seen, does not count it as
+    // moved.
+    let list = assistant_todo(&galley, &RunnerManager::new(), now)
+        .await
+        .unwrap();
+    let last = galley_core_lib::assistant_todo::LastReview::read(
+        Some(&instant_to_utc_iso(&(now - Duration::hours(1)))),
+        &Local,
+    );
+    assert!(!list.review_has_something_to_look_at(now.with_timezone(&Local).date_naive(), last));
 }

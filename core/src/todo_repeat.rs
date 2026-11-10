@@ -316,6 +316,51 @@ pub fn period_on<Tz: TimeZone>(
     NextPeriod { due, remind_at }
 }
 
+/// The first reminder time still after `now` for a period due on
+/// `due_day` that is left unsettled (main chat ticket 154 behaviour 13):
+/// with `own`, the period's own reminder time first; then the reminder
+/// times of the rule's days after `due_day`, in order. Each day's
+/// reminder is `remind` from it, read in `tz`. The days whose reminder
+/// falls on a day before today are passed over at once (their time is
+/// past whatever it is), so a period overdue for a long time costs no
+/// long walk; `None` only when the rule gives none within the bound.
+pub fn next_reminder_ahead<Tz: TimeZone>(
+    rule: &RepeatRule,
+    due_day: NaiveDate,
+    time_of_day: Option<NaiveTime>,
+    remind: RemindOffset,
+    own: bool,
+    now: DateTime<Utc>,
+    tz: &Tz,
+) -> Option<DateTime<Utc>> {
+    let reminder_of = |day: NaiveDate| {
+        period_on(day, time_of_day, Some(remind), tz)
+            .remind_at
+            .filter(|at| *at > now)
+    };
+    if own {
+        if let Some(at) = reminder_of(due_day) {
+            return Some(at);
+        }
+    }
+    // A day whose reminder falls before today: its time is past. The
+    // first that may still be ahead is due `days_before` days from today.
+    let today = now.with_timezone(tz).date_naive();
+    let floor = today
+        .checked_add_signed(Duration::days(
+            remind.days_before.clamp(-100_000, 100_000) - 1,
+        ))
+        .unwrap_or(due_day);
+    let mut day = rule.next_after(due_day.max(floor));
+    for _ in 0..800 {
+        if let Some(at) = reminder_of(day) {
+            return Some(at);
+        }
+        day = rule.next_after(day);
+    }
+    None
+}
+
 /// `HH:MM` as stored (`time_of_day`, `remind_time`).
 pub fn hhmm(time: NaiveTime) -> String {
     time.format("%H:%M").to_string()
@@ -641,6 +686,90 @@ mod tests {
         // A reminder after the due day reads below zero.
         let offset = remind_offset(&monday, utc("2026-11-17T01:00:00Z"), &Shanghai);
         assert_eq!(offset.days_before, -1);
+    }
+
+    #[test]
+    fn an_unsettled_period_is_reminded_at_the_first_time_still_ahead() {
+        let at = |day: NaiveDate, h: u32| {
+            resolve_wall_clock(&Shanghai, day.and_hms_opt(h, 0, 0).unwrap()).with_timezone(&Utc)
+        };
+        let nine = RemindOffset {
+            days_before: 0,
+            time: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+        };
+        // Weekly on Monday, reminded that day at 09:00; the period due Mon
+        // Nov 9 rang that day, and the computer opens next Monday at
+        // 08:00: today's ring, not next week's.
+        let mondays = rule(TodoRepeatKind::Weekly, 1, &[1], day(2026, 11, 9));
+        let next =
+            |due, own, now| next_reminder_ahead(&mondays, due, None, nine, own, now, &Shanghai);
+        assert_eq!(
+            next(day(2026, 11, 9), false, at(day(2026, 11, 16), 8)),
+            Some(at(day(2026, 11, 16), 9))
+        );
+        // At 10:00 it has passed: the Monday after.
+        assert_eq!(
+            next(day(2026, 11, 9), false, at(day(2026, 11, 16), 10)),
+            Some(at(day(2026, 11, 23), 9))
+        );
+        // Right after the ring on its own day: next Monday.
+        assert_eq!(
+            next(day(2026, 11, 9), false, at(day(2026, 11, 9), 9)),
+            Some(at(day(2026, 11, 16), 9))
+        );
+        // Its own time first, when asked and still ahead.
+        assert_eq!(
+            next(day(2026, 11, 16), true, at(day(2026, 11, 16), 8)),
+            Some(at(day(2026, 11, 16), 9))
+        );
+        assert_eq!(
+            next(day(2026, 11, 16), false, at(day(2026, 11, 16), 8)),
+            Some(at(day(2026, 11, 23), 9))
+        );
+        // Daily: rang on day D, first looked at on D+1 before 09:00.
+        let daily = rule(TodoRepeatKind::Daily, 1, &[], day(2026, 11, 1));
+        assert_eq!(
+            next_reminder_ahead(
+                &daily,
+                day(2026, 11, 10),
+                None,
+                nine,
+                false,
+                at(day(2026, 11, 11), 7),
+                &Shanghai
+            ),
+            Some(at(day(2026, 11, 11), 9))
+        );
+        // Overdue a long time: no long walk, the next one ahead.
+        assert_eq!(
+            next_reminder_ahead(
+                &daily,
+                day(2020, 1, 1),
+                None,
+                nine,
+                false,
+                at(day(2026, 11, 11), 10),
+                &Shanghai
+            ),
+            Some(at(day(2026, 11, 12), 9))
+        );
+        // Reminded the evening before: Sunday 20:00 for Monday.
+        let eve = RemindOffset {
+            days_before: 1,
+            time: NaiveTime::from_hms_opt(20, 0, 0).unwrap(),
+        };
+        let at_eve =
+            |now| next_reminder_ahead(&mondays, day(2026, 11, 16), None, eve, true, now, &Shanghai);
+        // Made on Sunday at 21:00, its own eve gone: the next Sunday's.
+        assert_eq!(
+            at_eve(at(day(2026, 11, 15), 21)),
+            Some(at(day(2026, 11, 22), 20))
+        );
+        // Made on Sunday at 19:00: its own eve still ahead.
+        assert_eq!(
+            at_eve(at(day(2026, 11, 15), 19)),
+            Some(at(day(2026, 11, 15), 20))
+        );
     }
 
     #[test]

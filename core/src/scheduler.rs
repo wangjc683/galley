@@ -79,9 +79,10 @@
 //! Main chat ticket 154 (PRD ruling 204): every tick first reminds again
 //! of the periods of repeating to-dos left unsettled
 //! ([`rearm_unsettled_periods`]): a period's reminder that went off and
-//! reached an outcome is armed again, the same task, for the time of the
-//! rule's next day. The next period itself is never made here: ticking a
-//! period off or skipping it makes it, in the same write.
+//! reached an outcome is armed again, the same task, for the first
+//! reminder time still ahead of the rule's later days, and a period that
+//! never got a reminder gets one. The next period itself is never made
+//! here: ticking a period off or skipping it makes it, in the same write.
 //!
 //! Main chat ticket 144 (PRD ruling 193 point 5): the tick is also the
 //! clock of the subtask reports held for their batch
@@ -371,8 +372,9 @@ pub async fn drop_reminders_of_closed_todos<T>(
 /// chat ticket 154 behaviour 13,
 /// [`SqliteGalley::rearm_unsettled_period_reminders`]): each period still
 /// open whose reminder went off and reached the assistant (or a
-/// notification) gets that same reminder at the time of the rule's next
-/// day. Only while there is an assistant (the managed runtime with its main
+/// notification) gets that same reminder at the first reminder time still
+/// ahead of the rule's days after its due day, and one that never got a
+/// reminder gets one. Only while there is an assistant (the managed runtime with its main
 /// chat): to-dos are its, and the external runtime is left as it is. The
 /// next period is never made here; this moves a reminder, nothing more.
 /// The desktop hears of a reminder moved; a failure is logged.

@@ -61,12 +61,14 @@ everything else goes through Galley, which uses these commands.
   to-do. A repeating to-do needs a due date (`repeat_needs_due:`). A
   period left unsettled is reminded again: once its reminder has gone off
   and reached Galley (or, undelivered, a system notification), Galley
-  Core arms that same reminder (same `taskId`) for the reminder time of
-  the rule's next day after the later of today and the period's due day
-  — the first whose time is still ahead. The period keeps its due date
-  (overdue) and no to-do is made; a reminder removed (`--no-remind`, the
-  desktop's 「取消提醒」) or paused is not armed again, and a settled period's
-  is let go as before.
+  Core arms that same reminder (same `taskId`) for the first reminder time
+  still ahead among the rule's days after the period's own due day. A
+  period of a rule with a reminder that has none at all (made after its
+  reminder time had passed) gets one the same way, its own reminder time
+  first while it is still ahead. The period keeps its due date (overdue)
+  and no to-do is made; a reminder removed (`--no-remind`, the desktop's
+  「取消提醒」, or let go by a tick before an untick) or paused is not armed
+  again, and a settled period's is let go as before.
 - **Where it lives**: to-dos belong to the assistant. Every write needs the
   managed runtime with its main chat; under an attached external GA the
   writes are refused (`assistant_unavailable:`) and the reads still answer.

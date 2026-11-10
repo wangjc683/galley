@@ -22,8 +22,8 @@ use crate::api::todo::{
     TodoSubitemId, NOT_REPEATING, REPEAT_NEEDS_DUE, REPEAT_SUPERVISOR,
 };
 use crate::todo_repeat::{
-    due_time_of_day, hhmm, next_due_day, parse_hhmm, period_on, remind_offset, RemindOffset,
-    RepeatRule,
+    due_time_of_day, hhmm, next_due_day, next_reminder_ahead, parse_hhmm, period_on, remind_offset,
+    RemindOffset, RepeatRule,
 };
 
 use super::helpers::origin_from_stored;
@@ -223,6 +223,17 @@ struct MadePeriod {
     id: String,
     title: String,
     remind_at: Option<DateTime<Utc>>,
+}
+
+/// An open period of a rule with a reminder
+/// ([`SqliteGalley::rearm_unsettled_period_reminders`]).
+#[derive(Debug, FromRow)]
+struct UnsettledPeriod {
+    id: String,
+    title: String,
+    due_date: Option<String>,
+    due_at: Option<String>,
+    series_id: String,
 }
 
 /// Who made a period (main chat ticket 154): Core, from its rule.
@@ -1209,24 +1220,30 @@ impl SqliteGalley {
     /// as Galley's are made ([`Self::set_todo_reminder`]), recorded as
     /// Core's ([`REPEAT_SUPERVISOR`]). None when its time is not after
     /// `now`, and none, logged, when it cannot be made: the period stands.
-    async fn hang_period_reminder(&self, made: &MadePeriod, now: DateTime<Utc>) {
+    /// `true` when it was made. It writes the reminder's task alone: the
+    /// period's `updated_at` stays its `created_at`, which the morning
+    /// review reads as "not moved" ([`crate::assistant_todo`]).
+    async fn hang_period_reminder(&self, made: &MadePeriod, now: DateTime<Utc>) -> bool {
         let Some(at) = made.remind_at else {
-            return;
+            return false;
         };
         if at <= now {
-            return;
+            return false;
         }
         let raw = instant_to_utc_iso(&at);
         match self
             .set_todo_reminder(&made.id, &made.title, &raw, &repeat_origin())
             .await
         {
-            Ok(()) => {}
-            Err(GalleyError::InvalidArgs { message }) if message.starts_with(TIME_IN_PAST) => {}
-            Err(e) => eprintln!(
-                "[db] todo {}: the reminder of the next period was not made: {e:?}",
-                made.id
-            ),
+            Ok(()) => true,
+            Err(GalleyError::InvalidArgs { message }) if message.starts_with(TIME_IN_PAST) => false,
+            Err(e) => {
+                eprintln!(
+                    "[db] todo {}: the reminder of the period was not made: {e:?}",
+                    made.id
+                );
+                false
+            }
         }
     }
 
@@ -1235,54 +1252,58 @@ impl SqliteGalley {
     /// period comes only when this one is settled, so a weekly report
     /// handed in but not ticked off, or one day of a daily to-do missed,
     /// would never ring again. For each period still open of a rule that
-    /// has not ended and carries a reminder, whose own reminder task is
-    /// still there (not cancelled), enabled, a one-off that went off for
-    /// its time and whose wake reached an outcome — delivered to the
-    /// assistant, or turned into a system notification — that same task is
-    /// armed again ([`Self::update_scheduled_task_db`], its `fireAt`) at the
-    /// reminder time of the rule's next day: the rule's first day after the
-    /// later of today in `tz` and the period's due day, or the day after
-    /// that one while its reminder time is not after `now`. The period
-    /// itself stays as it is (its due date, overdue); no row is made.
+    /// has not ended and carries a reminder:
     ///
-    /// Nothing else is touched: a period settled or deleted, a rule ended,
-    /// a reminder the user or Galley removed (its task cancelled: none is
-    /// made again; the next period still gets its own), one paused, one
-    /// not gone off yet, and one whose wake is still pending. A function of
-    /// what the database holds at `now`: run twice, the second arms
-    /// nothing (the task armed again has not gone off for its new time).
-    /// The scheduler runs it on every tick
+    /// - Its own reminder task still there (not cancelled), enabled, a
+    ///   one-off that went off for its time and whose wake reached an
+    ///   outcome — delivered to the assistant, or turned into a system
+    ///   notification: that same task is armed again
+    ///   ([`Self::update_scheduled_task_db`], its `fireAt`) at the first
+    ///   reminder time still after `now` of the rule's days after the
+    ///   period's own due day ([`next_reminder_ahead`]).
+    /// - No reminder task with its `todo_id` at all, cancelled ones
+    ///   counted (the period was made after its reminder time had passed,
+    ///   or Core stopped between making it and hanging its reminder): one
+    ///   is hung as a settled period's next gets its own
+    ///   ([`Self::hang_period_reminder`]), at the period's own reminder
+    ///   time when it is still ahead, else the first of the rule's later
+    ///   days'.
+    ///
+    /// The period itself stays as it is (its due date, overdue); no row of
+    /// it is made. Nothing else is touched: a period settled or deleted, a
+    /// rule ended, a reminder the user or Galley removed (its task
+    /// cancelled, a tick's release followed by an untick included: none
+    /// is made again; the next period still gets its own), one paused,
+    /// one not gone off yet, and one whose wake is still pending. A
+    /// function of what the database holds at `now`: run twice, the second
+    /// does nothing (a task armed again has not gone off for its new time;
+    /// a task hung is a row). The scheduler runs it on every tick
     /// ([`crate::scheduler::rearm_unsettled_periods`]). Returns how many
-    /// it armed; a period whose reminder cannot be armed is logged and
-    /// skipped.
+    /// reminders it armed or hung; a period whose reminder cannot be is
+    /// logged and skipped.
     pub async fn rearm_unsettled_period_reminders<Tz: TimeZone>(
         &self,
         now: DateTime<Utc>,
         tz: &Tz,
     ) -> Result<u32> {
-        let rows: Vec<(String, Option<String>, Option<String>, String)> = sqlx::query_as(
-            "SELECT t.id, t.due_date, t.due_at, t.series_id FROM todos t \
+        let rows: Vec<UnsettledPeriod> = sqlx::query_as(
+            "SELECT t.id, t.title, t.due_date, t.due_at, t.series_id FROM todos t \
              JOIN todo_series s ON s.id = t.series_id \
              WHERE t.done_at IS NULL AND t.cancelled_at IS NULL AND s.ended_at IS NULL \
                AND s.remind_days_before IS NOT NULL AND s.remind_time IS NOT NULL \
-               AND EXISTS (SELECT 1 FROM scheduled_tasks k \
-                   WHERE k.todo_id = t.id AND k.cancelled_at IS NULL \
-                     AND k.last_wake IN ('delivered', 'notified')) \
              ORDER BY t.created_at, t.id",
         )
         .fetch_all(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
         let mut armed = 0;
-        for (todo_id, due_date, due_at, series_id) in rows {
-            match self
-                .rearm_period_reminder(&todo_id, due_date, due_at, &series_id, now, tz)
-                .await
-            {
+        for period in rows {
+            match self.remind_unsettled_period(&period, now, tz).await {
                 Ok(true) => armed += 1,
                 Ok(false) => {}
                 Err(e) => eprintln!(
-                    "[db] todo {todo_id}: reminding again of the unsettled period failed: {e:?}"
+                    "[db] todo {}: reminding again of the unsettled period failed: {e:?}",
+                    period.id
                 ),
             }
         }
@@ -1290,17 +1311,46 @@ impl SqliteGalley {
     }
 
     /// One period of [`Self::rearm_unsettled_period_reminders`]: `true`
-    /// when its reminder was armed again.
-    async fn rearm_period_reminder<Tz: TimeZone>(
+    /// when its reminder was armed again or hung.
+    async fn remind_unsettled_period<Tz: TimeZone>(
         &self,
-        todo_id: &str,
-        due_date: Option<String>,
-        due_at: Option<String>,
-        series_id: &str,
+        period: &UnsettledPeriod,
         now: DateTime<Utc>,
         tz: &Tz,
     ) -> Result<bool> {
-        let Some(task) = self.todo_reminder_task(todo_id).await? else {
+        let Some(series) = fetch_series(&self.pool, &period.series_id).await? else {
+            return Ok(false);
+        };
+        let Some(remind) = series.remind() else {
+            return Ok(false);
+        };
+        if series.ended() {
+            return Ok(false);
+        }
+        let rule = series.rule()?;
+        let due_day =
+            StoredDue::from_columns(period.due_date.as_deref(), period.due_at.as_deref())?
+                .map(|due| due.local_date(tz))
+                .unwrap_or_else(|| now.with_timezone(tz).date_naive());
+        let tasks: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM scheduled_tasks WHERE todo_id = ?")
+                .bind(&period.id)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(map_sqlx_err)?;
+        if tasks == 0 {
+            // Never hung: its own time first.
+            let remind_at =
+                next_reminder_ahead(&rule, due_day, series.time_of_day(), remind, true, now, tz);
+            let made = MadePeriod {
+                id: period.id.clone(),
+                title: period.title.clone(),
+                remind_at,
+            };
+            return Ok(self.hang_period_reminder(&made, now).await);
+        }
+        // Removed on purpose (all its tasks cancelled): nothing.
+        let Some(task) = self.todo_reminder_task(&period.id).await? else {
             return Ok(false);
         };
         let spent = task.repeat.is_once()
@@ -1313,34 +1363,9 @@ impl SqliteGalley {
         if !spent {
             return Ok(false);
         }
-        let Some(series) = fetch_series(&self.pool, series_id).await? else {
-            return Ok(false);
-        };
-        let Some(remind) = series.remind() else {
-            return Ok(false);
-        };
-        if series.ended() {
-            return Ok(false);
-        }
-        let rule = series.rule()?;
-        let today = now.with_timezone(tz).date_naive();
-        let due_day = StoredDue::from_columns(due_date.as_deref(), due_at.as_deref())?
-            .map(|due| due.local_date(tz));
-        let mut day = next_due_day(&rule, today, due_day);
-        // The first of the rule's days whose reminder time is still ahead;
-        // bounded, should a rule and its offset never give one.
-        let mut at = None;
-        for _ in 0..800 {
-            let remind_at = period_on(day, series.time_of_day(), Some(remind), tz).remind_at;
-            match remind_at {
-                Some(remind_at) if remind_at > now => {
-                    at = Some(remind_at);
-                    break;
-                }
-                _ => day = rule.next_after(day),
-            }
-        }
-        let Some(at) = at else {
+        let Some(at) =
+            next_reminder_ahead(&rule, due_day, series.time_of_day(), remind, false, now, tz)
+        else {
             return Ok(false);
         };
         let patch = ScheduledTaskPatch {
