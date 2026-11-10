@@ -175,9 +175,14 @@ jobs:
         shell: bash
         run: mkdir -p core/python-bundle/python
 
+      - name: Setup Node (for the CLI sidecar script)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
       - name: Prepare CLI sidecar (for cargo check)
         shell: bash
-        run: ./scripts/prepare-cli-sidecar.sh --profile debug --target ${{ matrix.target }}
+        run: node scripts/prepare-cli-sidecar.mjs --profile debug --target ${{ matrix.target }}
 
       - name: Install Rosetta 2 (x86_64 tests on arm64 host)
         if: matrix.target == 'x86_64-apple-darwin'

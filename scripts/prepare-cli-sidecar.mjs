@@ -3,13 +3,11 @@
 // Build the Galley CLI and copy it to the target-triple-suffixed filename
 // Tauri expects for bundle.externalBin.
 //
-// Cross-platform port of scripts/prepare-cli-sidecar.sh: the bash version
-// cannot run as a Tauri beforeDevCommand / beforeBuildCommand on Windows
-// (cmd has no `./script.sh`), which broke the documented local Windows
-// build fallback. Node is already required by the frontend toolchain, so
-// this version runs everywhere. CI (release.yml) keeps calling the .sh in
-// an explicit `shell: bash` step; keep both scripts in sync until CI is
-// switched over.
+// Written in Node, not bash, so it runs everywhere: a bash script cannot
+// run as a Tauri beforeDevCommand / beforeBuildCommand on Windows (cmd has
+// no `./script.sh`). Node is already required by the frontend toolchain.
+// This is the only copy: tauri.conf.json, check.yml and release.yml all
+// call it.
 //
 // Usage:
 //   node scripts/prepare-cli-sidecar.mjs [--profile debug|release] [--target <triple>]

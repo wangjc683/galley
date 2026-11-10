@@ -58,9 +58,9 @@ pnpm --dir gui tauri build
 
 The CLI sidecar prep runs automatically: `tauri.conf.json`'s
 `beforeDevCommand` / `beforeBuildCommand` call the cross-platform
-`scripts/prepare-cli-sidecar.mjs` (ported from the bash-only `.sh` on
-2026-07-22 precisely because cmd cannot run `./script.sh`; CI still uses
-the `.sh` in its `shell: bash` steps — keep both in sync).
+`scripts/prepare-cli-sidecar.mjs` (ported from a bash-only script on
+2026-07-22 precisely because cmd cannot run `./script.sh`; CI calls the
+same `.mjs`, and the bash copy was deleted on 2026-11-10).
 
 The repo is not a pnpm workspace: a plain `pnpm install` at the repo root
 installs nothing for `gui/`, and the build then fails on missing frontend

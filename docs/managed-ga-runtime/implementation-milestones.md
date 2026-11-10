@@ -503,7 +503,7 @@ Current implementation slice:
   recursively rejects generated / local / secret / user-state artifacts.
   It also verifies `state-seed/memory` contains the critical GA memory/SOP
   defaults and does not contain generated long-term memory files.
-- `scripts/prepare-cli-sidecar.sh` builds `galley-cli` for the target triple
+- `scripts/prepare-cli-sidecar.mjs` builds `galley-cli` for the target triple
   and places it at the Tauri `externalBin` source path.
 - `scripts/check-managed-ga-app-bundle.mjs` inspects the finished macOS
   `.app`, including the CLI sibling, managed runtime resources, and memory/SOP

@@ -217,11 +217,6 @@ jobs:
       # 'python-bundle/python' doesn't exist`. Placing this step before
       # the cargo check is therefore load-bearing, not just for the
       # later `tauri build` artifact.
-      - name: Setup Python (for bundle pip install)
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Read bundled-Python version pins
         id: pbs
         shell: bash
@@ -261,7 +256,7 @@ jobs:
 
       - name: Prepare CLI sidecar
         shell: bash
-        run: ./scripts/prepare-cli-sidecar.sh --target ${{ matrix.target }}
+        run: node scripts/prepare-cli-sidecar.mjs --target ${{ matrix.target }}
 
       - name: Cargo check
         working-directory: ./core
