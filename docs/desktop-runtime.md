@@ -60,7 +60,7 @@ this policy and [release workflow](./release-workflow.md).
 ## Auto Update Runtime
 
 Galley checks for app updates on startup and exposes the current update state in
-Settings -> About / Runtime. Update delivery is enabled only for builds that
+Settings -> About (and the TopBar update indicator). Update delivery is enabled only for builds that
 provide both compile-time variables:
 
 - `GALLEY_UPDATER_PUBKEY`: Tauri updater public key embedded in the app.
@@ -80,10 +80,11 @@ update channel and local development keeps working. This is intentional: Tauri
 updater package verification is mandatory and should not be bypassed just
 because Galley itself is still unsigned at the OS level.
 
-Update installation is task-protected. If any session is actively running,
-Galley may remember that an update is available, but it will not download,
-install, or relaunch for that update until the session is idle. This avoids
-turning a background maintenance action into a lost-task event.
+Update installation is task-protected. Galley downloads an available update in
+the background at any time, even while a session is running (since 2026-10-08
+the download touches no child process), but restart-to-install is disabled
+while any session is running. This avoids turning a background maintenance
+action into a lost-task event.
 
 ## Background Mode
 

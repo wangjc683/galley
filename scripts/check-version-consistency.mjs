@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-// Verify the five version files agree, and optionally that a release tag
-// matches them. This script is the authoritative list of version files;
-// the release SOP pre-flight and project-status point here instead of
-// maintaining their own copies.
+// Verify the five version files agree, that core/Cargo.lock records the
+// same version for the two workspace crates a bump changes (galley-core,
+// galley-cli), and optionally that a release tag matches them. This script
+// is the authoritative list of version files; the release SOP pre-flight
+// and project-status point here instead of maintaining their own copies.
 //
 // Usage:
 //   node scripts/check-version-consistency.mjs            # files agree
@@ -38,12 +39,27 @@ function readCargoVersion(relPath) {
   return match[1];
 }
 
+// The `version` of one `[[package]]` entry in a Cargo.lock, by crate name.
+function readLockVersion(relPath, crateName) {
+  const text = fs.readFileSync(path.join(repoRoot, relPath), "utf8");
+  for (const block of text.split(/^\[\[package\]\]\s*$/m).slice(1)) {
+    const name = block.match(/^name\s*=\s*"([^"]+)"/m);
+    if (name?.[1] !== crateName) continue;
+    const version = block.match(/^version\s*=\s*"([^"]+)"/m);
+    if (!version) throw new Error(`${relPath}: ${crateName} has no version`);
+    return version[1];
+  }
+  throw new Error(`${relPath}: no [[package]] named ${crateName}`);
+}
+
 const versions = {
   "package.json": readJsonVersion("package.json"),
   "gui/package.json": readJsonVersion("gui/package.json"),
   "core/tauri.conf.json": readJsonVersion("core/tauri.conf.json"),
   "core/Cargo.toml": readCargoVersion("core/Cargo.toml"),
   "cli/Cargo.toml": readCargoVersion("cli/Cargo.toml"),
+  "core/Cargo.lock (galley-core)": readLockVersion("core/Cargo.lock", "galley-core"),
+  "core/Cargo.lock (galley-cli)": readLockVersion("core/Cargo.lock", "galley-cli"),
 };
 
 const errors = [];
@@ -71,6 +87,6 @@ if (errors.length > 0) {
 }
 
 console.log(
-  `[version-consistency] ${Object.keys(versions).length} files agree on ${expected}` +
+  `[version-consistency] ${Object.keys(versions).length} version entries agree on ${expected}` +
     (tagArg ? ` and match ${tagArg.slice("--tag=".length)}` : ""),
 );

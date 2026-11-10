@@ -119,7 +119,9 @@ It builds the release artifacts without creating a GitHub Release.
 
 ```bash
 gh workflow run release.yml --ref main
-gh run watch --repo wangjc683/galley --exit-status
+# A run just started can take a few seconds to appear; check the id is that run.
+RUN_ID=$(gh run list --repo wangjc683/galley --workflow release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN_ID" --repo wangjc683/galley --exit-status
 ```
 
 Pass criteria:
@@ -136,7 +138,7 @@ Pass criteria:
 Use one small commit so a bad release prep can be reverted cleanly.
 
 ```bash
-git add package.json gui/package.json core/tauri.conf.json core/Cargo.toml cli/Cargo.toml
+git add package.json gui/package.json core/tauri.conf.json core/Cargo.toml cli/Cargo.toml core/Cargo.lock
 git commit -m "Bump version ${RELEASE_TAG}"
 ```
 
@@ -153,7 +155,9 @@ git push origin main "${RELEASE_TAG}"
 
 ```bash
 gh run list --repo wangjc683/galley --workflow release.yml --limit 5
-gh run watch --repo wangjc683/galley --exit-status
+# A run just started can take a few seconds to appear; check the id is that run.
+RUN_ID=$(gh run list --repo wangjc683/galley --workflow release.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN_ID" --repo wangjc683/galley --exit-status
 ```
 
 Pass criteria:
@@ -247,7 +251,9 @@ gh workflow run promote-update-channel.yml \
   -f tag="${RELEASE_TAG}" \
   -f channel=stable
 
-gh run watch --repo wangjc683/galley --exit-status
+# A run just started can take a few seconds to appear; check the id is that run.
+RUN_ID=$(gh run list --repo wangjc683/galley --workflow promote-update-channel.yml --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN_ID" --repo wangjc683/galley --exit-status
 ```
 
 The workflow refuses draft releases. It regenerates `latest.json` from the
@@ -264,9 +270,12 @@ Run the live channel verifier:
 node scripts/check-update-channel.mjs \
   --repo wangjc683/galley \
   --tag "${RELEASE_TAG}" \
-  --channel stable \
-  --cache-bust
+  --channel stable
 ```
+
+The verifier reads the manifest through the GitHub contents API, not the raw
+CDN, so it sees the pushed file at once. To test the raw path instead, pass
+`--url <raw latest.json URL> --cache-bust`.
 
 Check:
 
@@ -277,8 +286,10 @@ Check:
 - The manifest changed on `galley-update-channel`.
 
 The promote workflow runs the same verifier after it pushes the channel branch.
-It passes `--cache-bust` so GitHub raw CDN cache cannot keep returning a stale
-but valid old manifest. If this step fails, treat the update channel as not
+It passes `--require-commit-sha` (the manifest's latest commit on
+`galley-update-channel` must be the promote commit) and `--token`, and reads
+through the API like the command above; promoting `stable` checks the `beta`
+alias the same way. If this step fails, treat the update channel as not
 promoted even if the workflow generated a local `latest.json`.
 
 After verification passes, edit the GitHub Release notes if needed so installed
@@ -314,7 +325,7 @@ Use an installed older release build, not `tauri dev`.
 Wait at least 5 minutes after the promote push before checking from the app,
 or first confirm with a plain `curl` (no cache-bust) that the endpoint serves
 the new version: the raw CDN caches `latest.json` for 300 s, and the Step 8
-verifier's `--cache-bust` bypasses that cache, so a green verifier does not
+verifier reads the contents API instead of the raw CDN, so a green verifier does not
 mean installed apps see the new version yet (`v0.5.6`: an app check about two
 minutes after promote reported "up to date").
 
@@ -366,10 +377,10 @@ Then:
 | `failed to decode base64 pubkey` | Used decoded minisign text instead of `.pub` file content | Set `GALLEY_UPDATER_PUBKEY` to `updater.key.pub` content |
 | Promote workflow refuses release | Release is still draft | Publish only after smoke, then rerun promote |
 | App says update channel not connected | Build lacks updater compile-time config | Expected in Dev; for release, inspect generated Tauri config |
-| Update downloads during active task | Protection regression | Stop release, fix before promotion |
+| Restart / install offered while a session is running | Protection regression | Stop release, fix before promotion |
 | Manifest URL points at wrong version | Wrong tag promoted | Promote the correct tag |
 | Live channel verifier returns 404 | Channel branch was not promoted or raw URL is wrong | Rerun promote, then verify `updates/stable/latest.json` on `galley-update-channel`; for old builds, also verify the `updates/beta/latest.json` alias |
-| Live channel verifier reads previous version | GitHub raw CDN returned stale but valid manifest content | Use `--cache-bust`, keep validation inside verifier retries, and confirm the pushed file on `galley-update-channel` |
+| Live channel verifier reads previous version | Promote push not visible yet, or (with `--url`) the raw CDN returned stale but valid content | Keep validation inside verifier retries, confirm the pushed file on `galley-update-channel` (`--require-commit-sha`); on the raw path add `--cache-bust` |
 
 ## Done Criteria
 

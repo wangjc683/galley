@@ -402,7 +402,7 @@ dogfood group.
 
 ### Auto-update (`tauri-plugin-updater`)
 
-Phase one has wired in the check-for-update entry in Settings → About / Runtime
+Phase one has wired in the check-for-update entry in Settings → About
 and the post-launch background check. When a new version is found, it downloads
 and prepares the update in the background, then waits for the user to restart
 to apply it. It is only truly enabled when both of these release configs are
@@ -414,11 +414,14 @@ provided:
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: optional, if the key has a password
 
 Until configured, the UI shows "Dev build not connected to an update channel",
-but Dev and local builds are unaffected. Generate the key pair:
+but Dev and local builds are unaffected.
 
-Protection logic: as long as any session is running, Galley will not download /
-install / relaunch an update. The background check can remember "new version
-found" and continue preparing it only after all tasks finish.
+Protection logic: the download runs at any time, even while a session is
+running (since 2026-10-08 it touches no child process); restart-to-install is
+disabled while any session is running, so the update waits for the user to
+restart after all tasks finish.
+
+Generate the key pair:
 
 ```bash
 pnpm --dir gui tauri signer generate -w ~/.config/galley/updater.key
@@ -474,8 +477,9 @@ Manifest rules:
 - `signature` in the manifest must be the `.sig` file's contents, not the
   `.sig` URL.
 - `url` in the manifest points at the corresponding platform's updater package.
-- The live channel must pass
-  `scripts/check-update-channel.mjs --cache-bust` before it counts as published.
+- The live channel must pass `scripts/check-update-channel.mjs` (it reads the
+  manifest through the GitHub contents API; the promote workflow adds
+  `--require-commit-sha`) before it counts as published.
 - Installed apps fetch the manifest without a cache-bust, so for up to 300 s
   after a promote (the raw CDN's `max-age`) they can still be told they are up
   to date; the SOP's app-update dogfood step waits this out (seen at `v0.5.6`).
