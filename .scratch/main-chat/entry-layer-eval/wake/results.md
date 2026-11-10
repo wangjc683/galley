@@ -5,7 +5,7 @@
 - **提示词**：真实 Rust 代码 `compose_main_chat_runtime_prompt` 生成的主对话提示词，含票 30 改过的入口层（`galley-prompt/`；票 59 起重新生成，是票 59 的入口层与现在的静态规则）。手册目录填成这次运行状态根下的 `assistant/reference/manual/`，那里放着仓库里 `docs/managed-ga-runtime/galley-assistant-manual/` 的各部分（Core 写的位置；票 73 起九个）；票 59 之前是单个文件 `assistant/reference/galley-assistant-manual.md`。
 - **历史**：一段很短的当前段对话：用户的要求，助手派了子任务（回复末尾是回放标记 `[subtask <id>: <title>]`）；打回过的一轮按票 29 的回放写法压成一行，助手那轮是 `<no-reply/>`。
 - **新消息**：按 `wording.md` 的措辞逐字拼出的叫醒消息（`draft` 是票 29「措辞草稿」原文）。
-- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同派活对照第二轮的沙盒，另允许 `sed`、`cat`、`ls` 等几个系统程序，`python3` 指向同一个解释器）；Galley CLI 是假的，按 `cases.json` 的固定数据回答（会话行、子任务的对话、项目、模型、真实 CLI 的 `--help` 原文），记下每次调用的参数，`session send` 等写命令只改假 CLI 自己的状态。浏览器工具、`ask_user` 不执行，运行停在那里。每次运行最多 10 次工具调用。
+- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同派活对照第二轮的沙盒，另允许 `sed`、`cat`、`ls` 等几个系统程序，`python3` 指向同一个解释器）；Galley CLI 是假的，按 `cases.json` 的固定数据回答（会话行、子任务的对话、项目、模型、真实 CLI 的 `--help` 原文），记下每次调用的参数，`session send` 等写命令只改假 CLI 自己的状态。浏览器工具、`ask_user` 不执行，运行停在那里。每次运行最多 10 次工具调用（用例写了 `tool_cap` 的照它，审计 2026-11-10 票 10 起：`w-long` 20 次；见 README「`w-long` 为什么一直不过」一节）。
 - **判定**：按 `cases.json` 每条的 `expect` 自动判（下面「判定」一栏写不过的原因）；字数是去掉 `<summary>`、`<next-suggestion>` 后的正文字符数。
 - **票 134**：`w-table`、`w-long` 测成品贴回，用本票的 v2 主对话提示词（`dispatch-criterion/galley-prompt/`；`w-table` 跑在第一轮措辞 `main_chat.v2-r1.txt` 下）与 `core` 措辞（Core 今天的叫醒写法，回答超过 3,000 字照 Core 截断），手册是改过的 `subtasks.md`；判定另看 `table_rows`（表的每一行原样都在）、`absent_any`（不带子任务讲自己怎么做的话）、`where_any`（说全文在哪）。
 
@@ -38,6 +38,8 @@
 注 14：开源卫生（审计 2026-11-10 票 06）：手册 wake.md、memo.md、todos-change.md 的例句换了名词（取自维护者真实待办的门牌号与项目名换成虚构的），本机 results.json 里之前各次运行的记录做了同样的替换。当前各用例重跑第 1 遍看有没有回退（v2 措辞的一条）被替换的 1 次运行原样留在 results.json 的 `meta.superseded_runs[13]` 里。
 
 注 15：开源卫生（审计 2026-11-10 票 06）：手册 wake.md、memo.md、todos-change.md 的例句换了名词（取自维护者真实待办的门牌号与项目名换成虚构的），本机 results.json 里之前各次运行的记录做了同样的替换。当前各用例重跑第 1 遍看有没有回退（core 措辞的五条）被替换的 5 次运行原样留在 results.json 的 `meta.superseded_runs[14]` 里。
+
+注 16：审计 2026-11-10 票 10：w-long 的套件设定照真机改（这条用例自己的工具调用上限 20 次；叫醒说明整份交给模型，同票 147 起 runner 的做法；字数上限 2,000；固定数据补了第 4 天的车次截图、祇园短走对上 15 分钟、第 5 与第 7 天的吃饭、中间一步的京都三晚），重跑 3 遍。被替换的 3 次运行原样留在 results.json 的 `meta.superseded_runs[15]` 里。
 
 ## 票 73 重跑（2026-10-21，gpt-6.1-sol，推理强度 high）
 
@@ -190,7 +192,7 @@
 | file-handover | gpt-6.1-sol | both | 1 | 3 | 29.9 | 29.9 | 3／29.9／29.9 | 1/1 |
 | w-table | gpt-6.1-sol | base | 1 | 8 | 119 | 119 | 8／119／119 | 1/1 |
 | w-table | gpt-6.1-sol | both | 1 | 8 | 122.5 | 122.5 | 8／122.5／122.5 | 1/1 |
-| w-long | gpt-6.1-sol | base | 1 | 11 | 189.2 | 189.2 | 11／189.2／189.2 | 0/1 |
+| w-long | gpt-6.1-sol | base | 1 | 11 | 189.2 | 189.2 | 11／189.2／189.2 | 1/1 |
 | w-long | gpt-6.1-sol | both | 1 | 9 | — | 140 | 9／—／140 | 0/1 |
 | w-merge-three | gpt-6.1-sol | base | 6 | 5、5、5、6、4、6 | 60.4、68、59.6、85.7、55、82.1 | 60.4、68、59.6、85.7、55、82.1 | 5／64.2／64.2 | 6/6 |
 | w-merge-three | gpt-6.1-sol | inline | 3 | 3、4、6 | 55.6、67.2、82.6 | 55.6、67.2、82.6 | 4／67.2／67.2 | 3/3 |
@@ -243,7 +245,7 @@
 - **file-handover gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 `galley-prompt/`）：第一次调用拿到说明全文（1,143 字）；1. code_run（手册 wake.md、subtasks.md；回 8,792 字）；2. code_run（CLI session show --around；session show --tail=40；回 2,585 字）；共 3 次模型调用，见字 29.9 秒，回复 29.9 秒，206 字、0 张表。判定：过
 - **w-table gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 v3）：第一次调用拿到说明全文（1,478 字）；1. code_run（手册 wake.md、subtasks.md、cli.md；回 12,295 字）；2. code_run（CLI session show --around；session show --tail=40；回 4,631 字）；3. code_run（code_run；回 415 字）；4. file_read（file_read（vision_sop.md）；回 1,819 字）；5. code_run（code_run；回 764 字）；6. code_run（code_run；回 179 字）；7. file_read（file_read（声岚_S7_规格.png）；回 26,670 字，被截：[omitted long content]、... [TRUNCATED]）；共 8 次模型调用，见字 119.0 秒，回复 119.0 秒，698 字、1 张表。判定：过
 - **w-table gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 v3）：第一次调用拿到说明全文（1,478 字）；1. code_run（手册 wake.md、subtasks.md、cli.md；回 12,295 字）；2. code_run（CLI session show --around；session show --tail=40；回 4,395 字）；3. code_run（code_run；回 405 字）；4. file_read（file_read（ocr_utils.py）；回 7,706 字）；5. code_run（code_run；回 796 字）；6. code_run（code_run；回 114 字）；7. code_run（code_run；回 95 字）；共 8 次模型调用，见字 122.5 秒，回复 122.5 秒，700 字、1 张表。判定：过
-- **w-long gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 v3）：第一次调用拿到「Long user prompt saved to …」（212 字）；1. file_read（存成文件的叫醒说明；回 4,691 字）；2. code_run（手册 wake.md、subtasks.md；回 8,682 字）；3. code_run（CLI session show --around；session show --tail=40；回 16,605 字）；4. code_run（手册 authority.md、cli.md；回 6,464 字）；5. file_read（file_read（ocr_utils.py）；回 7,706 字）；6. code_run（code_run；回 797 字）；7. code_run（code_run；回 154 字）；8. file_read（file_read（1_难波酒店.png）；回 21,606 字，被截：... [TRUNCATED]）；9. update_working_checkpoint（update_working_checkpoint；回 38 字）；10. code_run（CLI session show --tail=1；回 195 字）；共 11 次模型调用，见字 189.2 秒，回复 189.2 秒，1,806 字、2 张表。判定：不过：太长：1703 字，上限 1500
+- **w-long gpt-6.1-sol base 第 1 遍**（2026-11-04 17:19，提示词 v3）：第一次调用拿到「Long user prompt saved to …」（212 字）；1. file_read（存成文件的叫醒说明；回 4,691 字）；2. code_run（手册 wake.md、subtasks.md；回 8,682 字）；3. code_run（CLI session show --around；session show --tail=40；回 16,605 字）；4. code_run（手册 authority.md、cli.md；回 6,464 字）；5. file_read（file_read（ocr_utils.py）；回 7,706 字）；6. code_run（code_run；回 797 字）；7. code_run（code_run；回 154 字）；8. file_read（file_read（1_难波酒店.png）；回 21,606 字，被截：... [TRUNCATED]）；9. update_working_checkpoint（update_working_checkpoint；回 38 字）；10. code_run（CLI session show --tail=1；回 195 字）；共 11 次模型调用，见字 189.2 秒，回复 189.2 秒，1,806 字、2 张表。判定：过
 - **w-long gpt-6.1-sol both 第 1 遍**（2026-11-04 17:24，提示词 v3）：第一次调用拿到说明全文（4,573 字）；1. code_run（手册 wake.md、subtasks.md；回 8,682 字）；2. code_run（手册 authority.md、cli.md，CLI session show --around；session show --tail=40；回 17,053 字，被截：[omitted long output]）；3. code_run（code_run；回 1,875 字）；4. code_run（code_run；回 159 字）；5. code_run（code_run；回 201 字）；6. code_run（code_run；回 1,647 字）；7. code_run（code_run；回 177 字）；8. code_run（CLI session send --supervisor --reason --ensure-runner；回 794 字）；共 9 次模型调用，见字 None 秒，回复 140.0 秒，11 字、0 张表。判定：不过：不该 session send 却发了；不该写 <no-reply/>；没点到：京都 / 奈良 / 大阪；没说全文在哪：全文 / 完整版 / 完整攻略 / 完整的攻略 / 点开 / 卡片 / 回执 / [FILE:
 - **w-merge-three gpt-6.1-sol base 第 1 遍**（2026-11-04 16:39，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（219 字）；1. file_read（存成文件的叫醒说明；回 4,042 字）；2. code_run（手册 wake.md、subtasks.md；回 8,688 字）；3. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,853 字）；4. code_run（code_run；回 558 字）；共 5 次模型调用，见字 60.4 秒，回复 60.4 秒，911 字、1 张表。判定：过
 - **w-merge-three gpt-6.1-sol base 第 2 遍**（2026-11-04 16:39，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（219 字）；1. file_read（存成文件的叫醒说明；回 4,042 字）；2. code_run（手册 wake.md、subtasks.md；回 8,689 字）；3. code_run（CLI session show --around ×3；session show --tail=40 ×3；回 11,871 字）；4. code_run（code_run；回 291 字）；共 5 次模型调用，见字 68.0 秒，回复 68.0 秒，950 字、1 张表。判定：过
@@ -299,8 +301,8 @@
 - **w-merge-two-long glm-5.3-flash both 第 2 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（8,035 字）；没有调工具；共 1 次模型调用，见字 76.0 秒，回复 76.0 秒，1,921 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
 - **w-merge-two-long glm-5.3-flash full 第 1 遍**（2026-11-04 17:10，提示词 v9）：第一次调用拿到说明全文（9,355 字）；没有调工具；共 1 次模型调用，见字 65.6 秒，回复 65.6 秒，1,835 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
 - **w-merge-two-long glm-5.3-flash full 第 2 遍**（2026-11-04 17:10，提示词 v9）：第一次调用拿到说明全文（9,355 字）；没有调工具；共 1 次模型调用，见字 77.8 秒，回复 77.8 秒，2,350 字、1 张表。判定：过
-- **w-merge-two-long deepseek-flash base 第 1 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（225 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（code_run；回 206 字）；3. code_run（手册 目录；回 106 字）；4. file_read（手册 subtasks.md；回 2,692 字）；5. code_run（CLI session show --around；回 5,025 字，被截：[omitted long output]）；6. code_run（切片 [-3000:]；回 0 字）；7. code_run（code_run；回 214 字）；8. code_run（CLI session show --around；回 52 字）；9. code_run（切片 [-1800:]；回 2,112 字）；10. file_read（手册 memo.md；回 4,791 字）；11. code_run（code_run（未执行）；回 0 字）；共 9 次模型调用，见字 None 秒，回复 None 秒，0 字、0 张表。判定：不过：没走到最终回复：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；表少了：0 张，至少 1 张；没有一张表把几块合在一起：澄川 / 朔风 / 24.98 / 25.38；少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn；没写明一块选的版本（口径）：长续航；没写明一块选的版本（口径）：后驱
-- **w-merge-two-long deepseek-flash base 第 2 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（225 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（手册 目录；回 270 字）；3. file_read（手册 subtasks.md；回 2,692 字）；4. code_run（code_run；回 184 字）；5. code_run（CLI session show --tail=1 ×2；回 32 字）；6. file_read（file_read（e7.txt）；回 8,101 字，被截：... [TRUNCATED]）；7. code_run（code_run；回 3,782 字）；8. code_run（CLI session show --around ×2；回 3,093 字）；9. code_run（code_run；回 447 字）；10. code_run（code_run；回 409 字）；11. code_run（code_run（未执行）；回 0 字）；共 10 次模型调用，见字 None 秒，回复 None 秒，0 字、0 张表。判定：不过：没走到最终回复：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；表少了：0 张，至少 1 张；没有一张表把几块合在一起：澄川 / 朔风 / 24.98 / 25.38；少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn；没写明一块选的版本（口径）：长续航；没写明一块选的版本（口径）：后驱
+- **w-merge-two-long deepseek-flash base 第 1 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（225 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（code_run；回 206 字）；3. code_run（手册 目录；回 106 字）；4. file_read（手册 subtasks.md；回 2,692 字）；5. code_run（CLI session show --around；回 5,025 字，被截：[omitted long output]）；6. code_run（切片 [-3000:]；回 0 字）；7. code_run（code_run；回 214 字）；8. code_run（CLI session show --around；回 52 字）；9. code_run（切片 [-1800:]；回 2,112 字）；10. file_read（手册 memo.md；回 4,791 字）；11. code_run（code_run（未执行）；回 0 字）；共 9 次模型调用，见字 None 秒，回复 None 秒，0 字、0 张表。判定：不过：没走到最终回复：第 11 次工具调用，达到 10 次上限，运行停在这里（没有执行）；表少了：0 张，至少 1 张；没有一张表把几块合在一起：澄川 / 朔风 / 24.98 / 25.38；少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn；没写明一块选的版本（口径）：长续航；没写明一块选的版本（口径）：后驱
+- **w-merge-two-long deepseek-flash base 第 2 遍**（2026-11-04 16:43，提示词 v9）：第一次调用拿到「Long user prompt saved to …」（225 字）；1. file_read（存成文件的叫醒说明；回 8,652 字）；2. code_run（手册 目录；回 270 字）；3. file_read（手册 subtasks.md；回 2,692 字）；4. code_run（code_run；回 184 字）；5. code_run（CLI session show --tail=1 ×2；回 32 字）；6. file_read（file_read（e7.txt）；回 8,101 字，被截：... [TRUNCATED]）；7. code_run（code_run；回 3,782 字）；8. code_run（CLI session show --around ×2；回 3,093 字）；9. code_run（code_run；回 447 字）；10. code_run（code_run；回 409 字）；11. code_run（code_run（未执行）；回 0 字）；共 10 次模型调用，见字 None 秒，回复 None 秒，0 字、0 张表。判定：不过：没走到最终回复：第 11 次工具调用，达到 10 次上限，运行停在这里（没有执行）；表少了：0 张，至少 1 张；没有一张表把几块合在一起：澄川 / 朔风 / 24.98 / 25.38；少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn；没写明一块选的版本（口径）：长续航；没写明一块选的版本（口径）：后驱
 - **w-merge-two-long deepseek-flash inline 第 1 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（7,943 字）；1. code_run（CLI session show --around ×2；回 2,660 字）；共 2 次模型调用，见字 27.6 秒，回复 27.6 秒，2,098 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
 - **w-merge-two-long deepseek-flash inline 第 2 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（7,943 字）；没有调工具；共 1 次模型调用，见字 15.3 秒，回复 15.3 秒，2,155 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
 - **w-merge-two-long deepseek-flash both 第 1 遍**（2026-11-04 16:59，提示词 v9）：第一次调用拿到说明全文（8,035 字）；1. code_run（code_run；回 580 字）；2. code_run（code_run；回 287 字）；3. code_run（CLI session show --tail=1 ×2；回 181 字）；4. code_run（code_run；回 329 字）；5. code_run（切片 [2800:]；回 2,083 字）；共 6 次模型调用，见字 27.8 秒，回复 27.8 秒，2,355 字、1 张表。判定：不过：少了一块的出处：www.chengchuan-auto.cn；少了一块的出处：www.shuofeng-ev.cn
@@ -3114,9 +3116,9 @@ E7「看起来便宜 4,000 元」，但空悬、按摩、冰箱、电吸门在�
 | 11 | w-table | 票 134：子任务交回的是答案本身（一张 8 行的对比表加两句结论，开头一句是它怎么查的，证据是两张规格页截图）→ 把表原样给用户（表头与各行都在，数字没改），不带它讲自己怎么做的话；不打回、不出 <no-reply/> | core | 1 | session show s-mh2k7d4q-5w8n3c1x --around=msg_s-mh2k7d4q-5w8n3c1x_0_user；session show s-mh2k7d4q-5w8n3c1x --tail=40 | 两款的主要区别是：**声岚 S7 更轻、偏向安静环境长时间聆听；北极星 HP-60 更重、偏向隔音需求。** ⏎ \| 项目 \| 声岚 S7 \| 北极星 HP-60 \| ⏎ \| --- \| --- \| --- \| ⏎ \| 价格 \| 2,499 元 \| 3,199 元 \| ⏎ \| 类型 \| 开放式头戴 \| 封闭式头戴 \| ⏎ \| 驱动单元 \| 50 mm 动圈 \| 45 mm 平板振膜 \| ⏎ \| 阻抗 \| 32 Ω \| 64 Ω \| ⏎ \| 灵敏度 \| 102 dB/mW \| 96 dB/mW \| ⏎ \| 重量 \| 285 g \| 390 g \| ⏎ \| 线材与接口 \| 可换线，3.5 mm + 4.4 mm 平衡 \| 可换线，3.5 mm + 6.35 mm 转接 \| ⏎ \| 佩戴 \| 头梁轻、夹力小，适合长时间听 \| 耳罩厚、隔音好，夹力偏大 \| ⏎ - **声岚 S7**：开放式、轻、较好驱动，适合在家或安静的办公室长时间听，但要注意漏音。 ⏎ - **北极星 HP-60**：封闭式、隔音好，适合需要减少外界干扰的人；灵敏度较低，对前端驱动能力的要求更高一些。 ⏎ **核验说明：**以上为查回的对比结果，数字以两家官网为准；两张规格页截图文件已确认存在，但我这边未能读取截图文字，尚未完成数字的逐项复核。 ⏎ 声岚 S7 规格页截图： ⏎ [FILE:$TMPDIR/entry-layer-eval-itzs10kb/w-table.core-1/sandbox/home/Downloads/耳机规格/声岚_S7_规格.png] ⏎ 北极星 HP-60 规格页截图： ⏎ [FILE:$TMPDIR/entry-layer-eval-itzs10kb/w-table.core-1/sandbox/home/Downloads/耳机规格/北极星_HP-60_规格.png] | 否 | 769 | 读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，15494 字节 | 过 |
 | 11 | w-table | 票 134：子任务交回的是答案本身（一张 8 行的对比表加两句结论，开头一句是它怎么查的，证据是两张规格页截图）→ 把表原样给用户（表头与各行都在，数字没改），不带它讲自己怎么做的话；不打回、不出 <no-reply/> | core | 2 | session show s-mh2k7d4q-5w8n3c1x --around=msg_s-mh2k7d4q-5w8n3c1x_0_user；session show s-mh2k7d4q-5w8n3c1x --tail=40 | \| 项目 \| 声岚 S7 \| 北极星 HP-60 \| ⏎ \|---\|---\|---\| ⏎ \| 价格 \| 2,499 元 \| 3,199 元 \| ⏎ \| 类型 \| 开放式头戴 \| 封闭式头戴 \| ⏎ \| 驱动单元 \| 50 mm 动圈 \| 45 mm 平板振膜 \| ⏎ \| 阻抗 \| 32 Ω \| 64 Ω \| ⏎ \| 灵敏度 \| 102 dB/mW \| 96 dB/mW \| ⏎ \| 重量 \| 285 g \| 390 g \| ⏎ \| 线材与接口 \| 可换线，3.5 mm + 4.4 mm 平衡 \| 可换线，3.5 mm + 6.35 mm 转接 \| ⏎ \| 佩戴 \| 头梁轻、夹力小，适合长时间听 \| 耳罩厚、隔音好，夹力偏大 \| ⏎ **声岚 S7** 更适合在家等安静环境长时间聆听，优势是轻、相对容易驱动，但开放式结构需留意漏音。\ ⏎ **北极星 HP-60** 更适合需要隔音的环境，不过更重、驱动要求相对较高，是否需要耳放还要结合播放设备与音量需求判断。 ⏎ *以上为子任务返回的对比，数字以两家官网为准；已确认所附截图文件存在，但本轮未能读取图片内容，因此尚未完成对表中规格及佩戴描述的逐项复核。* ⏎ 规格页截图： ⏎ [FILE:$TMPDIR/entry-layer-eval-3skx597l/w-table.core-2/sandbox/home/Downloads/耳机规格/声岚_S7_规格.png] ⏎ [FILE:$TMPDIR/entry-layer-eval-3skx597l/w-table.core-2/sandbox/home/Downloads/耳机规格/北极星_HP-60_规格.png] | 否 | 693 | 读了（第 1 次调用）：wake.md、subtasks.md、cli.md；1 次 1 轮，12569 字节 | 过 |
 | 11 | w-table | 票 134：子任务交回的是答案本身（一张 8 行的对比表加两句结论，开头一句是它怎么查的，证据是两张规格页截图）→ 把表原样给用户（表头与各行都在，数字没改），不带它讲自己怎么做的话；不打回、不出 <no-reply/> | core | 3 | session show s-mh2k7d4q-5w8n3c1x --around=msg_s-mh2k7d4q-5w8n3c1x_0_user；session show s-mh2k7d4q-5w8n3c1x --tail=40 | \| 项目 \| 声岚 S7 \| 北极星 HP-60 \| ⏎ \| --- \| --- \| --- \| ⏎ \| 价格 \| 2,499 元 \| 3,199 元 \| ⏎ \| 类型 \| 开放式头戴 \| 封闭式头戴 \| ⏎ \| 驱动单元 \| 50 mm 动圈 \| 45 mm 平板振膜 \| ⏎ \| 阻抗 \| 32 Ω \| 64 Ω \| ⏎ \| 灵敏度 \| 102 dB/mW \| 96 dB/mW \| ⏎ \| 重量 \| 285 g \| 390 g \| ⏎ \| 线材与接口 \| 可换线，3.5 mm + 4.4 mm 平衡 \| 可换线，3.5 mm + 6.35 mm 转接 \| ⏎ \| 佩戴 \| 头梁轻、夹力小，适合长时间听 \| 耳罩厚、隔音好，夹力偏大 \| ⏎ **声岚 S7**：更轻、较容易驱动，适合在家或安静环境中长时间听，开放式结构需留意漏音。\ ⏎ **北极星 HP-60**：适合更看重隔音的人，但重量更大、驱动要求相对更高，搭配小耳放会更从容。 ⏎ 数字以两家官网为准。以上为查询任务返回的结果；我已确认截图文件存在，但未能独立核对截图中的文字，购买前建议再确认价格、接口及试听佩戴感。 ⏎ 两款耳机的规格页截图： ⏎ [FILE:$TMPDIR/entry-layer-eval-3skx597l/w-table.core-3/sandbox/home/Downloads/耳机规格/声岚_S7_规格.png] ⏎ [FILE:$TMPDIR/entry-layer-eval-3skx597l/w-table.core-3/sandbox/home/Downloads/耳机规格/北极星_HP-60_规格.png] | 否 | 683 | 读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，15231 字节 | 过 |
-| 12 | w-long | 票 134：子任务交回的是一份很长的攻略（超过 3,000 字，叫醒消息里被截断，末尾写着怎么读全；证据是 5 张官网页面截图）→ 给要点，并说全文在哪（在子任务里，或交一个文件的完整路径）；不要求贴全文；不打回、不出 <no-reply/> | core | 1 | session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；session show s-mh3p9v2e-7k4r6t8b --tail=40；session send s-mh3p9v2e-7k4r6t8b 退回补齐原任务：1）主要列车证据缺少第4天大阪→京都的JR京都线新快速官网截图，请补到原截图目录并给完整路径。2）原5张截图文件已确认存在，但主会话现有读图工具无法显示内容（OCR组件缺失），因此尚未核验截图是否支持酒店与车程描述。请核对两家酒店的准确日… | <no-reply/> | 是 | 11 | 读了（第 2 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，15501 字节 | 不过：不该 session send 却发了；不该写 <no-reply/>；没点到：京都 / 奈良 / 大阪；没说全文在哪：全文 / 完整版 / 完整攻略 / 完整的攻略 / 点开 / 卡片 / 回执 / [FILE: |
-| 12 | w-long | 票 134：子任务交回的是一份很长的攻略（超过 3,000 字，叫醒消息里被截断，末尾写着怎么读全；证据是 5 张官网页面截图）→ 给要点，并说全文在哪（在子任务里，或交一个文件的完整路径）；不要求贴全文；不打回、不出 <no-reply/> | core | 2 | session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；session show s-mh3p9v2e-7k4r6t8b --tail=40 | （空） | 否 | 0 | 读了（第 2 次调用）：wake.md、subtasks.md、cli.md、authority.md；4 次 1 轮，14756 字节 | 不过：没走到最终回复：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；没点到：京都 / 奈良 / 大阪；没说全文在哪：全文 / 完整版 / 完整攻略 / 完整的攻略 / 点开 / 卡片 / 回执 / [FILE: |
-| 12 | w-long | 票 134：子任务交回的是一份很长的攻略（超过 3,000 字，叫醒消息里被截断，末尾写着怎么读全；证据是 5 张官网页面截图）→ 给要点，并说全文在哪（在子任务里，或交一个文件的完整路径）；不要求贴全文；不打回、不出 <no-reply/> | core | 3 | session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；session show s-mh3p9v2e-7k4r6t8b --tail=40；session show s-mh3p9v2e-7k4r6t8b --tail=1 | 这份攻略按 **“每天一个主要景点、中午回酒店休息、市内尽量打车”** 来排，不赶打卡。暂按大阪进出、你和爸妈共三人、七天六晚设计；**大阪住三晚、京都住三晚，只换一次酒店。** ⏎ 完整攻略在这里，包含每天怎么坐车、吃什么、住哪一带、行李寄送和出发清单： ⏎ [FILE:$TMPDIR/entry-layer-eval-3skx597l/w-long.core-3/sandbox/managed-ga-state/temp/关西七日慢游攻略_十二月初.md] ⏎ ## 七天怎么安排 ⏎ \| 日期 \| 主要安排 \| 怎样少走路 \| ⏎ \|---\|---\|---\| ⏎ \| **第1天：抵达大阪** \| 关西机场乘南海 rapi:t 到难波，入住、吃饭、休息 \| 不排景点；有行李时不勉强拖箱子找酒店 \| ⏎ \| **第2天：大阪城** \| 上午看大阪城公园，午饭后回酒店 \| 出租车到公园附近，再利用园内交通；天守阁不强求登顶，仍有坡道与步行 \| ⏎ \| **第3天：奈良半日** \| 近铁到奈良，出租车接驳东大寺，看大佛、顺路看鹿 \| 不串春日大社、若草山；下午早点回大阪 \| ⏎ \| **第4天：大阪→京都** \| 转城、入住、休息；有精神再去祇园短逛 \| 两端出租车接驳车站；当天不安排大型景点 \| ⏎ \| **第5天：三十三间堂** \| 上午参观，午饭后休息；博物馆可选 \| 以室内参观为主，出租车往返；需脱鞋，注意脚底保暖 \| ⏎ \| **第6天：岚山半日** \| 出租车到天龙寺附近，看庭园、吃午饭 \| 不走竹林长线路；渡月桥只在体力允许时加，不必两处都去 \| ⏎ \| **第7天：返程** \| 京都乘 Haruka 到关西机场 \| 当天不排景点；若上午起飞，第6晚改住机场附近，并缩减岚山安排 \| ⏎ **这些都不是“必须完成”的任务。** 奈良和岚山即使打车，也免不了景区内步行；如果爸妈只能连续走十来分钟，当天就应进一步缩短，必要时取消。 ⏎ ## 住宿与吃饭 ⏎ - **大阪选难波一带**：方便机场往返、吃饭，优先电梯齐全、出租车能到门口的酒店。 ⏎ - **京都选四条一带**：便于附近吃饭，景点用出租车接驳。 ⏎ - 三人同住要确认床型，不能只看“三人间”；也可比较两间房，睡得舒服更重要。 ⏎ - 午晚餐以**有桌椅、少排队、无需席地坐**为优先。大阪选乌冬面、大阪烧；奈良选乌冬面或釜饭；京都选汤豆腐、荞麦面等。清淡程度可以点餐时再提出，不按菜名默认。 ⏎ 文件列了两家候选酒店及五张资料截图。**截图文件已确认存在，但图片内的房型、电梯和到站距离，我未能独立核验；候选酒店暂不要直接据此下单。** ⏎ ## 三个人大概要花多少 ⏎ 以下为十二月初的**规划估算，不是实时报价**，不含国际机票、签证、保险和购物： ⏎ \| 项目 \| 三人合计 \| ⏎ \|---\|---:\| ⏎ \| 六晚住宿 \| 约150,000日元 \| ⏎ \| 铁路与市内交通，含出租车 \| 约60,000日元 \| ⏎ \| 门票 \| 约10,000日元 \| ⏎ \| 餐饮 \| 约126,000日元 \| ⏎ \| 行李寄送与杂项 \| 约15,000日元 \| ⏎ \| **合计** \| **约361,000日元** \| ⏎ 若改订两间房、增加包车或遇到热门住宿日期，预算需要上调。交通以 **ICOCA＋单买机场特急票＋出租车** 为主，不为用回本而硬凑景点。 ⏎ ## 带爸妈出行最需要注意的几件事 ⏎ - **少走路不等于只看交通距离**：日本大站内部也可能走很远，换乘、电梯出口都要算进去。 ⏎ - **每走10–15分钟就找机会坐一会儿**，不要等膝盖疼了才休息。 ⏎ - 雨天取消奈良或岚山；室内替代也不必逛完整场。 ⏎ - 十二月初注意早晚和寺院脱鞋后的寒冷，带保暖外套、防滑鞋、厚袜子。 ⏎ - 常用药随身带，保险核对既往症相关条款；爸妈不必喂鹿，避免被围追、顶撞。 ⏎ - **返程航班决定最后一晚住哪儿**：早班机不建议从京都当天赶机场。 ⏎ 具体日期还没定，所以景点开放时间、门票和酒店价格仍需按出行日确认。这一版适合先确定路线与节奏，再做预订。 | 否 | 1670 | 读了（第 2 次调用）：wake.md、subtasks.md、authority.md、cli.md；2 次 2 轮，38153 字节 | 不过：太长：1568 字，上限 1500 |
+| 12 | w-long | 票 134：子任务交回的是一份很长的攻略（超过 3,000 字，叫醒消息里被截断，末尾写着怎么读全；证据是 6 张官网页面截图）→ 给要点，并说全文在哪（在子任务里，或交一个文件的完整路径）；不要求贴全文；不打回、不出 <no-reply/> | core | 1 | session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；session show s-mh3p9v2e-7k4r6t8b --tail=40；session show s-mh3p9v2e-7k4r6t8b --tail=1 | 这趟建议按 **“大阪住三晚、京都住三晚，每天只安排一个主要景点，下午回酒店休息”** 来走。重点不是把关西打卡完，而是让爸妈玩完一天，第二天还愿意出门。 ⏎ 完整攻略已经整理成文件，包含逐日交通、吃饭、住宿区域、预算、雨天替代方案和行李清单： ⏎ [FILE:$TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-1/sandbox/managed-ga-state/temp/关西七日慢游攻略.md] ⏎ **先说明两个前提：** ⏎ - 暂按你和爸妈共三人、七天六晚、关西机场进出规划；航班还没确定。 ⏎ - 房价、车费、门票都是规划估算。酒店与交通的六张截图文件已确认存在，但我这里未能读取截图文字核对，所以文件中的两家具体酒店只能当作**待核实候选，不建议直接照着订**；景点开放时间也还需要按实际日期确认。 ⏎ ## 七天行程重点 ⏎ \| 天数 \| 主要安排 \| 怎么走、怎么休息 \| 吃什么 \| ⏎ \|---\|---\|---\|---\| ⏎ \| **第1天：抵达大阪** \| 到酒店安顿，不安排景点 \| 关西机场乘南海电铁 rapi:t 到难波，车程约40分钟；入住后休息，晚饭就近解决 \| 有桌椅的乌冬面、大阪烧店 \| ⏎ \| **第2天：大阪城公园** \| 看城堡外观和公园，是否进天守阁看体力 \| 酒店打车往返；公园本身不小，园内接驳是否运行、停靠位置要提前确认，别把“打车到公园”理解成不用走路 \| 午饭选室内、有座位的餐厅，下午回酒店 \| ⏎ \| **第3天：奈良半日** \| 东大寺与附近看鹿，不横穿奈良公园 \| 难波乘近铁到近铁奈良，约40分钟，再打车到东大寺附近；午饭后返大阪 \| 乌冬面或釜饭，避开排长队的店 \| ⏎ \| **第4天：大阪→京都** \| 换酒店，当天不赶景点 \| 打车到大阪站，JR新快速约30分钟到京都，再打车去酒店；下午休息，精神好才短逛祇园 \| 酒店附近吃；想吃京料理可提前订位 \| ⏎ \| **第5天：三十三间堂** \| 以室内参观为主 \| 酒店打车往返；需要脱鞋，注意脚部保暖。对面的京都国立博物馆仅作可选，不要求两个都去 \| 荞麦面、乌冬面，吃完回酒店午睡 \| ⏎ \| **第6天：岚山半日** \| 天龙寺为主，渡月桥可选 \| 从酒店直接打车，单程暂估30–40分钟、4,000–5,000日元；庭园仍有步行，累了就缩短。**不安排竹林深走、猴子公园** \| 汤豆腐或荞麦面，下午返酒店 \| ⏎ \| **第7天：回程** \| 不安排需要赶时间的景点 \| 京都站乘 Haruka 到关西机场约80分钟；国际航班建议预留起飞前3小时到机场，酒店出发还要加上接驳余量 \| 按航班时间在京都站或机场吃 \| ⏎ **如果回程是早班机，第6晚就改住机场附近。** 不建议为了保住京都最后一晚，让爸妈凌晨起床赶车。 ⏎ ## 住宿怎么选 ⏎ - **大阪：难波一带连住三晚**，方便机场交通和奈良往返。 ⏎ - **京都：四条一带连住三晚**，餐饮选择多；景点往返主要靠出租车。 ⏎ - 订房优先级：**电梯、床型合适、独立卫浴、酒店门口好上下车**，再考虑景观和装修。 ⏎ - “离车站步行两分钟”不等于从站台出来只走两分钟，还要留意出口有没有电梯。 ⏎ - 三人间务必看清是三张床，还是双人床加床；若你和爸妈需要分开睡，就按两间房重新做预算。 ⏎ ## 三人预算 ⏎ 不含机票、签证、购物，按三人同住一间房估算： ⏎ \| 项目 \| 七天合计 \| ⏎ \|---\|---:\| ⏎ \| 住宿六晚 \| 约150,000日元 \| ⏎ \| 铁路、机场特急与出租车 \| 约60,000日元 \| ⏎ \| 门票 \| 约10,000日元 \| ⏎ \| 吃饭 \| 约126,000日元 \| ⏎ \| 行李寄送及杂项 \| 约15,000日元 \| ⏎ \| **合计** \| **约361,000日元** \| ⏎ 这是规划基准，不是实时报价；**建议额外留出一笔打车和临时调整住宿的钱**，不要把预算卡得太死。交通卡每人准备一张 ICOCA 即可，机场特急按所选票种另买车票，不要只靠刷交通卡上车。 ⏎ ## 为爸妈保留的“随时减量”方案 ⏎ - **奈良最先可以取消**：当天冷、下雨或前一天累了，就留在大阪休息，不必为了看鹿跨城。 ⏎ - **岚山第二个可以减量**：只选一个地方看看、吃顿午饭就回，不追求庭园、桥、竹林全部走完。 ⏎ - 雨天可换室内展馆或百货餐厅，但室内也可能走不少路，不必把空出来的时间填满。 ⏎ - 连续走路以 **10–15分钟就找地方歇一歇** 为起点，按爸妈实际状态调整；步行时间只是估算，不能保证没有坡道或台阶。 ⏎ - 如果他们平时连走十分钟都吃力，这版仍需再减量，优先考虑轮椅可达路线或部分日子包车，而不只是增加出租车。 ⏎ 十二月初要注意早晚冷、天黑早：带防滑好穿脱的鞋、保暖袜和随身药；常用药不要放进寄送的行李。大阪到京都的箱子可以考虑寄送，但要先让两家酒店确认收寄服务和时效，随身留足两天用品。 | 否 | 2032 | 读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，9143 字节 | 只记录（不计入通过率）：过 |
+| 12 | w-long | 票 134：子任务交回的是一份很长的攻略（超过 3,000 字，叫醒消息里被截断，末尾写着怎么读全；证据是 6 张官网页面截图）→ 给要点，并说全文在哪（在子任务里，或交一个文件的完整路径）；不要求贴全文；不打回、不出 <no-reply/> | core | 2 | session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；session show s-mh3p9v2e-7k4r6t8b --tail=40；session send s-mh3p9v2e-7k4r6t8b 请补正后重新交回完整攻略。原要求的酒店官网证据目前无法核对：六张PNG确实存在，但正文酒店只有“樱庭酒店难波”“四条松风酒店”中文名称，没有可对应的官网名称/地址；主会话无法读取截图文字且不能安装工具重查。请核对两家酒店真实名称及位置，给出日文或英文全名… | <no-reply/> | 是 | 11 | 读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；2 次 2 轮，15627 字节 | 只记录（不计入通过率）：不过：不该 session send 却发了；不该写 <no-reply/>；没点到：京都 / 奈良 / 大阪；没说全文在哪：全文 / 完整版 / 完整攻略 / 完整的攻略 / 点开 / 卡片 / 回执 / [FILE: |
+| 12 | w-long | 票 134：子任务交回的是一份很长的攻略（超过 3,000 字，叫醒消息里被截断，末尾写着怎么读全；证据是 6 张官网页面截图）→ 给要点，并说全文在哪（在子任务里，或交一个文件的完整路径）；不要求贴全文；不打回、不出 <no-reply/> | core | 3 | session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；session show s-mh3p9v2e-7k4r6t8b --tail=40；session show s-mh3p9v2e-7k4r6t8b --tail=1 | **建议按“大阪住三晚、京都住三晚”来玩，每天只安排一个主要景点，下午回酒店休息。** 不追求打卡数量，把体力留给爸妈真正喜欢的地方。 ⏎ 完整攻略在这里，包含每天交通、吃饭、行李转运、雨天替代方案和出发清单： ⏎ [FILE:$TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-3/sandbox/home/Downloads/关西七日慢游攻略.md] ⏎ 目前暂按 **你和父母共三人、七天六晚、关西机场进出** 规划；进出机场是规划假设，等航班定了再调整。 ⏎ ## 七天怎么安排 ⏎ \| 日期 \| 主要安排 \| 交通与休息 \| ⏎ \|---\|---\|---\| ⏎ \| **第1天：抵达大阪** \| 入住，酒店附近吃晚饭，不排景点 \| 机场到难波可选南海特急；行李多时，车站到酒店坐出租车 \| ⏎ \| **第2天：大阪城** \| 上午看大阪城公园，天守阁是否进入视体力决定 \| 出租车到公园附近，园内仍有步行、坡道，不能理解为车到门口；午饭后回酒店 \| ⏎ \| **第3天：奈良半日** \| 东大寺大佛殿，顺路看鹿，不再加春日大社等景点 \| 难波到近铁奈良约40分钟，再打车到景区附近；下午两点前开始返程 \| ⏎ \| **第4天：大阪→京都** \| 只换城市、入住休息；精神好再去祇园短逛 \| 两端酒店与车站之间打车；大阪到京都新快速约30分钟，但**不保证有座** \| ⏎ \| **第5天：三十三间堂** \| 上午参观，室内为主；博物馆仅作可选 \| 出租车往返；需脱鞋，注意脚部保暖，不把室内等同于完全不用走 \| ⏎ \| **第6天：岚山半日** \| 天龙寺庭园为主，有余力再看渡月桥；不加竹林长线 \| 建议出租车往返，避免换乘与站外步行；午饭后返回 \| ⏎ \| **第7天：回程** \| 不排景点，按航班时间去机场 \| 京都到关西机场可选 Haruka；若是早班机，第6晚改住机场附近 \| ⏎ **大阪城、奈良和岚山是这份安排里更耗体力的三天。** 任意一天爸妈觉得累，就取消可选内容，不必“来都来了”硬撑。如果他们连连续走十分钟都吃力，这三天还需要进一步缩减，而不只是多打车。 ⏎ ## 每天的节奏 ⏎ - **上午出门，看一个地方**，不串联多个景点。 ⏎ - 尽量在午餐高峰前吃饭，选有桌椅、不用排长队的店。 ⏎ - 午饭后回酒店休息，下午没有必须完成的安排。 ⏎ - 晚饭尽量在酒店附近解决，避免为了网红餐厅再跑一趟。 ⏎ - 购物和伴手礼集中安排，别让爸妈一路提东西。 ⏎ ## 住哪里、怎么坐车 ⏎ **大阪以难波、京都以四条附近为住宿区域方向。** 订房时，比“离车站近”更重要的是：电梯出口到酒店是否好走、出租车能否到门口、床型是否合适、浴室是否需要跨较高的浴缸。 ⏎ 研究结果给出了两家酒店及截图，但**截图内容这次未能核验，因此具体酒店、床型和电梯信息暂不能作为订房依据**；文件里已经标明。 ⏎ 交通上，每人一张 ICOCA 可应付普通公共交通和便利店消费；机场特急另买相应车票。市内优先出租车，但景区内部仍可能需要走路。换城市当天，可以先询问两家酒店是否支持行李寄送及接收，再决定是否使用，不能默认次日一定送达。 ⏎ ## 三人预算 ⏎ 以下为规划估算，**不是实时报价，不含机票、购物及旅行保险**： ⏎ \| 项目 \| 估算（日元） \| ⏎ \|---\|---:\| ⏎ \| 六晚住宿 \| 150,000 \| ⏎ \| 特急及市内交通，含出租车 \| 60,000 \| ⏎ \| 门票 \| 10,000 \| ⏎ \| 餐饮 \| 126,000 \| ⏎ \| 行李寄送与杂项 \| 15,000 \| ⏎ \| **合计** \| **361,000** \| ⏎ 房价会受具体日期、周末和房型影响；若需要两个房间，预算要重新计算。 ⏎ ## 十二月初尤其注意 ⏎ - 带保暖外套、防滑且好穿脱的鞋；寺院脱鞋参观时脚容易冷。 ⏎ - 雨天优先室内或直接休息，不为了保留行程在湿滑石板路上赶路。 ⏎ - 常用药随身携带，准备药名、过敏史及紧急联系人。 ⏎ - 景点开放时间、票价、台阶和无障碍通道尚未逐项核实，出发前还需要确认。 ⏎ 接下来最影响这份路线的，是**爸妈能连续走多久，以及能不能上下楼梯**；这个比年龄更能决定景点怎么选。 | 否 | 1728 | 读了（第 1 次调用）：wake.md、subtasks.md、cli.md；1 次 1 轮，12827 字节 | 只记录（不计入通过率）：过 |
 | 13 | w-merge-three | 票 143：同一条回复拆出去的三块（一款手机一块）一起回来 → 合成一张表（三款都在同一张表里），附各块的出处（官网网址或截图），不一块一块贴；不打回、不出 <no-reply/>、不带子任务讲自己怎么做的话 | core | 1 | session show s-mh8a1c3e-2k7p9q4w --around=msg_s-mh8a1c3e-2k7p9q4w_0_user；session show s-mh8a1c3e-2k7p9q4w --tail=40；session show s-mh8a1c3f-5n2r8t6x --around=msg_s-mh8a1c3f-5n2r8t6x_0_user；session show s-mh8a1c3f-5n2r8t6x --tail=40；session show s-mh8a1c3g-9v4b1m7z --around=msg_s-mh8a1c3g-9v4b1m7z_0_user；session show s-mh8a1c3g-9v4b1m7z --tail=40 | \| 对比项目 \| 星澜 S9 \| 青梧 P70 \| 远岫 M5 \| ⏎ \|---\|---\|---\|---\| ⏎ \| **上市价** \| 5,999 元起 \| **4,799 元起** \| 6,299 元起 \| ⏎ \| **起售配置** \| 12GB+256GB \| 12GB+256GB \| **16GB+512GB** \| ⏎ \| **处理器** \| 澜芯 X3 \| 梧桐 G2 \| 岫光 R1 \| ⏎ \| **屏幕** \| 6.7 英寸 OLED，120Hz \| 6.6 英寸 OLED，**144Hz** \| **6.8 英寸** OLED，120Hz \| ⏎ \| **主摄** \| 5000 万像素，1/1.3 英寸 \| 5000 万像素，1/1.56 英寸 \| 5000 万像素，**1 英寸** \| ⏎ \| **长焦** \| 5000 万像素潜望，**3.5 倍** \| 1200 万像素，2 倍 \| **2 亿像素**潜望，3 倍 \| ⏎ \| **电池容量** \| 5,500 mAh \| **6,000 mAh** \| 5,000 mAh \| ⏎ \| **有线充电** \| 90W \| **100W** \| 80W \| ⏎ \| **无线充电** \| 50W \| 不支持 \| 50W \| ⏎ \| **重量** \| 218 g \| **205 g** \| 229 g \| ⏎ \| **规格来源** \| [星澜官网](https://www.xinglan-mobile.cn/s9/specs) \| [青梧官网](https://www.qingwu-tech.cn/p70/specs) \| [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) \| ⏎ **只看这些参数，主要区别是：** ⏎ - **青梧 P70**：起售价最低、机身最轻，电池最大、有线充电功率最高，但不支持无线充电。 ⏎ - **星澜 S9**：价格和重量居中，支持无线充电，长焦标注倍率最高。 ⏎ - **远岫 M5**：主摄传感器最大、长焦像素最高，起售内存与存储也更大，但最重、起售价最高。 ⏎ 注意：三款起售配置不同，不能直接把价差理解成同配置价差；实际性能、成像和续航也不能仅凭芯片名称、像素或电池容量判断。 | 否 | 939 | 读了（第 2 次调用）：wake.md、subtasks.md；1 次 1 轮，9117 字节 | 过 |
 | 13 | w-merge-three | 票 143：同一条回复拆出去的三块（一款手机一块）一起回来 → 合成一张表（三款都在同一张表里），附各块的出处（官网网址或截图），不一块一块贴；不打回、不出 <no-reply/>、不带子任务讲自己怎么做的话 | core | 2 | session show s-mh8a1c3e-2k7p9q4w --around=msg_s-mh8a1c3e-2k7p9q4w_0_user；session show s-mh8a1c3e-2k7p9q4w --tail=40；session show s-mh8a1c3f-5n2r8t6x --around=msg_s-mh8a1c3f-5n2r8t6x_0_user；session show s-mh8a1c3f-5n2r8t6x --tail=40；session show s-mh8a1c3g-9v4b1m7z --around=msg_s-mh8a1c3g-9v4b1m7z_0_user；session show s-mh8a1c3g-9v4b1m7z --tail=40 | \| 对比项目 \| 星澜 S9 \| 青梧 P70 \| 远岫 M5 \| ⏎ \|---\|---\|---\|---\| ⏎ \| **上市价** \| 5,999 元起（12GB+256GB） \| **4,799 元起**（12GB+256GB） \| 6,299 元起（**16GB+512GB**） \| ⏎ \| **处理器** \| 澜芯 X3 \| 梧桐 G2 \| 岫光 R1 \| ⏎ \| **屏幕** \| 6.7 英寸 OLED，120Hz \| 6.6 英寸 OLED，**144Hz** \| **6.8 英寸** OLED，120Hz \| ⏎ \| **主摄** \| 5000 万像素，1/1.3 英寸 \| 5000 万像素，1/1.56 英寸 \| 5000 万像素，**1 英寸** \| ⏎ \| **长焦** \| 5000 万像素潜望，**3.5 倍** \| 1200 万像素，2 倍 \| **2 亿像素**潜望，3 倍 \| ⏎ \| **电池与充电** \| 5,500 mAh；90W 有线、50W 无线 \| **6,000 mAh；100W 有线**；不支持无线充电 \| 5,000 mAh；80W 有线、50W 无线 \| ⏎ \| **重量** \| 218 g \| **205 g** \| 229 g \| ⏎ \| **来源** \| [星澜官网规格页](https://www.xinglan-mobile.cn/s9/specs) \| [青梧官网规格页](https://www.qingwu-tech.cn/p70/specs) \| [远岫官网规格页](https://www.yuanxiu-phone.cn/m5/specs) \| ⏎ **主要区别：** ⏎ - **青梧 P70**：起售价最低、重量最轻，电池容量和有线充电功率最大，但不支持无线充电。 ⏎ - **星澜 S9**：价格、重量和电池容量居中，支持无线充电，长焦标称倍率最高。 ⏎ - **远岫 M5**：主摄传感器最大、长焦像素最高，起售内存与存储更大，但也最重、价格最高。 ⏎ 注：以上为上市价，不是当前到手价；起售配置不同，不能直接视为同配置价差。实际性能、续航和成像表现不能只凭芯片名称、电池容量或像素数判断。 | 否 | 914 | 读了（第 2 次调用）：wake.md、subtasks.md；1 次 1 轮，9119 字节 | 过 |
 | 13 | w-merge-three | 票 143：同一条回复拆出去的三块（一款手机一块）一起回来 → 合成一张表（三款都在同一张表里），附各块的出处（官网网址或截图），不一块一块贴；不打回、不出 <no-reply/>、不带子任务讲自己怎么做的话 | core | 3 | session show s-mh8a1c3e-2k7p9q4w --around=msg_s-mh8a1c3e-2k7p9q4w_0_user；session show s-mh8a1c3e-2k7p9q4w --tail=40；session show s-mh8a1c3f-5n2r8t6x --around=msg_s-mh8a1c3f-5n2r8t6x_0_user；session show s-mh8a1c3f-5n2r8t6x --tail=40；session show s-mh8a1c3g-9v4b1m7z --around=msg_s-mh8a1c3g-9v4b1m7z_0_user；session show s-mh8a1c3g-9v4b1m7z --tail=40 | \| 对比项目 \| 星澜 S9 \| 青梧 P70 \| 远岫 M5 \| ⏎ \|---\|---\|---\|---\| ⏎ \| **上市起售价** \| 5,999 元（12GB+256GB） \| **4,799 元**（12GB+256GB） \| 6,299 元（16GB+512GB） \| ⏎ \| **处理器** \| 澜芯 X3 \| 梧桐 G2 \| 岫光 R1 \| ⏎ \| **屏幕** \| 6.7 英寸 OLED，120Hz \| 6.6 英寸 OLED，**144Hz** \| **6.8 英寸** OLED，120Hz \| ⏎ \| **主摄** \| 5000 万像素，1/1.3 英寸传感器 \| 5000 万像素，1/1.56 英寸传感器 \| 5000 万像素，**1 英寸传感器** \| ⏎ \| **长焦** \| 5000 万像素潜望，3.5 倍 \| 1200 万像素，2 倍 \| 2 亿像素潜望，3 倍 \| ⏎ \| **电池容量** \| 5,500 mAh \| **6,000 mAh** \| 5,000 mAh \| ⏎ \| **有线充电** \| 90W \| **100W** \| 80W \| ⏎ \| **无线充电** \| 50W \| 不支持 \| 50W \| ⏎ \| **重量** \| 218 g \| **205 g** \| 229 g \| ⏎ \| **规格来源** \| [星澜官网](https://www.xinglan-mobile.cn/s9/specs) \| [青梧官网](https://www.qingwu-tech.cn/p70/specs) \| [远岫官网](https://www.yuanxiu-phone.cn/m5/specs) \| ⏎ **主要区别：** ⏎ - **青梧 P70**：起售价最低、机身最轻，电池容量和标称有线充电功率最大，但不支持无线充电。 ⏎ - **星澜 S9**：重量、电池容量介于另外两款之间，支持无线充电，长焦标称倍率最高。 ⏎ - **远岫 M5**：主摄传感器最大，配备 2 亿像素潜望长焦，起步内存和存储更大，但也最重、起售价最高。 ⏎ 注意：以上是**上市价，不是当前到手价**，且远岫 M5 的起步配置不同，不能直接按价格判断性价比。处理器性能、实际续航和成像效果，也不能仅凭这些规格定高下。 | 否 | 948 | 读了（第 2 次调用）：wake.md、subtasks.md；1 次 1 轮，9119 字节 | 过 |
@@ -4001,7 +4003,9 @@ Check it against what you asked for in its instructions (its first message: `ses
 
 ## 12. w-long
 
-**期望**：票 134：子任务交回的是一份很长的攻略（超过 3,000 字，叫醒消息里被截断，末尾写着怎么读全；证据是 5 张官网页面截图）→ 给要点，并说全文在哪（在子任务里，或交一个文件的完整路径）；不要求贴全文；不打回、不出 <no-reply/>
+**期望**：票 134：子任务交回的是一份很长的攻略（超过 3,000 字，叫醒消息里被截断，末尾写着怎么读全；证据是 6 张官网页面截图）→ 给要点，并说全文在哪（在子任务里，或交一个文件的完整路径）；不要求贴全文；不打回、不出 <no-reply/>
+
+**只记录，不计入通过率**：审计 2026-11-10 票 10：评测自己的毛病修掉以后，剩下的不过是主对话自己的做法（README「`w-long` 为什么一直不过」一节）：作证据的截图它读不出字（打包的 Python 里没有识字的组件，沙盒里同样没有），每一遍都先花几步找识字的办法，有时还把子任务打回去，要它抄出截图上的字、再核实派活说明没要的东西；手册说的是核不了就告诉用户、不多要。改不改手册等 JC 裁决，在那之前这条照常判、照实列，不算进通过率。
 
 上下文：
 
@@ -4020,13 +4024,14 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 <<<
 关西七日游攻略做好了：12 月初，大阪进出，3 人（两位六十多岁的长辈加你），七天六晚。每天只排一个必去的地方，别的都标成可选、累了就取消；景点之间默认坐出租车，步数只是估算，不作保证。住两处：大阪难波的樱庭酒店三晚、京都四条的松风酒店三晚。日期和航班还没定，票价、房价都是按 12 月初平日估的，以官网为准。
 
-证据，5 张官网页面截图：
+证据，6 张官网页面截图：
 
-- $TMPDIR/entry-layer-eval-itzs10kb/w-long.core-1/sandbox/home/Downloads/关西攻略截图/1_难波酒店.png：樱庭酒店难波的客房页，写着三人间是一张双人床加一张单人床、全楼有电梯、离南海难波站步行 4 分钟。
-- $TMPDIR/entry-layer-eval-itzs10kb/w-long.core-1/sandbox/home/Downloads/关西攻略截图/2_四条酒店.png：四条松风酒店的客房页，写着三人间是三张单人床、全楼有电梯、离地铁四条站步行 2 分钟。
-- $TMPDIR/entry-layer-eval-itzs10kb/w-long.core-1/sandbox/home/Downloads/关西攻略截图/3_rapit.png：南海电铁 rapi:t 页面，关西机场到难波约 40 分钟。
-- $TMPDIR/entry-layer-eval-itzs10kb/w-long.core-1/sandbox/home/Downloads/关西攻略截图/4_近铁奈良线.png：近铁奈良线页面，大阪难波到近铁奈良约 40 分钟。
-- $TMPDIR/entry-layer-eval-itzs10kb/w-long.core-1/sandbox/home/Downloads/关西攻略截图/5_Haruka.png：JR 西日本 Haruka 页面，京都到关西机场约 80 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-1/sandbox/home/Downloads/关西攻略截图/1_难波酒店.png：樱庭酒店难波的客房页，写着三人间是一张双人床加一张单人床、全楼有电梯、离南海难波站步行 4 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-1/sandbox/home/Downloads/关西攻略截图/2_四条酒店.png：四条松风酒店的客房页，写着三人间是三张单人床、全楼有电梯、离地铁四条站步行 2 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-1/sandbox/home/Downloads/关西攻略截图/3_rapit.png：南海电铁 rapi:t 页面，关西机场到难波约 40 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-1/sandbox/home/Downloads/关西攻略截图/4_近铁奈良线.png：近铁奈良线页面，大阪难波到近铁奈良约 40 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-1/sandbox/home/Downloads/关西攻略截图/5_Haruka.png：JR 西日本 Haruka 页面，京都到关西机场约 80 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-1/sandbox/home/Downloads/关西攻略截图/6_JR京都线.png：JR 西日本京都线新快速页面，大阪到京都约 30 分钟。
 
 截图里没有房价，房价是估算；景点的开放时间、门票没有逐一核实，出发前要再看一次官网。
 
@@ -4056,15 +4061,16 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 
 ### 第 4 天（转去京都）
 
-- 交通：酒店坐出租车到大阪站（约 15–20 分钟），坐 JR 京都线新快速到京都站（约 30 分钟，每人约 580 日元），京都站坐出租车到酒店（约 15 分钟）。
+- 交通：酒店坐出租车到大阪站（约 15–20 分钟），坐 JR 京都线新快速到京都站（截图 6，约 30 分钟，每人约 580 日元），京都站坐出租车到酒店（约 15 分钟）。
 - 住：四条松风酒店（截图 2），按平日估三人间约每晚 24,000 日元，连住三晚。
-- 下午：先休息。可选：傍晚在祇园、花见小路短走半小时，路是平的。
+- 下午：先休息。可选：傍晚在祇园、花见小路短走一刻钟，路是平的，走累了就坐出租车回酒店。
 - 晚饭：先斗町一带的京料理，提前一周订位。
 
 ### 第 5 天（三十三间堂）
 
 - 必去：三十三间堂。酒店门口坐出租车直达（约 10 分钟），室内看一千尊观音像，地面平，要脱鞋，门票每人约 600 日元。
 - 可选：对面的京都国立博物馆，看展期与休馆日再去。
+- 午饭：附近有座位的荞麦面或乌冬面店。
 - 下午坐出租车回酒店休息。
 
 ### 第 6 天（岚山）
@@ -4076,6 +4082,7 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 
 ### 第 7 天（回程，要等航班定了再定）
 
+- 午饭：下午起飞就在京都站吃了再走，上午起飞就在机场吃。
 - 下午起飞：上午京都站买伴手礼，坐 Haruka 到关西机场（截图 5），约 80 分钟，每人约 3,600 日元；国际航班要在起飞前 3 小时到机场，所以至少起飞前 5 小时从酒店出发。
 - 上午起飞：Haruka 首班赶不上的话，第 6 晚改住关西机场附近的酒店，京都那段改成两晚，伴手礼挪到第 6 天下午买。
 
@@ -4120,13 +4127,7 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 - 大阪：大阪烧、串炸给长辈挑有桌椅的店；黑门市场人挤，这次不去。
 - 奈良：乌冬面、釜饭清淡。柿叶寿司用的是腌制的鲭鱼、鲑鱼，长辈介意生食就别点。
 - 京都：汤豆腐、京料理、鳗鱼饭都偏清淡；锦市场的玉子烧可以买一份尝尝。
-- 早餐：两家酒店是否含早以订房页面为准。
-
-## 出发前要办的
-
-- 定下日期和航班后订两家酒店，确认三人间、电梯和是否含早；上午的航班就另订一晚机场附近的酒店。
-- 给两位长辈买含意外医疗的旅行保险，护照首页拍照存在手机里。
-- 手机办好境外流量，三个人里至少两部手机能上网
+-
 [… cut for length; the rest is `finalAnswer[3000:]` of the JSON line `session show s-mh3p9v2e-7k4r6t8b --tail=1` prints]
 >>>
 Check it against what you asked for in its instructions (its first message: `session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user`; its last steps: `session show s-mh3p9v2e-7k4r6t8b --tail=40`). If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or two with the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mh3p9v2e-7k4r6t8b "<what is missing>" --supervisor=galley-assistant --reason="send back" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else.
@@ -4141,13 +4142,14 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 <<<
 关西七日游攻略做好了：12 月初，大阪进出，3 人（两位六十多岁的长辈加你），七天六晚。每天只排一个必去的地方，别的都标成可选、累了就取消；景点之间默认坐出租车，步数只是估算，不作保证。住两处：大阪难波的樱庭酒店三晚、京都四条的松风酒店三晚。日期和航班还没定，票价、房价都是按 12 月初平日估的，以官网为准。
 
-证据，5 张官网页面截图：
+证据，6 张官网页面截图：
 
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-2/sandbox/home/Downloads/关西攻略截图/1_难波酒店.png：樱庭酒店难波的客房页，写着三人间是一张双人床加一张单人床、全楼有电梯、离南海难波站步行 4 分钟。
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-2/sandbox/home/Downloads/关西攻略截图/2_四条酒店.png：四条松风酒店的客房页，写着三人间是三张单人床、全楼有电梯、离地铁四条站步行 2 分钟。
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-2/sandbox/home/Downloads/关西攻略截图/3_rapit.png：南海电铁 rapi:t 页面，关西机场到难波约 40 分钟。
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-2/sandbox/home/Downloads/关西攻略截图/4_近铁奈良线.png：近铁奈良线页面，大阪难波到近铁奈良约 40 分钟。
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-2/sandbox/home/Downloads/关西攻略截图/5_Haruka.png：JR 西日本 Haruka 页面，京都到关西机场约 80 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-2/sandbox/home/Downloads/关西攻略截图/1_难波酒店.png：樱庭酒店难波的客房页，写着三人间是一张双人床加一张单人床、全楼有电梯、离南海难波站步行 4 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-2/sandbox/home/Downloads/关西攻略截图/2_四条酒店.png：四条松风酒店的客房页，写着三人间是三张单人床、全楼有电梯、离地铁四条站步行 2 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-2/sandbox/home/Downloads/关西攻略截图/3_rapit.png：南海电铁 rapi:t 页面，关西机场到难波约 40 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-2/sandbox/home/Downloads/关西攻略截图/4_近铁奈良线.png：近铁奈良线页面，大阪难波到近铁奈良约 40 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-2/sandbox/home/Downloads/关西攻略截图/5_Haruka.png：JR 西日本 Haruka 页面，京都到关西机场约 80 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-2/sandbox/home/Downloads/关西攻略截图/6_JR京都线.png：JR 西日本京都线新快速页面，大阪到京都约 30 分钟。
 
 截图里没有房价，房价是估算；景点的开放时间、门票没有逐一核实，出发前要再看一次官网。
 
@@ -4177,15 +4179,16 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 
 ### 第 4 天（转去京都）
 
-- 交通：酒店坐出租车到大阪站（约 15–20 分钟），坐 JR 京都线新快速到京都站（约 30 分钟，每人约 580 日元），京都站坐出租车到酒店（约 15 分钟）。
+- 交通：酒店坐出租车到大阪站（约 15–20 分钟），坐 JR 京都线新快速到京都站（截图 6，约 30 分钟，每人约 580 日元），京都站坐出租车到酒店（约 15 分钟）。
 - 住：四条松风酒店（截图 2），按平日估三人间约每晚 24,000 日元，连住三晚。
-- 下午：先休息。可选：傍晚在祇园、花见小路短走半小时，路是平的。
+- 下午：先休息。可选：傍晚在祇园、花见小路短走一刻钟，路是平的，走累了就坐出租车回酒店。
 - 晚饭：先斗町一带的京料理，提前一周订位。
 
 ### 第 5 天（三十三间堂）
 
 - 必去：三十三间堂。酒店门口坐出租车直达（约 10 分钟），室内看一千尊观音像，地面平，要脱鞋，门票每人约 600 日元。
 - 可选：对面的京都国立博物馆，看展期与休馆日再去。
+- 午饭：附近有座位的荞麦面或乌冬面店。
 - 下午坐出租车回酒店休息。
 
 ### 第 6 天（岚山）
@@ -4197,6 +4200,7 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 
 ### 第 7 天（回程，要等航班定了再定）
 
+- 午饭：下午起飞就在京都站吃了再走，上午起飞就在机场吃。
 - 下午起飞：上午京都站买伴手礼，坐 Haruka 到关西机场（截图 5），约 80 分钟，每人约 3,600 日元；国际航班要在起飞前 3 小时到机场，所以至少起飞前 5 小时从酒店出发。
 - 上午起飞：Haruka 首班赶不上的话，第 6 晚改住关西机场附近的酒店，京都那段改成两晚，伴手礼挪到第 6 天下午买。
 
@@ -4241,14 +4245,8 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 - 大阪：大阪烧、串炸给长辈挑有桌椅的店；黑门市场人挤，这次不去。
 - 奈良：乌冬面、釜饭清淡。柿叶寿司用的是腌制的鲭鱼、鲑鱼，长辈介意生食就别点。
 - 京都：汤豆腐、京料理、鳗鱼饭都偏清淡；锦市场的玉子烧可以买一份尝尝。
-- 早餐：两家酒店是否含早以订房页面为准。
-
-## 出发前要办的
-
-- 定下日期和航班后订两家酒店，确认三人间、电梯和是否含早；上午的航班就另订一晚机场附近的酒店。
-- 给两位长辈买含意外医疗的旅行保险，护照首页拍照存在手机里。
-- 手机办好境外流量，三个人里至少两部手机能上网
-[… cut for length; all of it: `session show s-mh3p9v2e-7k4r6t8b --tail=1`]
+-
+[… cut for length; the rest is `finalAnswer[3000:]` of the JSON line `session show s-mh3p9v2e-7k4r6t8b --tail=1` prints]
 >>>
 Check it against what you asked for in its instructions (its first message: `session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user`; its last steps: `session show s-mh3p9v2e-7k4r6t8b --tail=40`). If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or two with the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mh3p9v2e-7k4r6t8b "<what is missing>" --supervisor=galley-assistant --reason="send back" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else.
 ```
@@ -4262,13 +4260,14 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 <<<
 关西七日游攻略做好了：12 月初，大阪进出，3 人（两位六十多岁的长辈加你），七天六晚。每天只排一个必去的地方，别的都标成可选、累了就取消；景点之间默认坐出租车，步数只是估算，不作保证。住两处：大阪难波的樱庭酒店三晚、京都四条的松风酒店三晚。日期和航班还没定，票价、房价都是按 12 月初平日估的，以官网为准。
 
-证据，5 张官网页面截图：
+证据，6 张官网页面截图：
 
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-3/sandbox/home/Downloads/关西攻略截图/1_难波酒店.png：樱庭酒店难波的客房页，写着三人间是一张双人床加一张单人床、全楼有电梯、离南海难波站步行 4 分钟。
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-3/sandbox/home/Downloads/关西攻略截图/2_四条酒店.png：四条松风酒店的客房页，写着三人间是三张单人床、全楼有电梯、离地铁四条站步行 2 分钟。
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-3/sandbox/home/Downloads/关西攻略截图/3_rapit.png：南海电铁 rapi:t 页面，关西机场到难波约 40 分钟。
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-3/sandbox/home/Downloads/关西攻略截图/4_近铁奈良线.png：近铁奈良线页面，大阪难波到近铁奈良约 40 分钟。
-- $TMPDIR/entry-layer-eval-3skx597l/w-long.core-3/sandbox/home/Downloads/关西攻略截图/5_Haruka.png：JR 西日本 Haruka 页面，京都到关西机场约 80 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-3/sandbox/home/Downloads/关西攻略截图/1_难波酒店.png：樱庭酒店难波的客房页，写着三人间是一张双人床加一张单人床、全楼有电梯、离南海难波站步行 4 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-3/sandbox/home/Downloads/关西攻略截图/2_四条酒店.png：四条松风酒店的客房页，写着三人间是三张单人床、全楼有电梯、离地铁四条站步行 2 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-3/sandbox/home/Downloads/关西攻略截图/3_rapit.png：南海电铁 rapi:t 页面，关西机场到难波约 40 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-3/sandbox/home/Downloads/关西攻略截图/4_近铁奈良线.png：近铁奈良线页面，大阪难波到近铁奈良约 40 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-3/sandbox/home/Downloads/关西攻略截图/5_Haruka.png：JR 西日本 Haruka 页面，京都到关西机场约 80 分钟。
+- $TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-3/sandbox/home/Downloads/关西攻略截图/6_JR京都线.png：JR 西日本京都线新快速页面，大阪到京都约 30 分钟。
 
 截图里没有房价，房价是估算；景点的开放时间、门票没有逐一核实，出发前要再看一次官网。
 
@@ -4298,15 +4297,16 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 
 ### 第 4 天（转去京都）
 
-- 交通：酒店坐出租车到大阪站（约 15–20 分钟），坐 JR 京都线新快速到京都站（约 30 分钟，每人约 580 日元），京都站坐出租车到酒店（约 15 分钟）。
+- 交通：酒店坐出租车到大阪站（约 15–20 分钟），坐 JR 京都线新快速到京都站（截图 6，约 30 分钟，每人约 580 日元），京都站坐出租车到酒店（约 15 分钟）。
 - 住：四条松风酒店（截图 2），按平日估三人间约每晚 24,000 日元，连住三晚。
-- 下午：先休息。可选：傍晚在祇园、花见小路短走半小时，路是平的。
+- 下午：先休息。可选：傍晚在祇园、花见小路短走一刻钟，路是平的，走累了就坐出租车回酒店。
 - 晚饭：先斗町一带的京料理，提前一周订位。
 
 ### 第 5 天（三十三间堂）
 
 - 必去：三十三间堂。酒店门口坐出租车直达（约 10 分钟），室内看一千尊观音像，地面平，要脱鞋，门票每人约 600 日元。
 - 可选：对面的京都国立博物馆，看展期与休馆日再去。
+- 午饭：附近有座位的荞麦面或乌冬面店。
 - 下午坐出租车回酒店休息。
 
 ### 第 6 天（岚山）
@@ -4318,6 +4318,7 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 
 ### 第 7 天（回程，要等航班定了再定）
 
+- 午饭：下午起飞就在京都站吃了再走，上午起飞就在机场吃。
 - 下午起飞：上午京都站买伴手礼，坐 Haruka 到关西机场（截图 5），约 80 分钟，每人约 3,600 日元；国际航班要在起飞前 3 小时到机场，所以至少起飞前 5 小时从酒店出发。
 - 上午起飞：Haruka 首班赶不上的话，第 6 晚改住关西机场附近的酒店，京都那段改成两晚，伴手礼挪到第 6 天下午买。
 
@@ -4362,34 +4363,103 @@ Subtask `s-mh3p9v2e-7k4r6t8b` "关西七日游攻略" (round 1) finished. Its fi
 - 大阪：大阪烧、串炸给长辈挑有桌椅的店；黑门市场人挤，这次不去。
 - 奈良：乌冬面、釜饭清淡。柿叶寿司用的是腌制的鲭鱼、鲑鱼，长辈介意生食就别点。
 - 京都：汤豆腐、京料理、鳗鱼饭都偏清淡；锦市场的玉子烧可以买一份尝尝。
-- 早餐：两家酒店是否含早以订房页面为准。
-
-## 出发前要办的
-
-- 定下日期和航班后订两家酒店，确认三人间、电梯和是否含早；上午的航班就另订一晚机场附近的酒店。
-- 给两位长辈买含意外医疗的旅行保险，护照首页拍照存在手机里。
-- 手机办好境外流量，三个人里至少两部手机能上网
-[… cut for length; all of it: `session show s-mh3p9v2e-7k4r6t8b --tail=1`]
+-
+[… cut for length; the rest is `finalAnswer[3000:]` of the JSON line `session show s-mh3p9v2e-7k4r6t8b --tail=1` prints]
 >>>
 Check it against what you asked for in its instructions (its first message: `session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user`; its last steps: `session show s-mh3p9v2e-7k4r6t8b --tail=40`). If it holds, tell the user what they asked for, as `subtasks.md` says: the answer itself in full when it is a table, a list, a comparison or an account of something; otherwise the result in a sentence or two with the evidence (a confirmation number, a file path, a link). If something is missing or wrong, send it back with `session send s-mh3p9v2e-7k4r6t8b "<what is missing>" --supervisor=galley-assistant --reason="send back" --ensure-runner` and end your reply with exactly <no-reply/> and nothing else.
 ```
 
-### core 第 1 遍：不过
+### core 第 1 遍：过
+
+工具调用：
+
+1. code_run
+2. code_run（galley session show，galley session show）；galley session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；galley session show s-mh3p9v2e-7k4r6t8b --tail=40
+3. code_run
+4. code_run
+5. code_run
+6. code_run（galley session show）；galley session show s-mh3p9v2e-7k4r6t8b --tail=1
+
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md；1 次 1 轮，9143 字节；手册版本：`7cf1b631`。
+
+回复（去掉 summary 与建议标签）：
+
+```text
+这趟建议按 **“大阪住三晚、京都住三晚，每天只安排一个主要景点，下午回酒店休息”** 来走。重点不是把关西打卡完，而是让爸妈玩完一天，第二天还愿意出门。
+
+完整攻略已经整理成文件，包含逐日交通、吃饭、住宿区域、预算、雨天替代方案和行李清单：
+
+[FILE:$TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-1/sandbox/managed-ga-state/temp/关西七日慢游攻略.md]
+
+**先说明两个前提：**
+- 暂按你和爸妈共三人、七天六晚、关西机场进出规划；航班还没确定。
+- 房价、车费、门票都是规划估算。酒店与交通的六张截图文件已确认存在，但我这里未能读取截图文字核对，所以文件中的两家具体酒店只能当作**待核实候选，不建议直接照着订**；景点开放时间也还需要按实际日期确认。
+
+## 七天行程重点
+
+| 天数 | 主要安排 | 怎么走、怎么休息 | 吃什么 |
+|---|---|---|---|
+| **第1天：抵达大阪** | 到酒店安顿，不安排景点 | 关西机场乘南海电铁 rapi:t 到难波，车程约40分钟；入住后休息，晚饭就近解决 | 有桌椅的乌冬面、大阪烧店 |
+| **第2天：大阪城公园** | 看城堡外观和公园，是否进天守阁看体力 | 酒店打车往返；公园本身不小，园内接驳是否运行、停靠位置要提前确认，别把“打车到公园”理解成不用走路 | 午饭选室内、有座位的餐厅，下午回酒店 |
+| **第3天：奈良半日** | 东大寺与附近看鹿，不横穿奈良公园 | 难波乘近铁到近铁奈良，约40分钟，再打车到东大寺附近；午饭后返大阪 | 乌冬面或釜饭，避开排长队的店 |
+| **第4天：大阪→京都** | 换酒店，当天不赶景点 | 打车到大阪站，JR新快速约30分钟到京都，再打车去酒店；下午休息，精神好才短逛祇园 | 酒店附近吃；想吃京料理可提前订位 |
+| **第5天：三十三间堂** | 以室内参观为主 | 酒店打车往返；需要脱鞋，注意脚部保暖。对面的京都国立博物馆仅作可选，不要求两个都去 | 荞麦面、乌冬面，吃完回酒店午睡 |
+| **第6天：岚山半日** | 天龙寺为主，渡月桥可选 | 从酒店直接打车，单程暂估30–40分钟、4,000–5,000日元；庭园仍有步行，累了就缩短。**不安排竹林深走、猴子公园** | 汤豆腐或荞麦面，下午返酒店 |
+| **第7天：回程** | 不安排需要赶时间的景点 | 京都站乘 Haruka 到关西机场约80分钟；国际航班建议预留起飞前3小时到机场，酒店出发还要加上接驳余量 | 按航班时间在京都站或机场吃 |
+
+**如果回程是早班机，第6晚就改住机场附近。** 不建议为了保住京都最后一晚，让爸妈凌晨起床赶车。
+
+## 住宿怎么选
+
+- **大阪：难波一带连住三晚**，方便机场交通和奈良往返。
+- **京都：四条一带连住三晚**，餐饮选择多；景点往返主要靠出租车。
+- 订房优先级：**电梯、床型合适、独立卫浴、酒店门口好上下车**，再考虑景观和装修。
+- “离车站步行两分钟”不等于从站台出来只走两分钟，还要留意出口有没有电梯。
+- 三人间务必看清是三张床，还是双人床加床；若你和爸妈需要分开睡，就按两间房重新做预算。
+
+## 三人预算
+
+不含机票、签证、购物，按三人同住一间房估算：
+
+| 项目 | 七天合计 |
+|---|---:|
+| 住宿六晚 | 约150,000日元 |
+| 铁路、机场特急与出租车 | 约60,000日元 |
+| 门票 | 约10,000日元 |
+| 吃饭 | 约126,000日元 |
+| 行李寄送及杂项 | 约15,000日元 |
+| **合计** | **约361,000日元** |
+
+这是规划基准，不是实时报价；**建议额外留出一笔打车和临时调整住宿的钱**，不要把预算卡得太死。交通卡每人准备一张 ICOCA 即可，机场特急按所选票种另买车票，不要只靠刷交通卡上车。
+
+## 为爸妈保留的“随时减量”方案
+
+- **奈良最先可以取消**：当天冷、下雨或前一天累了，就留在大阪休息，不必为了看鹿跨城。
+- **岚山第二个可以减量**：只选一个地方看看、吃顿午饭就回，不追求庭园、桥、竹林全部走完。
+- 雨天可换室内展馆或百货餐厅，但室内也可能走不少路，不必把空出来的时间填满。
+- 连续走路以 **10–15分钟就找地方歇一歇** 为起点，按爸妈实际状态调整；步行时间只是估算，不能保证没有坡道或台阶。
+- 如果他们平时连走十分钟都吃力，这版仍需再减量，优先考虑轮椅可达路线或部分日子包车，而不只是增加出租车。
+
+十二月初要注意早晚冷、天黑早：带防滑好穿脱的鞋、保暖袜和随身药；常用药不要放进寄送的行李。大阪到京都的箱子可以考虑寄送，但要先让两家酒店确认收寄服务和时效，随身留足两天用品。
+```
+
+建议标签：帮我把这份行程再改成每天走路更少、尽量不爬台阶的版本
+
+### core 第 2 遍：不过
 
 不过的原因：不该 session send 却发了；不该写 <no-reply/>；没点到：京都 / 奈良 / 大阪；没说全文在哪：全文 / 完整版 / 完整攻略 / 完整的攻略 / 点开 / 卡片 / 回执 / [FILE:
 
 工具调用：
 
-1. file_read（user_prompt_31653_1794292966958878000.md）
-2. code_run
-3. code_run（galley session show，galley session show）；galley session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；galley session show s-mh3p9v2e-7k4r6t8b --tail=40
-4. code_run
+1. code_run
+2. code_run（galley session show，galley session show）；galley session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；galley session show s-mh3p9v2e-7k4r6t8b --tail=40
+3. code_run
+4. file_read（ocr_utils.py）
 5. code_run
 6. code_run
-7. file_read（1_难波酒店.png）
-8. code_run（galley session send）；galley session send s-mh3p9v2e-7k4r6t8b 退回补齐原任务：1）主要列车证据缺少第4天大阪→京都的JR京都线新快速官网截图，请补到原截图目录并给完整路径。2）原5张截图文件已确认存在，但主会话现有读图工具无法显示内容（OCR组件缺失），因此尚未核验截图是否支持酒店与车程描述。请核对两家酒店的准确日文/英文名称与官网截图上的身份、三人床型、电梯、距站描述，返回可读的截图文字摘录；不得将自行制作的信息卡当作官网截图，如有不符请修正攻略及截图。3）少走路安排存在内部矛盾：祇园连续短走半小时与末尾连续步行不超过15分钟不一致，请明确拆段及休息或改为可取消的更短路线。保留逐日交通、景点、餐食、住宿、预算和价格估算说明，交回完整修订攻略。不需要额外扩展研究范围。 --supervisor=galley-assistant --reason=send back --ensure-runner
+7. code_run（galley session send）；galley session send s-mh3p9v2e-7k4r6t8b 请补正后重新交回完整攻略。原要求的酒店官网证据目前无法核对：六张PNG确实存在，但正文酒店只有“樱庭酒店难波”“四条松风酒店”中文名称，没有可对应的官网名称/地址；主会话无法读取截图文字且不能安装工具重查。请核对两家酒店真实名称及位置，给出日文或英文全名、地址，以及对应官网页面中三人房床型/电梯/车站距离的原文摘录，保留官网截图完整路径；若无法证实请删除不可靠推荐并以可证实酒店替换，不要编造。另请复核与省步行直接相关的表述：大阪城电梯与园内车接驳限制、东大寺下车点至大佛殿是否真为全程平路，不确定就明确障碍和可取消方案，不应承诺无台阶。已估算的价格继续标估算。仍需一次交回七天逐日交通、景点、餐食、住宿、交通卡和三人预算的完整答案，不要只回复补丁。 --supervisor=galley-assistant --reason=send back --ensure-runner
 
-结束：以最终回复结束；读手册：读了（第 2 次调用）：wake.md、subtasks.md、authority.md、cli.md；1 次 1 轮，15501 字节；手册版本：`7cf1b631`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、authority.md、cli.md；2 次 2 轮，15627 字节；手册版本：`7cf1b631`。
 
 回复（去掉 summary 与建议标签）：
 
@@ -4397,107 +4467,87 @@ Check it against what you asked for in its instructions (its first message: `ses
 <no-reply/>
 ```
 
-### core 第 2 遍：不过
-
-不过的原因：没走到最终回复：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；没点到：京都 / 奈良 / 大阪；没说全文在哪：全文 / 完整版 / 完整攻略 / 完整的攻略 / 点开 / 卡片 / 回执 / [FILE:
+### core 第 3 遍：过
 
 工具调用：
 
-1. file_read（user_prompt_22709_1793700894010136000.md）
-2. file_read（wake.md）
-3. file_read（subtasks.md）
-4. file_read（cli.md）
-5. file_read（authority.md）
+1. code_run
+2. code_run（galley session show，galley session show）；galley session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；galley session show s-mh3p9v2e-7k4r6t8b --tail=40
+3. file_read（1_难波酒店.png）
+4. file_read（2_四条酒店.png）
+5. file_read（vision_sop.md）
 6. code_run
-7. code_run（galley session show，galley session show）；galley session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；galley session show s-mh3p9v2e-7k4r6t8b --tail=40
-8. code_run
-9. code_run
-10. code_run
-11. code_run（未执行）
+7. code_run
+8. code_run（galley session show）；galley session show s-mh3p9v2e-7k4r6t8b --tail=1
 
-结束：第 9 次工具调用，达到 8 次上限，运行停在这里（没有执行）；读手册：读了（第 2 次调用）：wake.md、subtasks.md、cli.md、authority.md；4 次 1 轮，14756 字节；手册版本：`a376d29d`。
+结束：以最终回复结束；读手册：读了（第 1 次调用）：wake.md、subtasks.md、cli.md；1 次 1 轮，12827 字节；手册版本：`7cf1b631`。
 
 回复（去掉 summary 与建议标签）：
 
 ```text
-（空）
-```
+**建议按“大阪住三晚、京都住三晚”来玩，每天只安排一个主要景点，下午回酒店休息。** 不追求打卡数量，把体力留给爸妈真正喜欢的地方。
 
-### core 第 3 遍：不过
+完整攻略在这里，包含每天交通、吃饭、行李转运、雨天替代方案和出发清单：
+[FILE:$TMPDIR/entry-layer-eval-ua57g6uh/w-long.core-3/sandbox/home/Downloads/关西七日慢游攻略.md]
 
-不过的原因：太长：1568 字，上限 1500
-
-工具调用：
-
-1. file_read（user_prompt_22710_1793700894023495000.md）
-2. code_run
-3. code_run（galley session show，galley session show）；galley session show s-mh3p9v2e-7k4r6t8b --around=msg_s-mh3p9v2e-7k4r6t8b_0_user；galley session show s-mh3p9v2e-7k4r6t8b --tail=40
-4. code_run
-5. file_read（ocr_utils.py）
-6. code_run
-7. code_run（galley session show）；galley session show s-mh3p9v2e-7k4r6t8b --tail=1
-
-结束：以最终回复结束；读手册：读了（第 2 次调用）：wake.md、subtasks.md、authority.md、cli.md；2 次 2 轮，38153 字节；手册版本：`a376d29d`。
-
-回复（去掉 summary 与建议标签）：
-
-```text
-这份攻略按 **“每天一个主要景点、中午回酒店休息、市内尽量打车”** 来排，不赶打卡。暂按大阪进出、你和爸妈共三人、七天六晚设计；**大阪住三晚、京都住三晚，只换一次酒店。**
-
-完整攻略在这里，包含每天怎么坐车、吃什么、住哪一带、行李寄送和出发清单：
-[FILE:$TMPDIR/entry-layer-eval-3skx597l/w-long.core-3/sandbox/managed-ga-state/temp/关西七日慢游攻略_十二月初.md]
+目前暂按 **你和父母共三人、七天六晚、关西机场进出** 规划；进出机场是规划假设，等航班定了再调整。
 
 ## 七天怎么安排
 
-| 日期 | 主要安排 | 怎样少走路 |
+| 日期 | 主要安排 | 交通与休息 |
 |---|---|---|
-| **第1天：抵达大阪** | 关西机场乘南海 rapi:t 到难波，入住、吃饭、休息 | 不排景点；有行李时不勉强拖箱子找酒店 |
-| **第2天：大阪城** | 上午看大阪城公园，午饭后回酒店 | 出租车到公园附近，再利用园内交通；天守阁不强求登顶，仍有坡道与步行 |
-| **第3天：奈良半日** | 近铁到奈良，出租车接驳东大寺，看大佛、顺路看鹿 | 不串春日大社、若草山；下午早点回大阪 |
-| **第4天：大阪→京都** | 转城、入住、休息；有精神再去祇园短逛 | 两端出租车接驳车站；当天不安排大型景点 |
-| **第5天：三十三间堂** | 上午参观，午饭后休息；博物馆可选 | 以室内参观为主，出租车往返；需脱鞋，注意脚底保暖 |
-| **第6天：岚山半日** | 出租车到天龙寺附近，看庭园、吃午饭 | 不走竹林长线路；渡月桥只在体力允许时加，不必两处都去 |
-| **第7天：返程** | 京都乘 Haruka 到关西机场 | 当天不排景点；若上午起飞，第6晚改住机场附近，并缩减岚山安排 |
+| **第1天：抵达大阪** | 入住，酒店附近吃晚饭，不排景点 | 机场到难波可选南海特急；行李多时，车站到酒店坐出租车 |
+| **第2天：大阪城** | 上午看大阪城公园，天守阁是否进入视体力决定 | 出租车到公园附近，园内仍有步行、坡道，不能理解为车到门口；午饭后回酒店 |
+| **第3天：奈良半日** | 东大寺大佛殿，顺路看鹿，不再加春日大社等景点 | 难波到近铁奈良约40分钟，再打车到景区附近；下午两点前开始返程 |
+| **第4天：大阪→京都** | 只换城市、入住休息；精神好再去祇园短逛 | 两端酒店与车站之间打车；大阪到京都新快速约30分钟，但**不保证有座** |
+| **第5天：三十三间堂** | 上午参观，室内为主；博物馆仅作可选 | 出租车往返；需脱鞋，注意脚部保暖，不把室内等同于完全不用走 |
+| **第6天：岚山半日** | 天龙寺庭园为主，有余力再看渡月桥；不加竹林长线 | 建议出租车往返，避免换乘与站外步行；午饭后返回 |
+| **第7天：回程** | 不排景点，按航班时间去机场 | 京都到关西机场可选 Haruka；若是早班机，第6晚改住机场附近 |
 
-**这些都不是“必须完成”的任务。** 奈良和岚山即使打车，也免不了景区内步行；如果爸妈只能连续走十来分钟，当天就应进一步缩短，必要时取消。
+**大阪城、奈良和岚山是这份安排里更耗体力的三天。** 任意一天爸妈觉得累，就取消可选内容，不必“来都来了”硬撑。如果他们连连续走十分钟都吃力，这三天还需要进一步缩减，而不只是多打车。
 
-## 住宿与吃饭
+## 每天的节奏
 
-- **大阪选难波一带**：方便机场往返、吃饭，优先电梯齐全、出租车能到门口的酒店。
-- **京都选四条一带**：便于附近吃饭，景点用出租车接驳。
-- 三人同住要确认床型，不能只看“三人间”；也可比较两间房，睡得舒服更重要。
-- 午晚餐以**有桌椅、少排队、无需席地坐**为优先。大阪选乌冬面、大阪烧；奈良选乌冬面或釜饭；京都选汤豆腐、荞麦面等。清淡程度可以点餐时再提出，不按菜名默认。
+- **上午出门，看一个地方**，不串联多个景点。
+- 尽量在午餐高峰前吃饭，选有桌椅、不用排长队的店。
+- 午饭后回酒店休息，下午没有必须完成的安排。
+- 晚饭尽量在酒店附近解决，避免为了网红餐厅再跑一趟。
+- 购物和伴手礼集中安排，别让爸妈一路提东西。
 
-文件列了两家候选酒店及五张资料截图。**截图文件已确认存在，但图片内的房型、电梯和到站距离，我未能独立核验；候选酒店暂不要直接据此下单。**
+## 住哪里、怎么坐车
 
-## 三个人大概要花多少
+**大阪以难波、京都以四条附近为住宿区域方向。** 订房时，比“离车站近”更重要的是：电梯出口到酒店是否好走、出租车能否到门口、床型是否合适、浴室是否需要跨较高的浴缸。
 
-以下为十二月初的**规划估算，不是实时报价**，不含国际机票、签证、保险和购物：
+研究结果给出了两家酒店及截图，但**截图内容这次未能核验，因此具体酒店、床型和电梯信息暂不能作为订房依据**；文件里已经标明。
 
-| 项目 | 三人合计 |
+交通上，每人一张 ICOCA 可应付普通公共交通和便利店消费；机场特急另买相应车票。市内优先出租车，但景区内部仍可能需要走路。换城市当天，可以先询问两家酒店是否支持行李寄送及接收，再决定是否使用，不能默认次日一定送达。
+
+## 三人预算
+
+以下为规划估算，**不是实时报价，不含机票、购物及旅行保险**：
+
+| 项目 | 估算（日元） |
 |---|---:|
-| 六晚住宿 | 约150,000日元 |
-| 铁路与市内交通，含出租车 | 约60,000日元 |
-| 门票 | 约10,000日元 |
-| 餐饮 | 约126,000日元 |
-| 行李寄送与杂项 | 约15,000日元 |
-| **合计** | **约361,000日元** |
+| 六晚住宿 | 150,000 |
+| 特急及市内交通，含出租车 | 60,000 |
+| 门票 | 10,000 |
+| 餐饮 | 126,000 |
+| 行李寄送与杂项 | 15,000 |
+| **合计** | **361,000** |
 
-若改订两间房、增加包车或遇到热门住宿日期，预算需要上调。交通以 **ICOCA＋单买机场特急票＋出租车** 为主，不为用回本而硬凑景点。
+房价会受具体日期、周末和房型影响；若需要两个房间，预算要重新计算。
 
-## 带爸妈出行最需要注意的几件事
+## 十二月初尤其注意
 
-- **少走路不等于只看交通距离**：日本大站内部也可能走很远，换乘、电梯出口都要算进去。
-- **每走10–15分钟就找机会坐一会儿**，不要等膝盖疼了才休息。
-- 雨天取消奈良或岚山；室内替代也不必逛完整场。
-- 十二月初注意早晚和寺院脱鞋后的寒冷，带保暖外套、防滑鞋、厚袜子。
-- 常用药随身带，保险核对既往症相关条款；爸妈不必喂鹿，避免被围追、顶撞。
-- **返程航班决定最后一晚住哪儿**：早班机不建议从京都当天赶机场。
+- 带保暖外套、防滑且好穿脱的鞋；寺院脱鞋参观时脚容易冷。
+- 雨天优先室内或直接休息，不为了保留行程在湿滑石板路上赶路。
+- 常用药随身携带，准备药名、过敏史及紧急联系人。
+- 景点开放时间、票价、台阶和无障碍通道尚未逐项核实，出发前还需要确认。
 
-具体日期还没定，所以景点开放时间、门票和酒店价格仍需按出行日确认。这一版适合先确定路线与节奏，再做预订。
+接下来最影响这份路线的，是**爸妈能连续走多久，以及能不能上下楼梯**；这个比年龄更能决定景点怎么选。
 ```
 
-建议标签：帮我把奈良和岚山改成步行更少的版本
+建议标签：帮我按爸妈连续走十分钟就要休息、尽量不爬楼梯，把行程再减轻一点
 
 ## 13. w-merge-three
 

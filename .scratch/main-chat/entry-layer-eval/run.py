@@ -3490,6 +3490,11 @@ def fake_llm(script: str, ctx: dict[str, Any] | None = None) -> Any:
                            "https://www.shuofeng-ev.cn/s6/specs")],
         "final": [call("<summary>Answered</summary>\n先放蛋。\n"
                        "<next-suggestion>帮我写个番茄炒蛋的完整步骤</next-suggestion>")],
+        # Audit 2026-11-10 ticket 10: w-long, one look, then the gist and
+        # where the whole is.
+        "wake-long-gist": [call("<summary>Look</summary>", ("code_run", {"script": "print('looked')"})),
+                           call("<summary>Gist</summary>\n七天按大阪三晚、京都三晚排，每天一个必去的地方，景点之间坐出租车。\n\n"
+                                "完整攻略在这里：\n[FILE:/tmp/关西七日游攻略.md]")],
         "tag": [call("<summary>Dispatched</summary>\n交给子任务去整理了。\n"
                      "<subtask>把 ~/Downloads 里的 PDF 按内容分类</subtask>")],
         "cli-final": [call("<summary>Start a subtask</summary>\n开个子任务去做。",
@@ -4313,10 +4318,11 @@ def build_result(job: dict[str, Any], rec: dict[str, Any], done: Any, latency: f
             # Ticket 145: the prompt a wake case ran under (its own, or
             # --wake-prompt's).
             result["wake_prompt"] = job["wake_prompt"]
-        if job.get("t147"):
+        if job.get("t147") or job.get("wake_inline"):
             # Ticket 147: what the first model call got as the new user
             # message: the note itself, or upstream's pointer to the file
-            # it was saved to.
+            # it was saved to (since audit 2026-11-10 ticket 10 also for a
+            # case with `inline_note`).
             msgs = (rec["requests"][0] if rec["requests"] else {}).get("messages") or []
             last = msgs[-1].get("content") if msgs else ""
             if isinstance(last, list):
@@ -4780,13 +4786,18 @@ def make_wake_jobs(cases: list[dict[str, Any]], wordings: list[str], now: dateti
                     "keep_request": (case["id"] in WAKE_DUMP_CASES and n == 1) or bool(dry),
                     "dry": dry,
                     "sandbox": True,
-                    "tool_cap": WAKE_TOOL_CAP,
+                    # Audit 2026-11-10 ticket 10: a case may set its own
+                    # cap (w-long; wake/cases.json `tool_cap`).
+                    "tool_cap": int(case.get("tool_cap") or WAKE_TOOL_CAP),
                     "wake": {"fixture": wake_fixture(filled, now), "files": case.get("files") or {}},
                     "wake_prompt": prompt_override or case.get("prompt"),
                     # Ticket 147.
                     "t147": t147,
                     "model_tag": model_tag,
-                    "wake_inline": bool(cfg.get("inline")),
+                    # Audit 2026-11-10 ticket 10: a case that sets
+                    # `inline_note` gets its note in full, as the runner
+                    # hands every wake note since ticket 147.
+                    "wake_inline": bool(cfg.get("inline") or case.get("inline_note")),
                     "tell_user": bool(t147),
                 })
     return jobs
@@ -5297,6 +5308,24 @@ STOP_LABELS = {
 }
 
 
+CAP_OUTCOME_RE = re.compile(r"^not run: cap of (\d+) tool calls reached")
+
+
+def stop_label(r: dict[str, Any]) -> str:
+    """STOP_LABELS for a run, the cap it hit being its own (audit 2026-11-10
+    ticket 10): the label names SANDBOX_TOOL_CAP's 8, while a wake run's cap
+    is WAKE_TOOL_CAP or its case's `tool_cap`, as the call it stopped at
+    records it."""
+    stop = r.get("stop_reason")
+    if stop == "cap_reached":
+        for c in reversed(r.get("calls") or []):
+            m = CAP_OUTCOME_RE.match(c.get("outcome") or "")
+            if m:
+                cap = int(m.group(1))
+                return f"第 {cap + 1} 次工具调用，达到 {cap} 次上限，运行停在这里（没有执行）"
+    return STOP_LABELS.get(stop, str(stop))
+
+
 def outcome_label(outcome: str) -> str:
     if outcome == "run in the sandbox":
         return "在沙盒里执行"
@@ -5556,7 +5585,7 @@ def wake_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
     if r.get("status") != "ok":
         reasons.append(f"运行失败：{r.get('status')}")
     if stop not in ("final_reply", "ask_user"):
-        reasons.append("没走到最终回复：" + STOP_LABELS.get(stop, str(stop)))
+        reasons.append("没走到最终回复：" + stop_label(r))
     if held:
         reasons.append("用了会卡住主对话的命令：" + "、".join(sorted(set(held))))
     if "session new" in names or SUBTASK_OPEN_RE.search(reply):
@@ -5668,6 +5697,14 @@ def wake_facts(r: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
         "pass": not reasons,
         "reasons": reasons,
     }
+
+
+def wake_verdict(f: dict[str, Any], case: dict[str, Any]) -> str:
+    """The 判定 column of the wake suite's overview: 过, or 不过 with the
+    reasons; a case marked `record_only` (audit 2026-11-10 ticket 10,
+    w-long) is judged and shown as usual but says it is not counted."""
+    verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+    return "只记录（不计入通过率）：" + verdict if case.get("record_only") else verdict
 
 
 def cell_text(cell: str) -> str:
@@ -6195,7 +6232,10 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         "- **工具**：`code_run` 与文件工具在每次运行自己的 macOS 沙盒里真的执行（同派活对照第二轮的沙盒，另允许 `sed`、`cat`、`ls` 等几个系统程序，"
         "`python3` 指向同一个解释器）；Galley CLI 是假的，按 `cases.json` 的固定数据回答（会话行、子任务的对话、项目、模型、真实 CLI 的 `--help` 原文），"
         "记下每次调用的参数，`session send` 等写命令只改假 CLI 自己的状态。浏览器工具、`ask_user` 不执行，运行停在那里。"
-        f"每次运行最多 {WAKE_TOOL_CAP} 次工具调用。",
+        f"每次运行最多 {WAKE_TOOL_CAP} 次工具调用"
+        + ("（用例写了 `tool_cap` 的照它，审计 2026-11-10 票 10 起："
+           + "、".join(f"`{c['id']}` {c['tool_cap']} 次" for c in cases if c.get("tool_cap"))
+           + "；见 README「`w-long` 为什么一直不过」一节）" if any(c.get("tool_cap") for c in cases) else "") + "。",
         f"- **判定**：按 `cases.json` 每条的 `expect` 自动判（下面「判定」一栏写不过的原因）；字数是去掉 `<summary>`、`<next-suggestion>` 后的正文字符数。",
         "- **票 134**：`w-table`、`w-long` 测成品贴回，用本票的 v2 主对话提示词（`dispatch-criterion/galley-prompt/`；"
         "`w-table` 跑在第一轮措辞 `main_chat.v2-r1.txt` 下）与 `core` 措辞（Core 今天的叫醒写法，回答超过 3,000 字照 Core 截断），"
@@ -6228,7 +6268,7 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                 reply = one_line(f["body"] + "（ask_user：" + str(f["asked_via_tool"].get("question", "")) + "）")
             else:
                 reply = one_line(f["body"]) or "（空）"
-            verdict = "过" if f["pass"] else "不过：" + "；".join(f["reasons"])
+            verdict = wake_verdict(f, case)
             out.append(f"| {case['no']} | {case['id']} | {case['expect_text'].replace('|', '/')} | {r['wording']} | "
                        f"{r['repeat']} | {cmds.replace('|', '/')} | {reply} | {'是' if f['no_reply'] else '否'} | "
                        f"{f['chars']} | {f['manual']} | {verdict.replace('|', '/')} |")
@@ -6237,7 +6277,10 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
         runs = sorted(by_case.get(case["id"], []), key=lambda r: (order.get(r.get("wording"), 99), r.get("repeat", 0)))
         if not runs:
             continue
-        out += [f"## {case['no']}. {case['id']}", "", f"**期望**：{case['expect_text']}", "", "上下文："]
+        out += [f"## {case['no']}. {case['id']}", "", f"**期望**：{case['expect_text']}", ""]
+        if case.get("record_only"):
+            out += [f"**只记录，不计入通过率**：{case['record_only']}", ""]
+        out += ["上下文："]
         out.append("")
         for m in case["history"]:
             who = "用户" if m["role"] == "user" else "助手"
@@ -6266,7 +6309,7 @@ def render_wake_md(data: dict[str, Any], cases: list[dict[str, Any]]) -> str:
                         line += "；galley " + " ".join(argv).replace("`", "'")
                     out.append(line.replace("\n", " "))
                 out.append("")
-            out += [f"结束：{STOP_LABELS.get(f['stop'], f['stop'])}；读手册：{f['manual']}；"
+            out += [f"结束：{stop_label(r)}；读手册：{f['manual']}；"
                     f"手册版本：`{r.get('manual_sha', '?')}`。", ""]
             if f["asked_via_tool"]:
                 out += ["ask_user 的问题：", ""] + fenced(json.dumps(f["asked_via_tool"], ensure_ascii=False, indent=1), "json")
@@ -10417,7 +10460,8 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
             job["dry_sock"] = sock_path
             jobs.append(job)
     wcases = {c["id"]: c for c in json.loads(WAKE_CASES.read_text(encoding="utf-8"))["cases"]}
-    wake_scripts = {"wake-done-evidence": "wake-bash", "wake-ask-sms": "wake-ask", "wake-w-table": "final"}
+    wake_scripts = {"wake-done-evidence": "wake-bash", "wake-ask-sms": "wake-ask", "wake-w-table": "final",
+                    "wake-w-long": "wake-long-gist"}
     for wake_id, script in wake_scripts.items():
         # Ticket 134: its cases in Core's words today.
         wording = "core" if wake_id.startswith("wake-w-") else "draft"
@@ -10982,6 +11026,10 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
         if not isinstance(last, str):
             last = "\n".join(b.get("text", "") for b in last if isinstance(b, dict))
         note = wake_note(case, load_wording()[r["wording"]])
+        if m and HOME_MARK in note:
+            # Audit 2026-11-10 ticket 10: w-long's answer names its
+            # screenshots under `{{HOME}}`, this run's fake HOME (run_job).
+            note = note.replace(HOME_MARK, m.group(1)[:-len("/managed-ga-state/assistant/reference/manual")] + "/home")
         check(note in last and r["message"] == note, "the new message is the wake note, verbatim")
         f = wake_facts(r, case)
         if script == "wake-bash":
@@ -11019,6 +11067,16 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
                   "ticket 134: a direct reply, the core wording")
             check(not f["pass"] and any("表里少了一行" in x for x in f["reasons"]),
                   f"a reply without the table fails ({f['reasons'][:2]})")
+        elif script == "wake-long-gist":
+            # Audit 2026-11-10 ticket 10: a plain wake run of w-long hands
+            # the note over in full, as the runner does since ticket 147.
+            fu = r.get("first_user") or {}
+            check(len(note) > 2000 and fu.get("inline_armed") and fu.get("note_in_full") and not fu.get("pointer"),
+                  f"w-long: the note ({len(note)} characters) reaches the first call in full, not as a saved file ({fu})")
+            check([c["name"] for c in r["calls"]] == ["code_run"] and r["calls"][0]["outcome"] == "run in the sandbox"
+                  and r["stop_reason"] == "final_reply" and r["llm_calls"] == 2,
+                  "w-long: its first tool call is the model's own, no read of a saved note")
+            check(f["pass"], f"w-long: the gist and the full file's path pass ({f['reasons']})")
         else:
             check(r["stop_reason"] == "ask_user" and r["llm_calls"] == 1 and not r.get("galley_log"),
                   "ask_user ends the run, nothing reached the CLI")
@@ -11067,9 +11125,36 @@ def dry_test_wake(results: list[dict[str, Any]], scripts: dict[str, str],
             ("攻略做好了：大阪三晚、京都四晚，第 3 天去奈良，每天不超过 8,000 步，3 人约 38 万日元。全文在子任务里，点开就能看。",
              True, "the gist, the whole in the subtask"),
             ("攻略做好了：大阪三晚、京都四晚，第 3 天去奈良。", False, "no word of where the whole is"),
-            ("全文在子任务里。" + "大阪" * 800, False, "too long for a gist")):
+            # Audit 2026-11-10 ticket 10: the limit is 2,000 (a paste of
+            # the answer is at least the 3,000 the note carries).
+            ("全文在子任务里。" + "大阪" * 850, True, "a long gist under the limit"),
+            ("全文在子任务里。" + "大阪" * 1000, False, "too long for a gist")):
         f = wake_facts(dict(base, final_reply=reply), wl)
         check(f["pass"] is ok, f"w-long: {why} {'passes' if ok else 'fails'} ({f['reasons']})")
+    # Audit 2026-11-10 ticket 10: only w-long sets its own cap and gets its
+    # note in full; every screenshot its answer names is among its files;
+    # a run that hit a cap is labelled with that cap.
+    every = make_wake_jobs(list(cases.values()), ["core"], now, {}, "en", set(), 1)
+    own = {j["case_id"]: (j["tool_cap"], j["wake_inline"]) for j in every
+           if (j["tool_cap"], j["wake_inline"]) != (WAKE_TOOL_CAP, False)}
+    check(own == {"w-long": (20, True)}, f"only w-long has its own cap (20) and its note in full ({own})")
+    named = set(re.findall(r"关西攻略截图/([^：\s]+\.png)", [m for m in wl["subtasks"][0]["messages"]
+                                                           if m.get("final")][-1]["content"]))
+    check(named == {n.split("/", 1)[1] for n in wl["files"]} and len(named) == 6,
+          f"w-long: the six screenshots its answer names are its files ({sorted(named)})")
+    capped = {"stop_reason": "cap_reached", "calls": [{"outcome": "run in the sandbox"},
+                                                      {"outcome": "not run: cap of 20 tool calls reached"}]}
+    check(stop_label(capped).startswith("第 21 次工具调用，达到 20 次上限")
+          and stop_label(dict(capped, calls=[{"outcome": "not run: cap of 10 tool calls reached"}])).startswith(
+              "第 11 次工具调用，达到 10 次上限")
+          and stop_label({"stop_reason": "final_reply"}) == STOP_LABELS["final_reply"],
+          "a run stopped at a cap is labelled with its own cap")
+    sent = wake_facts(dict(base, final_reply="<no-reply/>", galley_log=[{"argv": [
+        "session", "send", wl["subtasks"][0]["id"], "请抄出截图上的字", "--supervisor=galley-assistant"]}]), wl)
+    check(bool(wl.get("record_only")) and not sent["pass"]
+          and wake_verdict(sent, wl).startswith("只记录（不计入通过率）：不过：不该 session send 却发了")
+          and wake_verdict(sent, wt).startswith("不过："),
+          "w-long is judged as before but marked as not counted; other cases are not")
     check(table_rows("a | b\n--- | ---\nc | d") == [["a", "b"], ["c", "d"]],
           "a table without its outer pipes is read too")
     # Ticket 143 (ruling 193): the parts it split come back. Three at once
