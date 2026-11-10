@@ -419,7 +419,11 @@ Docs: `docs/galley-native/` archived, `docs/design/conversation.md` split
 into a directory, this file trimmed to the latest three releases, the
 entry-layer eval's raw `results.json` no longer tracked, README text for
 memos. The main session verified the CLI fixes and the index in dev against
-the real database; the GUI changes wait for JC's dogfood (tickets 02, 08).
+the real database. JC tried the GUI changes in dev the same day: ⌘K's Enter
+started a new chat and sent the text (the engine log shows the run; JC then
+archived and deleted that chat), and archive, delete and rename behaved as
+before. Not walked: the rollback when Core refuses a write, the new error
+copy, the palette row by mouse and its blank-text and in-conversation cases.
 
 A second wave merged the same day (tickets 03, 06, 07, 09; `ca83fb45` …
 `e987acf9`). IPC: the three `tool_call_*` events nothing sent are gone from
