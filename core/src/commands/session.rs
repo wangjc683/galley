@@ -605,18 +605,6 @@ pub(crate) async fn delete_empty_new_sessions(
 }
 
 #[tauri::command]
-pub(crate) async fn delete_demo_sessions(
-    app: tauri::AppHandle,
-    galley: State<'_, SqliteGalley>,
-) -> std::result::Result<u32, String> {
-    let notifier = TauriNotifier::new(app);
-    gui_writes(&galley, &notifier)
-        .delete_demo_sessions()
-        .await
-        .map_err(stringify_error)
-}
-
-#[tauri::command]
 pub(crate) async fn backfill_fts_if_empty(
     galley: State<'_, SqliteGalley>,
 ) -> std::result::Result<u32, String> {

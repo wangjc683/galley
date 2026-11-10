@@ -37,12 +37,7 @@
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 
-import {
-  backfillFtsIfEmpty,
-  deleteDemoSessions,
-  deleteEmptyNewSessions,
-  getPref,
-} from "@/lib/db";
+import { backfillFtsIfEmpty, deleteEmptyNewSessions, getPref } from "@/lib/db";
 import { copyForLanguage } from "@/lib/i18n";
 import { resolveLanguagePreference } from "@/lib/language";
 import { openMainChat } from "@/lib/main-chat";
@@ -198,15 +193,6 @@ async function runSqlHousekeeping(): Promise<void> {
     }
   } catch (e) {
     console.debug("[hydrate] deleteEmptyNewSessions failed.", e);
-  }
-
-  try {
-    const removed = await deleteDemoSessions();
-    if (removed > 0) {
-      console.info(`[hydrate] pruned ${removed} legacy demo session(s).`);
-    }
-  } catch (e) {
-    console.debug("[hydrate] deleteDemoSessions failed.", e);
   }
 
   try {

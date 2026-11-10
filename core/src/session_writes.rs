@@ -17,7 +17,7 @@
 //! | create a session; the main chat's first ask | `session-created-external` |
 //! | rename, pin, reasoning effort, unread, model | `session-updated-external` |
 //! | archive / unarchive (bulk: one event per session it changed); an archived main chat's ask | `session-archived-external` / `session-unarchived-external` |
-//! | delete, bulk delete, empty-session and demo sweeps (one per session) | `session-deleted-external` `{ sessionId, via }` |
+//! | delete, bulk delete, the empty-session sweep (one per session) | `session-deleted-external` `{ sessionId, via }` |
 //! | reset the main chat (`crate::main_chat_reset`): the old one and its unpromoted subtasks, then the new one | `session-deleted-external` per session, then `session-created-external` |
 //! | move to a project | `session-moved-external` |
 //! | create / update / delete a project | `project-created-external` / `project-updated-external` / `project-deleted-external` |
@@ -660,16 +660,6 @@ impl<'a> Writes<'a> {
     /// `session-deleted-external` per row.
     pub async fn delete_empty_new_sessions(&self) -> Result<u32> {
         let deleted = self.galley.delete_empty_new_session_ids().await?;
-        for id in &deleted {
-            self.session_deleted(id);
-        }
-        Ok(deleted.len() as u32)
-    }
-
-    /// The one-time sweep of the v0.1 demo rows, one
-    /// `session-deleted-external` per row.
-    pub async fn delete_demo_sessions(&self) -> Result<u32> {
-        let deleted = self.galley.delete_demo_session_ids().await?;
         for id in &deleted {
             self.session_deleted(id);
         }

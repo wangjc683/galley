@@ -274,7 +274,7 @@ frontend could have seen them.
 | rename, pin, reasoning effort, mark / clear unread, model choice; derived and auto title | `session-updated-external` | `{ session, via }` |
 | archive / unarchive (bulk: one per session it changed) | `session-archived-external` / `session-unarchived-external` | `{ session, via }` |
 | move to a project or out of one | `session-moved-external` | `{ session, via }` |
-| delete, bulk delete, the launch sweeps of empty and demo sessions (one per session) | `session-deleted-external` | `{ sessionId, via }` |
+| delete, bulk delete, the launch sweep of empty sessions (one per session) | `session-deleted-external` | `{ sessionId, via }` |
 | create / update a project | `project-created-external` / `project-updated-external` | `{ project, via }` |
 | delete a project | `project-deleted-external` | `{ projectId, detachedSessions, detachedSessionIds }` |
 | create / update / cancel (delete) a scheduled task, a fire, a wake delivered or notified, the turn it was made in settled | `scheduled-tasks:changed` | none (pages refetch) |

@@ -237,7 +237,6 @@ pub fn run() {
             queue_remove_message,
             session_queue_snapshot,
             delete_empty_new_sessions,
-            delete_demo_sessions,
             backfill_fts_if_empty,
             search_messages,
             get_pref_json,

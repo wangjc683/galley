@@ -37,20 +37,6 @@ export async function deleteEmptyNewSessions(): Promise<number> {
   return invoke<number>("delete_empty_new_sessions");
 }
 
-/**
- * One-time migration: delete the v0.1 demo session fixtures from
- * SQLite. Early hydrate logic seeded these six rows on first launch
- * as visual placeholders for the empty sidebar. Stage 3 ships real
- * Session Restore + onboarding, so the placeholders are pure noise.
- * Safe to call repeatedly — `DELETE ... WHERE id IN (...)` is
- * idempotent.
- *
- * Returns rows deleted, primarily for debug logging.
- */
-export async function deleteDemoSessions(): Promise<number> {
-  return invoke<number>("delete_demo_sessions");
-}
-
 // Session + project row mappers moved to sessionsStore in M4b
 // (sessionFromBrief / projectFromBrief — both translate the Rust
 // SessionBrief / ProjectBrief wire shape instead of mapping raw SQLite

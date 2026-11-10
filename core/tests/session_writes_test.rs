@@ -534,7 +534,7 @@ async fn deletes_broadcast_session_deleted_per_session() {
 }
 
 #[tokio::test]
-async fn the_launch_sweeps_broadcast_each_deleted_session() {
+async fn the_launch_sweep_broadcasts_each_deleted_session() {
     let galley = fresh_galley().await;
     // Abandoned 新对话 rows go; one with a message stays.
     galley
@@ -549,10 +549,6 @@ async fn the_launch_sweeps_broadcast_each_deleted_session() {
         .send_message(sid("s-used"), "你好".into(), gui())
         .await
         .unwrap();
-    galley
-        .create_session(session_input("s-today-1", "演示"), gui())
-        .await
-        .unwrap();
     let rec = Recorder::default();
     let w = Writes::new(&galley, &rec, VIA_GUI);
 
@@ -563,15 +559,7 @@ async fn the_launch_sweeps_broadcast_each_deleted_session() {
     );
 
     rec.clear();
-    assert_eq!(w.delete_demo_sessions().await.unwrap(), 1);
-    assert_eq!(
-        rec.only("session-deleted-external"),
-        json!({ "sessionId": "s-today-1", "via": "gui" })
-    );
-
-    rec.clear();
     assert_eq!(w.delete_empty_new_sessions().await.unwrap(), 0);
-    assert_eq!(w.delete_demo_sessions().await.unwrap(), 0);
     assert!(rec.names().is_empty());
 }
 

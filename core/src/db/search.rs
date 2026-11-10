@@ -73,24 +73,6 @@ impl SqliteGalley {
         Ok(ids.into_iter().map(SessionId).collect())
     }
 
-    pub async fn delete_demo_sessions(&self) -> Result<u32> {
-        Ok(self.delete_demo_session_ids().await?.len() as u32)
-    }
-
-    /// [`Self::delete_demo_sessions`], returning the ids it deleted.
-    pub async fn delete_demo_session_ids(&self) -> Result<Vec<SessionId>> {
-        let ids: Vec<String> = sqlx::query_scalar(
-            "DELETE FROM sessions \
-             WHERE id IN ('s-today-1','s-today-2','s-today-3', \
-                          's-week-1','s-week-2','s-earlier-1') \
-             RETURNING id",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
-        Ok(ids.into_iter().map(SessionId).collect())
-    }
-
     pub async fn backfill_fts_if_empty(&self) -> Result<u32> {
         // Rows per rebuild batch. Small enough that each batch's write
         // transaction commits in milliseconds, so concurrent writers
