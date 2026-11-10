@@ -309,7 +309,7 @@ describe("folded: the count on the time line (ruling 157 point 6)", () => {
     expect(shown(container, "todo_trip")).toEqual([]);
   });
 
-  it("stands alone in the time line's place without a time, the notes under it; 「3/3 项」 when all are ticked, nothing else", () => {
+  it("stands alone in the time line's place without a time, no notes folded (ticket 152); 「3/3 项」 when all are ticked, nothing else", () => {
     core = list([
       {
         ...TRIP,
@@ -327,9 +327,9 @@ describe("folded: the count on the time line (ruling 157 point 6)", () => {
       line.querySelector('[data-role="todo-item-count"]')!.className,
     ).not.toContain("ml-2");
     expect(
-      row(container, "todo_trip").querySelector('[data-role="todo-notes"]')
-        ?.textContent,
-    ).toBe("虹桥站附近");
+      row(container, "todo_trip").querySelector('[data-role="todo-notes"]'),
+    ).toBeNull();
+    expect(row(container, "todo_trip").textContent).not.toContain("虹桥站附近");
     // Still open in your to-dos: the user ticks it.
     expect(row(container, "todo_trip").dataset.todoState).toBe("open");
   });

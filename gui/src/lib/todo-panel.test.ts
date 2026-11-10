@@ -24,7 +24,6 @@ import {
   todoEditWrite,
   todoMetaParts,
   todoNotedLine,
-  todoNotesLine,
   todoOverdueDays,
   todoGlanceOpened,
   todoListed,
@@ -391,41 +390,6 @@ describe("Galley's rows, routines and done items", () => {
       ),
     ).toBe(false);
     expect(assistantTaskCancellable(todo())).toBe(false);
-  });
-});
-
-describe("a to-do's notes (ticket 80)", () => {
-  it("are one line: trimmed, breaks and runs of space one space; in full for the hover", () => {
-    expect(
-      todoNotesLine(
-        todo({ notes: "  王老师\n电话 138 0000 0000\n\n  A 座   3 楼 " }),
-      ),
-    ).toEqual({
-      text: "王老师 电话 138 0000 0000 A 座 3 楼",
-      full: "王老师\n电话 138 0000 0000\n\n  A 座   3 楼",
-    });
-  });
-
-  it("are not drawn when there are none, only blanks, or the to-do is done", () => {
-    expect(todoNotesLine(todo())).toBeNull();
-    expect(todoNotesLine(todo({ notes: "" }))).toBeNull();
-    expect(todoNotesLine(todo({ notes: " \n\t " }))).toBeNull();
-    expect(
-      todoNotesLine(todo({ state: "done", notes: "A 座 3 楼" })),
-    ).toBeNull();
-    // Overdue ones keep theirs.
-    expect(
-      todoNotesLine(todo({ overdue: true, notes: "A 座 3 楼" }))?.text,
-    ).toBe("A 座 3 楼");
-  });
-
-  it("say a full path in backticks by its file's name on the folded line, the notes as written for the box (ticket 112)", () => {
-    const notes =
-      "10月28日：模板做好了：`/Users/me/Downloads/松岚湾资料收集模板.md`\n用 `todo show` 看";
-    expect(todoNotesLine(todo({ notes }))).toEqual({
-      text: "10月28日：模板做好了：松岚湾资料收集模板.md 用 `todo show` 看",
-      full: notes,
-    });
   });
 });
 

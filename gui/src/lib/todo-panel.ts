@@ -20,7 +20,6 @@ import {
   localDayStart,
 } from "@/lib/message-time";
 import { todoItemWords } from "@/lib/reminder-first-line";
-import { todoNotesFolded } from "@/lib/todo-notes";
 import { repeatSummary } from "@/lib/scheduled-tasks";
 import type { TodoGlance } from "@/lib/todo-open";
 import { TODO_PLACES, type TodoPlace } from "@/lib/todo-panel-memory";
@@ -265,26 +264,6 @@ export function assistantTaskCancellable(item: TodoItem): boolean {
     (item.repeat?.kind ?? "once") === "once" &&
     (item.state === "scheduled" || item.state === "paused")
   );
-}
-
-/**
- * The notes line under one of the user's to-dos not done (main chat
- * ticket 80, PRD ruling 128 point 5): what Galley noted with it to have
- * at hand (a name, a place, a number, a path). `text` is the line, its
- * breaks and runs of space one space, and since ticket 112 a full path
- * in backticks only its file's name, the backticks gone
- * (`todoNotesFolded`; drawn as words, the row's click still opens it);
- * `full` the notes as written, for the hover when the line is cut and
- * for the box that changes them. Null when there are none or only
- * blanks, and for a done one (已完成 draws none).
- */
-export function todoNotesLine(
-  item: TodoItem,
-): { text: string; full: string } | null {
-  if (item.kind !== "todo" || item.state === "done") return null;
-  const full = item.notes?.trim();
-  if (!full) return null;
-  return { text: todoNotesFolded(full), full };
 }
 
 /** A line's tone: a session row subline's — the question in warning, a

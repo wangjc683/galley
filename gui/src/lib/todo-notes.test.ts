@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   todoNotesDay,
-  todoNotesFolded,
   todoNotesParagraphs,
   type TodoNotesPiece,
 } from "./todo-notes";
@@ -10,8 +9,8 @@ import {
 /**
  * A to-do's notes as the panel draws them (main chat ticket 112, PRD
  * ruling 158 point 3): a paragraph a line, the leading day set apart, a
- * full path in backticks the file by its name; and the folded row's one
- * line.
+ * full path in backticks the file by its name. (A folded row draws no
+ * notes since ticket 152.)
  */
 
 /** A paragraph's pieces in short: `[day]`, words, `<name|path>`. */
@@ -136,22 +135,6 @@ describe("a full path in backticks", () => {
     const [p] = todoNotesParagraphs("Oct 29: `/a/one.md` and `/b/two.md`");
     expect(gist(p.pieces)).toBe(
       "[Oct 29:] <one.md|/a/one.md> and <two.md|/b/two.md>",
-    );
-  });
-});
-
-describe("the folded line", () => {
-  it("says a backticked path by its name, every break and run of space one space", () => {
-    expect(
-      todoNotesFolded(
-        "10月29日：模板做好了：`/Users/me/Downloads/模板.md`\n\n收集要点：  品牌、预算",
-      ),
-    ).toBe("10月29日：模板做好了：模板.md 收集要点： 品牌、预算");
-  });
-
-  it("leaves other backticks and bare paths as written", () => {
-    expect(todoNotesFolded("用 `todo show`，/Users/me/a.md")).toBe(
-      "用 `todo show`，/Users/me/a.md",
     );
   });
 });

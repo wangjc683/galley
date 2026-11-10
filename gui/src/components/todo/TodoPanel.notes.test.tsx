@@ -34,8 +34,8 @@ import { TodoPanel } from "./TodoPanel";
  * the blocks; the notes drawn apart — a paragraph a line, the day a step
  * darker, a full path in backticks the file by its name, the reply's file
  * reference when open (clickable with the conversation's file context,
- * as LocalFileWorkspace gives it to the panel), words when folded. The
- * pure parts are in lib/todo-notes.test.ts and lib/todo-panel.test.ts;
+ * as LocalFileWorkspace gives it to the panel); folded, none at all
+ * (ticket 152). The pure parts are in lib/todo-notes.test.ts and lib/todo-panel.test.ts;
  * the drag in TodoPanel.move.test.tsx.
  */
 
@@ -327,21 +327,28 @@ describe("the notes, open (ruling 158 point 3)", () => {
   });
 });
 
-describe("the notes, folded", () => {
-  it("say a backticked path by its file's name, the backticks gone, and are no button", () => {
+// Main chat ticket 152, PRD ruling 206: folded, a row draws no notes
+// and no mark for them; opened, they are there in full.
+describe("the notes, folded (ticket 152)", () => {
+  it("are not drawn on the folded row, and are there whole once it opens", () => {
     const container = mount();
-    const line = row(container, "todo_intake").querySelector(
+    const folded = row(container, "todo_intake");
+    expect(folded.querySelector('[data-role="todo-notes"]')).toBeNull();
+    expect(folded.textContent).not.toContain("业主说筹开预算下周给");
+    expect(folded.textContent).not.toContain("松岚湾项目资料收集模板.md");
+    expect(folded.textContent).not.toContain("the owner sent the address");
+    // The title and the time line's count stay.
+    expect(folded.textContent).toContain("松岚湾酒店项目上下文资料收集");
+    expect(folded.querySelector('[data-role="todo-meta"]')).not.toBeNull();
+    // A click on the row opens it, the notes whole.
+    open(container, "todo_intake");
+    const notes = row(container, "todo_intake").querySelector(
       '[data-role="todo-notes"]',
     )!;
-    expect(line.textContent).toBe(
-      "10月29日：业主说筹开预算下周给 10月28日：资料收集模板做好了：松岚湾项目资料收集模板.md，用 `todo show` 看 Oct 27: the owner sent the address",
+    expect(notes.textContent).toContain("10月29日：业主说筹开预算下周给");
+    expect(notes.textContent).toContain(
+      "10月28日：资料收集模板做好了：松岚湾项目资料收集模板.md，用 `todo show` 看",
     );
-    expect(line.querySelector("button")).toBeNull();
-    expect(line.querySelector('[data-role="todo-notes-day"]')).toBeNull();
-    // A click on it opens the row, as before.
-    click(line);
-    expect(row(container, "todo_intake").hasAttribute("data-todo-open")).toBe(
-      true,
-    );
+    expect(notes.textContent).toContain("Oct 27: the owner sent the address");
   });
 });

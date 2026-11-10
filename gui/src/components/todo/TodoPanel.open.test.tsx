@@ -270,9 +270,12 @@ describe("opening a row (ruling 153 points 2 and 3)", () => {
       row(container, "todo_hotel")!.querySelector('[data-role="todo-noted"]')
         ?.textContent,
     ).toBe("今天记下 · 在对话里查看");
-    // Its own blank folds it.
+    // Its own blank folds it, the notes gone with the fold (ticket 152).
     click(row(container, "todo_hotel")!);
     expect(openRows(container)).toEqual([]);
+    expect(
+      row(container, "todo_hotel")!.querySelector('[data-role="todo-notes"]'),
+    ).toBeNull();
     // The title opens it too, and from the keyboard it is the button.
     click(titleOf(container, "todo_soil"));
     expect(openRows(container)).toEqual(["todo_soil"]);

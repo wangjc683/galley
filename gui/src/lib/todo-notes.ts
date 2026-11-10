@@ -129,21 +129,3 @@ export function todoNotesParagraphs(notes: string): TodoNotesParagraph[] {
   }
   return paragraphs;
 }
-
-/** The notes as the folded row's one line says them: a full path in
- * backticks only its file's name, the backticks gone, every break and
- * run of space one space. The day is not set apart there: folded, a
- * row keeps its three inks (ruling 146). */
-export function todoNotesFolded(notes: string): string {
-  return notes
-    .split("\n")
-    .map((line) =>
-      line.replace(BACKTICKS, (whole, inner: string) => {
-        const path = spanPath(inner);
-        return path ? fileName(path) : whole;
-      }),
-    )
-    .join("\n")
-    .replace(/\s+/g, " ")
-    .trim();
-}

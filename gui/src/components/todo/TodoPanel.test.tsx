@@ -660,10 +660,13 @@ describe("the panel's rows", () => {
   });
 });
 
-describe("a to-do's notes (ticket 80)", () => {
+// Main chat ticket 152, PRD ruling 206: folded, a row is its title and
+// its time line; the notes are drawn only once it opens
+// (TodoPanel.open.test.tsx), and nothing marks a row that has some.
+describe("a to-do's notes, folded (ticket 152)", () => {
   const NOTES = "王老师\n电话 138 0000 0000，A 座 3 楼";
 
-  it("go on their own line under the time, 12px ink-muted, cut", () => {
+  it("are not drawn: the title and the time line only, the hover actions as ever", () => {
     const html = panel({
       ...FULL,
       yours: {
@@ -674,33 +677,18 @@ describe("a to-do's notes (ticket 80)", () => {
     });
     for (const id of ["todo_late", "todo_report"]) {
       const r = row(html, id);
-      const meta = r.indexOf('data-role="todo-meta"');
-      const notes = r.indexOf('data-role="todo-notes"');
-      expect(meta).toBeGreaterThan(-1);
-      expect(notes).toBeGreaterThan(meta);
-      // Breaks and runs of space one space.
-      expect(r).toMatch(
-        /<p data-role="todo-notes" class="truncate text-\[12px\] leading-\[1\.4\] text-ink-muted">王老师 电话 138 0000 0000，A 座 3 楼<\/p>/,
-      );
-      // Outside the box the hover actions centre in, so they stay level
-      // with the title and the time.
-      expect(r.indexOf("absolute inset-y-0")).toBeLessThan(notes);
-      expect(r.slice(0, notes)).toContain('aria-label="说说这件"');
+      expect(r).toContain('data-role="todo-meta"');
+      expect(r).not.toContain('data-role="todo-notes"');
+      expect(r).not.toContain("王老师");
+      expect(r).toContain('aria-label="说说这件"');
     }
-    // Overdue: the time in warning, the notes not.
-    const late = row(html, "todo_late");
-    const notes = late.slice(late.indexOf('data-role="todo-notes"'));
-    expect(notes).not.toMatch(/^[^>]*text-warning/);
-    // 「取消提醒」 still on the time's line, before the notes.
-    const report = row(html, "todo_report");
-    expect(report.indexOf('aria-label="取消提醒"')).toBeLessThan(
-      report.indexOf('data-role="todo-notes"'),
-    );
+    // 「取消提醒」 still at the time line's end.
+    expect(row(html, "todo_report")).toContain('aria-label="取消提醒"');
   });
 
-  // Main chat PRD ruling 146: the title, when, then the notes, in the
-  // three inks.
-  it("sit a step under the time: the time ink-soft, the notes ink-muted", () => {
+  // Main chat PRD ruling 146, two inks folded since ticket 152: the title
+  // ink, the time ink-soft.
+  it("leave the time line a step under the title: ink-soft", () => {
     const html = panel({
       ...FULL,
       yours: {
@@ -714,25 +702,23 @@ describe("a to-do's notes (ticket 80)", () => {
     expect(report).not.toMatch(
       /data-role="todo-meta" class="[^"]*text-ink-muted/,
     );
-    expect(report).toMatch(
-      /data-role="todo-notes" class="[^"]*text-ink-muted"/,
-    );
+    expect(report).not.toContain("text-ink-muted");
     // Ticked and holding its place, the time goes muted with the title.
     store.flips = { todo_report: { done: true, phase: "settling" } };
     const held = row(panel(FULL), "todo_report");
     expect(held).toMatch(/data-role="todo-meta" class="[^"]*text-ink-muted"/);
   });
 
-  it("go right under the title when there is no time line", () => {
+  it("leave a row with no time and no items its title alone", () => {
     const html = panel({
       ...FULL,
       yours: { today: [], later: [], anytime: [{ ...ANYTIME, notes: NOTES }] },
     });
     const soil = row(html, "todo_soil");
+    expect(soil).toContain(">买营养土<");
     expect(soil).not.toContain('data-role="todo-meta"');
-    expect(soil.indexOf(">买营养土<")).toBeLessThan(
-      soil.indexOf('data-role="todo-notes"'),
-    );
+    expect(soil).not.toContain('data-role="todo-notes"');
+    expect(soil).not.toContain("王老师");
   });
 
   it("are not drawn when blank, nor under 已完成, nor on the card", () => {

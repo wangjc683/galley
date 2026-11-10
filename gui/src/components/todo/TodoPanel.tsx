@@ -48,7 +48,6 @@ import {
   todoMetaParts,
   type TodoMetaPart,
   todoNotedLine,
-  todoNotesLine,
   todoPanelEmpty,
   todoPanelRows,
   todoReminderCancellable,
@@ -124,7 +123,7 @@ export interface TodoPanelProps {
  *   (no label)  the user's to-dos not done, one part at the top in
  *               Core's order — overdue, today, later by day, no time
  *               (ticket 86, ruling 130): a box, the title, when it is
- *               due and its reminder, its notes (ticket 80)
+ *               due and its reminder; its notes only open (ticket 152)
  *   Galley 在办  the one-off tasks it will come back to: no box, a
  *               clock and the time
  *   例行         repeating tasks: the rule and the next time
@@ -591,10 +590,9 @@ const LINE_TONES: Record<TodoLineTone, string> = {
  * One row: the leading column (a box or a glyph, on the title's line),
  * the title (one line, cut; a button when it leads somewhere), a second
  * line, and the hover actions over the row's right end — the title
- * gives way to them as a sidebar row's does to its ⋯. A to-do's notes
- * (ticket 80) go on a line under those, outside the box the actions
- * centre in, so a row with notes holds them where a row without does:
- * between the title and the second line, or on a lone title. A failed
+ * gives way to them as a sidebar row's does to its ⋯. `notes` go under
+ * those, outside the box the actions centre in: an open to-do's items and
+ * notes (ticket 107; folded, a row has none since ticket 152). A failed
  * write says why on a line under it all.
  *
  * With a `menu` (your to-dos, ticket 88) the actions end with its ⋯
@@ -790,7 +788,8 @@ function useTodoWrite(id: string) {
 }
 
 /** One of the user's to-dos: the box, the title, when it is due and
- * its reminder (ruling 97), its notes under them (ticket 80);
+ * its reminder (ruling 97) — folded, no notes (ticket 152, PRD ruling
+ * 206: they are whole once it opens);
  * 「说说这件」 on the right, and 「取消提醒」 beside a reminder still to go
  * off — by the thing it removes, and not a second target beside the
  * first at the row's end (deferred.md 「session 行 hover 置顶按钮」: two
@@ -811,8 +810,9 @@ function useTodoWrite(id: string) {
  *                             it in place
  *   when it is due            a button: 「说说这件」 (「改时间跟 Galley
  *                             说」), the time is said, not set here
- *   the notes                 whole, their own lines kept; a click
- *                             changes them; none: 「添加备注」
+ *   the notes                 (none folded) whole, their own lines
+ *                             kept; a click changes them; none:
+ *                             「添加备注」
  *   「10月28日记下 · 在对话里查看」 the day it was noted, and the jump
  *
  * A title or the notes in their box (`TodoTextEditor`): saved straight
@@ -872,7 +872,8 @@ function YourRow({
     copy,
   );
   const canCancelReminder = !checked && todoReminderCancellable(item);
-  const notes = todoNotesLine(item);
+  // The notes as written, their blanks off the ends: drawn only open.
+  const notes = item.notes?.trim() ?? "";
   const target = todoTitleTarget(item, mainChatId);
   const editable = open && !checked;
 
@@ -901,7 +902,7 @@ function YourRow({
     keyboard: boolean,
   ) => {
     if (!editable) return;
-    const start = field === "title" ? item.text : (notes?.full ?? "");
+    const start = field === "title" ? item.text : notes;
     setEdit({
       field,
       start,
@@ -995,11 +996,14 @@ function YourRow({
   );
 
   const notesEdit = editing("notes");
-  const notesWords = shownWords("notes", notes?.full ?? "");
+  const notesWords = shownWords("notes", notes);
+  // Folded, a row draws no notes (ticket 152, PRD ruling 206): the title
+  // and the time line are what the eye runs down; Galley's notes are long
+  // sentences a folded line could only give half of, and a click opens
+  // the row with them whole. No mark for a row that has some either.
+  // (`notesEdit` and `editable` hold only open.)
   let notesBlock: ReactNode = null;
-  if (!open) {
-    notesBlock = notes && <NotesLine text={notes.text} full={notes.full} />;
-  } else if (notesEdit) {
+  if (notesEdit) {
     notesBlock = (
       <OpenNotes>
         <TodoTextEditor
@@ -1043,7 +1047,7 @@ function YourRow({
         )}
       </OpenNotes>
     );
-  } else if (notesWords) {
+  } else if (open && notesWords) {
     notesBlock = (
       <OpenNotes>
         <NotesText notes={notesWords} />
@@ -1164,7 +1168,8 @@ interface TodoEdit {
   keyboard: boolean;
 }
 
-/** The notes' type: 12px `ink-muted` (ruling 146), folded or open. */
+/** The notes' type: 12px `ink-muted` (ruling 146), drawn only open
+ * (ticket 152). */
 const NOTES_TYPE = "text-[12px] leading-[1.4] text-ink-muted";
 
 /** An open to-do's notes, or 「添加备注」, at the title's start, 10px
@@ -1317,36 +1322,13 @@ function CancelReminder({
   );
 }
 
-/**
- * A to-do's notes folded (ticket 80, ruling 128 point 5): 12px
- * `ink-muted`, one line, cut, its breaks and runs of space one space;
- * cut, the hover gives them in full, as a title's does — open, they are
- * whole (ticket 107, `OpenNotes`). Under the second line, or the
- * title when there is none, at the title's start (the leading column
- * and its gap: 36px). Its own block under the row's box, pulled up 4px
- * into the box's 6px foot so it sits 2px under the line above, as the
- * second line sits under the title, and with the row's 6px foot below.
- */
-function NotesLine({ text, full }: { text: string; full: string }) {
-  return (
-    <div className="-mt-1 pb-1.5 pl-9 pr-2.5">
-      <p
-        data-role="todo-notes"
-        className={cn("truncate", NOTES_TYPE)}
-        onPointerEnter={(e) => syncTruncatedTitle(e.currentTarget, full)}
-      >
-        {text}
-      </p>
-    </div>
-  );
-}
-
 /** A to-do's second line: when it is due (warning when overdue) and the
  * reminder, a bell and its time (ruling 97: the day it was noted is not
  * on it), and `after` it the reminder's cancel, on hover — outside what
  * the line cuts, so a narrow row cuts the words, never the button.
- * `ink-soft`, a step over the notes' `ink-muted` (main chat PRD ruling
- * 146): the title, when, then what to bring, in the three inks; ticked
+ * `ink-soft`, a step under the title's `ink` (main chat PRD ruling 146):
+ * folded, the title and when, in two inks (ticket 152: no notes folded);
+ * open, the notes in `ink-muted` a step under it; ticked
  * and holding its place it goes `ink-muted` with the struck title. With
  * `onTalk` (an open row, ticket 107, PRD ruling 153 point 5) the words
  * are a button, 「改时间跟 Galley 说」 on hover, that does 「说说这件」:
@@ -1357,7 +1339,7 @@ function NotesLine({ text, full }: { text: string; full: string }) {
  * 8px from the time as the bell's part is set apart, no 「·」; the line's
  * own ink, never warning (that is overdue's), the digits tabular. Outside
  * the open row's time button: it is not a time to say to Galley. With no
- * time it is the line alone, the notes under it as ever. */
+ * time it is the line alone. */
 function MetaLine({
   parts,
   checked,
