@@ -66,5 +66,6 @@
 | [08](./issues/08-palette-ask-directly.md) | ⌘K「Enter 直接发问？」接线：A6 |
 | [09](./issues/09-hygiene-sweep.md) | 开源卫生补扫：D20 在测试、文档与夹具里剩下的引用 |
 | [10](./issues/10-loose-ends.md) | 收尾：评测用例 `w-long`、`run.py` 丢记录、种子清单、失效的暂缓项 |
+| [11](./issues/11-unreadable-screenshot-rule.md) | 手册：读不出的截图不找识字办法、不为它打回（票 10 诊断后 JC 的裁决） |
 
 第一波 01、02、04、05、08 与第二波 03、06、07、09 都已于 2026-11-10 合入。票 02、08 的 dev 真机 JC 当天已走。还等的：票 04 的 Windows 真机；票 04、07 的 `release.yml` 验证（JC 裁定这次不做 dry-run，留到下次发版）。
