@@ -33,8 +33,8 @@ describe("quotePathForMessage", () => {
   it("quotes only when the path contains whitespace", () => {
     expect(quotePathForMessage("/a/b.txt")).toBe("/a/b.txt");
     expect(quotePathForMessage("/a/年度 报告.pdf")).toBe('"/a/年度 报告.pdf"');
-    expect(quotePathForMessage("C:\\Users\\jc\\notes.txt")).toBe(
-      "C:\\Users\\jc\\notes.txt",
+    expect(quotePathForMessage("C:\\Users\\me\\notes.txt")).toBe(
+      "C:\\Users\\me\\notes.txt",
     );
   });
 });

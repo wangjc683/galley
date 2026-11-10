@@ -38,7 +38,7 @@ function normalizeForCompare(path: string, windows: boolean): string {
 }
 
 /** Replace a leading `homeDir` with `~`. Only whole segments match:
- * `/Users/jcx` is not under `/Users/jc`. */
+ * `/Users/mex` is not under `/Users/me`. */
 function collapseHome(
   path: string,
   homeDir: string | null,

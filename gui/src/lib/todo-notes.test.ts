@@ -93,23 +93,23 @@ describe("the day a paragraph starts with", () => {
 describe("a full path in backticks", () => {
   it("is the file, by its name, the backticks gone", () => {
     const notes =
-      "10月28日：资料收集模板做好了：`/Users/jc/Downloads/希尔顿项目资料收集模板.md`，等业主发来";
+      "10月28日：资料收集模板做好了：`/Users/me/Downloads/希尔顿项目资料收集模板.md`，等业主发来";
     const [p] = todoNotesParagraphs(notes);
     expect(gist(p.pieces)).toBe(
-      "[10月28日：]资料收集模板做好了：<希尔顿项目资料收集模板.md|/Users/jc/Downloads/希尔顿项目资料收集模板.md>，等业主发来",
+      "[10月28日：]资料收集模板做好了：<希尔顿项目资料收集模板.md|/Users/me/Downloads/希尔顿项目资料收集模板.md>，等业主发来",
     );
     const file = p.pieces.find((piece) => piece.kind === "path")!;
     // Where its backticks are in the notes.
     expect(file.kind === "path" && notes.slice(file.start, file.end)).toBe(
-      "`/Users/jc/Downloads/希尔顿项目资料收集模板.md`",
+      "`/Users/me/Downloads/希尔顿项目资料收集模板.md`",
     );
   });
 
   it("takes the reply's paths: ~/, file://, a Windows drive, UNC; one space off each end", () => {
     for (const [inner, name] of [
       ["~/Downloads/搬家报价/对比.md", "对比.md"],
-      ["file:///Users/jc/a%20b.pdf", "a b.pdf"],
-      ["C:\\Users\\jc\\报价.xlsx", "报价.xlsx"],
+      ["file:///Users/me/a%20b.pdf", "a b.pdf"],
+      ["C:\\Users\\me\\报价.xlsx", "报价.xlsx"],
       ["\\\\server\\share\\plan.docx", "plan.docx"],
       [" /tmp/x.txt ", "x.txt"],
     ]) {
@@ -124,7 +124,7 @@ describe("a full path in backticks", () => {
     for (const line of [
       "用 `todo show` 看",
       "相对路径 `Downloads/a.md` 不算",
-      "没有反引号 /Users/jc/a.md 也不算",
+      "没有反引号 /Users/me/a.md 也不算",
       "只有一个 ` 反引号 /a.md",
       "空的 `` 两个",
     ]) {
@@ -144,14 +144,14 @@ describe("the folded line", () => {
   it("says a backticked path by its name, every break and run of space one space", () => {
     expect(
       todoNotesFolded(
-        "10月29日：模板做好了：`/Users/jc/Downloads/模板.md`\n\n收集要点：  品牌、预算",
+        "10月29日：模板做好了：`/Users/me/Downloads/模板.md`\n\n收集要点：  品牌、预算",
       ),
     ).toBe("10月29日：模板做好了：模板.md 收集要点： 品牌、预算");
   });
 
   it("leaves other backticks and bare paths as written", () => {
-    expect(todoNotesFolded("用 `todo show`，/Users/jc/a.md")).toBe(
-      "用 `todo show`，/Users/jc/a.md",
+    expect(todoNotesFolded("用 `todo show`，/Users/me/a.md")).toBe(
+      "用 `todo show`，/Users/me/a.md",
     );
   });
 });

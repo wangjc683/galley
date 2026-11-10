@@ -6,58 +6,58 @@ describe("splitDisplayPath", () => {
   describe("macOS / Linux paths", () => {
     it("collapses the home prefix and splits off the leaf", () => {
       expect(
-        splitDisplayPath("/Users/jc/Documents/genericagent-webui", "/Users/jc"),
+        splitDisplayPath("/Users/me/Documents/genericagent-webui", "/Users/me"),
       ).toEqual({ parent: "~/Documents/", leaf: "genericagent-webui" });
     });
 
     it("shows the home folder itself as ~", () => {
-      expect(splitDisplayPath("/Users/jc", "/Users/jc")).toEqual({
+      expect(splitDisplayPath("/Users/me", "/Users/me")).toEqual({
         parent: "",
         leaf: "~",
       });
-      expect(splitDisplayPath("/Users/jc/", "/Users/jc/")).toEqual({
+      expect(splitDisplayPath("/Users/me/", "/Users/me/")).toEqual({
         parent: "",
         leaf: "~",
       });
     });
 
     it("keeps a direct child of home as ~/leaf", () => {
-      expect(splitDisplayPath("/Users/jc/notes", "/Users/jc")).toEqual({
+      expect(splitDisplayPath("/Users/me/notes", "/Users/me")).toEqual({
         parent: "~/",
         leaf: "notes",
       });
     });
 
     it("leaves paths outside home untouched", () => {
-      expect(splitDisplayPath("/Volumes/Data/work", "/Users/jc")).toEqual({
+      expect(splitDisplayPath("/Volumes/Data/work", "/Users/me")).toEqual({
         parent: "/Volumes/Data/",
         leaf: "work",
       });
     });
 
     it("only matches home on whole segments", () => {
-      expect(splitDisplayPath("/Users/jcx/work", "/Users/jc")).toEqual({
-        parent: "/Users/jcx/",
+      expect(splitDisplayPath("/Users/mex/work", "/Users/me")).toEqual({
+        parent: "/Users/mex/",
         leaf: "work",
       });
     });
 
     it("compares case-sensitively", () => {
-      expect(splitDisplayPath("/users/jc/work", "/Users/jc")).toEqual({
-        parent: "/users/jc/",
+      expect(splitDisplayPath("/users/me/work", "/Users/me")).toEqual({
+        parent: "/users/me/",
         leaf: "work",
       });
     });
 
     it("works without a known home dir", () => {
-      expect(splitDisplayPath("/Users/jc/work", null)).toEqual({
-        parent: "/Users/jc/",
+      expect(splitDisplayPath("/Users/me/work", null)).toEqual({
+        parent: "/Users/me/",
         leaf: "work",
       });
     });
 
     it("drops trailing slashes", () => {
-      expect(splitDisplayPath("/Users/jc/work/", "/Users/jc")).toEqual({
+      expect(splitDisplayPath("/Users/me/work/", "/Users/me")).toEqual({
         parent: "~/",
         leaf: "work",
       });
@@ -68,7 +68,7 @@ describe("splitDisplayPath", () => {
     });
 
     it("keeps a backslash in a POSIX folder name as part of the name", () => {
-      expect(splitDisplayPath("/Users/jc/a\\b", "/Users/jc")).toEqual({
+      expect(splitDisplayPath("/Users/me/a\\b", "/Users/me")).toEqual({
         parent: "~/",
         leaf: "a\\b",
       });
@@ -78,12 +78,12 @@ describe("splitDisplayPath", () => {
   describe("Windows paths", () => {
     it("collapses home case-insensitively", () => {
       expect(
-        splitDisplayPath("C:\\Users\\JC\\Documents\\proj", "C:\\Users\\jc"),
+        splitDisplayPath("C:\\Users\\ME\\Documents\\proj", "C:\\Users\\me"),
       ).toEqual({ parent: "~\\Documents\\", leaf: "proj" });
     });
 
     it("treats / and \\ as the same separator", () => {
-      expect(splitDisplayPath("c:/users/jc/proj", "C:\\Users\\JC\\")).toEqual({
+      expect(splitDisplayPath("c:/users/me/proj", "C:\\Users\\ME\\")).toEqual({
         parent: "~/",
         leaf: "proj",
       });
@@ -94,14 +94,14 @@ describe("splitDisplayPath", () => {
     });
 
     it("shows the home folder itself as ~", () => {
-      expect(splitDisplayPath("C:\\Users\\jc", "C:\\Users\\jc")).toEqual({
+      expect(splitDisplayPath("C:\\Users\\me", "C:\\Users\\me")).toEqual({
         parent: "",
         leaf: "~",
       });
     });
 
     it("leaves paths outside home untouched", () => {
-      expect(splitDisplayPath("D:\\work\\proj", "C:\\Users\\jc")).toEqual({
+      expect(splitDisplayPath("D:\\work\\proj", "C:\\Users\\me")).toEqual({
         parent: "D:\\work\\",
         leaf: "proj",
       });
@@ -124,14 +124,14 @@ describe("splitDisplayPath", () => {
 
   describe("edge cases", () => {
     it("handles empty input", () => {
-      expect(splitDisplayPath("", "/Users/jc")).toEqual({
+      expect(splitDisplayPath("", "/Users/me")).toEqual({
         parent: "",
         leaf: "",
       });
     });
 
     it("shows roots whole", () => {
-      expect(splitDisplayPath("/", "/Users/jc")).toEqual({
+      expect(splitDisplayPath("/", "/Users/me")).toEqual({
         parent: "",
         leaf: "/",
       });
@@ -143,11 +143,11 @@ describe("splitDisplayPath", () => {
     });
 
     it("splits a top-level folder under the root", () => {
-      expect(splitDisplayPath("/Users", "/Users/jc")).toEqual({
+      expect(splitDisplayPath("/Users", "/Users/me")).toEqual({
         parent: "/",
         leaf: "Users",
       });
-      expect(splitDisplayPath("C:\\proj", "C:\\Users\\jc")).toEqual({
+      expect(splitDisplayPath("C:\\proj", "C:\\Users\\me")).toEqual({
         parent: "C:\\",
         leaf: "proj",
       });
@@ -161,8 +161,8 @@ describe("splitDisplayPath", () => {
     });
 
     it("ignores a home of the other path style", () => {
-      expect(splitDisplayPath("C:\\Users\\jc\\proj", "/Users/jc")).toEqual({
-        parent: "C:\\Users\\jc\\",
+      expect(splitDisplayPath("C:\\Users\\me\\proj", "/Users/me")).toEqual({
+        parent: "C:\\Users\\me\\",
         leaf: "proj",
       });
     });

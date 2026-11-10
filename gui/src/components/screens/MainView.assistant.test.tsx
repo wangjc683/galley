@@ -440,8 +440,8 @@ describe("the main chat is the assistant's conversation", () => {
     const delivered: AgentTurn = {
       ...answer("排好了。", 2),
       files: [
-        "/Users/jc/Documents/五一行程.html",
-        "/Users/jc/Documents/船票.pdf",
+        "/Users/me/Documents/五一行程.html",
+        "/Users/me/Documents/船票.pdf",
       ],
     };
     const turns: Turn[] = [...conversation().slice(0, -1), delivered];
@@ -457,7 +457,7 @@ describe("the main chat is the assistant's conversation", () => {
     // The paths themselves are not shown: the cleaned answer has no
     // marker and the cards show a name and a folder.
     expect(main).not.toContain("[FILE:");
-    expect(main).not.toContain(">/Users/jc/Documents/五一行程.html<");
+    expect(main).not.toContain(">/Users/me/Documents/五一行程.html<");
     // With the reply's subtask and reminder cards: the files first, the
     // rest under them, all in one frame (ruling 182).
     cards.dispatches = new Map([

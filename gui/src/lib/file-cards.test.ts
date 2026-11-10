@@ -49,15 +49,15 @@ describe("filesByMessage", () => {
   it("keys each reply's files by its row id, in marker order", () => {
     const turns: Turn[] = [
       { role: "user", content: "做个计划" },
-      reply("a-1", ["/Users/jc/plan.html", "/Users/jc/banner.png"]),
+      reply("a-1", ["/Users/me/plan.html", "/Users/me/banner.png"]),
       reply("a-2"),
       reply("a-3", ["/tmp/out/report.pdf"]),
     ];
     const byMessage = filesByMessage(turns);
     expect([...byMessage.keys()]).toEqual(["a-1", "a-3"]);
     expect(byMessage.get("a-1")).toEqual([
-      "/Users/jc/plan.html",
-      "/Users/jc/banner.png",
+      "/Users/me/plan.html",
+      "/Users/me/banner.png",
     ]);
   });
 
@@ -105,12 +105,12 @@ describe("splitFileName (a middle cut that keeps the extension)", () => {
 
 describe("fileFolder", () => {
   it("is the folder the path names, as written", () => {
-    expect(fileFolder("/Users/jc/Documents/报告/q3.pdf")).toBe(
-      "/Users/jc/Documents/报告",
+    expect(fileFolder("/Users/me/Documents/报告/q3.pdf")).toBe(
+      "/Users/me/Documents/报告",
     );
     expect(fileFolder("~/Desktop/a.png")).toBe("~/Desktop");
-    expect(fileFolder("C:\\Users\\jc\\Desktop\\a.docx")).toBe(
-      "C:\\Users\\jc\\Desktop",
+    expect(fileFolder("C:\\Users\\me\\Desktop\\a.docx")).toBe(
+      "C:\\Users\\me\\Desktop",
     );
   });
 
@@ -146,8 +146,8 @@ describe("thumbnailPath (an image draws as a thumbnail)", () => {
   it("loads `~` from the path Core expanded, and not before", () => {
     expect(thumbnailPath("~/Desktop/a.png", undefined)).toBeNull();
     expect(
-      thumbnailPath("~/Desktop/a.png", present("/Users/jc/Desktop/a.png")),
-    ).toBe("/Users/jc/Desktop/a.png");
+      thumbnailPath("~/Desktop/a.png", present("/Users/me/Desktop/a.png")),
+    ).toBe("/Users/me/Desktop/a.png");
   });
 });
 
@@ -230,11 +230,11 @@ describe("fileGlyph", () => {
 describe("inspectFilePresence (Core's answer)", () => {
   it("is there with Core's kind and resolved path", async () => {
     access.error = null;
-    access.answer = { path: "/Users/jc/a.md", kind: "markdown", content: null };
+    access.answer = { path: "/Users/me/a.md", kind: "markdown", content: null };
     await expect(inspectFilePresence("~/a.md")).resolves.toEqual({
       state: "present",
       kind: "markdown",
-      path: "/Users/jc/a.md",
+      path: "/Users/me/a.md",
     });
   });
 

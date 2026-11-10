@@ -8,24 +8,24 @@ import {
 
 describe("dropPathBasename", () => {
   it("takes the last segment of a POSIX path", () => {
-    expect(dropPathBasename("/Users/jc/Documents/report.pdf")).toBe(
+    expect(dropPathBasename("/Users/me/Documents/report.pdf")).toBe(
       "report.pdf",
     );
   });
 
   it("takes the last segment of a Windows path", () => {
-    expect(dropPathBasename("C:\\Users\\jc\\Desktop\\notes.txt")).toBe(
+    expect(dropPathBasename("C:\\Users\\me\\Desktop\\notes.txt")).toBe(
       "notes.txt",
     );
   });
 
   it("tolerates a trailing separator on directory paths", () => {
-    expect(dropPathBasename("/Users/jc/project/")).toBe("project");
-    expect(dropPathBasename("C:\\Users\\jc\\project\\")).toBe("project");
+    expect(dropPathBasename("/Users/me/project/")).toBe("project");
+    expect(dropPathBasename("C:\\Users\\me\\project\\")).toBe("project");
   });
 
   it("keeps CJK and spaces intact", () => {
-    expect(dropPathBasename("/Users/jc/文档/年度 报告.pdf")).toBe(
+    expect(dropPathBasename("/Users/me/文档/年度 报告.pdf")).toBe(
       "年度 报告.pdf",
     );
   });

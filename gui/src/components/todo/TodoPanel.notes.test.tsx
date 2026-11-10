@@ -66,7 +66,7 @@ afterAll(() => {
 const NOW = new Date().toISOString();
 const items = (...words: [string, boolean][]): TodoSubitem[] =>
   words.map(([text, done], at) => ({ id: `item_${at}`, text, done }));
-const PATH = "/Users/jc/Downloads/希尔顿项目资料收集模板.md";
+const PATH = "/Users/me/Downloads/希尔顿项目资料收集模板.md";
 const HILTON: TodoItem = {
   kind: "todo",
   id: "todo_hilton",

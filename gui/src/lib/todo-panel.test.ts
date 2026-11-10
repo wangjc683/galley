@@ -421,7 +421,7 @@ describe("a to-do's notes (ticket 80)", () => {
 
   it("say a full path in backticks by its file's name on the folded line, the notes as written for the box (ticket 112)", () => {
     const notes =
-      "10月28日：模板做好了：`/Users/jc/Downloads/希尔顿资料收集模板.md`\n用 `todo show` 看";
+      "10月28日：模板做好了：`/Users/me/Downloads/希尔顿资料收集模板.md`\n用 `todo show` 看";
     expect(todoNotesLine(todo({ notes }))).toEqual({
       text: "10月28日：模板做好了：希尔顿资料收集模板.md 用 `todo show` 看",
       full: notes,

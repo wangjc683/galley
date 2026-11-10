@@ -116,7 +116,7 @@ async fn runtime_identity_migration_preserves_existing_attach_users() {
     }
     sqlx::query("INSERT INTO prefs (key, value, updated_at) VALUES (?, ?, ?)")
         .bind("ga_config")
-        .bind(r#"{"gaPath":"/Users/jc/GenericAgent"}"#)
+        .bind(r#"{"gaPath":"/Users/me/GenericAgent"}"#)
         .bind("2026-05-23T00:00:00Z")
         .execute(&pool)
         .await

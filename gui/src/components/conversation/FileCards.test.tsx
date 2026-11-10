@@ -39,9 +39,9 @@ const count = (html: string, needle: string) => html.split(needle).length - 1;
 describe("FileCards", () => {
   it("draws one line per file, in marker order, in the reply's frame", () => {
     const html = render([
-      "/Users/jc/Documents/计划/五一出行计划.html",
-      "/Users/jc/Documents/报告/q3.pdf",
-      "/Users/jc/notes.md",
+      "/Users/me/Documents/计划/五一出行计划.html",
+      "/Users/me/Documents/报告/q3.pdf",
+      "/Users/me/notes.md",
     ]);
     // No margin, no gap: lines one after another in ReplyCards' frame.
     expect(html).toContain('data-role="file-cards" class="flex flex-col"');
@@ -59,12 +59,12 @@ describe("FileCards", () => {
   });
 
   it("shows the name with its extension kept apart and the folder, never the whole path", () => {
-    const path = "/Users/jc/Documents/报告/2026年第三季度经营分析报告.pdf";
+    const path = "/Users/me/Documents/报告/2026年第三季度经营分析报告.pdf";
     const html = render([path]);
     expect(html).toContain(">2026年第三季度经营</span>");
     expect(html).toContain(">分析报告.pdf</span>");
     // The folder (its tooltip is the folder's own path), not the file's.
-    expect(html).toContain('title="/Users/jc/Documents/报告"');
+    expect(html).toContain('title="/Users/me/Documents/报告"');
     expect(html).not.toContain(path);
     expect(html).toContain('aria-label="2026年第三季度经营分析报告.pdf"');
     // A glyph for the kind, and 在文件夹中显示 beside the right end on
@@ -83,7 +83,7 @@ describe("FileCards", () => {
   // then, so a long folder set the frame's width (ticket 132b).
   it("caps the folder at 16em, never a share of the line", () => {
     const html = render([
-      "/Users/jc/Library/Application Support/app.galley/managed/state/temp/模板.md",
+      "/Users/me/Library/Application Support/app.galley/managed/state/temp/模板.md",
     ]);
     expect(html).toContain("ml-2 max-w-[16em] shrink-0 text-ink-muted");
     expect(html).not.toMatch(/max-w-\[\d+%\]/);
@@ -98,16 +98,16 @@ describe("FileCards", () => {
 
   it("draws an image as the attachment thumbnail, side by side with the next", () => {
     const html = render([
-      "/Users/jc/Pictures/banner.png",
-      "/Users/jc/Pictures/cover.JPG",
-      "/Users/jc/plan.html",
+      "/Users/me/Pictures/banner.png",
+      "/Users/me/Pictures/cover.JPG",
+      "/Users/me/plan.html",
     ]);
     expect(count(html, 'data-file-kind="image"')).toBe(2);
     expect(html).toContain(
       "h-24 w-24 overflow-hidden rounded-md border border-line",
     );
     expect(html).toContain(
-      `src="asset://localhost/${encodeURIComponent("/Users/jc/Pictures/banner.png")}"`,
+      `src="asset://localhost/${encodeURIComponent("/Users/me/Pictures/banner.png")}"`,
     );
     expect(html).toContain('aria-label="预览图片 · banner.png"');
     // The two thumbnails share a wrapping row, a band of its own in the

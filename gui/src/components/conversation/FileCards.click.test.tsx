@@ -93,11 +93,11 @@ async function click(element: Element | null | undefined) {
 
 describe("a click on a file card", () => {
   const PATHS = [
-    "/Users/jc/out/report.pdf",
-    "/Users/jc/out/plan.html",
-    "/Users/jc/out/notes.md",
-    "/Users/jc/out/banner.png",
-    "/Users/jc/out/bundle.zip",
+    "/Users/me/out/report.pdf",
+    "/Users/me/out/plan.html",
+    "/Users/me/out/notes.md",
+    "/Users/me/out/banner.png",
+    "/Users/me/out/bundle.zip",
   ];
   const card = (container: HTMLElement, name: string) =>
     [...container.querySelectorAll('[data-role="file-card"]')].find((el) =>
@@ -111,20 +111,20 @@ describe("a click on a file card", () => {
     await click(mainButton(card(container, "report.pdf")));
     await click(mainButton(card(container, "plan.html")));
     expect(calls.operations).toEqual([
-      ["/Users/jc/out/report.pdf", "open"],
-      ["/Users/jc/out/plan.html", "open"],
+      ["/Users/me/out/report.pdf", "open"],
+      ["/Users/me/out/plan.html", "open"],
     ]);
     expect(activated).toEqual([]);
   });
 
   it("opens a Pages package (a folder Core named) in the default application; a plain folder goes where a reference goes", async () => {
     const container = mount(
-      <FileCards paths={["/Users/jc/out/方案.pages", "/Users/jc/素材"]} />,
+      <FileCards paths={["/Users/me/out/方案.pages", "/Users/me/素材"]} />,
     );
     await click(container.querySelector('button[aria-label="方案.pages"]'));
     await click(container.querySelector('button[aria-label="素材"]'));
-    expect(calls.operations).toEqual([["/Users/jc/out/方案.pages", "open"]]);
-    expect(activated).toEqual(["/Users/jc/素材"]);
+    expect(calls.operations).toEqual([["/Users/me/out/方案.pages", "open"]]);
+    expect(activated).toEqual(["/Users/me/素材"]);
   });
 
   it("sends Markdown to the reading panel and a zip where a reference goes (its folder)", async () => {
@@ -132,8 +132,8 @@ describe("a click on a file card", () => {
     await click(mainButton(card(container, "notes.md")));
     await click(mainButton(card(container, "bundle.zip")));
     expect(activated).toEqual([
-      "/Users/jc/out/notes.md",
-      "/Users/jc/out/bundle.zip",
+      "/Users/me/out/notes.md",
+      "/Users/me/out/bundle.zip",
     ]);
     expect(calls.operations).toEqual([]);
   });

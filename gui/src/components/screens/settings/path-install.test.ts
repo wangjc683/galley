@@ -59,9 +59,9 @@ describe("parseDiscoveryCliPath", () => {
   it("reads line 1 of the v1 discovery file", () => {
     expect(
       parseDiscoveryCliPath(
-        "C:\\Users\\JC\\AppData\\Local\\Galley\\galley.exe\nschema_version=1\n",
+        "C:\\Users\\ME\\AppData\\Local\\Galley\\galley.exe\nschema_version=1\n",
       ),
-    ).toBe("C:\\Users\\JC\\AppData\\Local\\Galley\\galley.exe");
+    ).toBe("C:\\Users\\ME\\AppData\\Local\\Galley\\galley.exe");
     expect(
       parseDiscoveryCliPath(
         "/Applications/Galley.app/Contents/MacOS/galley\nschema_version=1\n",
