@@ -43,7 +43,10 @@ cancels a reminder.
   it.
 - A repeating task: one the user did not ask for, and, even when they
   did, one that costs money every time it runs (it wakes you to do work:
-  look something up, write something).
+  look something up, write something). Not a repeating to-do whose cycle
+  the user stated: each time costs nothing, and only its reminder wakes
+  you, for one turn; one whose cycle they did not state, do not set (see
+  `todos.md`).
 - Changing, pausing or cancelling a scheduled task someone else made:
   the user, with the desktop's form, or an outside agent.
 - Changing a default setting, such as the default model.

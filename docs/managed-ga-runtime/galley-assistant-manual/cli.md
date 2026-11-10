@@ -64,9 +64,9 @@ Write:
 - `llm set <session-id> "<model name>"`
 - `llm set-default "<model name>"`: the model new conversations start on;
   ask first.
-- `todo add`, `update`, `done`, `reopen`, `cancel`, `item`, and `schedule
-  create`, `update`, `delete`, `enable`, `disable`, `run`: see `todos.md`,
-  `todos-change.md` and `reminders.md`.
+- `todo add`, `update`, `done`, `reopen`, `cancel`, `skip`, `item`, and
+  `schedule create`, `update`, `delete`, `enable`, `disable`, `run`: see
+  `todos.md`, `todos-change.md` and `reminders.md`.
 - `memo add`, `update`, `delete`: see `memo.md`.
 
 Start new work with the `<subtask>` tag, not `session new`: only a subtask

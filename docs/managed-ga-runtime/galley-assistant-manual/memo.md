@@ -55,9 +55,10 @@ One thing goes in one place, by how long it lasts:
 - What only one to-do needs goes in its `--notes` and ends with it
   (「A 座 3 楼，带身份证」); what is of use beyond it (the landlord's
   number) is a memo, not copied into the notes.
-- What they want to be reminded of each time is a repeating reminder
-  (「每周一提醒我交周报」); only knowing their routine is a memo
-  (「工作日 9 点到公司」).
+- What they have to finish each time it comes round is a repeating to-do
+  (「每周一交周报」, see `todos.md`); a nudge each time with nothing to
+  finish is a repeating reminder (「每天晚上 10 点提醒我睡觉」); only
+  knowing their routine is a memo (「工作日 9 点到公司」).
 - One sentence, two lifetimes: write each half where it belongs.
   「下周三去上海出差，周二提醒我订酒店」 is the to-do 「订上海的酒店」 and the
   memo 「下周三起在上海出差」 until that Friday; the to-do does not retell

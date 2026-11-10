@@ -240,8 +240,12 @@ mod tests {
         // todos.md's whose-step question to subtasks.md for an errand, to
         // reminders.md for a step of its own that waits, and to unasked.md
         // twice, for the groundwork ahead of a to-do and for a step that
-        // only waits for the user's yes.
-        assert_eq!(referred, 33);
+        // only waits for the user's yes. Ticket 155's five: todos.md's
+        // repeating to-do to reminders.md for a nudge that comes round;
+        // wake.md's overdue repeating reminder to todos-change.md for the
+        // tick; memo.md, reminders.md and authority.md to todos.md for the
+        // repeating to-do.
+        assert_eq!(referred, 38);
         assert!(part("wake.md")
             .contains("notes do not say yet, add that line first (`todos-change.md`). When"));
         assert!(part("wake.md")
@@ -404,6 +408,24 @@ mod tests {
                     // it.
                     "`todo item move <item-id> --to=<n>`",
                     "`todo show <todo-id>`",
+                    // Ticket 155: ticket 154's skip and rule flags, as
+                    // `TodoCmd::Skip` and `TodoCmd::Update` parse them.
+                    "`todo skip <todo-id>`",
+                    "`todo update <todo-id> --no-repeat`",
+                    "`--weekly=1 --every=2`",
+                    "`--series`",
+                ][..],
+            ),
+            (
+                // Ticket 155: the rule flags of `todo add` (`TodoRepeatArgs`).
+                "todos.md",
+                &[
+                    "`--daily`",
+                    "`--weekly=<days>`",
+                    "`--monthly=<days>`",
+                    "`--yearly`",
+                    "`--every=<n>`",
+                    "`--monthly=15 --every=3`",
                 ][..],
             ),
         ] {
@@ -427,6 +449,14 @@ mod tests {
             "todo add \"<title>\" --due=<date or time> --remind-at=<YYYY-MM-DDTHH:MM> \
              --notes=\"<details>\" --supervisor=galley-assistant --reason=\"<why>\""
         ));
+        // Ticket 155: a repeating one, with its rule flag (`TodoCmd::Add`
+        // flattens `TodoRepeatArgs`), and `skip` in the command list.
+        assert!(part("todos.md").contains(
+            "todo add \"<title>\" --due=<the first day or time it is due> --weekly=<days> \
+             --remind-at=<YYYY-MM-DDTHH:MM> --supervisor=galley-assistant --reason=\"<why>\""
+        ));
+        assert!(part("cli.md")
+            .contains("- `todo add`, `update`, `done`, `reopen`, `cancel`, `skip`, `item`, and"));
         // Ticket 95's `memo` family (ticket 96), as the CLI parses it
         // (`cli/src/args.rs` `MemoCmd`): the text, `--until`; `update`
         // takes `--text`, `--until` or `--no-until`.
@@ -544,17 +574,20 @@ mod tests {
         // items is gone.
         assert!(!todos.contains("they go in as items"));
         for rule in [
-            // Two lists; the user's only controls on theirs (deleting one
+            // Two lists; the user's controls on theirs (deleting one
             // since main chat ticket 88, PRD ruling 132; its title and
-            // notes since ticket 107, PRD ruling 153).
+            // notes since ticket 107, PRD ruling 153; its day, time and
+            // reminder, repeating or not, and skipping this time since
+            // ticket 155, PRD rulings 202, 204 and 205).
             "- **The user's to-dos**: what they have to do (hand in a report, call the",
-            "user sees it in 「待办」 beside this chat and can only tick a to-do off,",
-            "untick it, change its title and notes, cancel its reminder, or delete it",
+            "user sees it in 「待办」 beside this chat and can tick a to-do off or",
+            "untick it there, change its title, notes, day, time and reminder, make",
+            "it repeat or stop it repeating, skip this time of one that repeats, or",
             // Ticket 111 (PRD ruling 157): and the items under it; ticket
             // 112 (PRD ruling 158): and their order.
-            "there, and add, tick, change, delete or reorder the items under it. Everything",
-            "else, a new one, a new time, they tell you, and you change it, as you",
-            "change its words when they tell you; do not send them to the list to do",
+            "delete it, and add, tick, change, delete or reorder the items under it.",
+            "A new one they tell you, and you note it; a change they tell you, you",
+            "make; do not send them to the list to do it.",
             "- **Your own reminders**: times Galley wakes you to do something yourself,",
             // Information is a memo (memory until ticket 96); no tidying
             // unasked.
@@ -588,9 +621,11 @@ mod tests {
             "and not as a record about them (「用户说……」).",
             // Ticket 107 (PRD ruling 153 point 6): changed in the list,
             // so read before changing; nothing more is asked of them.
-            "user may have changed the title or the notes in their list: before you",
-            "change either, read the to-do as it is now (`todo show <todo-id>`) and",
-            "change that, not what you wrote; `--notes=` replaces the notes whole.",
+            // Ticket 155 (PRD ruling 205): the day and the reminder too.
+            "user may have changed the title, the notes, the day or the reminder in",
+            "their list: before you change any of them, read the to-do as it is now",
+            "(`todo show <todo-id>`) and change that, not what you wrote; `--notes=`",
+            "replaces the notes whole.",
             // Ticket 108: what comes of it later goes on top, by the rule
             // in todos-change.md.
             "What you get done for it later, and news of it, go on top of its notes",
@@ -619,17 +654,19 @@ mod tests {
         let change = part("todos-change.md");
         assert!(change.contains("## Changing a to-do, ticking it off, what is left"));
         for rule in [
-            // Change, quote, tick, what is left.
-            "- The user changes a to-do by telling you: `todo update <todo-id>` with",
+            // Change, quote, tick, what is left. Ticket 155: the user
+            // changes it in the list too, so a change told is one kind.
+            "- A change the user tells you: `todo update <todo-id>` with",
             "- A message that opens with a quote of a line from the list",
             "When nothing matches, or more than one thing does, ask which.",
             "- When the user says it is done (「营养土买好了」), or you saw it done",
             "so in a few words (「已勾掉。」); do not recite the list.",
             "- Asked what is left (「我还有什么没办」), run `todo list` first and answer",
             // Ticket 108 (PRD ruling 154): how it is going goes into the
-            // notes, one line on top (the collapsed row shows the start),
-            // over what is there, read first; not a look that found
-            // nothing; the news that moves the time moves both.
+            // notes, one line on top, newest first (ticket 108's reason was
+            // the collapsed row, which since ticket 152, PRD ruling 206,
+            // draws no notes), over what is there, read first; not a look
+            // that found nothing; the news that moves the time moves both.
             "- How it is going: when you got something done for a to-do (something",
             "the user tells you news of it (「业主说预算下周给」), add one line at the",
             "start of its notes, above what is there (newest first), the day first,",
@@ -802,6 +839,152 @@ mod tests {
         // Ruling 206: the folded row draws no notes.
         for (name, body) in PARTS {
             assert!(!body.contains("notes under the to-do"), "{name}");
+        }
+    }
+
+    /// Ticket 155 (main chat PRD rulings 204 and 205, on ticket 154's
+    /// Core): a repeating to-do. What the user has to finish each time it
+    /// comes round is one, asked of one time round by the two questions
+    /// before noting; a nudge that comes round stays the model's own
+    /// repeating reminder (`reminders.md` and `memo.md` say so too). The
+    /// rule's flags and the due date it needs; the next made at once from
+    /// the rule (after today and this one's day; the rule's title, items
+    /// and notes); one left unticked reminded again; the reminder's
+    /// offset, none for a daily one unless a time was named; a stated
+    /// cycle set without asking and said, one that only shows through
+    /// asked about, none on a guess; a cycle Core cannot hold noted each
+    /// time. Changing one (`todos-change.md`): skip, cancel,
+    /// `--no-repeat`, a new cycle, `--series`, the next day said on a
+    /// tick. An overdue one's reminder asks whether it was done
+    /// (`wake.md`). A stated cycle is not asked first (`authority.md`).
+    /// Single-line fragments only (CRLF on Windows).
+    #[test]
+    fn manual_teaches_repeating_to_dos() {
+        let under = |name: &str, heading: &str, end: Option<&str>, rules: &[&str]| {
+            let body = part(name);
+            let from = body
+                .find(heading)
+                .unwrap_or_else(|| panic!("{name} lost: {heading}"));
+            let to = end.map_or(body.len(), |end| {
+                body.find(end)
+                    .unwrap_or_else(|| panic!("{name} lost: {end}"))
+            });
+            let mut at = Vec::new();
+            for rule in rules {
+                let found = body
+                    .find(rule)
+                    .unwrap_or_else(|| panic!("{name} lost: {rule}"));
+                assert!(
+                    from < found && found < to,
+                    "{name}: {rule} is not in its place"
+                );
+                at.push(found);
+            }
+            assert!(at.windows(2).all(|pair| pair[0] < pair[1]), "{name}: order");
+        };
+        // After "Noting a to-do", the questions it asks of one time round.
+        let todos = part("todos.md");
+        assert_eq!(todos.matches("### A to-do that repeats").count(), 1);
+        assert!(
+            todos.find("### Noting a to-do").unwrap()
+                < todos.find("### A to-do that repeats").unwrap()
+        );
+        under(
+            "todos.md",
+            "### A to-do that repeats",
+            None,
+            &[
+                "Something the user has to finish each time it comes round (「每周一交周报」,",
+                "time round what you ask before noting any (whose step it is, and whether",
+                "it would still be on their list if they ignored its reminder), and when",
+                "that one is their to-do, it repeats as a to-do. A nudge that comes round",
+                "with nothing to finish (「每天晚上 10 点提醒我睡觉」) stays your own",
+                "repeating reminder (see `reminders.md`).",
+                // The rule, as `TodoRepeatArgs` takes it; the due date it
+                // needs (`repeat_needs_due:`).
+                "- The rule is one of `--daily`, `--weekly=<days>` (1 = Monday … 7 =",
+                "`--monthly=15 --every=3`). `--due` is the first time it is due, and a",
+                "repeating to-do must have one.",
+                // Ruling 204 points 3, 4 and 12: one at a time, the next
+                // made from the rule, no pile-up, reminded again.
+                "- Galley keeps the rule: the user's list holds one of them at a time,",
+                "once, due on the rule's next day after both today and this one's day,",
+                "with the title, the items (unticked) and the notes it had when you set",
+                "the rule; `todo done` and `todo skip` print it as `next`. One left",
+                "unticked stays where it is, overdue: no second one comes, and its",
+                "reminder comes again at each later one's time.",
+                // Point 8: the reminder's offset; a daily one none unless
+                // a time was named.
+                "- `--remind-at` on the first one sets how each one is reminded: as many",
+                "days before its day, at that time. Give a daily one no reminder unless",
+                "the user named a time: each one wakes you.",
+                // Point 9: stated, set and said; shown through, asked.
+                "- Set a rule when the user states the cycle (「每周一要交周报」); do not",
+                "ask, and say the rule in the sentence that says you noted it",
+                "(「记下了：每周一交周报，周一早上 9 点提醒你。」). When the cycle only",
+                "shows through (「又该交季报了」, 「这个月的物业费」), note this one and",
+                "ask in the same reply whether to note it each time",
+                "(「以后每季度都记吗？」). Never set a rule on a guess.",
+                // Point 5: what Core cannot hold, until the day lists.
+                "- A cycle Galley cannot hold (the last working day of each month, a day",
+                "as an ordinary to-do, set your own reminder for after its day to note",
+                "the next, and tell the user you will note each as it comes.",
+            ],
+        );
+        // Points 6 and 7, and the next day said on a tick: after ticking
+        // off, before what is left.
+        under(
+            "todos-change.md",
+            "- When the user says it is done (「营养土买好了」)",
+            Some("- Asked what is left"),
+            &[
+                "- A repeating to-do. 「这周的不用交了」 skips this one,",
+                "`todo skip <todo-id>`, and the next comes; 「以后不用了」 deletes it and",
+                "ends its rule, `todo cancel <todo-id>`; 「这次做完就不用再重复了」 keeps",
+                "this one and ends the rule, `todo update <todo-id> --no-repeat`. A new",
+                "cycle is `todo update <todo-id>` with the rule's flag (「改成每两周」:",
+                "its title, notes, day and reminder; add `--series` when the user means",
+                "every one from now on (「以后都叫……」, 「以后都提前两天提醒」): the later",
+                "ones then take this one's title, items and reminder, and its notes too",
+                "when you give `--notes` in the same command. When you tick one off, say",
+                "in a few words when the next is due (「已勾掉，下一次是 11 月 23 日。」).",
+            ],
+        );
+        // Point 12: an overdue one rings again; ask, do not repeat it.
+        under(
+            "wake.md",
+            "A to-do's reminder only reminds: do not tick the to-do off until the",
+            Some("A scheduled task that starts a new conversation"),
+            &[
+                "- A repeating to-do's reminder (`todo show` has its `repeat`) on one due",
+                "before today: it was left unticked, and its reminder comes again at",
+                "ask in a sentence whether they did, rather than give the same reminder",
+                "again; when they say it is done, tick it off (`todos-change.md`), and",
+            ],
+        );
+        under(
+            "reminders.md",
+            "- Repeating: `--daily`, `--weekly=<days>` (1 = Monday … 7 = Sunday) or",
+            Some("- The first line of your words is the thing itself"),
+            &[
+                "For a nudge that comes round (「每天晚上 10 点提醒我睡觉」); what the",
+                "user has to finish each time (「每周一交周报」) is a repeating to-do",
+                "instead (see `todos.md`).",
+            ],
+        );
+        under(
+            "authority.md",
+            "### Ask the user first",
+            Some("### Only the user can do it"),
+            &[
+                "look something up, write something). Not a repeating to-do whose cycle",
+                "the user stated: each time costs nothing, and only its reminder wakes",
+                "you, for one turn; one whose cycle they did not state, do not set (see",
+            ],
+        );
+        // The memo part's example was a repeating reminder.
+        for (name, body) in PARTS {
+            assert!(!body.contains("每周一提醒我交周报"), "{name}");
         }
     }
 
@@ -1311,8 +1494,13 @@ mod tests {
             "- What only one to-do needs goes in its `--notes` and ends with it",
             "(「A 座 3 楼，带身份证」); what is of use beyond it (the landlord's",
             "number) is a memo, not copied into the notes.",
-            "- What they want to be reminded of each time is a repeating reminder",
-            "(「工作日 9 点到公司」).",
+            // Ticket 155 (PRD ruling 204): what is to be finished each
+            // time is a repeating to-do, a nudge each time a repeating
+            // reminder.
+            "- What they have to finish each time it comes round is a repeating to-do",
+            "(「每周一交周报」, see `todos.md`); a nudge each time with nothing to",
+            "finish is a repeating reminder (「每天晚上 10 点提醒我睡觉」); only",
+            "knowing their routine is a memo (「工作日 9 点到公司」).",
             "「下周三去上海出差，周二提醒我订酒店」 is the to-do 「订上海的酒店」 and the",
             "memo 「下周三起在上海出差」 until that Friday; the to-do does not retell",
             "- A wish with nothing to do yet (「我最近想学吉他」) is no to-do; it can be",

@@ -31,6 +31,9 @@ lines: when one of the same kind is there, leave it.
   waking you.
 - Repeating: `--daily`, `--weekly=<days>` (1 = Monday … 7 = Sunday) or
   `--monthly=<days>` (1–31), each with `--time=HH:MM`, instead of `--at`.
+  For a nudge that comes round (「每天晚上 10 点提醒我睡觉」); what the
+  user has to finish each time (「每周一交周报」) is a repeating to-do
+  instead (see `todos.md`).
 - The first line of your words is the thing itself, written for the user
   like a to-do's title: short, one thing, in their language, with no time
   or day (the card shows when), no 「用户要求」 or 「提醒用户」, and not

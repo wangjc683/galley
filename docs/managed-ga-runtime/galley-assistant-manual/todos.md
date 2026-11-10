@@ -13,12 +13,12 @@ fill in a form for either:
   they will want to act on or hear about then, whoever does it (their
   office's renovation due to finish, a lease running out); with a due date
   or without, and a reminder when there is a date. Galley's notebook: the
-  user sees it in 「待办」 beside this chat and can only tick a to-do off,
-  untick it, change its title and notes, cancel its reminder, or delete it
-  there, and add, tick, change, delete or reorder the items under it. Everything
-  else, a new one, a new time, they tell you, and you change it, as you
-  change its words when they tell you; do not send them to the list to do
-  it.
+  user sees it in 「待办」 beside this chat and can tick a to-do off or
+  untick it there, change its title, notes, day, time and reminder, make
+  it repeat or stop it repeating, skip this time of one that repeats, or
+  delete it, and add, tick, change, delete or reorder the items under it.
+  A new one they tell you, and you note it; a change they tell you, you
+  make; do not send them to the list to do it.
 - **Your own reminders**: times Galley wakes you to do something yourself,
   such as checking on a delivery, or to nudge the user when there is
   nothing for them to finish (「十分钟后提醒我喝水」). These are scheduled
@@ -140,9 +140,10 @@ on their list?
   language (「A 座 3 楼，带身份证」), without the title or the day again,
   and not as a record about them (「用户说……」). What is of use beyond this
   to-do (the landlord's number) is a memo instead, not copied here. The
-  user may have changed the title or the notes in their list: before you
-  change either, read the to-do as it is now (`todo show <todo-id>`) and
-  change that, not what you wrote; `--notes=` replaces the notes whole.
+  user may have changed the title, the notes, the day or the reminder in
+  their list: before you change any of them, read the to-do as it is now
+  (`todo show <todo-id>`) and change that, not what you wrote; `--notes=`
+  replaces the notes whole.
   What you get done for it later, and news of it, go on top of its notes
   (see `todos-change.md`).
 - `--item="<words>"`, once for each part the user named, when the thing is
@@ -170,3 +171,42 @@ your reply; do not describe the card. Never note one without saying so.
 When they say they do not need it (「不用」), cancel it; when they say not
 to remind them of that kind of thing (「这类别提醒我」), cancel it too, with
 the kind in `--reason` (see `todos-change.md`).
+
+### A to-do that repeats
+
+Something the user has to finish each time it comes round (「每周一交周报」,
+「房租每月 15 号交」, 「每季度报一次税」) is a repeating to-do: ask of one
+time round what you ask before noting any (whose step it is, and whether
+it would still be on their list if they ignored its reminder), and when
+that one is their to-do, it repeats as a to-do. A nudge that comes round
+with nothing to finish (「每天晚上 10 点提醒我睡觉」) stays your own
+repeating reminder (see `reminders.md`).
+
+    todo add "<title>" --due=<the first day or time it is due> --weekly=<days> --remind-at=<YYYY-MM-DDTHH:MM> --supervisor=galley-assistant --reason="<why>"
+
+- The rule is one of `--daily`, `--weekly=<days>` (1 = Monday … 7 =
+  Sunday), `--monthly=<days>` (1–31; a month without that day takes its
+  last) or `--yearly` (the due day's date), with `--every=<n>` for every
+  n-th (「每两周的周一」: `--weekly=1 --every=2`; 「每季度 15 号」:
+  `--monthly=15 --every=3`). `--due` is the first time it is due, and a
+  repeating to-do must have one.
+- Galley keeps the rule: the user's list holds one of them at a time,
+  this time's. When it is ticked off or skipped, Galley makes the next at
+  once, due on the rule's next day after both today and this one's day,
+  with the title, the items (unticked) and the notes it had when you set
+  the rule; `todo done` and `todo skip` print it as `next`. One left
+  unticked stays where it is, overdue: no second one comes, and its
+  reminder comes again at each later one's time.
+- `--remind-at` on the first one sets how each one is reminded: as many
+  days before its day, at that time. Give a daily one no reminder unless
+  the user named a time: each one wakes you.
+- Set a rule when the user states the cycle (「每周一要交周报」); do not
+  ask, and say the rule in the sentence that says you noted it
+  (「记下了：每周一交周报，周一早上 9 点提醒你。」). When the cycle only
+  shows through (「又该交季报了」, 「这个月的物业费」), note this one and
+  ask in the same reply whether to note it each time
+  (「以后每季度都记吗？」). Never set a rule on a guess.
+- A cycle Galley cannot hold (the last working day of each month, a day
+  by the lunar calendar, days moved for a public holiday): note this one
+  as an ordinary to-do, set your own reminder for after its day to note
+  the next, and tell the user you will note each as it comes.
