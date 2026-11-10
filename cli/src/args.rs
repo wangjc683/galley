@@ -160,7 +160,15 @@ pub(crate) enum TodoCmd {
         /// To-do id (`todo_<16-hex>`).
         todo_id: String,
     },
-    /// Note a to-do.
+    /// Note a to-do. With `--daily` / `--weekly` / `--monthly` / `--yearly`
+    /// (and `--every`) it repeats: it is the first period of a rule, which
+    /// needs `--due` (`repeat_needs_due:`, exit 2); ticking a period off or
+    /// skipping it makes the next.
+    #[command(group(
+        clap::ArgGroup::new("rule")
+            .multiple(false)
+            .args(["daily", "weekly", "monthly", "yearly"])
+    ))]
     Add {
         /// What the user has to do.
         title: String,
@@ -180,18 +188,29 @@ pub(crate) enum TodoCmd {
         /// order.
         #[arg(long = "item", value_name = "TEXT")]
         items: Vec<String>,
+        #[command(flatten)]
+        repeat: TodoRepeatArgs,
         #[arg(long)]
         supervisor: Option<String>,
         #[arg(long)]
         reason: Option<String>,
     },
     /// Change a to-do; only what is given changes. An empty `--notes=`
-    /// clears the notes.
+    /// clears the notes. On a repeating to-do every change is this
+    /// period's alone, unless `--series` takes it into the rule.
     #[command(group(
         clap::ArgGroup::new("change")
             .required(true)
             .multiple(true)
-            .args(["title", "notes", "due", "no_due", "remind_at", "no_remind"])
+            .args([
+                "title", "notes", "due", "no_due", "remind_at", "no_remind", "daily", "weekly",
+                "monthly", "yearly", "no_repeat", "series",
+            ])
+    ))]
+    #[command(group(
+        clap::ArgGroup::new("rule")
+            .multiple(false)
+            .args(["daily", "weekly", "monthly", "yearly"])
     ))]
     Update {
         todo_id: String,
@@ -222,6 +241,22 @@ pub(crate) enum TodoCmd {
         /// Remove the reminder (its scheduled task is cancelled).
         #[arg(long)]
         no_remind: bool,
+        /// Give it a rule, or change its rule (counted from its due date
+        /// from now on).
+        #[command(flatten)]
+        repeat: TodoRepeatArgs,
+        /// Stop repeating: the rule ends, this period stays as an ordinary
+        /// to-do (`not_repeating:` when it does not repeat).
+        #[arg(long, conflicts_with_all = ["rule", "every", "series"])]
+        no_repeat: bool,
+        /// Then take this period, as changed, into its rule: its title,
+        /// its items' words, its reminder's offset from the due day (none
+        /// clears it), its due time; its notes only with `--notes` in the
+        /// same command, and its due day as where the rule counts from
+        /// only with `--due` (`not_repeating:` when it does not repeat;
+        /// refused on a done period).
+        #[arg(long)]
+        series: bool,
         #[arg(long)]
         supervisor: Option<String>,
         #[arg(long)]
@@ -246,8 +281,20 @@ pub(crate) enum TodoCmd {
         reason: Option<String>,
     },
     /// Cancel a to-do (a soft delete), and its reminder with it: it leaves
-    /// the lists; `show` and `list --all` still read it.
+    /// the lists; `show` and `list --all` still read it. A period of a
+    /// repeating to-do ends its rule too: no next period.
     Cancel {
+        todo_id: String,
+        #[arg(long)]
+        supervisor: Option<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+    /// Skip this period of a repeating to-do: it is cancelled (marked
+    /// skipped) with its reminder, and the next period is made, as a tick
+    /// makes it (`not_repeating:` when it does not repeat). Prints the
+    /// skipped one and the next (`{"todo": …, "next": …}`).
+    Skip {
         todo_id: String,
         #[arg(long)]
         supervisor: Option<String>,
@@ -259,6 +306,33 @@ pub(crate) enum TodoCmd {
     /// to-do off. Every write prints the to-do with its items.
     #[command(subcommand)]
     Item(TodoSubitemCmd),
+}
+
+/// A to-do's repeating rule (main chat ticket 154): one of the four, and
+/// `--every` with it. Day ranges, `--every`'s bound and the due date it
+/// needs are Core's to check.
+#[derive(clap::Args, Debug, Default)]
+pub(crate) struct TodoRepeatArgs {
+    /// Repeat every day (every `--every` days).
+    #[arg(long)]
+    pub(crate) daily: bool,
+    /// Repeat every week (every `--every` weeks) on these ISO weekdays
+    /// (Mon=1 … Sun=7, comma-separated).
+    #[arg(long, value_name = "DAYS", value_parser = NonEmptyStringValueParser::new())]
+    pub(crate) weekly: Option<String>,
+    /// Repeat every month (every `--every` months; a quarter is
+    /// `--every=3`) on these days of the month (1-31, comma-separated; a
+    /// short month takes its last day).
+    #[arg(long, value_name = "DAYS", value_parser = NonEmptyStringValueParser::new())]
+    pub(crate) monthly: Option<String>,
+    /// Repeat every year (every `--every` years) on the due date's month
+    /// and day (Feb 29 is Feb 28 in a common year).
+    #[arg(long)]
+    pub(crate) yearly: bool,
+    /// Every N days, weeks, months or years (1-365; default 1), with one
+    /// of the four.
+    #[arg(long, value_name = "N", requires = "rule")]
+    pub(crate) every: Option<u32>,
 }
 
 #[derive(Subcommand, Debug)]

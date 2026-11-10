@@ -25,6 +25,13 @@
 //! [`super::ScheduledTaskBrief::todo_id`]). Setting, moving and removing it
 //! go through the scheduled-task functions; there is no second scheduler.
 //!
+//! Since main chat ticket 154 (PRD ruling 204) a to-do may repeat: a rule
+//! kept on its own (`todo_series`, migration 057; [`TodoRepeat`] on the
+//! wire) and, at any time, at most one period of it not settled — an
+//! ordinary to-do. Ticking that period off or skipping it makes the next
+//! one in the same transaction ([`TodoSettled::next`]); the dates are
+//! [`crate::todo_repeat`]'s.
+//!
 //! The due date keeps the form the user gave it ([`TodoDue`]): a calendar
 //! day with no time ("by Friday") is a floating local date, stored as
 //! `YYYY-MM-DD`; a day with a time ("Wednesday 3 pm") is an instant,
@@ -53,6 +60,105 @@ use crate::error::{GalleyError, Result};
 /// forward it.
 pub const TODOS_CHANGED_EVENT: &str = "todos:changed";
 
+/// Stable prefix of the `invalid_args` message for a repeating to-do with
+/// no due date (main chat ticket 154, Agent API §1.1): `todo add` with a
+/// rule and no `--due`, `todo update` giving one a rule while it has none,
+/// or taking a repeating one's due date away (`--no-due`). Nothing is
+/// written.
+pub const REPEAT_NEEDS_DUE: &str = "repeat_needs_due";
+
+/// Stable prefix of the `invalid_args` message for a write that needs a
+/// rule on a to-do that has none, or whose rule ended (main chat ticket
+/// 154): `todo skip`, `todo update --series`, `todo update --no-repeat`.
+pub const NOT_REPEATING: &str = "not_repeating";
+
+/// Supervisor label of a period Core made from its rule (main chat ticket
+/// 154): stored with `created_via = 'system'`, as the morning review's
+/// task is with `galley-review` (ticket 73), and on the reminder task Core
+/// hangs on it. Reads back as `{"via":"system","supervisor":"galley-repeat"}`.
+pub const REPEAT_SUPERVISOR: &str = "galley-repeat";
+
+/// A repeating rule's kind (main chat ticket 154). A quarter is monthly
+/// every 3.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TodoRepeatKind {
+    Daily,
+    Weekly,
+    Monthly,
+    Yearly,
+}
+
+impl TodoRepeatKind {
+    /// The stored value (`todo_series.repeat_kind`), as on the wire.
+    pub fn as_sql(&self) -> &'static str {
+        match self {
+            Self::Daily => "daily",
+            Self::Weekly => "weekly",
+            Self::Monthly => "monthly",
+            Self::Yearly => "yearly",
+        }
+    }
+
+    /// Read a stored value.
+    pub fn from_sql(raw: &str) -> Result<Self> {
+        match raw {
+            "daily" => Ok(Self::Daily),
+            "weekly" => Ok(Self::Weekly),
+            "monthly" => Ok(Self::Monthly),
+            "yearly" => Ok(Self::Yearly),
+            other => Err(GalleyError::Internal {
+                message: format!("todo series: unknown repeat_kind {other:?}"),
+            }),
+        }
+    }
+}
+
+fn one() -> u32 {
+    1
+}
+
+fn is_one(every: &u32) -> bool {
+    *every == 1
+}
+
+/// A repeating rule as `todo add` / `todo update` give it (socket
+/// `repeat`) and as [`TodoRepeat`] prints it: `{"kind":"weekly",
+/// "weekdays":[1],"every":2}`. `weekdays` (ISO, 1 is Monday) only for
+/// weekly, `monthdays` (1–31) only for monthly; `every` absent is 1.
+/// Core checks it ([`crate::todo_repeat::RepeatRule::checked`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoRepeatRule {
+    pub kind: TodoRepeatKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub weekdays: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub monthdays: Vec<u8>,
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    pub every: u32,
+}
+
+/// The reminder each period of a rule gets: `daysBefore` its due day (0
+/// the same day), at local `time` `HH:MM`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoRepeatRemind {
+    pub days_before: i64,
+    pub time: String,
+}
+
+/// `Todo.repeat` (main chat ticket 154): the rule a to-do is a period of,
+/// while it has not ended, with the reminder each period gets.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoRepeat {
+    #[serde(flatten)]
+    pub rule: TodoRepeatRule,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remind: Option<TodoRepeatRemind>,
+}
+
 /// Opaque to-do identifier, `todo_<16 hex>` ([`mint_todo_id`]).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -74,6 +180,12 @@ impl std::fmt::Display for TodoId {
 /// task's ([`super::schedule::mint_scheduled_task_id`]).
 pub fn mint_todo_id() -> String {
     format!("todo_{}", super::schedule::mint_hex16())
+}
+
+/// Mint a repeating rule's id (main chat ticket 154): `series_` and 16 hex
+/// digits, as a to-do's.
+pub fn mint_todo_series_id() -> String {
+    format!("series_{}", super::schedule::mint_hex16())
 }
 
 /// Opaque identifier of an item under a to-do (main chat ticket 111),
@@ -382,8 +494,32 @@ pub struct TodoBrief {
     /// none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub item_count: Option<TodoSubitemCount>,
+    /// The rule it is a period of (main chat ticket 154), while the rule
+    /// has not ended: absent on a to-do that does not repeat, and once
+    /// the rule ended (`--no-repeat`, a period deleted).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<TodoRepeat>,
+    /// The rule it is (or was) a period of, `series_<16 hex>`; it stays
+    /// when the rule ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series_id: Option<String>,
+    /// A period skipped (`todo skip`, 「跳过这一次」): cancelled, and the
+    /// next one made. Only `true` is written.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub skipped: bool,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// What `todo done` and `todo skip` print (main chat ticket 154): the
+/// to-do as it now stands, and the next period of its rule when settling
+/// this one made it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TodoSettled {
+    pub todo: TodoBrief,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<TodoBrief>,
 }
 
 impl TodoBrief {
@@ -422,6 +558,12 @@ pub struct CreateTodoInput {
     /// --item`); each needs words ([`todo_subitem_text`]).
     #[serde(default)]
     pub items: Vec<String>,
+    /// A repeating rule (main chat ticket 154): the to-do is its first
+    /// period, and the rule carries its title, notes and items, its due
+    /// time and its reminder's offset. Needs `due`
+    /// ([`REPEAT_NEEDS_DUE`]).
+    #[serde(default)]
+    pub repeat: Option<TodoRepeatRule>,
 }
 
 /// A change: only what is given. The double `Option`s clear with
@@ -439,6 +581,21 @@ pub struct TodoPatch {
     /// removes it (cancels its task).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remind_at: Option<Option<String>>,
+    /// Give it a rule, or change its rule (main chat ticket 154 point 8):
+    /// a to-do that does not repeat becomes the first period of a new
+    /// rule; one that does gets the rule's kind, days and every changed,
+    /// counted from its due date.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<TodoRepeatRule>,
+    /// End its rule (point 5): the to-do stays, an ordinary one.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_repeat: bool,
+    /// Once changed, take the to-do as it stands into its rule (point 7):
+    /// title, items' words, the reminder's offset, the due time; the notes
+    /// only when this patch gives them, the anchor only when it gives a
+    /// due date.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub series: bool,
 }
 
 impl TodoPatch {
@@ -452,9 +609,28 @@ impl TodoPatch {
         Self {
             title,
             notes: notes.map(Some),
-            due: None,
-            remind_at: None,
+            ..Self::default()
         }
+    }
+
+    /// The desktop's 「不再重复」 (main chat ticket 154 point 5): the rule
+    /// ends, the to-do stays as it is.
+    pub fn stop_repeating() -> Self {
+        Self {
+            no_repeat: true,
+            ..Self::default()
+        }
+    }
+
+    /// Whether it changes anything at all.
+    pub fn is_empty(&self) -> bool {
+        self.title.is_none()
+            && self.notes.is_none()
+            && self.due.is_none()
+            && self.remind_at.is_none()
+            && self.repeat.is_none()
+            && !self.no_repeat
+            && !self.series
     }
 }
 

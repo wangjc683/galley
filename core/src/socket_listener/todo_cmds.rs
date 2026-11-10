@@ -1,12 +1,12 @@
 use super::common::{map_galley_err, origin_from_args};
 use super::schedule_cmds::created_in;
 use super::*;
-use crate::api::{CreateTodoInput, TodoBrief, TodoId, TodoPatch, TodoSubitemId};
+use crate::api::{CreateTodoInput, TodoBrief, TodoId, TodoPatch, TodoSettled, TodoSubitemId};
 use crate::assistant_todo::todo_list;
 use crate::protocol::{
     TodoAddArgs, TodoCancelArgs, TodoDoneArgs, TodoListArgs, TodoReopenArgs, TodoShowArgs,
-    TodoSubitemAddArgs, TodoSubitemDoneArgs, TodoSubitemMoveArgs, TodoSubitemRemoveArgs,
-    TodoSubitemReopenArgs, TodoSubitemUpdateArgs, TodoUpdateArgs,
+    TodoSkipArgs, TodoSubitemAddArgs, TodoSubitemDoneArgs, TodoSubitemMoveArgs,
+    TodoSubitemRemoveArgs, TodoSubitemReopenArgs, TodoSubitemUpdateArgs, TodoUpdateArgs,
 };
 use crate::session_writes::Writes;
 use serde::de::DeserializeOwned;
@@ -28,6 +28,11 @@ use serde::de::DeserializeOwned;
 // done / reopen / update / remove` (`todo.item_*`), each answering with
 // the to-do as it now stands, items and all, and broadcasting
 // `todos:changed`; since ticket 112 `todo item move` (`todo.item_move`).
+//
+// Since main chat ticket 154 repeating to-dos: `todo.add` / `todo.update`
+// take a `repeat` rule (`update` also `noRepeat` and `series`), and
+// `todo.done` and the new `todo.skip` answer `{"todo": …, "next"?: …}`,
+// `next` the period settling this one made.
 
 fn parse<T: DeserializeOwned>(
     request_id: &Option<String>,
@@ -58,6 +63,15 @@ async fn open(
 
 fn todo_result(request_id: Option<String>, todo: &TodoBrief) -> SocketResponse {
     SocketResponse::ok(request_id, serde_json::json!({ "todo": todo }))
+}
+
+/// `{"todo": …}`, and `"next": …` when settling it made the next period
+/// (main chat ticket 154).
+fn settled_result(request_id: Option<String>, settled: &TodoSettled) -> SocketResponse {
+    match serde_json::to_value(settled) {
+        Ok(value) => SocketResponse::ok(request_id, value),
+        Err(e) => SocketResponse::err(request_id, ErrorTag::Internal, format!("todo: {e}")),
+    }
 }
 
 /// An empty value clears a field (`Some(None)`); a value sets it; absence
@@ -128,6 +142,7 @@ pub(super) async fn dispatch_todo_add(
         due: parsed.due,
         remind_at: parsed.remind_at,
         items: parsed.items,
+        repeat: parsed.repeat,
     };
     match Writes::new(&galley, ctx.notifier.as_ref(), "todo.add")
         .create_todo(input, origin, created_in)
@@ -152,17 +167,16 @@ pub(super) async fn dispatch_todo_update(
         notes: clearable(parsed.notes),
         due: clearable(parsed.due),
         remind_at: clearable(parsed.remind_at),
+        repeat: parsed.repeat,
+        no_repeat: parsed.no_repeat,
+        series: parsed.series,
     };
-    if patch.title.is_none()
-        && patch.notes.is_none()
-        && patch.due.is_none()
-        && patch.remind_at.is_none()
-    {
+    if patch.is_empty() {
         return SocketResponse::err(
             request_id,
             ErrorTag::InvalidArgs,
-            "todo.update: nothing to change; give a title, notes, a due date (or none) or a \
-             reminder (or none)",
+            "todo.update: nothing to change; give a title, notes, a due date (or none), a \
+             reminder (or none), a repeat rule (or noRepeat) or series",
         );
     }
     let galley = match open(&request_id, ctx).await {
@@ -179,12 +193,14 @@ pub(super) async fn dispatch_todo_update(
     }
 }
 
-/// Which of the three state writes.
+/// Which of the four state writes.
 #[derive(Clone, Copy)]
 enum StateWrite {
     Done,
     Reopen,
     Cancel,
+    /// Main chat ticket 154.
+    Skip,
 }
 
 async fn state_write(
@@ -203,9 +219,22 @@ async fn state_write(
     let id = TodoId(todo_id);
     let result = match write {
         StateWrite::Done => {
-            Writes::new(&galley, ctx.notifier.as_ref(), "todo.done")
-                .complete_todo(&id, origin)
-                .await
+            let settled = Writes::new(&galley, ctx.notifier.as_ref(), "todo.done")
+                .complete_todo_with_next(&id, origin)
+                .await;
+            return match settled {
+                Ok(settled) => settled_result(request_id, &settled),
+                Err(e) => map_galley_err(request_id, e),
+            };
+        }
+        StateWrite::Skip => {
+            let settled = Writes::new(&galley, ctx.notifier.as_ref(), "todo.skip")
+                .skip_todo(&id, origin)
+                .await;
+            return match settled {
+                Ok(settled) => settled_result(request_id, &settled),
+                Err(e) => map_galley_err(request_id, e),
+            };
         }
         StateWrite::Reopen => {
             Writes::new(&galley, ctx.notifier.as_ref(), "todo.reopen")
@@ -280,6 +309,26 @@ pub(super) async fn dispatch_todo_cancel(
         parsed.supervisor,
         parsed.reason,
         StateWrite::Cancel,
+    )
+    .await
+}
+
+pub(super) async fn dispatch_todo_skip(
+    request_id: Option<String>,
+    args: Value,
+    ctx: &HandlerCtx<'_>,
+) -> SocketResponse {
+    let parsed: TodoSkipArgs = match parse(&request_id, args, "todo.skip") {
+        Ok(a) => a,
+        Err(resp) => return resp,
+    };
+    state_write(
+        request_id,
+        ctx,
+        parsed.todo_id,
+        parsed.supervisor,
+        parsed.reason,
+        StateWrite::Skip,
     )
     .await
 }

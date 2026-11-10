@@ -163,7 +163,9 @@ fn repeat_from(rule: &RepeatArgs) -> Result<Option<ScheduledTaskRepeat>, GalleyE
     Ok(None)
 }
 
-fn day_list(raw: &str, flag: &str) -> Result<Vec<u8>, GalleyError> {
+/// A comma-separated list of days (`--weekly`, `--monthly`), shared with
+/// `todo add` / `update`'s rule flags (main chat ticket 154).
+pub(crate) fn day_list(raw: &str, flag: &str) -> Result<Vec<u8>, GalleyError> {
     raw.split(',')
         .map(str::trim)
         .filter(|d| !d.is_empty())

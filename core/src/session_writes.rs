@@ -22,7 +22,7 @@
 //! | move to a project | `session-moved-external` |
 //! | create / update / delete a project | `project-created-external` / `project-updated-external` / `project-deleted-external` |
 //! | create / update / delete a scheduled task | `scheduled-tasks:changed` (empty payload) |
-//! | create / update / tick off / untick / cancel a to-do, cancel its reminder | `todos:changed` (empty payload), and `scheduled-tasks:changed` unless unticking |
+//! | create / update / tick off / untick / skip / cancel a to-do, cancel its reminder | `todos:changed` (empty payload), and `scheduled-tasks:changed` unless unticking |
 //! | add / tick / untick / change / move / remove an item under a to-do | `todos:changed` (empty payload) |
 //! | note / change / delete a memo | `memos:changed` (empty payload) |
 //!
@@ -55,8 +55,8 @@ use crate::api::{
     CreateTodoInput, GalleyApi, MemoBrief, MemoId, MemoPatch, MemoWrite, Origin, ProjectBrief,
     ProjectId, ProjectPatch, RuntimeKind, ScheduledTaskBrief, ScheduledTaskId, ScheduledTaskPatch,
     SessionBrief, SessionFilter, SessionId, SessionStatus, TodoBrief, TodoId, TodoPatch,
-    TodoSubitemId, MAIN_CHAT_PROTECTED, MEMOS_CHANGED_EVENT, SCHEDULED_TASKS_CHANGED_EVENT,
-    TODOS_CHANGED_EVENT,
+    TodoSettled, TodoSubitemId, MAIN_CHAT_PROTECTED, MEMOS_CHANGED_EVENT,
+    SCHEDULED_TASKS_CHANGED_EVENT, TODOS_CHANGED_EVENT,
 };
 use crate::db::{
     main_chat_greeting, MainChatEnsured, MainChatSeed, RenameTitleSource, SqliteGalley,
@@ -826,6 +826,24 @@ impl<'a> Writes<'a> {
     /// `todo done`.
     pub async fn complete_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
         let result = self.galley.complete_todo(id, origin).await;
+        self.todos_changed(result, true)
+    }
+
+    /// [`SqliteGalley::complete_todo_with_next`]: `todo done`, with the
+    /// next period of a repeating to-do (main chat ticket 154).
+    pub async fn complete_todo_with_next(
+        &self,
+        id: &TodoId,
+        origin: Origin,
+    ) -> Result<TodoSettled> {
+        let result = self.galley.complete_todo_with_next(id, origin).await;
+        self.todos_changed(result, true)
+    }
+
+    /// [`SqliteGalley::skip_todo`] (main chat ticket 154): `todo skip`,
+    /// the desktop's 「跳过这一次」.
+    pub async fn skip_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoSettled> {
+        let result = self.galley.skip_todo(id, origin).await;
         self.todos_changed(result, true)
     }
 

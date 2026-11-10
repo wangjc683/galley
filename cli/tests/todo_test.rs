@@ -10,7 +10,10 @@
 //! bytes with to-dos about. Since main chat ticket 111 the items under a
 //! to-do: `add --item`, `todo item add / done / reopen / update / remove`,
 //! `show` listing them and `list` counting them; since ticket 112 `todo
-//! item move --to`. Unix only: the server is a Unix socket.
+//! item move --to`. Since ticket 154 repeating to-dos: the rule flags,
+//! `done` and `skip` printing the next period, `--no-repeat`, `--series`,
+//! a deleted period ending its rule, and the flag combinations clap
+//! refuses. Unix only: the server is a Unix socket.
 #![cfg(unix)]
 
 use std::os::unix::fs::MetadataExt;
@@ -18,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 
-use chrono::{Duration as ChronoDuration, Local, Utc};
+use chrono::{Datelike, Duration as ChronoDuration, Local, Utc};
 use galley_core_lib::api::schedule::instant_to_utc_iso;
 use galley_core_lib::api::Origin;
 use galley_core_lib::db::{MainChatSeed, SqliteGalley};
@@ -718,5 +721,287 @@ async fn todo_item_move_puts_an_item_in_its_place() {
     // Under every pin, as the family.
     for schema in ["--schema=1", "--schema=2"] {
         ok(dir, &[schema, "todo", "item", "move", &budget, "--to=1"]).await;
+    }
+}
+
+/// `galley …` as [`galley`] runs it, with `HOME` the temp dir too (main
+/// chat ticket 154's walk: nothing may reach a real data directory).
+async fn galley_at_home(dir: &Path, args: &[&str]) -> (String, Option<i32>) {
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_galley"));
+    let dir = dir.to_path_buf();
+    let args: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+    tokio::task::spawn_blocking(move || {
+        let out = Command::new(bin)
+            .args(&args)
+            .env("GALLEY_DB_PATH", dir.join("test.db"))
+            .env("TMPDIR", &dir)
+            .env("HOME", &dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .expect("spawn galley");
+        (
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            out.status.code(),
+        )
+    })
+    .await
+    .expect("join")
+}
+
+/// One step of the walk: the command and what it printed, for the eye
+/// (`--nocapture`), then the exit code checked.
+async fn step(dir: &Path, args: &[&str]) -> String {
+    let (out, code) = galley_at_home(dir, args).await;
+    eprintln!("$ galley {}\n{}", args.join(" "), out.trim_end());
+    assert_eq!(code, Some(0), "{args:?}: {out}");
+    out
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_repeating_to_do_made_ticked_off_skipped_stopped_and_deleted() {
+    let td = short_tempdir();
+    let dir = td.path();
+    serve(dir, database(dir, true).await);
+    let today = Local::now().date_naive();
+    // The next Monday at least two days on: its eve's 20:00 is never past.
+    let mut ahead = i64::from(7 - today.weekday().num_days_from_monday());
+    if ahead < 2 {
+        ahead += 7;
+    }
+    let monday = today + ChronoDuration::days(ahead);
+    let day = |d: chrono::NaiveDate| d.format("%Y-%m-%d").to_string();
+    let weekday = monday.weekday().number_from_monday().to_string();
+
+    // Made: weekly on Monday, due next Monday 09:00, reminded the evening
+    // before at 20:00.
+    let out = step(
+        dir,
+        &[
+            "--schema=3",
+            "todo",
+            "add",
+            "交周报",
+            "--notes=发给王总",
+            &format!("--due={}T09:00", day(monday)),
+            &format!(
+                "--remind-at={}T20:00",
+                day(monday - ChronoDuration::days(1))
+            ),
+            "--item=汇总数据",
+            &format!("--weekly={weekday}"),
+            "--supervisor=galley-assistant",
+            "--reason=票 154 的测试数据",
+        ],
+    )
+    .await;
+    let first = json_of(&out)["todo"].clone();
+    let first_id = first["id"].as_str().unwrap().to_string();
+    let series = first["seriesId"].as_str().unwrap().to_string();
+    assert!(series.starts_with("series_"));
+    assert_eq!(
+        first["repeat"],
+        json!({"kind": "weekly", "weekdays": [monday.weekday().number_from_monday()],
+               "remind": {"daysBefore": 1, "time": "20:00"}})
+    );
+
+    // Ticked off (early): the next is the Monday after.
+    let out = step(
+        dir,
+        &["todo", "done", &first_id, "--supervisor=galley-assistant"],
+    )
+    .await;
+    let done = json_of(&out);
+    assert_eq!(done["todo"]["status"], "done");
+    let second = done["next"].clone();
+    let second_id = second["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        second["due"]["date"],
+        json!(day(monday + ChronoDuration::days(7)))
+    );
+    assert_eq!(second["due"]["time"], "09:00");
+    assert_eq!(
+        second["origin"],
+        json!({"via": "system", "supervisor": "galley-repeat"})
+    );
+    assert_eq!(second["seriesId"], json!(series));
+    assert_eq!(second["items"][0]["text"], "汇总数据");
+    assert_eq!(second["items"][0]["done"], false);
+    assert_eq!(second["reminder"]["state"], "scheduled");
+    assert!(second.get("createdIn").is_none());
+
+    // Seen: show and list, one period each.
+    let shown = json_of(&step(dir, &["todo", "show", &second_id]).await);
+    assert_eq!(shown["repeat"], first["repeat"]);
+    assert_eq!(
+        ids(&step(dir, &["todo", "list"]).await),
+        vec![second_id.clone()]
+    );
+
+    // Skipped: cancelled and marked, the next made.
+    let out = step(
+        dir,
+        &["todo", "skip", &second_id, "--supervisor=galley-assistant"],
+    )
+    .await;
+    let skipped = json_of(&out);
+    assert_eq!(skipped["todo"]["status"], "cancelled");
+    assert_eq!(skipped["todo"]["skipped"], true);
+    let third = skipped["next"].clone();
+    let third_id = third["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        third["due"]["date"],
+        json!(day(monday + ChronoDuration::days(14)))
+    );
+
+    // No longer repeating: this period stays, an ordinary to-do.
+    let out = step(
+        dir,
+        &[
+            "todo",
+            "update",
+            &third_id,
+            "--no-repeat",
+            "--supervisor=galley-assistant",
+        ],
+    )
+    .await;
+    let stopped = json_of(&out)["todo"].clone();
+    assert!(stopped.get("repeat").is_none());
+    assert_eq!(stopped["seriesId"], json!(series));
+    assert_eq!(stopped["status"], "open");
+    // Ticked off now, it makes nothing.
+    let out = step(dir, &["todo", "done", &third_id]).await;
+    assert!(json_of(&out).get("next").is_none());
+    let (out, code) = galley_at_home(dir, &["todo", "skip", &third_id]).await;
+    assert_refused(&out, code, "not_repeating:");
+
+    // Deleted: a new rule, its first period deleted — the rule ends, no
+    // next.
+    let out = step(
+        dir,
+        &[
+            "todo",
+            "add",
+            "交季报",
+            &format!("--due={}", day(today + ChronoDuration::days(5))),
+            "--monthly=15",
+            "--every=3",
+            "--supervisor=galley-assistant",
+            "--reason=票 154 的测试数据",
+        ],
+    )
+    .await;
+    let quarterly = json_of(&out)["todo"].clone();
+    assert_eq!(
+        quarterly["repeat"],
+        json!({"kind": "monthly", "monthdays": [15], "every": 3})
+    );
+    let qid = quarterly["id"].as_str().unwrap().to_string();
+    let out = step(
+        dir,
+        &["todo", "cancel", &qid, "--supervisor=galley-assistant"],
+    )
+    .await;
+    let deleted = json_of(&out)["todo"].clone();
+    assert_eq!(deleted["status"], "cancelled");
+    assert!(deleted.get("repeat").is_none());
+    assert!(deleted.get("skipped").is_none());
+    let (out, code) = galley_at_home(dir, &["todo", "skip", &qid]).await;
+    assert_eq!(code, Some(3), "{out}");
+
+    // `--series`: this period's title into the rule.
+    let out = step(
+        dir,
+        &[
+            "todo",
+            "add",
+            "吃药",
+            &format!("--due={}", day(today)),
+            "--daily",
+            "--supervisor=galley-assistant",
+            "--reason=票 154 的测试数据",
+        ],
+    )
+    .await;
+    let pills = json_of(&out)["todo"]["id"].as_str().unwrap().to_string();
+    step(
+        dir,
+        &["todo", "update", &pills, "--title=吃降压药", "--series"],
+    )
+    .await;
+    let out = step(dir, &["todo", "done", &pills]).await;
+    let next = json_of(&out)["next"].clone();
+    assert_eq!(next["title"], "吃降压药");
+    assert_eq!(
+        next["due"]["date"],
+        json!(day(today + ChronoDuration::days(1)))
+    );
+    assert!(next.get("reminder").is_none());
+    // Of all that, one to-do is open: the pills' next day.
+    assert_eq!(
+        ids(&step(dir, &["todo", "list"]).await),
+        vec![next["id"].as_str().unwrap().to_string()]
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_rule_flags_refused_together_and_without_a_due_date() {
+    let td = short_tempdir();
+    let dir = td.path();
+    serve(dir, database(dir, true).await);
+    let due = Local::now().format("--due=%Y-%m-%d").to_string();
+    // clap's: two kinds, `--every` alone, `--no-repeat` with a rule or
+    // `--series`.
+    for args in [
+        vec!["todo", "add", "x", due.as_str(), "--daily", "--yearly"],
+        vec![
+            "todo",
+            "add",
+            "x",
+            due.as_str(),
+            "--weekly=1",
+            "--monthly=1",
+        ],
+        vec!["todo", "add", "x", due.as_str(), "--every=2"],
+        vec!["todo", "update", "todo_1", "--every=2"],
+        vec!["todo", "update", "todo_1", "--no-repeat", "--daily"],
+        vec!["todo", "update", "todo_1", "--no-repeat", "--series"],
+    ] {
+        let (out, code) = galley_at_home(dir, &args).await;
+        assert_refused(&out, code, "");
+        assert_eq!(json_of(&out)["error"], "invalid_args", "{args:?}");
+    }
+    // Core's: no due date, a bad day, `--every` past its bound.
+    let (out, code) = galley_at_home(dir, &["todo", "add", "交周报", "--weekly=1"]).await;
+    assert_refused(&out, code, "repeat_needs_due:");
+    let (out, code) = galley_at_home(dir, &["todo", "add", "x", &due, "--weekly=8"]).await;
+    assert_refused(&out, code, "");
+    let (out, code) =
+        galley_at_home(dir, &["todo", "add", "x", &due, "--daily", "--every=366"]).await;
+    assert_refused(&out, code, "");
+    // `--series` / `--no-repeat` on a to-do that does not repeat.
+    let out = step(dir, &["todo", "add", "买营养土"]).await;
+    let soil = json_of(&out)["todo"]["id"].as_str().unwrap().to_string();
+    for flag in ["--series", "--no-repeat"] {
+        let (out, code) = galley_at_home(dir, &["todo", "update", &soil, flag]).await;
+        assert_refused(&out, code, "not_repeating:");
+    }
+    let (out, code) = galley_at_home(dir, &["todo", "skip", &soil]).await;
+    assert_refused(&out, code, "not_repeating:");
+    // Nothing was written but the plain one.
+    assert_eq!(
+        ids(&step(dir, &["todo", "list", "--all"]).await),
+        vec![soil]
+    );
+    // Under every pin, as the family.
+    for schema in ["--schema=1", "--schema=2"] {
+        let out = step(
+            dir,
+            &[schema, "todo", "add", "交周报", &due, "--weekly=1,3"],
+        )
+        .await;
+        assert_eq!(json_of(&out)["todo"]["repeat"]["weekdays"], json!([1, 3]));
     }
 }

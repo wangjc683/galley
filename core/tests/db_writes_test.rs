@@ -79,6 +79,9 @@ const MIG_051: &str = include_str!("../migrations/051_cancelled_by.sql");
 const MIG_052: &str = include_str!("../migrations/052_provider_auth_kind_none.sql");
 const MIG_053: &str = include_str!("../migrations/053_memos.sql");
 const MIG_054: &str = include_str!("../migrations/054_todo_subitems.sql");
+const MIG_055: &str = include_str!("../migrations/055_main_chat_title_galley.sql");
+const MIG_056: &str = include_str!("../migrations/056_subtask_background.sql");
+const MIG_057: &str = include_str!("../migrations/057_todo_series.sql");
 
 async fn fresh_pool() -> SqlitePool {
     let pool = SqlitePool::connect("sqlite::memory:")
@@ -3512,8 +3515,14 @@ async fn migration_054_adds_the_items_under_a_to_do_and_leaves_the_to_dos_as_the
         .execute(&pool)
         .await
         .expect("migration 054");
+    // Read with today's code, which reads a to-do's rule (057, main chat
+    // ticket 154).
+    for sql in [MIG_055, MIG_056, MIG_057] {
+        sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
+    }
     let galley = SqliteGalley::from_pool(pool.clone());
     let todo = galley.todo("todo_before").await.expect("read");
+    assert!(todo.repeat.is_none() && todo.series_id.is_none() && !todo.skipped);
     assert_eq!(todo.notes.as_deref(), Some("收集要点：品牌、预算"));
     assert!(todo.items.is_empty() && todo.item_count.is_none());
     assert_eq!(todo.updated_at, "2026-10-28T09:46:38+00:00");
@@ -3598,8 +3607,8 @@ async fn migration_051_records_who_cancelled_and_leaves_older_cancels_unknown() 
         .await
         .expect("migration 051");
     // Read with today's code, which reads a to-do's items (054, main chat
-    // ticket 111).
-    for sql in [MIG_052, MIG_053, MIG_054] {
+    // ticket 111) and its rule (057, main chat ticket 154).
+    for sql in [MIG_052, MIG_053, MIG_054, MIG_055, MIG_056, MIG_057] {
         sqlx::raw_sql(sql).execute(&pool).await.expect("migration");
     }
     let galley = SqliteGalley::from_pool(pool.clone());

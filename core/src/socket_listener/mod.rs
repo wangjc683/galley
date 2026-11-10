@@ -738,6 +738,8 @@ pub async fn dispatch_line_with(ctx: &HandlerCtx<'_>, line: &str) -> DispatchRes
         "todo.cancel" => {
             DispatchResult::Unary(dispatch_todo_cancel(request_id, req.args, ctx).await)
         }
+        // Ticket 154: a period of a repeating to-do skipped.
+        "todo.skip" => DispatchResult::Unary(dispatch_todo_skip(request_id, req.args, ctx).await),
         // ---- items under a to-do (main chat ticket 111, additive inside 3) ----
         "todo.item_add" => {
             DispatchResult::Unary(dispatch_todo_item_add(request_id, req.args, ctx).await)

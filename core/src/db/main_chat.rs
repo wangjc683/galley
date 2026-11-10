@@ -255,10 +255,11 @@ pub struct MainChatDeletion {
     /// whatever their status.
     pub subtasks: Vec<SessionId>,
     /// How many to-dos went with it (every one, ticket 39), their
-    /// reminders' tasks with them, and how many items were under them
-    /// (ticket 111).
+    /// reminders' tasks with them, how many items were under them
+    /// (ticket 111), and how many repeating rules (ticket 154).
     pub todos: u64,
     pub todo_items: u64,
+    pub todo_series: u64,
     /// How many memos went with it (every one, ticket 95), and how many
     /// records of their writes (`memo_events`).
     pub memos: u64,
@@ -303,7 +304,8 @@ impl SqliteGalley {
     /// conversation's by-products, the notebook Galley kept in it), with
     /// the scheduled tasks that were their reminders — explicitly, as no
     /// foreign key links the two (migration 050) — and the items under
-    /// them (ticket 111, migration 054, no foreign key either); so does
+    /// them (ticket 111, migration 054, no foreign key either) and every
+    /// repeating rule (ticket 154, migration 057, the same); so does
     /// every memo, with
     /// every record of its writes (ticket 95, migration 053: what Galley
     /// learned about the user in this conversation). The assistant's own
@@ -364,6 +366,11 @@ impl SqliteGalley {
             .await
             .map_err(map_sqlx_err)?
             .rows_affected();
+        let todo_series = sqlx::query("DELETE FROM todo_series")
+            .execute(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?
+            .rows_affected();
         let memo_events = sqlx::query("DELETE FROM memo_events")
             .execute(&mut *tx)
             .await
@@ -388,6 +395,7 @@ impl SqliteGalley {
             subtasks: subtasks.into_iter().map(SessionId).collect(),
             todos,
             todo_items,
+            todo_series,
             memos,
             memo_events,
         })

@@ -1078,7 +1078,10 @@ where
 /// 14:00 (Wed): <title> ``; `due 2026-10-23 (Fri)` for a day without a
 /// time; `no due date`; `reminded …` once the reminder went off; `2 of 5
 /// items done` when it has items under it (main chat ticket 111: the
-/// count, not the items — `todo show` reads them).
+/// count, not the items — `todo show` reads them); after the due date,
+/// `repeats weekly on Mon` (`repeats every 3 months on the 15th`, …) for
+/// a period of a rule that has not ended (main chat ticket 154,
+/// [`crate::todo_repeat::repeat_words`]).
 fn in_hand_todo_line<Tz: chrono::TimeZone>(item: &TodoItem, tz: &Tz) -> String
 where
     Tz::Offset: std::fmt::Display,
@@ -1090,6 +1093,9 @@ where
     }
     if item.overdue {
         facts.push("overdue".into());
+    }
+    if let Some(repeat) = &item.todo_repeat {
+        facts.push(crate::todo_repeat::repeat_words(&repeat.rule));
     }
     if let Some(reminder) = &item.reminder {
         if let Some(at) = in_hand_time(&reminder.at, tz) {
@@ -2729,6 +2735,9 @@ mod tests {
             updated_at: None,
             cancelled_at: None,
             items: Vec::new(),
+            todo_repeat: None,
+            series_id: None,
+            skipped: false,
         }
     }
 
@@ -3432,6 +3441,65 @@ mod tests {
             assert!(text.contains(line), "{line}\n{text}");
         }
         assert!(!text.contains("订酒店"), "the items are todo show's");
+    }
+
+    #[test]
+    fn in_hand_says_a_repeating_to_dos_rule() {
+        use crate::api::{TodoRepeat, TodoRepeatKind, TodoRepeatRemind, TodoRepeatRule};
+        let rule = |kind, weekdays: &[u8], monthdays: &[u8], every| TodoRepeat {
+            rule: TodoRepeatRule {
+                kind,
+                weekdays: weekdays.to_vec(),
+                monthdays: monthdays.to_vec(),
+                every,
+            },
+            remind: Some(TodoRepeatRemind {
+                days_before: 1,
+                time: "20:00".into(),
+            }),
+        };
+        let mut report = open_todo(
+            "todo_7a8b9c0d1e2f3a4b",
+            "交周报",
+            Some(day(2026, 10, 19)),
+            false,
+            Some(("2026-10-18T12:00:00+00:00", TodoReminderState::Scheduled)),
+        );
+        report.todo_repeat = Some(rule(TodoRepeatKind::Weekly, &[1], &[], 1));
+        report.series_id = Some("series_1".into());
+        let mut quarterly = open_todo(
+            "todo_8b9c0d1e2f3a4b5c",
+            "交季报",
+            Some(day(2026, 10, 15)),
+            true,
+            None,
+        );
+        quarterly.todo_repeat = Some(rule(TodoRepeatKind::Monthly, &[], &[15], 3));
+        // A rule that ended: the line says nothing of it.
+        let mut ended = open_todo(
+            "todo_9c0d1e2f3a4b5c6d",
+            "浇花",
+            Some(day(2026, 10, 17)),
+            false,
+            None,
+        );
+        ended.series_id = Some("series_2".into());
+        let todo = AssistantTodo {
+            yours: YourTodos {
+                today: vec![quarterly],
+                later: vec![ended, report],
+                ..YourTodos::default()
+            },
+            ..AssistantTodo::default()
+        };
+        let text = in_hand_section(&todo, &[], at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
+        for line in [
+            "- `todo_8b9c0d1e2f3a4b5c` due 2026-10-15 (Thu), overdue, repeats every 3 months on the 15th: 交季报",
+            "- `todo_9c0d1e2f3a4b5c6d` due 2026-10-17 (Sat): 浇花",
+            "- `todo_7a8b9c0d1e2f3a4b` due 2026-10-19 (Mon), repeats weekly on Mon, reminder 2026-10-18 20:00 (Sun): 交周报",
+        ] {
+            assert!(text.contains(line), "{line}\n{text}");
+        }
     }
 
     #[test]

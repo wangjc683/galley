@@ -36,7 +36,7 @@ pub use commands::{
     SessionNewArgs, SessionNewResult, SessionPinArgs, SessionRenameArgs, SessionRestoreArgs,
     SessionSendArgs, SessionStopArgs, SessionUnpinArgs, SessionWatchArgs, SessionsRunStateArgs,
     SocketCommand, TodoAddArgs, TodoCancelArgs, TodoDoneArgs, TodoListArgs, TodoReopenArgs,
-    TodoShowArgs, TodoSubitemAddArgs, TodoSubitemDoneArgs, TodoSubitemMoveArgs,
+    TodoShowArgs, TodoSkipArgs, TodoSubitemAddArgs, TodoSubitemDoneArgs, TodoSubitemMoveArgs,
     TodoSubitemRemoveArgs, TodoSubitemReopenArgs, TodoSubitemUpdateArgs, TodoUpdateArgs,
 };
 pub use envelope::{

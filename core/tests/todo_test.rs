@@ -128,6 +128,7 @@ async fn a_to_do_is_noted_with_its_due_date_and_who() {
                 due: Some("2026-10-21T15:00".into()),
                 remind_at: None,
                 items: Vec::new(),
+                repeat: None,
             },
             assistant(),
             Some((SessionId(MAIN.into()), 4)),

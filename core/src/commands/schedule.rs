@@ -180,9 +180,10 @@ pub(crate) async fn list_noted_todos(
 //
 // The desktop's direct actions on a to-do (PRD ruling 91 point 3): tick
 // it off, untick it, cancel its reminder, since main chat ticket 88 (PRD
-// ruling 132) delete it, and since ticket 107 (PRD ruling 153) change its
-// title and notes. Everything else the user says to Galley, which writes
-// through the CLI. Each is the user at the desktop
+// ruling 132) delete it, since ticket 107 (PRD ruling 153) change its
+// title and notes, and since ticket 154 (PRD ruling 204) skip a period of
+// a repeating one or stop it repeating. Everything else the user says to
+// Galley, which writes through the CLI. Each is the user at the desktop
 // (`Origin::desktop()`: `done_via` / `cancelled_via = 'gui'`), goes
 // through Core's write path, broadcasts `todos:changed` (and
 // `scheduled-tasks:changed` when a reminder moved), and returns the to-do
@@ -275,6 +276,50 @@ pub(crate) async fn cancel_todo(
     let notifier = TauriNotifier::new(app);
     Writes::new(&galley, notifier.as_ref(), VIA_GUI)
         .cancel_todo(&id, Origin::desktop())
+        .await
+        .map_err(stringify_error)
+}
+
+/// Skip this period of a repeating to-do (main chat ticket 154, PRD
+/// ruling 204 point 6: the 「⋯」 menu's 「跳过这一次」): Core's `skip_todo`,
+/// the one Galley's `todo skip` makes — the period is cancelled, marked
+/// skipped and recorded as the user at the desktop (`cancelled_via =
+/// 'gui'`; a skipped period is no follow-up turned down), its reminder
+/// goes with it, and the next period is made at once. Returns the
+/// skipped period; the panel reads the list again on `todos:changed`.
+/// `invalid_args` (`not_repeating:`) for a to-do that does not repeat.
+#[tauri::command]
+pub(crate) async fn skip_todo(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoId,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .skip_todo(&id, Origin::desktop())
+        .await
+        .map(|settled| settled.todo)
+        .map_err(stringify_error)
+}
+
+/// Stop repeating (main chat ticket 154, ruling 204 point 6: 「不再重复」):
+/// Core's `update_todo` with the rule ended, as Galley's `todo update
+/// --no-repeat`, recorded as the user at the desktop (`ended_via =
+/// 'gui'`). The period stays, an ordinary to-do. `invalid_args`
+/// (`not_repeating:`) for one that does not repeat.
+#[tauri::command]
+pub(crate) async fn stop_todo_repeat(
+    app: tauri::AppHandle,
+    galley: State<'_, SqliteGalley>,
+    id: crate::api::TodoId,
+) -> std::result::Result<crate::api::TodoBrief, String> {
+    let notifier = TauriNotifier::new(app);
+    Writes::new(&galley, notifier.as_ref(), VIA_GUI)
+        .update_todo(
+            &id,
+            crate::api::TodoPatch::stop_repeating(),
+            Origin::desktop(),
+        )
         .await
         .map_err(stringify_error)
 }

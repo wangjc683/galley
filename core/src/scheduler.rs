@@ -76,6 +76,13 @@
 //! stops it by asking the main chat, which pauses it; Galley never makes
 //! it again.
 //!
+//! Main chat ticket 154 (PRD ruling 204): every tick first reminds again
+//! of the periods of repeating to-dos left unsettled
+//! ([`rearm_unsettled_periods`]): a period's reminder that went off and
+//! reached an outcome is armed again, the same task, for the time of the
+//! rule's next day. The next period itself is never made here: ticking a
+//! period off or skipping it makes it, in the same write.
+//!
 //! Main chat ticket 144 (PRD ruling 193 point 5): the tick is also the
 //! clock of the subtask reports held for their batch
 //! (`crate::subtask_report`): a main chat holding them is woken once they
@@ -233,6 +240,15 @@ pub(crate) fn start(app: &tauri::App) {
 }
 
 async fn tick(app: &tauri::AppHandle, galley: &SqliteGalley) {
+    // Main chat ticket 154: before the due check, so a reminder armed
+    // again is read as it now stands.
+    rearm_unsettled_periods(
+        galley,
+        crate::notify::TauriNotifier::new(app.clone()).as_ref(),
+        Utc::now(),
+        &Local,
+    )
+    .await;
     let tasks = match galley.list_scheduled_tasks().await {
         Ok(t) => t,
         Err(e) => {
@@ -349,6 +365,38 @@ pub async fn drop_reminders_of_closed_todos<T>(
         }
     }
     kept
+}
+
+/// Remind again of the periods of repeating to-dos left unsettled (main
+/// chat ticket 154 behaviour 13,
+/// [`SqliteGalley::rearm_unsettled_period_reminders`]): each period still
+/// open whose reminder went off and reached the assistant (or a
+/// notification) gets that same reminder at the time of the rule's next
+/// day. Only while there is an assistant (the managed runtime with its main
+/// chat): to-dos are its, and the external runtime is left as it is. The
+/// next period is never made here; this moves a reminder, nothing more.
+/// The desktop hears of a reminder moved; a failure is logged.
+pub async fn rearm_unsettled_periods<Tz: TimeZone>(
+    galley: &SqliteGalley,
+    notifier: &dyn Notifier,
+    now: DateTime<Utc>,
+    tz: &Tz,
+) {
+    if galley
+        .ensure_assistant_available("scheduler")
+        .await
+        .is_err()
+    {
+        return;
+    }
+    match galley.rearm_unsettled_period_reminders(now, tz).await {
+        Ok(0) => {}
+        Ok(_) => {
+            notify(notifier, SCHEDULED_TASKS_CHANGED_EVENT, &());
+            notify(notifier, crate::api::TODOS_CHANGED_EVENT, &());
+        }
+        Err(e) => eprintln!("[scheduler] reminding again of unsettled to-dos failed: {e:?}"),
+    }
 }
 
 /// Read the pending fires into the waiting reports and, when any was

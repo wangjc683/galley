@@ -2,20 +2,28 @@
 //! desktop's three commands and the CLI (ticket 40). Reminders go through
 //! the scheduled-task functions (`db/schedule.rs`, ticket 33). The items
 //! under a to-do (ticket 111, `todo_subitems`) are read with it and
-//! written here too.
+//! written here too, and so are the rules of repeating to-dos (ticket 154,
+//! `todo_series`): a period ticked off or skipped makes the next one in
+//! the same transaction ([`SqliteGalley::settle_todo`]).
 
 use std::collections::{HashMap, HashSet};
 
-use chrono::Local;
+use chrono::{DateTime, Local, NaiveDate, NaiveTime, TimeZone, Utc};
 
 use crate::api::schedule::{
-    mint_scheduled_task_id, CreateScheduledTaskInput, ScheduleTarget, ScheduledTaskCreatedIn,
-    ScheduledTaskPatch, ScheduledTaskRepeat, ScheduledWake,
+    instant_to_utc_iso, mint_scheduled_task_id, parse_fire_at, CreateScheduledTaskInput,
+    ScheduleTarget, ScheduledTaskCreatedIn, ScheduledTaskPatch, ScheduledTaskRepeat, ScheduledWake,
+    TIME_IN_PAST,
 };
 use crate::api::todo::{
-    mint_todo_subitem_id, parse_todo_due, todo_subitem_text, CreateTodoInput, StoredDue, TodoBrief,
-    TodoId, TodoPatch, TodoReminder, TodoReminderState, TodoStatus, TodoSubitem, TodoSubitemCount,
-    TodoSubitemId,
+    mint_todo_series_id, mint_todo_subitem_id, parse_todo_due, todo_subitem_text, CreateTodoInput,
+    StoredDue, TodoBrief, TodoId, TodoPatch, TodoReminder, TodoReminderState, TodoRepeat,
+    TodoRepeatKind, TodoRepeatRemind, TodoSettled, TodoStatus, TodoSubitem, TodoSubitemCount,
+    TodoSubitemId, NOT_REPEATING, REPEAT_NEEDS_DUE, REPEAT_SUPERVISOR,
+};
+use crate::todo_repeat::{
+    due_time_of_day, hhmm, next_due_day, parse_hhmm, period_on, remind_offset, RemindOffset,
+    RepeatRule,
 };
 
 use super::helpers::origin_from_stored;
@@ -44,12 +52,208 @@ struct TodoRow {
     created_in_turn_index: Option<i64>,
     created_at: String,
     updated_at: String,
+    series_id: Option<String>,
+    skipped: i64,
 }
 
 const TODO_COLUMNS: &str = "id, title, notes, due_date, due_at, done_at, done_via, \
     done_by_supervisor, done_origin_note, cancelled_at, cancelled_via, cancelled_by_supervisor, \
     cancelled_origin_note, created_via, created_by_supervisor, created_origin_note, \
-    created_in_session_id, created_in_turn_index, created_at, updated_at";
+    created_in_session_id, created_in_turn_index, created_at, updated_at, series_id, skipped";
+
+/// A repeating rule (main chat ticket 154, migration 057): what the next
+/// period carries and when it falls.
+#[derive(Debug, FromRow)]
+struct TodoSeriesRow {
+    id: String,
+    title: String,
+    notes: Option<String>,
+    items: Option<String>,
+    repeat_kind: String,
+    repeat_every: i64,
+    repeat_days: Option<String>,
+    anchor_date: String,
+    time_of_day: Option<String>,
+    remind_days_before: Option<i64>,
+    remind_time: Option<String>,
+    ended_at: Option<String>,
+}
+
+const TODO_SERIES_COLUMNS: &str = "id, title, notes, items, repeat_kind, repeat_every, \
+    repeat_days, anchor_date, time_of_day, remind_days_before, remind_time, ended_at";
+
+fn series_unreadable(id: &str, what: &str) -> GalleyError {
+    GalleyError::Internal {
+        message: format!("todo series {id}: bad {what}"),
+    }
+}
+
+impl TodoSeriesRow {
+    fn ended(&self) -> bool {
+        self.ended_at.is_some()
+    }
+
+    fn rule(&self) -> Result<RepeatRule> {
+        let kind = TodoRepeatKind::from_sql(&self.repeat_kind)?;
+        let anchor = NaiveDate::parse_from_str(&self.anchor_date, "%Y-%m-%d")
+            .map_err(|_| series_unreadable(&self.id, "anchor_date"))?;
+        let every = u32::try_from(self.repeat_every)
+            .ok()
+            .filter(|every| *every >= 1)
+            .ok_or_else(|| series_unreadable(&self.id, "repeat_every"))?;
+        let days = self
+            .repeat_days
+            .as_deref()
+            .unwrap_or("")
+            .split(',')
+            .filter(|cell| !cell.is_empty())
+            .map(|cell| cell.parse::<u8>())
+            .collect::<std::result::Result<Vec<u8>, _>>()
+            .map_err(|_| series_unreadable(&self.id, "repeat_days"))?;
+        Ok(RepeatRule {
+            kind,
+            every,
+            days,
+            anchor,
+        })
+    }
+
+    fn time_of_day(&self) -> Option<NaiveTime> {
+        self.time_of_day.as_deref().and_then(parse_hhmm)
+    }
+
+    fn remind(&self) -> Option<RemindOffset> {
+        match (
+            self.remind_days_before,
+            self.remind_time.as_deref().and_then(parse_hhmm),
+        ) {
+            (Some(days_before), Some(time)) => Some(RemindOffset { days_before, time }),
+            _ => None,
+        }
+    }
+
+    /// The items' words the next period gets, each as Core keeps an
+    /// item's ([`todo_subitem_text`]). A list that does not read (Core
+    /// never writes one) is none: the period beats no period.
+    fn items(&self) -> Vec<String> {
+        let Some(raw) = self.items.as_deref() else {
+            return Vec::new();
+        };
+        match serde_json::from_str::<Vec<String>>(raw) {
+            Ok(texts) => texts
+                .iter()
+                .filter_map(|text| todo_subitem_text(text))
+                .collect(),
+            Err(e) => {
+                eprintln!(
+                    "[db] todo series {} items unreadable, left out: {e}",
+                    self.id
+                );
+                Vec::new()
+            }
+        }
+    }
+
+    /// `Todo.repeat`: the rule while it has not ended. One that does not
+    /// read (Core never writes one) is logged and left out, as an
+    /// unreadable row is: the to-do still shows.
+    fn wire(&self) -> Option<TodoRepeat> {
+        if self.ended() {
+            return None;
+        }
+        let rule = match self.rule() {
+            Ok(rule) => rule,
+            Err(e) => {
+                eprintln!("[db] todo series {} unreadable, left out: {e:?}", self.id);
+                return None;
+            }
+        };
+        let remind = match (self.remind_days_before, self.remind_time.clone()) {
+            (Some(days_before), Some(time)) => Some(TodoRepeatRemind { days_before, time }),
+            _ => None,
+        };
+        Some(TodoRepeat {
+            rule: rule.given(),
+            remind,
+        })
+    }
+}
+
+/// One rule, ended or not; `None` when there is no such row.
+async fn fetch_series<'e, E>(executor: E, id: &str) -> Result<Option<TodoSeriesRow>>
+where
+    E: sqlx::Executor<'e, Database = Sqlite>,
+{
+    let sql = format!("SELECT {TODO_SERIES_COLUMNS} FROM todo_series WHERE id = ?");
+    sqlx::query_as::<_, TodoSeriesRow>(&sql)
+        .bind(id)
+        .fetch_optional(executor)
+        .await
+        .map_err(map_sqlx_err)
+}
+
+/// A rule being made: the rule, the due time its periods carry, and the
+/// offset of their reminder.
+struct NewSeries {
+    rule: RepeatRule,
+    time_of_day: Option<NaiveTime>,
+    remind: Option<RemindOffset>,
+}
+
+impl NewSeries {
+    /// The rule `rule` for a to-do due `due` with its reminder at
+    /// `remind_at`, read in `tz`.
+    fn of<Tz: TimeZone>(
+        rule: RepeatRule,
+        due: &StoredDue,
+        remind_at: Option<DateTime<Utc>>,
+        tz: &Tz,
+    ) -> Self {
+        Self {
+            rule,
+            time_of_day: due_time_of_day(due, tz),
+            remind: remind_at.map(|at| remind_offset(due, at, tz)),
+        }
+    }
+}
+
+/// A period [`SqliteGalley::settle_todo`] made: its id, its title (its
+/// reminder's words), and when its reminder goes off.
+struct MadePeriod {
+    id: String,
+    title: String,
+    remind_at: Option<DateTime<Utc>>,
+}
+
+/// Who made a period (main chat ticket 154): Core, from its rule.
+fn repeat_origin() -> Origin {
+    Origin {
+        via: OriginVia::System,
+        supervisor: Some(REPEAT_SUPERVISOR.into()),
+        reason: None,
+        client: None,
+    }
+}
+
+fn days_csv(days: &[u8]) -> Option<String> {
+    (!days.is_empty()).then(|| days.iter().map(u8::to_string).collect::<Vec<_>>().join(","))
+}
+
+fn items_json(items: &[String]) -> Option<String> {
+    (!items.is_empty()).then(|| serde_json::to_string(items).unwrap_or_else(|_| "[]".into()))
+}
+
+fn repeat_needs_due(context: &str) -> GalleyError {
+    invalid(format!(
+        "{REPEAT_NEEDS_DUE}: {context}: a repeating to-do needs a due date (--due)"
+    ))
+}
+
+fn not_repeating(context: &str, id: &str) -> GalleyError {
+    invalid(format!(
+        "{NOT_REPEATING}: {context}: todo {id} does not repeat (it has no rule, or its rule ended)"
+    ))
+}
 
 /// An item under a to-do (main chat ticket 111, migration 054).
 #[derive(Debug, FromRow)]
@@ -115,6 +319,7 @@ impl TodoRow {
         self,
         reminder: Option<TodoReminder>,
         items: Vec<TodoSubitem>,
+        repeat: Option<TodoRepeat>,
     ) -> Result<TodoBrief> {
         let status = self.status();
         let due = StoredDue::from_columns(self.due_date.as_deref(), self.due_at.as_deref())?
@@ -161,6 +366,9 @@ impl TodoRow {
             cancelled_by,
             item_count: TodoSubitemCount::of(&items),
             items,
+            repeat,
+            series_id: self.series_id,
+            skipped: self.skipped != 0,
             created_at: self.created_at,
             updated_at: self.updated_at,
         })
@@ -308,7 +516,23 @@ impl SqliteGalley {
             .await?
             .remove(id)
             .unwrap_or_default();
-        row.into_brief(reminder, items)
+        let repeat = match row.series_id.as_deref() {
+            Some(series) => fetch_series(&self.pool, series)
+                .await?
+                .and_then(|series| series.wire()),
+            None => None,
+        };
+        row.into_brief(reminder, items, repeat)
+    }
+
+    /// Every rule, by id (main chat ticket 154).
+    async fn todo_series_all(&self) -> Result<HashMap<String, TodoSeriesRow>> {
+        let sql = format!("SELECT {TODO_SERIES_COLUMNS} FROM todo_series");
+        let rows = sqlx::query_as::<_, TodoSeriesRow>(&sql)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
+        Ok(rows.into_iter().map(|row| (row.id.clone(), row)).collect())
     }
 
     /// The items under one to-do (`Some(id)`) or under every one (`None`),
@@ -359,6 +583,7 @@ impl SqliteGalley {
             .map_err(map_sqlx_err)?;
         let reminders = self.todo_reminders().await?;
         let mut items = self.todo_subitems(None).await?;
+        let series = self.todo_series_all().await?;
         // Per-row tolerance, as for scheduled tasks: one unreadable row
         // must not hide the others.
         Ok(rows
@@ -366,7 +591,12 @@ impl SqliteGalley {
             .filter_map(|row| {
                 let id = row.id.clone();
                 let reminder = reminders.get(&id).and_then(reminder_of);
-                row.into_brief(reminder, items.remove(&id).unwrap_or_default())
+                let repeat = row
+                    .series_id
+                    .as_ref()
+                    .and_then(|series_id| series.get(series_id))
+                    .and_then(TodoSeriesRow::wire);
+                row.into_brief(reminder, items.remove(&id).unwrap_or_default(), repeat)
                     .map_err(|e| eprintln!("[db] todo {id} unreadable, skipped: {e:?}"))
                     .ok()
             })
@@ -414,13 +644,20 @@ impl SqliteGalley {
     /// reminder: a one-off scheduled task that wakes the assistant, made
     /// by [`Self::create_scheduled_task_in`] and linked to the to-do.
     /// With `items` (main chat ticket 111), the items under it, in that
-    /// order, written with it.
+    /// order, written with it. With `repeat` (main chat ticket 154 point
+    /// 1), a rule written with it, the to-do its first period: due on the
+    /// day given (the rule's anchor, whether or not the rule falls on it),
+    /// the rule carrying its title, notes and items as they are now, its
+    /// due time, and its reminder as days before the due day and a time
+    /// of day.
     ///
     /// To-dos are the assistant's notebook: refused with
     /// [`crate::api::ASSISTANT_UNAVAILABLE`] unless the managed runtime
     /// is active and has a main chat. A reminder time already past is
     /// refused with [`crate::api::TIME_IN_PAST`] before anything is
-    /// written, as is an item with no words.
+    /// written, as is an item with no words, a rule that does not check
+    /// ([`RepeatRule::checked`]) and a rule with no due date
+    /// ([`REPEAT_NEEDS_DUE`]).
     ///
     /// **Errors**: `invalid_args`.
     pub async fn create_todo(
@@ -439,23 +676,50 @@ impl SqliteGalley {
             .map(|raw| parse_todo_due(raw, &Local))
             .transpose()?;
         let remind_at = input.remind_at.as_deref().map(str::trim);
-        if let Some(raw) = remind_at {
-            future_fire_at(raw, CONTEXT)?;
-        }
+        let remind_instant = match remind_at {
+            Some(raw) => {
+                future_fire_at(raw, CONTEXT)?;
+                Some(parse_fire_at(raw, &Local)?)
+            }
+            None => None,
+        };
         let items = checked_subitem_texts(&input.items, CONTEXT)?;
+        let series = match &input.repeat {
+            Some(given) => {
+                let due = due.as_ref().ok_or_else(|| repeat_needs_due(CONTEXT))?;
+                let rule = RepeatRule::checked(given, due.local_date(&Local), CONTEXT)?;
+                Some(NewSeries::of(rule, due, remind_instant, &Local))
+            }
+            None => None,
+        };
         let (due_date, due_at) = due.as_ref().map(StoredDue::columns).unwrap_or_default();
         let (in_session, in_run_turn) = match created_in {
             Some((session, turn)) => (Some(session.0), Some(turn)),
             None => (None, None),
         };
         let id = crate::api::todo::mint_todo_id();
+        let series_id = series.as_ref().map(|_| mint_todo_series_id());
         let now = chrono_now_iso();
         let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        if let (Some(series_id), Some(series)) = (&series_id, &series) {
+            insert_series(
+                &mut tx,
+                series_id,
+                &title,
+                notes.as_deref(),
+                &items,
+                series,
+                &origin,
+                &now,
+                CONTEXT,
+            )
+            .await?;
+        }
         sqlx::query(
             "INSERT INTO todos (id, title, notes, due_date, due_at, created_via, \
                 created_by_supervisor, created_origin_note, created_in_session_id, \
-                created_in_run_turn, created_at, updated_at) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                created_in_run_turn, series_id, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&title)
@@ -467,6 +731,7 @@ impl SqliteGalley {
         .bind(origin.reason.as_deref())
         .bind(&in_session)
         .bind(in_run_turn)
+        .bind(&series_id)
         .bind(&now)
         .bind(&now)
         .execute(&mut *tx)
@@ -477,7 +742,7 @@ impl SqliteGalley {
         if let Some(raw) = remind_at {
             if let Err(e) = self.set_todo_reminder(&id, &title, raw, &origin).await {
                 // Nothing half made: the to-do goes with its reminder,
-                // and its items with it.
+                // and its items and its rule with it.
                 let _ = sqlx::query("DELETE FROM todo_subitems WHERE todo_id = ?")
                     .bind(&id)
                     .execute(&self.pool)
@@ -486,6 +751,12 @@ impl SqliteGalley {
                     .bind(&id)
                     .execute(&self.pool)
                     .await;
+                if let Some(series_id) = &series_id {
+                    let _ = sqlx::query("DELETE FROM todo_series WHERE id = ?")
+                        .bind(series_id)
+                        .execute(&self.pool)
+                        .await;
+                }
                 return Err(e);
             }
         }
@@ -561,6 +832,23 @@ impl SqliteGalley {
     /// new title to the reminder's task (the words its notification shows
     /// should it not reach the assistant).
     ///
+    /// Repeating to-dos (main chat ticket 154): every change above is the
+    /// period's alone, the rule stays as it was (point 7). `repeat` gives
+    /// one that does not repeat a rule, as `todo add` does (point 8: due
+    /// on its due date, which it needs, [`REPEAT_NEEDS_DUE`]; refused on a
+    /// done one, untick it first), and changes the kind, days and every of
+    /// one that does, counted from its due date from now on.
+    /// `no_repeat` ends its rule, the period left an ordinary to-do
+    /// (point 5). `series` takes the period as it stands after this
+    /// change into its rule: title, items' words, the reminder's offset
+    /// from the due day (none, none), the due time; its notes only when
+    /// this patch gives notes, and the anchor only when it gives a due
+    /// date. A repeating period's due date cannot be taken away
+    /// (`REPEAT_NEEDS_DUE`, point 9); `series` and `no_repeat` on one that
+    /// does not repeat are [`NOT_REPEATING`]. Everything is checked before
+    /// anything is written; the period and its rule are written in one
+    /// transaction, its reminder after it.
+    ///
     /// **Errors**: `not_found`, `invalid_args`.
     pub async fn update_todo(
         &self,
@@ -571,6 +859,27 @@ impl SqliteGalley {
         const CONTEXT: &str = "update_todo";
         self.ensure_assistant_available(CONTEXT).await?;
         let row = self.live_todo_row(id.as_str()).await?;
+        let series = match row.series_id.as_deref() {
+            Some(series) => fetch_series(&self.pool, series).await?,
+            None => None,
+        }
+        .filter(|series| !series.ended());
+        if patch.no_repeat && (patch.repeat.is_some() || patch.series) {
+            return Err(invalid(format!(
+                "{CONTEXT}: ending the rule (noRepeat) takes no new rule and no series"
+            )));
+        }
+        if (patch.no_repeat || (patch.series && patch.repeat.is_none())) && series.is_none() {
+            return Err(not_repeating(CONTEXT, id.as_str()));
+        }
+        if patch.series && row.done_at.is_some() {
+            // Ticking it off let its reminder go: taken into the rule, that
+            // would read as "no reminder" and clear the rule's.
+            return Err(invalid(format!(
+                "{CONTEXT}: todo {id} is done; take the open period into the rule, or untick \
+                 this one first"
+            )));
+        }
         let title = match patch.title.as_deref() {
             Some(raw) => checked_title(raw, CONTEXT)?,
             None => row.title.clone(),
@@ -597,6 +906,37 @@ impl SqliteGalley {
             }
             other => other.clone(),
         };
+        // Ticket 154: what repeats once this change is made.
+        let due = StoredDue::from_columns(due_date.as_deref(), due_at.as_deref())?;
+        let repeats = !patch.no_repeat && (patch.repeat.is_some() || series.is_some());
+        let rule = match (&patch.repeat, &due) {
+            (_, None) if repeats => return Err(repeat_needs_due(CONTEXT)),
+            (Some(_), _) if series.is_none() && row.done_at.is_some() => {
+                return Err(invalid(format!(
+                    "{CONTEXT}: todo {id} is done; untick it before making it repeat"
+                )));
+            }
+            (Some(given), Some(due)) => {
+                Some(RepeatRule::checked(given, due.local_date(&Local), CONTEXT)?)
+            }
+            _ => None,
+        };
+        // The reminder once this change is made: the rule keeps its
+        // offset from the due day.
+        let reminder_after: Option<DateTime<Utc>> = match &remind_at {
+            Some(Some(raw)) => Some(parse_fire_at(raw, &Local)?),
+            Some(None) => None,
+            None if rule.is_some() || patch.series => self
+                .todo_reminder_task(id.as_str())
+                .await?
+                .as_ref()
+                .and_then(reminder_of)
+                .and_then(|reminder| DateTime::parse_from_rfc3339(&reminder.at).ok())
+                .map(|at| at.with_timezone(&Utc)),
+            None => None,
+        };
+        let now = chrono_now_iso();
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         sqlx::query(
             "UPDATE todos SET title = ?, notes = ?, due_date = ?, due_at = ?, updated_at = ? \
              WHERE id = ?",
@@ -605,11 +945,99 @@ impl SqliteGalley {
         .bind(&notes)
         .bind(&due_date)
         .bind(&due_at)
-        .bind(chrono_now_iso())
+        .bind(&now)
         .bind(id.as_str())
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| map_constraint_err(CONTEXT, e))?;
+        let mut series_id = series.as_ref().map(|series| series.id.clone());
+        if patch.no_repeat {
+            if let Some(series_id) = &series_id {
+                end_series(&mut tx, series_id, &origin, &now).await?;
+            }
+        } else if let (Some(rule), Some(due)) = (rule, &due) {
+            match &series_id {
+                None => {
+                    // Point 8, as `todo add` makes one (point 1).
+                    let items = subitem_texts_in(&mut tx, id.as_str()).await?;
+                    let new = mint_todo_series_id();
+                    insert_series(
+                        &mut tx,
+                        &new,
+                        &title,
+                        notes.as_deref(),
+                        &items,
+                        &NewSeries::of(rule, due, reminder_after, &Local),
+                        &origin,
+                        &now,
+                        CONTEXT,
+                    )
+                    .await?;
+                    sqlx::query("UPDATE todos SET series_id = ? WHERE id = ?")
+                        .bind(&new)
+                        .bind(id.as_str())
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(map_sqlx_err)?;
+                    series_id = Some(new);
+                }
+                Some(series_id) => {
+                    // Point 8: a new rule, counted from this period's day;
+                    // the rest of what it carries stays.
+                    sqlx::query(
+                        "UPDATE todo_series SET repeat_kind = ?, repeat_every = ?, \
+                            repeat_days = ?, anchor_date = ?, updated_at = ? \
+                         WHERE id = ?",
+                    )
+                    .bind(rule.kind.as_sql())
+                    .bind(i64::from(rule.every))
+                    .bind(days_csv(&rule.days))
+                    .bind(rule.anchor.format("%Y-%m-%d").to_string())
+                    .bind(&now)
+                    .bind(series_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| map_constraint_err(CONTEXT, e))?;
+                }
+            }
+        }
+        if patch.series {
+            if let (Some(series_id), Some(due)) = (&series_id, &due) {
+                // Point 7: the rule takes the period as it now stands.
+                let items = subitem_texts_in(&mut tx, id.as_str()).await?;
+                let remind = reminder_after.map(|at| remind_offset(due, at, &Local));
+                let mut sql = String::from(
+                    "UPDATE todo_series SET title = ?, items = ?, time_of_day = ?, \
+                        remind_days_before = ?, remind_time = ?, updated_at = ?",
+                );
+                if patch.notes.is_some() {
+                    sql.push_str(", notes = ?");
+                }
+                if matches!(patch.due, Some(Some(_))) {
+                    sql.push_str(", anchor_date = ?");
+                }
+                sql.push_str(" WHERE id = ?");
+                let mut query = sqlx::query(&sql)
+                    .bind(&title)
+                    .bind(items_json(&items))
+                    .bind(due_time_of_day(due, &Local).map(hhmm))
+                    .bind(remind.map(|offset| offset.days_before))
+                    .bind(remind.map(|offset| hhmm(offset.time)))
+                    .bind(&now);
+                if patch.notes.is_some() {
+                    query = query.bind(&notes);
+                }
+                if matches!(patch.due, Some(Some(_))) {
+                    query = query.bind(due.local_date(&Local).format("%Y-%m-%d").to_string());
+                }
+                query
+                    .bind(series_id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| map_constraint_err(CONTEXT, e))?;
+            }
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
         match remind_at {
             Some(Some(raw)) => {
                 self.set_todo_reminder(id.as_str(), &title, &raw, &origin)
@@ -641,31 +1069,287 @@ impl SqliteGalley {
     /// Tick a to-do off: when, and who (the user at the desktop, Galley
     /// through the CLI). Its reminder is cancelled while it has not
     /// reached the assistant ([`reminder_unspent`]). Ticking off one
-    /// already done changes nothing.
+    /// already done changes nothing. A period of a rule makes the next one
+    /// ([`Self::complete_todo_with_next`], which says which).
     ///
     /// **Errors**: `not_found`, `invalid_args` (no assistant).
     pub async fn complete_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
-        const CONTEXT: &str = "complete_todo";
-        self.ensure_assistant_available(CONTEXT).await?;
+        Ok(self.complete_todo_with_next(id, origin).await?.todo)
+    }
+
+    /// [`Self::complete_todo`], with the next period of the to-do's rule
+    /// when ticking it off made one (`todo done`'s `next`).
+    ///
+    /// **Errors**: `not_found`, `invalid_args` (no assistant).
+    pub async fn complete_todo_with_next(
+        &self,
+        id: &TodoId,
+        origin: Origin,
+    ) -> Result<TodoSettled> {
+        self.settle_todo(id, origin, Settle::Done, Utc::now(), &Local)
+            .await
+    }
+
+    /// Skip a period of a rule (main chat ticket 154 point 3, `todo skip`,
+    /// the desktop's 「跳过这一次」): a soft delete as [`Self::cancel_todo`]
+    /// records it (who, and why: `origin`), marked skipped, its reminder
+    /// let go as a cancel lets it go; then the next period, as a tick
+    /// makes it. [`NOT_REPEATING`] for a to-do with no rule or one whose
+    /// rule ended; a done period is refused (untick it first).
+    ///
+    /// **Errors**: `not_found` (no such to-do, or cancelled),
+    /// `invalid_args`.
+    pub async fn skip_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoSettled> {
+        self.settle_todo(id, origin, Settle::Skip, Utc::now(), &Local)
+            .await
+    }
+
+    /// Settle a to-do — tick it off or skip it — and, when it is a period
+    /// of a rule that has not ended and no other period of it is still
+    /// open, make the next period in the same transaction (main chat
+    /// ticket 154 point 2): due on the rule's first day after the later of
+    /// today in `tz` and every period's due day so far
+    /// ([`next_due_day`]); carrying the rule's title, notes and items (all
+    /// unticked); made by Core ([`REPEAT_SUPERVISOR`], `system`), in no
+    /// turn; `created_at` and `updated_at` one instant, `now`. The
+    /// settling and the next period are one transaction: a failure leaves
+    /// neither. Then, outside it, the settled one's reminder is let go
+    /// ([`Self::release_todo_reminder`]) and the next one's is hung
+    /// through [`Self::set_todo_reminder`] at the rule's offset — none when
+    /// that time has passed, and a failure there is logged, not returned:
+    /// the period stands without it.
+    async fn settle_todo<Tz: TimeZone>(
+        &self,
+        id: &TodoId,
+        origin: Origin,
+        how: Settle,
+        now: DateTime<Utc>,
+        tz: &Tz,
+    ) -> Result<TodoSettled> {
+        let context = how.context();
+        self.ensure_assistant_available(context).await?;
         let row = self.live_todo_row(id.as_str()).await?;
-        if row.done_at.is_none() {
-            sqlx::query(
+        if how == Settle::Skip {
+            let series = match row.series_id.as_deref() {
+                Some(series) => fetch_series(&self.pool, series).await?,
+                None => None,
+            };
+            if series.map_or(true, |series| series.ended()) {
+                return Err(not_repeating(context, id.as_str()));
+            }
+            if row.done_at.is_some() {
+                return Err(invalid(format!(
+                    "{context}: todo {id} is done; untick it before skipping it"
+                )));
+            }
+        }
+        let stamp = instant_to_utc_iso(&now);
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
+        let sql = match how {
+            Settle::Done => {
                 "UPDATE todos SET done_at = ?, done_via = ?, done_by_supervisor = ?, \
                     done_origin_note = ?, updated_at = ? \
-                 WHERE id = ? AND done_at IS NULL AND cancelled_at IS NULL",
-            )
-            .bind(chrono_now_iso())
+                 WHERE id = ? AND done_at IS NULL AND cancelled_at IS NULL"
+            }
+            Settle::Skip => {
+                "UPDATE todos SET cancelled_at = ?, cancelled_via = ?, \
+                    cancelled_by_supervisor = ?, cancelled_origin_note = ?, skipped = 1, \
+                    updated_at = ? \
+                 WHERE id = ? AND done_at IS NULL AND cancelled_at IS NULL"
+            }
+        };
+        let settled = sqlx::query(sql)
+            .bind(&stamp)
             .bind(origin.via.as_sql())
             .bind(origin.stored_supervisor())
             .bind(origin.reason.as_deref())
-            .bind(chrono_now_iso())
+            .bind(&stamp)
             .bind(id.as_str())
-            .execute(&self.pool)
+            .execute(&mut *tx)
             .await
-            .map_err(|e| map_constraint_err(CONTEXT, e))?;
+            .map_err(|e| map_constraint_err(context, e))?
+            .rows_affected()
+            > 0;
+        if !settled && how == Settle::Skip {
+            // Ticked off or deleted since it was read: say which.
+            tx.rollback().await.map_err(map_sqlx_err)?;
+            let row = self.live_todo_row(id.as_str()).await?;
+            return Err(invalid(format!(
+                "{context}: todo {} is done; untick it before skipping it",
+                row.id
+            )));
         }
+        let made = match (&row.series_id, settled) {
+            (Some(series_id), true) => {
+                match make_next_period(&mut tx, id.as_str(), series_id, now, tz, context).await {
+                    Ok(made) => made,
+                    Err(e) => {
+                        // Neither the settling nor the next period.
+                        let _ = tx.rollback().await;
+                        return Err(e);
+                    }
+                }
+            }
+            _ => None,
+        };
+        tx.commit().await.map_err(map_sqlx_err)?;
         self.release_todo_reminder(id.as_str()).await?;
-        self.todo(id.as_str()).await
+        if let Some(made) = &made {
+            self.hang_period_reminder(made, now).await;
+        }
+        let todo = self.todo(id.as_str()).await?;
+        let next = match &made {
+            Some(made) => Some(self.todo(&made.id).await?),
+            None => None,
+        };
+        Ok(TodoSettled { todo, next })
+    }
+
+    /// The reminder of a period Core made (main chat ticket 154 point 2),
+    /// as Galley's are made ([`Self::set_todo_reminder`]), recorded as
+    /// Core's ([`REPEAT_SUPERVISOR`]). None when its time is not after
+    /// `now`, and none, logged, when it cannot be made: the period stands.
+    async fn hang_period_reminder(&self, made: &MadePeriod, now: DateTime<Utc>) {
+        let Some(at) = made.remind_at else {
+            return;
+        };
+        if at <= now {
+            return;
+        }
+        let raw = instant_to_utc_iso(&at);
+        match self
+            .set_todo_reminder(&made.id, &made.title, &raw, &repeat_origin())
+            .await
+        {
+            Ok(()) => {}
+            Err(GalleyError::InvalidArgs { message }) if message.starts_with(TIME_IN_PAST) => {}
+            Err(e) => eprintln!(
+                "[db] todo {}: the reminder of the next period was not made: {e:?}",
+                made.id
+            ),
+        }
+    }
+
+    /// Remind again of the periods left unsettled (main chat ticket 154
+    /// behaviour 13): a period's reminder goes off once, and the next
+    /// period comes only when this one is settled, so a weekly report
+    /// handed in but not ticked off, or one day of a daily to-do missed,
+    /// would never ring again. For each period still open of a rule that
+    /// has not ended and carries a reminder, whose own reminder task is
+    /// still there (not cancelled), enabled, a one-off that went off for
+    /// its time and whose wake reached an outcome — delivered to the
+    /// assistant, or turned into a system notification — that same task is
+    /// armed again ([`Self::update_scheduled_task_db`], its `fireAt`) at the
+    /// reminder time of the rule's next day: the rule's first day after the
+    /// later of today in `tz` and the period's due day, or the day after
+    /// that one while its reminder time is not after `now`. The period
+    /// itself stays as it is (its due date, overdue); no row is made.
+    ///
+    /// Nothing else is touched: a period settled or deleted, a rule ended,
+    /// a reminder the user or Galley removed (its task cancelled: none is
+    /// made again; the next period still gets its own), one paused, one
+    /// not gone off yet, and one whose wake is still pending. A function of
+    /// what the database holds at `now`: run twice, the second arms
+    /// nothing (the task armed again has not gone off for its new time).
+    /// The scheduler runs it on every tick
+    /// ([`crate::scheduler::rearm_unsettled_periods`]). Returns how many
+    /// it armed; a period whose reminder cannot be armed is logged and
+    /// skipped.
+    pub async fn rearm_unsettled_period_reminders<Tz: TimeZone>(
+        &self,
+        now: DateTime<Utc>,
+        tz: &Tz,
+    ) -> Result<u32> {
+        let rows: Vec<(String, Option<String>, Option<String>, String)> = sqlx::query_as(
+            "SELECT t.id, t.due_date, t.due_at, t.series_id FROM todos t \
+             JOIN todo_series s ON s.id = t.series_id \
+             WHERE t.done_at IS NULL AND t.cancelled_at IS NULL AND s.ended_at IS NULL \
+               AND s.remind_days_before IS NOT NULL AND s.remind_time IS NOT NULL \
+               AND EXISTS (SELECT 1 FROM scheduled_tasks k \
+                   WHERE k.todo_id = t.id AND k.cancelled_at IS NULL \
+                     AND k.last_wake IN ('delivered', 'notified')) \
+             ORDER BY t.created_at, t.id",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
+        let mut armed = 0;
+        for (todo_id, due_date, due_at, series_id) in rows {
+            match self
+                .rearm_period_reminder(&todo_id, due_date, due_at, &series_id, now, tz)
+                .await
+            {
+                Ok(true) => armed += 1,
+                Ok(false) => {}
+                Err(e) => eprintln!(
+                    "[db] todo {todo_id}: reminding again of the unsettled period failed: {e:?}"
+                ),
+            }
+        }
+        Ok(armed)
+    }
+
+    /// One period of [`Self::rearm_unsettled_period_reminders`]: `true`
+    /// when its reminder was armed again.
+    async fn rearm_period_reminder<Tz: TimeZone>(
+        &self,
+        todo_id: &str,
+        due_date: Option<String>,
+        due_at: Option<String>,
+        series_id: &str,
+        now: DateTime<Utc>,
+        tz: &Tz,
+    ) -> Result<bool> {
+        let Some(task) = self.todo_reminder_task(todo_id).await? else {
+            return Ok(false);
+        };
+        let spent = task.repeat.is_once()
+            && task.enabled
+            && task.once_fired()
+            && matches!(
+                task.last_wake,
+                Some(ScheduledWake::Delivered | ScheduledWake::Notified)
+            );
+        if !spent {
+            return Ok(false);
+        }
+        let Some(series) = fetch_series(&self.pool, series_id).await? else {
+            return Ok(false);
+        };
+        let Some(remind) = series.remind() else {
+            return Ok(false);
+        };
+        if series.ended() {
+            return Ok(false);
+        }
+        let rule = series.rule()?;
+        let today = now.with_timezone(tz).date_naive();
+        let due_day = StoredDue::from_columns(due_date.as_deref(), due_at.as_deref())?
+            .map(|due| due.local_date(tz));
+        let mut day = next_due_day(&rule, today, due_day);
+        // The first of the rule's days whose reminder time is still ahead;
+        // bounded, should a rule and its offset never give one.
+        let mut at = None;
+        for _ in 0..800 {
+            let remind_at = period_on(day, series.time_of_day(), Some(remind), tz).remind_at;
+            match remind_at {
+                Some(remind_at) if remind_at > now => {
+                    at = Some(remind_at);
+                    break;
+                }
+                _ => day = rule.next_after(day),
+            }
+        }
+        let Some(at) = at else {
+            return Ok(false);
+        };
+        let patch = ScheduledTaskPatch {
+            fire_at: Some(instant_to_utc_iso(&at)),
+            ..ScheduledTaskPatch::default()
+        };
+        self.update_scheduled_task_db(task.id, patch, repeat_origin())
+            .await?;
+        Ok(true)
     }
 
     /// Untick a to-do: open again, its done stamps cleared. A reminder
@@ -695,13 +1379,17 @@ impl SqliteGalley {
     /// Cancel a to-do: a soft delete (the row stays with `cancelledAt`
     /// and, since ticket 61, who cancelled it and why: `origin`), its
     /// reminder cancelled as when it is ticked off. Gone for every write:
-    /// cancelling it again is `not_found`.
+    /// cancelling it again is `not_found`. A period of a rule ends the
+    /// rule with it, recorded with the same `origin`, and makes no next
+    /// period (main chat ticket 154 point 4): deleting is "neither this
+    /// one nor the rule".
     ///
     /// **Errors**: `not_found`, `invalid_args` (no assistant).
     pub async fn cancel_todo(&self, id: &TodoId, origin: Origin) -> Result<TodoBrief> {
         const CONTEXT: &str = "cancel_todo";
         self.ensure_assistant_available(CONTEXT).await?;
         let now = chrono_now_iso();
+        let mut tx = self.pool.begin().await.map_err(map_sqlx_err)?;
         let res = sqlx::query(
             "UPDATE todos SET cancelled_at = ?, cancelled_via = ?, cancelled_by_supervisor = ?, \
                 cancelled_origin_note = ?, updated_at = ? \
@@ -713,14 +1401,24 @@ impl SqliteGalley {
         .bind(origin.reason.as_deref())
         .bind(&now)
         .bind(id.as_str())
-        .execute(&self.pool)
+        .execute(&mut *tx)
         .await
         .map_err(map_sqlx_err)?;
         if res.rows_affected() == 0 {
             // Either no such row or cancelled before; say which.
+            tx.rollback().await.map_err(map_sqlx_err)?;
             self.todo_row(id.as_str()).await?;
             return Err(gone(id.as_str()));
         }
+        let series: Option<String> = sqlx::query_scalar("SELECT series_id FROM todos WHERE id = ?")
+            .bind(id.as_str())
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_sqlx_err)?;
+        if let Some(series) = series {
+            end_series(&mut tx, &series, &origin, &now).await?;
+        }
+        tx.commit().await.map_err(map_sqlx_err)?;
         self.release_todo_reminder(id.as_str()).await?;
         self.todo(id.as_str()).await
     }
@@ -1035,6 +1733,179 @@ impl SqliteGalley {
         .map_err(map_sqlx_err)?;
         Ok(res.rows_affected())
     }
+}
+
+/// How a to-do is settled ([`SqliteGalley::settle_todo`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Settle {
+    /// Ticked off (`todo done`, the desktop's tick).
+    Done,
+    /// Skipped (`todo skip`, 「跳过这一次」).
+    Skip,
+}
+
+impl Settle {
+    fn context(self) -> &'static str {
+        match self {
+            Self::Done => "complete_todo",
+            Self::Skip => "skip_todo",
+        }
+    }
+}
+
+/// Write a new rule (main chat ticket 154): what the next period carries
+/// (`title`, `notes`, `items`), the rule, its due time and reminder
+/// offset, and who made it.
+#[allow(clippy::too_many_arguments)]
+async fn insert_series(
+    tx: &mut Transaction<'_, Sqlite>,
+    id: &str,
+    title: &str,
+    notes: Option<&str>,
+    items: &[String],
+    series: &NewSeries,
+    origin: &Origin,
+    now: &str,
+    context: &str,
+) -> Result<()> {
+    let rule = &series.rule;
+    sqlx::query(
+        "INSERT INTO todo_series (id, title, notes, items, repeat_kind, repeat_every, \
+            repeat_days, anchor_date, time_of_day, remind_days_before, remind_time, \
+            created_via, created_by_supervisor, created_origin_note, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(id)
+    .bind(title)
+    .bind(notes)
+    .bind(items_json(items))
+    .bind(rule.kind.as_sql())
+    .bind(i64::from(rule.every))
+    .bind(days_csv(&rule.days))
+    .bind(rule.anchor.format("%Y-%m-%d").to_string())
+    .bind(series.time_of_day.map(hhmm))
+    .bind(series.remind.map(|offset| offset.days_before))
+    .bind(series.remind.map(|offset| hhmm(offset.time)))
+    .bind(origin.via.as_sql())
+    .bind(origin.stored_supervisor())
+    .bind(origin.reason.as_deref())
+    .bind(now)
+    .bind(now)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| map_constraint_err(context, e))?;
+    Ok(())
+}
+
+/// End a rule, recording who ended it (main chat ticket 154 points 4
+/// and 5). One already ended stays as it was.
+async fn end_series(
+    tx: &mut Transaction<'_, Sqlite>,
+    id: &str,
+    origin: &Origin,
+    now: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE todo_series SET ended_at = ?, ended_via = ?, ended_by_supervisor = ?, \
+            ended_origin_note = ?, updated_at = ? \
+         WHERE id = ? AND ended_at IS NULL",
+    )
+    .bind(now)
+    .bind(origin.via.as_sql())
+    .bind(origin.stored_supervisor())
+    .bind(origin.reason.as_deref())
+    .bind(now)
+    .bind(id)
+    .execute(&mut **tx)
+    .await
+    .map_err(map_sqlx_err)?;
+    Ok(())
+}
+
+/// The words of a to-do's items, in their order (what a rule carries).
+async fn subitem_texts_in(tx: &mut Transaction<'_, Sqlite>, todo_id: &str) -> Result<Vec<String>> {
+    sqlx::query_scalar("SELECT text FROM todo_subitems WHERE todo_id = ? ORDER BY position, id")
+        .bind(todo_id)
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(map_sqlx_err)
+}
+
+/// Inside the transaction that settled `settled`, a period of
+/// `series_id`: make the next period when the rule has not ended and no
+/// other period of it is still open ([`SqliteGalley::settle_todo`]).
+async fn make_next_period<Tz: TimeZone>(
+    tx: &mut Transaction<'_, Sqlite>,
+    settled: &str,
+    series_id: &str,
+    now: DateTime<Utc>,
+    tz: &Tz,
+    context: &str,
+) -> Result<Option<MadePeriod>> {
+    let Some(series) = fetch_series(&mut **tx, series_id).await? else {
+        return Ok(None);
+    };
+    if series.ended() {
+        return Ok(None);
+    }
+    // Point 6: unticked after the next one was made, two may be open at
+    // once; the next comes when both are settled.
+    let open: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM todos \
+         WHERE series_id = ? AND id != ? AND done_at IS NULL AND cancelled_at IS NULL",
+    )
+    .bind(series_id)
+    .bind(settled)
+    .fetch_one(&mut **tx)
+    .await
+    .map_err(map_sqlx_err)?;
+    if open > 0 {
+        return Ok(None);
+    }
+    let dues: Vec<(Option<String>, Option<String>)> =
+        sqlx::query_as("SELECT due_date, due_at FROM todos WHERE series_id = ?")
+            .bind(series_id)
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(map_sqlx_err)?;
+    let days = dues.iter().filter_map(|(date, at)| {
+        StoredDue::from_columns(date.as_deref(), at.as_deref())
+            .ok()
+            .flatten()
+            .map(|due| due.local_date(tz))
+    });
+    let rule = series.rule()?;
+    let today = now.with_timezone(tz).date_naive();
+    let day = next_due_day(&rule, today, days);
+    let period = period_on(day, series.time_of_day(), series.remind(), tz);
+    let (due_date, due_at) = period.due.columns();
+    let id = crate::api::todo::mint_todo_id();
+    let stamp = instant_to_utc_iso(&now);
+    let origin = repeat_origin();
+    sqlx::query(
+        "INSERT INTO todos (id, title, notes, due_date, due_at, created_via, \
+            created_by_supervisor, created_origin_note, series_id, created_at, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)",
+    )
+    .bind(&id)
+    .bind(&series.title)
+    .bind(&series.notes)
+    .bind(&due_date)
+    .bind(&due_at)
+    .bind(origin.via.as_sql())
+    .bind(origin.stored_supervisor())
+    .bind(series_id)
+    .bind(&stamp)
+    .bind(&stamp)
+    .execute(&mut **tx)
+    .await
+    .map_err(|e| map_constraint_err(context, e))?;
+    insert_subitems(tx, &id, 0, &series.items(), &stamp, context).await?;
+    Ok(Some(MadePeriod {
+        id,
+        title: series.title,
+        remind_at: period.remind_at,
+    }))
 }
 
 /// An item about to be written ([`SqliteGalley::live_subitem`]).

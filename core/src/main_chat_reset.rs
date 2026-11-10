@@ -4,7 +4,8 @@
 //! One action, no options. The main chat and the subtasks it dispatched
 //! that never became ordinary conversations are deleted, and with them
 //! every to-do Galley noted, its reminder (ticket 39) and the items under
-//! it (ticket 111), and every memo (ticket 95), a new main chat
+//! it (ticket 111), every repeating rule (ticket 154), and every memo
+//! (ticket 95), a new main chat
 //! starts from its greeting, the engine's long-term memory
 //! (`managed-ga-state/memory/`, shared by every conversation and IM
 //! channel) goes back to the seed it was installed with, and the
@@ -34,7 +35,8 @@
 //!    not deleted. A failure here changes nothing.
 //! 4. **Delete the rows** in one transaction
 //!    ([`SqliteGalley::delete_main_chat_for_reset`]): the sessions, the
-//!    to-dos with their reminders' tasks, and the memos with the records
+//!    to-dos with their reminders' tasks and their rules, and the memos
+//!    with the records
 //!    of their writes. If it fails, the
 //!    old `memory/` goes back and nothing changed. From here on the reset
 //!    has happened: the set-aside memory is deleted, runners are closed

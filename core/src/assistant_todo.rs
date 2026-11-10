@@ -82,8 +82,8 @@ use crate::api::schedule::{
     parse_utc_secs, ScheduleTarget, ScheduledTaskBrief, ScheduledTaskCreatedIn, ScheduledTaskRepeat,
 };
 use crate::api::{
-    Origin, OriginVia, RuntimeKind, SessionId, TodoBrief, TodoDue, TodoReminder, TodoStatus,
-    ASSISTANT_SUPERVISOR,
+    Origin, OriginVia, RuntimeKind, SessionId, TodoBrief, TodoDue, TodoReminder, TodoRepeat,
+    TodoStatus, ASSISTANT_SUPERVISOR, REPEAT_SUPERVISOR,
 };
 use crate::db::{LastRunReply, ScheduleListScope, SqliteGalley, TodoListScope, TodoSubtaskRow};
 use crate::error::Result;
@@ -200,6 +200,12 @@ impl AssistantTodo {
     /// same second counts, as a time does not read: one review too many
     /// beats one missed.
     ///
+    /// Main chat ticket 154: a period Core made from a repeating to-do's
+    /// rule does not count as noted by being made — only a change after
+    /// it does — while its due date coming this near counts as any to-do's.
+    /// A daily one wakes no review by itself; a weekly or longer one wakes
+    /// the review its period first comes this near at.
+    ///
     /// Woken, the review goes over everything in hand; this decides only
     /// whether it wakes. Since main chat ticket 95 this is the to-dos'
     /// half: the review also wakes for the memos new since the one before
@@ -234,11 +240,28 @@ impl AssistantTodo {
         };
         // An instant that does not read (Core never writes one) moved.
         let moved = |at: Option<&str>| at.and_then(parse_utc_secs).map_or(true, |at| at >= last.at);
+        // A to-do noted or changed since. A period Core made from its rule
+        // (ticket 154) did not move by being made: only a change after it
+        // (`updated_at` later than `created_at`) counts.
+        let touched = |item: &TodoItem| {
+            let made_by_core = item.created_by == TodoCreator::Agent
+                && item.agent.as_deref() == Some(REPEAT_SUPERVISOR);
+            if made_by_core {
+                let made = item.created_at.as_deref().and_then(parse_utc_secs);
+                let changed = item.updated_at.as_deref().and_then(parse_utc_secs);
+                if let (Some(made), Some(changed)) = (made, changed) {
+                    if changed <= made {
+                        return false;
+                    }
+                }
+            }
+            moved(item.updated_at.as_deref().or(item.created_at.as_deref()))
+        };
         // The days already this near at the review before.
         let seen = last.day + chrono::Duration::days(REVIEW_LOOKAHEAD_DAYS);
         // Of ticket 81's lot, what moved since, or came this near only now.
         let yours = self.yours.iter().filter(near).any(|item| {
-            moved(item.updated_at.as_deref().or(item.created_at.as_deref()))
+            touched(item)
                 || item
                     .due
                     .as_ref()
@@ -409,6 +432,19 @@ pub struct TodoItem {
     /// In Hand's count. Absent when it has none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<ListedSubitem>,
+    /// To-dos that repeat (main chat ticket 154): the rule it is a period
+    /// of, while the rule has not ended — the time row's 「↻ 每周」, In
+    /// Hand's `repeats weekly on Mon`. Not [`Self::repeat`], which is a
+    /// task's rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub todo_repeat: Option<TodoRepeat>,
+    /// To-dos: the rule it is (or was) a period of, `series_<16 hex>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series_id: Option<String>,
+    /// To-dos: a period skipped (cancelled, and only [`noted_todos`]
+    /// returns one), so its card can tell a skip from a delete (「已取消」).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub skipped: bool,
 }
 
 /// An item under a to-do as the list carries it (main chat ticket 111):
@@ -632,7 +668,9 @@ pub async fn declined_follow_ups(
 }
 
 /// [`declined_follow_ups`] from what was read: the to-dos and tasks
-/// Galley made that were cancelled within [`DECLINED_WINDOW_DAYS`] of
+/// Galley made (or Core made from a rule of a repeating to-do, ticket
+/// 154; a period skipped is no follow-up turned down, deleting one is)
+/// that were cancelled within [`DECLINED_WINDOW_DAYS`] of
 /// `now` (exactly 90 days back is in) by the user at the desktop or by
 /// Galley at the user's request, most recently cancelled first (the same
 /// second: by id). A to-do's reminder is a task of its own here: the
@@ -646,6 +684,9 @@ pub fn declined_items(
     let since = now.timestamp() - DECLINED_WINDOW_DAYS * 86_400;
     let mut declined: Vec<(i64, DeclinedFollowUp)> = todos
         .iter()
+        // A period skipped (ticket 154) is not turned down: the next one
+        // came with it.
+        .filter(|todo| !todo.skipped)
         .filter_map(|todo| {
             declined_one(
                 TodoKind::Todo,
@@ -684,7 +725,12 @@ fn declined_one(
     cancelled_by: Option<&Origin>,
     since: i64,
 ) -> Option<(i64, DeclinedFollowUp)> {
-    if made_by?.supervisor.as_deref() != Some(ASSISTANT_SUPERVISOR) {
+    // Galley's: noted by it, or a period Core made from a rule (ticket
+    // 154), and that period's reminder.
+    if !matches!(
+        made_by?.supervisor.as_deref(),
+        Some(ASSISTANT_SUPERVISOR | REPEAT_SUPERVISOR)
+    ) {
         return None;
     }
     let cancelled_at = cancelled_at?;
@@ -994,6 +1040,9 @@ fn blank(kind: TodoKind, id: String, text: String, state: TodoState) -> TodoItem
         updated_at: None,
         cancelled_at: None,
         items: Vec::new(),
+        todo_repeat: None,
+        series_id: None,
+        skipped: false,
     }
 }
 
@@ -1030,6 +1079,9 @@ where
                 done: item.done,
             })
             .collect(),
+        todo_repeat: todo.repeat.clone(),
+        series_id: todo.series_id.clone(),
+        skipped: todo.skipped,
         ..blank(
             TodoKind::Todo,
             todo.id.as_str().to_string(),
@@ -1196,6 +1248,9 @@ mod tests {
             cancelled_by: None,
             items: Vec::new(),
             item_count: None,
+            repeat: None,
+            series_id: None,
+            skipped: false,
             created_at: noted.into(),
             updated_at: noted.into(),
         }
@@ -2088,6 +2143,39 @@ mod tests {
         assert_eq!(order, ["t-a", "t-b"]);
     }
 
+    #[test]
+    fn a_period_skipped_is_not_turned_down_and_one_deleted_is() {
+        let by_user = || Some(Origin::gui());
+        let core = Origin {
+            via: OriginVia::System,
+            supervisor: Some(REPEAT_SUPERVISOR.into()),
+            reason: None,
+            client: None,
+        };
+        // Skipped on the desktop: the next one came with it.
+        let skipped = TodoBrief {
+            skipped: true,
+            series_id: Some("series_1".into()),
+            ..cancelled_todo("t-skipped", "2026-10-16T09:00:00Z", by_user())
+        };
+        // A period Core made, deleted on the desktop: turned down, as a
+        // to-do Galley noted is.
+        let deleted = TodoBrief {
+            origin: core.clone(),
+            series_id: Some("series_1".into()),
+            ..cancelled_todo("t-deleted", "2026-10-16T10:00:00Z", by_user())
+        };
+        // Its reminder, cancelled by the user: turned down too.
+        let reminder = ScheduledTaskBrief {
+            origin: Some(core),
+            todo_id: Some("t-other".into()),
+            ..cancelled_task("t-reminder", "2026-10-16T08:00:00Z", by_user())
+        };
+        let got = declined_items(&[skipped, deleted], &[reminder], now());
+        let order: Vec<&str> = got.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(order, ["t-deleted", "t-reminder"]);
+    }
+
     // ---- whether the morning review wakes (ticket 81) ----
 
     /// The review's look at what was read, now (Fri 2026-10-16 12:00), in
@@ -2514,6 +2602,66 @@ mod tests {
                 LastReview::read(Some("?"), &Utc)
             )
         );
+    }
+
+    /// A period Core made from a rule (ticket 154) at `made`, changed last
+    /// at `changed`.
+    fn period(id: &str, due: StoredDue, made: &str, changed: &str) -> TodoBrief {
+        TodoBrief {
+            origin: Origin {
+                via: OriginVia::System,
+                supervisor: Some(REPEAT_SUPERVISOR.into()),
+                reason: None,
+                client: None,
+            },
+            created_in: None,
+            series_id: Some("series_1".into()),
+            created_at: made.into(),
+            updated_at: changed.into(),
+            ..todo(id, Some(due), made)
+        }
+    }
+
+    #[test]
+    fn a_period_core_made_wakes_the_review_only_when_changed_or_newly_near() {
+        // Now Fri 2026-10-16 12:00 UTC; the review before, yesterday.
+        let made = "2026-10-16T10:00:00+00:00";
+        // A daily one: ticked off this morning, its next due tomorrow —
+        // within the days yesterday's review already saw. Being made is
+        // no move: no wake.
+        let daily = [period("t-daily", date(2026, 10, 17), made, made)];
+        assert!(!looks_since(&daily, &[], &[], YESTERDAY));
+        // Galley noting the same to-do is a move, as before.
+        let noted = [todo("t-noted", Some(date(2026, 10, 17)), made)];
+        assert!(looks_since(&noted, &[], &[], YESTERDAY));
+        // Changed after it was made (its notes, an item, its day): a move.
+        let changed = [period(
+            "t-changed",
+            date(2026, 10, 17),
+            made,
+            "2026-10-16T11:00:00+00:00",
+        )];
+        assert!(looks_since(&changed, &[], &[], YESTERDAY));
+        // A weekly one made last week, due Monday: yesterday's review saw
+        // through Sunday, today's reaches Monday — it wakes once, now...
+        let weekly = [period(
+            "t-weekly",
+            date(2026, 10, 19),
+            "2026-10-12T10:00:00+00:00",
+            "2026-10-12T10:00:00+00:00",
+        )];
+        assert!(looks_since(&weekly, &[], &[], YESTERDAY));
+        // ...and not at a review that already saw Monday.
+        assert!(!looks_since(&weekly, &[], &[], "2026-10-16T06:00:00+00:00"));
+        // Made today and due Monday: still once, for the day coming near.
+        let weekly_new = [period("t-weekly-new", date(2026, 10, 19), made, made)];
+        assert!(looks_since(&weekly_new, &[], &[], YESTERDAY));
+        assert!(!looks_since(
+            &weekly_new,
+            &[],
+            &[],
+            "2026-10-16T06:00:00+00:00"
+        ));
     }
 
     /// [`looks_since`] in `tz`: today, and the review before's day, read

@@ -347,5 +347,11 @@ pub(crate) fn all() -> Vec<Migration> {
             sql: include_str!("../migrations/056_subtask_background.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 57,
+            description: "add todo_series (repeating to-dos: the rule; todos.series_id, skipped)",
+            sql: include_str!("../migrations/057_todo_series.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }

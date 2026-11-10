@@ -8,7 +8,7 @@
 //! module existed.
 
 use crate::api::schedule::{ScheduleTarget, ScheduledTaskRepeat};
-use crate::api::{MessageBrief, RuntimeKind, SessionBrief};
+use crate::api::{MessageBrief, RuntimeKind, SessionBrief, TodoRepeatRule};
 use serde::{Deserialize, Serialize};
 
 pub use crate::git_review::GitReviewRequest;
@@ -462,7 +462,8 @@ socket_command!(TodoShowArgs, "todo.show");
 /// `todo.add`: note a to-do. `due` is a local date `YYYY-MM-DD` (no time)
 /// or a time in `schedule.create`'s `fireAt` forms; `remindAt` hangs a
 /// reminder on it (a one-off that wakes the assistant); `items` puts items
-/// under it (main chat ticket 111).
+/// under it (main chat ticket 111); `repeat` makes it the first period of
+/// a repeating rule (main chat ticket 154; needs `due`).
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TodoAddArgs {
@@ -476,6 +477,10 @@ pub struct TodoAddArgs {
     /// Items under it, in order (main chat ticket 111, `--item`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub items: Vec<String>,
+    /// A repeating rule (main chat ticket 154, `--daily` / `--weekly` /
+    /// `--monthly` / `--yearly` with `--every`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<TodoRepeatRule>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supervisor: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -486,7 +491,9 @@ socket_command!(TodoAddArgs, "todo.add");
 /// `todo.update`: only the fields given change. An empty `notes` clears
 /// the notes, an empty `due` the due date, an empty `remindAt` the
 /// reminder (its task is cancelled) — as an empty value clears a field on
-/// `schedule.update`.
+/// `schedule.update`. Since main chat ticket 154: `repeat` gives it a rule
+/// or changes its rule, `noRepeat` ends its rule, `series` takes the
+/// changed to-do into its rule.
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TodoUpdateArgs {
@@ -499,6 +506,12 @@ pub struct TodoUpdateArgs {
     pub due: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remind_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<TodoRepeatRule>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_repeat: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub series: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub supervisor: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -520,10 +533,19 @@ id_write_command!(
     "todo.reopen"
 );
 id_write_command!(
-    /// `todo.cancel`: a soft delete, its reminder cancelled with it.
+    /// `todo.cancel`: a soft delete, its reminder cancelled with it (and,
+    /// for a period of a rule, the rule ended with it, main chat ticket
+    /// 154).
     TodoCancelArgs,
     todo_id,
     "todo.cancel"
+);
+id_write_command!(
+    /// `todo.skip` (main chat ticket 154): skip a period of a rule — a
+    /// soft delete marked skipped — and make the next one.
+    TodoSkipArgs,
+    todo_id,
+    "todo.skip"
 );
 
 // ---- items under a to-do (main chat ticket 111, additive inside 3) ----
@@ -845,6 +867,7 @@ mod legacy_equivalence {
         assert_eq!(TodoDoneArgs::NAME, "todo.done");
         assert_eq!(TodoReopenArgs::NAME, "todo.reopen");
         assert_eq!(TodoCancelArgs::NAME, "todo.cancel");
+        assert_eq!(TodoSkipArgs::NAME, "todo.skip");
         assert_eq!(TodoSubitemAddArgs::NAME, "todo.item_add");
         assert_eq!(TodoSubitemDoneArgs::NAME, "todo.item_done");
         assert_eq!(TodoSubitemReopenArgs::NAME, "todo.item_reopen");
@@ -976,6 +999,52 @@ mod legacy_equivalence {
                 ..TodoSubitemUpdateArgs::default()
             },
             json!({"itemId": "item_1", "text": "订虹桥的酒店"}),
+        );
+        // Ticket 154: a rule on `todo.add` / `todo.update` (every 1 is not
+        // sent), `noRepeat` and `series` only when set, and `todo.skip`.
+        assert_matches_legacy(
+            &TodoAddArgs {
+                title: "交周报".into(),
+                due: Some("2026-11-16".into()),
+                repeat: Some(TodoRepeatRule {
+                    kind: crate::api::TodoRepeatKind::Weekly,
+                    weekdays: vec![1],
+                    monthdays: Vec::new(),
+                    every: 1,
+                }),
+                ..TodoAddArgs::default()
+            },
+            json!({"title": "交周报", "due": "2026-11-16", "repeat": {"kind": "weekly", "weekdays": [1]}}),
+        );
+        assert_matches_legacy(
+            &TodoUpdateArgs {
+                todo_id: "todo_1".into(),
+                repeat: Some(TodoRepeatRule {
+                    kind: crate::api::TodoRepeatKind::Monthly,
+                    weekdays: Vec::new(),
+                    monthdays: vec![15],
+                    every: 3,
+                }),
+                series: true,
+                ..TodoUpdateArgs::default()
+            },
+            json!({"todoId": "todo_1", "repeat": {"kind": "monthly", "monthdays": [15], "every": 3}, "series": true}),
+        );
+        assert_matches_legacy(
+            &TodoUpdateArgs {
+                todo_id: "todo_1".into(),
+                no_repeat: true,
+                ..TodoUpdateArgs::default()
+            },
+            json!({"todoId": "todo_1", "noRepeat": true}),
+        );
+        assert_matches_legacy(
+            &TodoSkipArgs {
+                todo_id: "todo_1".into(),
+                supervisor: Some("galley-assistant".into()),
+                reason: None,
+            },
+            json!({"todoId": "todo_1", "supervisor": "galley-assistant"}),
         );
         // Ticket 112: a move names the item and its place.
         assert_matches_legacy(

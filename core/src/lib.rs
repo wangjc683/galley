@@ -53,6 +53,7 @@ pub mod subtask;
 pub mod subtask_background;
 pub mod subtask_report;
 pub mod tell_user;
+pub mod todo_repeat;
 mod tray;
 pub mod turn_persistence;
 
@@ -272,6 +273,8 @@ pub fn run() {
             cancel_todo_reminder,
             update_todo,
             cancel_todo,
+            skip_todo,
+            stop_todo_repeat,
             add_todo_subitems,
             complete_todo_subitem,
             reopen_todo_subitem,

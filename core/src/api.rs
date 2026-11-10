@@ -67,7 +67,9 @@ pub use subtask::{
 };
 pub use todo::{
     CreateTodoInput, TodoBrief, TodoDue, TodoId, TodoPatch, TodoReminder, TodoReminderState,
-    TodoStatus, TodoSubitem, TodoSubitemCount, TodoSubitemId, TODOS_CHANGED_EVENT,
+    TodoRepeat, TodoRepeatKind, TodoRepeatRemind, TodoRepeatRule, TodoSettled, TodoStatus,
+    TodoSubitem, TodoSubitemCount, TodoSubitemId, NOT_REPEATING, REPEAT_NEEDS_DUE,
+    REPEAT_SUPERVISOR, TODOS_CHANGED_EVENT,
 };
 pub use transcript_window::{
     parse_local_time_bound, parse_time_bound, MessageWindow, TimeBound, DEFAULT_AROUND_CONTEXT,
