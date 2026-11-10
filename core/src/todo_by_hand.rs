@@ -9,13 +9,35 @@
 //!   B, at the same local time. Only the time of day changing (the local
 //!   due day the same) leaves the reminder where it is. Taking the due
 //!   date away takes the reminder with it.
-//! - **A time already passed is not hung**: a reminder moved or set to a
-//!   time no later than now leaves the to-do with none (its task let go as
-//!   Core's own, [`WhenWrite::let_reminder_go`]: the user did not turn it
-//!   down, as Core cancelling it with its to-do is not), and no error.
+//! - **A repeating period's reminder Core moved on moves by its rule**
+//!   (main chat ticket 157): a period's reminder goes off once, and left
+//!   unsettled Core arms the same reminder again at a later period's time
+//!   (ticket 154 behaviour 13), past the period's due day. Read off where
+//!   it is, that is "7 days after" and the move would carry it; under a
+//!   rule that records a reminder, one that reads as after the due day is
+//!   moved by the rule's offset instead (`carried_offset`) — what the
+//!   desktop's popover reads it as too. One set on the period by hand
+//!   (the popover's choices are the same day or days before) keeps its own.
+//! - **A reminder that follows the day falls back toward it** (main chat
+//!   ticket 157, the main session's addendum): "push it to tomorrow" is the
+//!   commonest hand edit, and a reminder the day before then lands on a
+//!   time already past today. So a reminder moved with the due day keeps
+//!   its local time and, from its N days before the new day, tries N − 1,
+//!   N − 2, … down to the due day itself (0), hanging at the first still
+//!   ahead: due Friday reminded Thursday 09:00, moved to tomorrow at 21:00
+//!   tonight, rings tomorrow 09:00. One after its due day (below 0) is not
+//!   walked. Only for a reminder following a day change: one picked in the
+//!   popover's reminder row is hung where picked or not at all (the
+//!   desktop says so under the row), and `todo update --due` moves none.
+//! - **A time already passed is not hung**: a reminder set to a time no
+//!   later than now, or moved with its day and none of its fallbacks still
+//!   ahead, leaves the to-do with none (its task let go as Core's own,
+//!   [`WhenWrite::let_reminder_go`]: the user did not turn it down, as Core
+//!   cancelling it with its to-do is not), and no error.
 //! - **But a repeating period keeps its reminder alive**: there the same
-//!   reminder is hung at the first reminder time still ahead among the
-//!   rule's days after the period's due day
+//!   reminder is hung — after the fallback toward the due day, when nothing
+//!   on or before it is ahead — at the first reminder time still ahead
+//!   among the rule's days after the period's due day
 //!   ([`crate::todo_repeat::next_reminder_ahead`], ticket 154). Let go, it
 //!   would never ring again: ticket 154's sweep re-arms a reminder that
 //!   went off and hangs one only on a period with no reminder task at all,
@@ -72,6 +94,9 @@ pub struct TodoWhenNow {
     pub reminder: Option<DateTime<Utc>>,
     /// The rule it is a period of, while that has not ended.
     pub rule: Option<RepeatRule>,
+    /// The reminder each period of `rule` gets, when the rule records one
+    /// (main chat ticket 154: days before the due day, a local time).
+    pub rule_remind: Option<RemindOffset>,
 }
 
 /// What Core writes for a [`TodoWhenChange`]: the [`crate::api::TodoPatch`]
@@ -107,6 +132,25 @@ enum Reminder {
     LetGo,
 }
 
+/// The offset a reminder at `at` on a to-do due `due` keeps when the due
+/// day moves (ruling 205 point 2): read off where it is
+/// ([`remind_offset`]); but under a rule that records a reminder
+/// (`rule_remind`), one that reads as after the due day is Core's re-arm
+/// at a later period's time (ticket 154 behaviour 13), and keeps the
+/// rule's offset (main chat ticket 157).
+fn carried_offset<Tz: TimeZone>(
+    due: &StoredDue,
+    at: DateTime<Utc>,
+    rule_remind: Option<RemindOffset>,
+    tz: &Tz,
+) -> RemindOffset {
+    let own = remind_offset(due, at, tz);
+    match rule_remind {
+        Some(rule) if own.days_before < 0 => rule,
+        _ => own,
+    }
+}
+
 /// What `change` writes on a to-do holding `before`, at `now`, its days
 /// read in `tz`. `invalid_args` for a reminder days before a due date when
 /// there is none after the change, or a time that is not `HH:MM`; a rule
@@ -135,14 +179,33 @@ pub fn when_write<Tz: TimeZone>(
         (None, _) => before.rule.clone(),
     };
     // A reminder `offset` from the due day after the change: there when it
-    // is still ahead; past, a repeating period's goes to the first time
-    // still ahead after its day, anything else's is let go.
-    let hang = |offset: RemindOffset, day: NaiveDate| -> Reminder {
-        let Some(at) = period_on(day, None, Some(offset), tz).remind_at else {
-            return Reminder::LetGo;
+    // is still ahead; past, one following the day (`toward_due`, ticket 157)
+    // tries a day nearer the due day at the same time, down to the due day
+    // itself (an offset below 0 is not walked); none ahead, a repeating
+    // period's goes to the first time still ahead after its day, anything
+    // else's is let go.
+    let hang = |offset: RemindOffset, day: NaiveDate, toward_due: bool| -> Reminder {
+        let nearest = if toward_due {
+            offset.days_before.min(0)
+        } else {
+            offset.days_before
         };
-        if at > now {
-            return Reminder::At(at);
+        let mut days_before = offset.days_before;
+        loop {
+            let tried = RemindOffset {
+                days_before,
+                ..offset
+            };
+            let Some(at) = period_on(day, None, Some(tried), tz).remind_at else {
+                return Reminder::LetGo;
+            };
+            if at > now {
+                return Reminder::At(at);
+            }
+            if days_before <= nearest {
+                break;
+            }
+            days_before -= 1;
         }
         let time_of_day = due_after.as_ref().and_then(|due| due_time_of_day(due, tz));
         match rule_after
@@ -173,6 +236,7 @@ pub fn when_write<Tz: TimeZone>(
                     time,
                 },
                 day,
+                false,
             )
         }
         // It follows the day.
@@ -181,7 +245,8 @@ pub fn when_write<Tz: TimeZone>(
             // 「不定日子」: the reminder goes with the due date.
             (Some(_), _, Some(_), None) => Reminder::LetGo,
             (Some(at), Some(due), Some(was), Some(day)) if was != day => {
-                hang(remind_offset(due, at, tz), day)
+                let rule_remind = before.rule.as_ref().and(before.rule_remind);
+                hang(carried_offset(due, at, rule_remind, tz), day, true)
             }
             // The same day (only the time of day changed), or no due date
             // before: no offset to carry, the reminder stays.
@@ -272,6 +337,7 @@ mod tests {
                 due: Some(StoredDue::Date(day(2026, 11, 20))),
                 reminder: Some(at(&tz, day(2026, 11, 19), 20, 0)),
                 rule: None,
+                rule_remind: None,
             };
             let got = write(&move_to("2026-11-25"), &before, now, &tz);
             assert_eq!(got.due, Some(Some("2026-11-25".into())));
@@ -282,6 +348,7 @@ mod tests {
                 due: Some(StoredDue::At(at(&tz, day(2026, 11, 20), 15, 0))),
                 reminder: Some(at(&tz, day(2026, 11, 20), 14, 0)),
                 rule: None,
+                rule_remind: None,
             };
             let got = write(&move_to("2026-11-23T09:30"), &before, now, &tz);
             assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 23), 14, 0)));
@@ -290,6 +357,7 @@ mod tests {
                 due: Some(StoredDue::Date(day(2026, 11, 20))),
                 reminder: Some(at(&tz, day(2026, 11, 21), 9, 0)),
                 rule: None,
+                rule_remind: None,
             };
             let got = write(&move_to("2026-12-01"), &before, now, &tz);
             assert_eq!(got.remind_at, iso(at(&tz, day(2026, 12, 2), 9, 0)));
@@ -306,6 +374,7 @@ mod tests {
             due: Some(StoredDue::At(at(&tz, day(2026, 11, 10), 15, 0))),
             reminder: Some(at(&tz, day(2026, 11, 10), 9, 0)),
             rule: None,
+            rule_remind: None,
         };
         let got = write(&move_to("2026-11-10T17:00"), &before, now, &tz);
         assert_eq!(got.due, Some(Some("2026-11-10T17:00".into())));
@@ -316,6 +385,7 @@ mod tests {
             due: Some(StoredDue::Date(day(2026, 11, 12))),
             reminder: Some(at(&tz, day(2026, 11, 11), 20, 0)),
             rule: None,
+            rule_remind: None,
         };
         let got = write(&move_to("2026-11-12T08:00"), &day_only, now, &tz);
         assert_eq!((got.remind_at, got.let_reminder_go), (None, false));
@@ -331,6 +401,7 @@ mod tests {
             due: Some(StoredDue::Date(day(2026, 11, 20))),
             reminder: Some(at(&tz, day(2026, 11, 19), 9, 0)),
             rule: None,
+            rule_remind: None,
         };
         // Moved to today: the day before at 09:00 has passed.
         let got = write(&move_to("2026-11-10"), &before, now, &tz);
@@ -342,6 +413,7 @@ mod tests {
             due: Some(StoredDue::Date(day(2026, 11, 10))),
             reminder: Some(at(&tz, day(2026, 11, 9), 9, 0)),
             rule: None,
+            rule_remind: None,
         };
         let got = write(&remind(0, "12:00"), &today, now, &tz);
         assert_eq!((got.remind_at, got.let_reminder_go), (None, true));
@@ -362,15 +434,17 @@ mod tests {
         // Wednesday Nov 11, 21:00.
         let now = at(&tz, day(2026, 11, 11), 21, 0);
         // Weekly on Monday; this period due Mon Nov 16, reminded the
-        // evening before at 20:00. Moved to Thu Nov 12: Wed 20:00 has
-        // passed, so the same reminder goes to the evening before the
-        // rule's first Monday after Thursday (Sun Nov 15, 20:00).
+        // evening before at 20:00. Moved to today, Wed Nov 11: Tue 20:00
+        // and, falling back toward the due day (ticket 157), Wed 20:00
+        // have passed, so the same reminder goes to the evening before the
+        // rule's first Monday after Wednesday (Sun Nov 15, 20:00).
         let before = TodoWhenNow {
             due: Some(StoredDue::Date(day(2026, 11, 16))),
             reminder: Some(at(&tz, day(2026, 11, 15), 20, 0)),
             rule: Some(weekly(day(2026, 11, 16))),
+            rule_remind: None,
         };
-        let got = write(&move_to("2026-11-12"), &before, now, &tz);
+        let got = write(&move_to("2026-11-11"), &before, now, &tz);
         assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 15), 20, 0)));
         assert!(!got.let_reminder_go);
         // The rule is not touched.
@@ -379,6 +453,10 @@ mod tests {
         // first Monday after Tuesday is Nov 16 again.
         let got = write(&move_to("2026-11-10"), &before, now, &tz);
         assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 15), 20, 0)));
+        // Moved to Thu Nov 12: Wed 20:00 has passed, but Thu 20:00, on the
+        // due day, is still ahead (ticket 157): there, not after the day.
+        let got = write(&move_to("2026-11-12"), &before, now, &tz);
+        assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 12), 20, 0)));
         // Set by hand: still ahead, there; passed, the same as moved.
         let got = write(&remind(0, "09:00"), &before, now, &tz);
         assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 16), 9, 0)));
@@ -399,13 +477,164 @@ mod tests {
     }
 
     #[test]
+    fn a_periods_reminder_core_moved_on_moves_by_its_rule() {
+        let nine = NaiveTime::from_hms_opt(9, 0, 0).unwrap();
+        for tz in [Shanghai, Los_Angeles] {
+            // Wednesday Nov 11, 12:00.
+            let now = at(&tz, day(2026, 11, 11), 12, 0);
+            // Weekly on Monday, each period reminded on its day at 09:00.
+            // This period was due Mon Nov 9; its reminder went off then and
+            // Core armed it again at the next period's time, Mon Nov 16
+            // 09:00 (ticket 154 behaviour 13): seven days after its day.
+            let before = TodoWhenNow {
+                due: Some(StoredDue::Date(day(2026, 11, 9))),
+                reminder: Some(at(&tz, day(2026, 11, 16), 9, 0)),
+                rule: Some(weekly(day(2026, 11, 9))),
+                rule_remind: Some(RemindOffset {
+                    days_before: 0,
+                    time: nine,
+                }),
+            };
+            // Moved to Fri Nov 13: the rule's offset from that day, not
+            // seven days after it (Nov 20).
+            let got = write(&move_to("2026-11-13"), &before, now, &tz);
+            assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 13), 9, 0)));
+            assert!(!got.let_reminder_go);
+            assert_eq!(got.repeat, None);
+            // Moved to today: 09:00 has passed, so the first reminder time
+            // still ahead among the rule's later days (Mon Nov 16).
+            let got = write(&move_to("2026-11-11"), &before, now, &tz);
+            assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 16), 9, 0)));
+            // A rule that records no reminder: read off where it is, as
+            // before (Core moves nothing on then).
+            let unrecorded = TodoWhenNow {
+                rule_remind: None,
+                ..before.clone()
+            };
+            let got = write(&move_to("2026-11-13"), &unrecorded, now, &tz);
+            assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 20), 9, 0)));
+            // An ordinary to-do's reminder after its day keeps being after
+            // it, whatever is passed for a rule's: there is no rule.
+            let ordinary = TodoWhenNow {
+                rule: None,
+                ..before.clone()
+            };
+            let got = write(&move_to("2026-11-13"), &ordinary, now, &tz);
+            assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 20), 9, 0)));
+        }
+    }
+
+    #[test]
+    fn a_periods_own_reminder_set_by_hand_keeps_its_offset() {
+        for tz in [Shanghai, Los_Angeles] {
+            let now = at(&tz, day(2026, 11, 11), 12, 0);
+            // The rule reminds on the day at 09:00; this period, due Mon
+            // Nov 16, was set by hand to two days before at 20:00. Moved to
+            // Wed Nov 18: two days before that at 20:00, not the rule's.
+            let before = TodoWhenNow {
+                due: Some(StoredDue::Date(day(2026, 11, 16))),
+                reminder: Some(at(&tz, day(2026, 11, 14), 20, 0)),
+                rule: Some(weekly(day(2026, 11, 16))),
+                rule_remind: Some(RemindOffset {
+                    days_before: 0,
+                    time: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+                }),
+            };
+            let got = write(&move_to("2026-11-18"), &before, now, &tz);
+            assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 16), 20, 0)));
+        }
+    }
+
+    #[test]
+    fn a_reminder_following_the_day_falls_back_toward_it() {
+        for tz in [Shanghai, Los_Angeles] {
+            // Tuesday Nov 10, 21:00.
+            let now = at(&tz, day(2026, 11, 10), 21, 0);
+            // Due Fri Nov 13, reminded the day before at 09:00; pushed to
+            // tomorrow: today 09:00 has passed, so the due day itself at
+            // the same time.
+            let friday = TodoWhenNow {
+                due: Some(StoredDue::Date(day(2026, 11, 13))),
+                reminder: Some(at(&tz, day(2026, 11, 12), 9, 0)),
+                rule: None,
+                rule_remind: None,
+            };
+            let got = write(&move_to("2026-11-11"), &friday, now, &tz);
+            assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 11), 9, 0)));
+            assert!(!got.let_reminder_go);
+            // A week before, moved to three days out: the nearest offset
+            // still ahead, two days before (Wed Nov 11 09:00).
+            let week = TodoWhenNow {
+                due: Some(StoredDue::Date(day(2026, 11, 20))),
+                reminder: Some(at(&tz, day(2026, 11, 13), 9, 0)),
+                rule: None,
+                rule_remind: None,
+            };
+            let got = write(&move_to("2026-11-13"), &week, now, &tz);
+            assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 11), 9, 0)));
+            // Moved to today, after the time: nothing on or before the due
+            // day is ahead, and nothing repeats — let go, as before.
+            let got = write(&move_to("2026-11-10"), &friday, now, &tz);
+            assert_eq!((got.remind_at, got.let_reminder_go), (None, true));
+            // One after its due day is not walked: moved with the day, and
+            // past, let go.
+            let after = TodoWhenNow {
+                reminder: Some(at(&tz, day(2026, 11, 14), 9, 0)),
+                ..friday.clone()
+            };
+            let got = write(&move_to("2026-11-09"), &after, now, &tz);
+            assert_eq!((got.remind_at, got.let_reminder_go), (None, true));
+            // A reminder picked in the popover's row is not walked: the
+            // day before tomorrow at 09:00 has passed, so none.
+            let tomorrow = TodoWhenNow {
+                due: Some(StoredDue::Date(day(2026, 11, 11))),
+                ..friday.clone()
+            };
+            let got = write(&remind(1, "09:00"), &tomorrow, now, &tz);
+            assert_eq!((got.remind_at, got.let_reminder_go), (None, true));
+        }
+    }
+
+    #[test]
+    fn a_repeating_periods_reminder_falls_back_toward_its_day_first() {
+        let eight_pm = NaiveTime::from_hms_opt(20, 0, 0).unwrap();
+        for tz in [Shanghai, Los_Angeles] {
+            // Tuesday Nov 10, 21:00.
+            let now = at(&tz, day(2026, 11, 10), 21, 0);
+            // Weekly on Monday, each period reminded the evening before at
+            // 20:00; this one due Mon Nov 16.
+            let before = TodoWhenNow {
+                due: Some(StoredDue::Date(day(2026, 11, 16))),
+                reminder: Some(at(&tz, day(2026, 11, 15), 20, 0)),
+                rule: Some(weekly(day(2026, 11, 16))),
+                rule_remind: Some(RemindOffset {
+                    days_before: 1,
+                    time: eight_pm,
+                }),
+            };
+            // Pushed to tomorrow: today 20:00 has passed, so the due day's
+            // 20:00 — not the next period's, after the new day.
+            let got = write(&move_to("2026-11-11"), &before, now, &tz);
+            assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 11), 20, 0)));
+            // Moved to today: nothing on or before it ahead, so the next
+            // period's time (the evening before Mon Nov 16).
+            let got = write(&move_to("2026-11-10"), &before, now, &tz);
+            assert_eq!(got.remind_at, iso(at(&tz, day(2026, 11, 15), 20, 0)));
+            assert!(!got.let_reminder_go);
+        }
+    }
+
+    #[test]
     fn a_rule_given_with_the_change_counts_as_repeating() {
         let tz = Shanghai;
-        let now = at(&tz, day(2026, 11, 11), 21, 0);
+        // Thursday Nov 12, 21:00: the reminder's 20:00 has passed on the
+        // new due day too, so nothing on or before it is ahead.
+        let now = at(&tz, day(2026, 11, 12), 21, 0);
         let before = TodoWhenNow {
             due: Some(StoredDue::Date(day(2026, 11, 16))),
             reminder: Some(at(&tz, day(2026, 11, 15), 20, 0)),
             rule: None,
+            rule_remind: None,
         };
         let change = TodoWhenChange {
             due: Some(Some("2026-11-12".into())),
@@ -431,6 +660,7 @@ mod tests {
             due: Some(StoredDue::Date(day(2026, 11, 20))),
             reminder: Some(at(&tz, day(2026, 11, 19), 20, 0)),
             rule: None,
+            rule_remind: None,
         };
         let no_date = TodoWhenChange {
             due: Some(None),
@@ -450,6 +680,7 @@ mod tests {
             due: None,
             reminder: Some(at(&tz, day(2026, 11, 19), 20, 0)),
             rule: None,
+            rule_remind: None,
         };
         let got = write(&move_to("2026-11-25"), &floating, now, &tz);
         assert_eq!((got.remind_at, got.let_reminder_go), (None, false));
@@ -466,6 +697,7 @@ mod tests {
             due: Some(StoredDue::Date(day(2026, 11, 20))),
             reminder: Some(at(&Shanghai, day(2026, 11, 19), 20, 0)),
             rule: None,
+            rule_remind: None,
         };
         let change = TodoWhenChange::default();
         assert!(change.is_empty());

@@ -1117,17 +1117,26 @@ impl SqliteGalley {
             .and_then(reminder_of)
             .and_then(|reminder| DateTime::parse_from_rfc3339(&reminder.at).ok())
             .map(|at| at.with_timezone(&Utc));
-        let rule = match row.series_id.as_deref() {
-            Some(series) => fetch_series(&self.pool, series)
+        // The rule, and the reminder it records for each period (main chat
+        // ticket 157: a reminder Core moved on moves by it).
+        let (rule, rule_remind) = match row.series_id.as_deref() {
+            Some(series) => match fetch_series(&self.pool, series)
                 .await?
                 .filter(|series| !series.ended())
-                .and_then(|series| series.rule().ok()),
-            None => None,
+            {
+                Some(series) => match series.rule() {
+                    Ok(rule) => (Some(rule), series.remind()),
+                    Err(_) => (None, None),
+                },
+                None => (None, None),
+            },
+            None => (None, None),
         };
         let before = TodoWhenNow {
             due: StoredDue::from_columns(row.due_date.as_deref(), row.due_at.as_deref())?,
             reminder,
             rule,
+            rule_remind,
         };
         let mut tries = 0;
         loop {

@@ -188,9 +188,12 @@ async fn only_the_time_of_day_leaves_the_reminder_alone() {
 #[tokio::test]
 async fn a_reminder_moved_into_the_past_is_let_go_as_cores_own() {
     let galley = with_main_chat().await;
-    let todo = note(&galley, Some(ymd(day(5))), Some(local(day(4), 9, 0)), None).await;
+    // At midnight: moved to today, both the day before's and today's
+    // midnight have passed, whenever this runs (ticket 157's fallback
+    // toward the due day finds nothing ahead).
+    let todo = note(&galley, Some(ymd(day(5))), Some(local(day(4), 0, 0)), None).await;
     let task = todo.reminder.clone().unwrap().task_id;
-    // Due today: the day before at 09:00 has passed. No error, no bell.
+    // Due today: the day before at 00:00 has passed. No error, no bell.
     let moved = by_hand(&galley, &todo, move_to(&ymd(day(0)))).await;
     assert_eq!(moved.due.as_ref().unwrap().date, ymd(day(0)));
     assert!(moved.reminder.is_none());
@@ -226,22 +229,25 @@ async fn got_todo(galley: &SqliteGalley, todo: &TodoBrief) -> TodoBrief {
 #[tokio::test]
 async fn a_repeating_periods_reminder_goes_to_the_next_time_ahead() {
     let galley = with_main_chat().await;
+    // At midnight, so that moved to today nothing on or before the day is
+    // still ahead, whenever this runs (ticket 157's fallback).
     let period = note(
         &galley,
         Some(ymd(day(7))),
-        Some(local(day(6), 9, 0)),
+        Some(local(day(6), 0, 0)),
         Some(weekly_on(day(7))),
     )
     .await;
     let task = period.reminder.clone().unwrap().task_id;
     let rule = period.repeat.clone().expect("a rule");
-    // Moved to today: the day before at 09:00 has passed. The same task
-    // goes to the day before the rule's first day after today — a week on.
+    // Moved to today: the day before at 00:00 has passed, and today's. The
+    // same task goes to the day before the rule's first day after today —
+    // a week on.
     let moved = by_hand(&galley, &period, move_to(&ymd(day(0)))).await;
     assert_eq!(moved.due.as_ref().unwrap().date, ymd(day(0)));
     let reminder = moved.reminder.clone().expect("kept alive");
     assert_eq!(reminder.task_id, task);
-    assert_eq!(reminder.at, instant(day(6), 9, 0));
+    assert_eq!(reminder.at, instant(day(6), 0, 0));
     assert_eq!(reminder.state, TodoReminderState::Scheduled);
     // The period's change is its own: the rule as it was.
     assert_eq!(moved.repeat, Some(rule));
@@ -250,6 +256,84 @@ async fn a_repeating_periods_reminder_goes_to_the_next_time_ahead() {
     let reminder = got.reminder.expect("kept alive");
     assert_eq!(reminder.task_id, task);
     assert_eq!(reminder.at, instant(day(4), 9, 0));
+}
+
+#[tokio::test]
+async fn a_periods_reminder_moved_on_moves_by_the_rules_offset() {
+    let galley = with_main_chat().await;
+    // Weekly, due in a week, reminded the day before at 09:00: the offset
+    // the rule records for every period.
+    let period = note(
+        &galley,
+        Some(ymd(day(7))),
+        Some(local(day(6), 9, 0)),
+        Some(weekly_on(day(7))),
+    )
+    .await;
+    let rule = period.repeat.clone().expect("a rule");
+    assert_eq!(
+        rule.remind,
+        Some(TodoRepeatRemind {
+            days_before: 1,
+            time: "09:00".into(),
+        })
+    );
+    // Ticket 154's re-arm, stood in for: once it went off with the period
+    // left open, the reminder hangs at the next period's time (the day
+    // before day 14), six days after this period's day.
+    let moved_on = galley
+        .update_todo(
+            &id(&period),
+            TodoPatch {
+                remind_at: Some(Some(local(day(13), 9, 0))),
+                ..TodoPatch::default()
+            },
+            assistant(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(moved_on.reminder.unwrap().at, instant(day(13), 9, 0));
+    // Moved to day 9 by hand: the rule's offset from it (main chat ticket
+    // 157), not six days after it.
+    let got = by_hand(&galley, &period, move_to(&ymd(day(9)))).await;
+    assert_eq!(got.reminder.as_ref().unwrap().at, instant(day(8), 9, 0));
+    assert_eq!(got.repeat, Some(rule.clone()));
+    // A reminder set on the period by hand keeps its own offset: two days
+    // before at 20:00, moved with the day.
+    let got = by_hand(&galley, &got, remind(2, "20:00")).await;
+    assert_eq!(got.reminder.as_ref().unwrap().at, instant(day(7), 20, 0));
+    let got = by_hand(&galley, &got, move_to(&ymd(day(10)))).await;
+    assert_eq!(got.reminder.unwrap().at, instant(day(8), 20, 0));
+    // The rule as it was all along.
+    assert_eq!(got.repeat, Some(rule));
+}
+
+#[tokio::test]
+async fn a_reminder_following_the_day_falls_back_toward_it() {
+    let galley = with_main_chat().await;
+    // Due in three days, reminded the day before at midnight; pushed to
+    // tomorrow: today's midnight has passed, so tomorrow's, on the due day
+    // (main chat ticket 157), the same task.
+    let todo = note(&galley, Some(ymd(day(3))), Some(local(day(2), 0, 0)), None).await;
+    let task = todo.reminder.clone().unwrap().task_id;
+    let got = by_hand(&galley, &todo, move_to(&ymd(day(1)))).await;
+    let reminder = got.reminder.expect("hung");
+    assert_eq!(reminder.task_id, task);
+    assert_eq!(reminder.at, instant(day(1), 0, 0));
+    // A repeating period the same: on its new due day, not after it at the
+    // next period's time.
+    let period = note(
+        &galley,
+        Some(ymd(day(7))),
+        Some(local(day(6), 0, 0)),
+        Some(weekly_on(day(7))),
+    )
+    .await;
+    let got = by_hand(&galley, &period, move_to(&ymd(day(1)))).await;
+    assert_eq!(got.reminder.unwrap().at, instant(day(1), 0, 0));
+    // A reminder picked by hand at a time passed is not walked: none.
+    let got = by_hand(&galley, &got_todo(&galley, &todo).await, remind(1, "00:00")).await;
+    assert!(got.reminder.is_none());
 }
 
 #[tokio::test]
