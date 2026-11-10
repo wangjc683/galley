@@ -57,8 +57,7 @@ use crate::api::schedule::instant_to_utc_iso;
 use crate::api::todo::{parse_todo_due, StoredDue, TodoRepeatRemind, TodoRepeatRule};
 use crate::error::{GalleyError, Result};
 use crate::todo_repeat::{
-    due_time_of_day, next_reminder_ahead, parse_hhmm, period_on, remind_offset, RemindOffset,
-    RepeatRule,
+    due_time_of_day, parse_hhmm, remind_offset, reminder_toward_due, RemindOffset, RepeatRule,
 };
 
 /// What the desktop picked (the Tauri `update_todo`'s new arguments).
@@ -183,36 +182,20 @@ pub fn when_write<Tz: TimeZone>(
     // tries a day nearer the due day at the same time, down to the due day
     // itself (an offset below 0 is not walked); none ahead, a repeating
     // period's goes to the first time still ahead after its day, anything
-    // else's is let go.
+    // else's is let go ([`reminder_toward_due`], which `todo update
+    // --series` uses too since ticket 158).
     let hang = |offset: RemindOffset, day: NaiveDate, toward_due: bool| -> Reminder {
-        let nearest = if toward_due {
-            offset.days_before.min(0)
-        } else {
-            offset.days_before
-        };
-        let mut days_before = offset.days_before;
-        loop {
-            let tried = RemindOffset {
-                days_before,
-                ..offset
-            };
-            let Some(at) = period_on(day, None, Some(tried), tz).remind_at else {
-                return Reminder::LetGo;
-            };
-            if at > now {
-                return Reminder::At(at);
-            }
-            if days_before <= nearest {
-                break;
-            }
-            days_before -= 1;
-        }
         let time_of_day = due_after.as_ref().and_then(|due| due_time_of_day(due, tz));
-        match rule_after
-            .as_ref()
-            .and_then(|rule| next_reminder_ahead(rule, day, time_of_day, offset, false, now, tz))
-        {
-            Some(ahead) => Reminder::At(ahead),
+        match reminder_toward_due(
+            day,
+            offset,
+            toward_due,
+            rule_after.as_ref(),
+            time_of_day,
+            now,
+            tz,
+        ) {
+            Some(at) => Reminder::At(at),
             None => Reminder::LetGo,
         }
     };

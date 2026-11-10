@@ -251,12 +251,16 @@ Repeating to-dos (added 2026-11-10, main chat ticket 154):
 - Added 2026-11-10 (main chat ticket 158): with `--series`, a
   `--remind-at` already past is not `time_in_past:` (「以后都提前两天提醒」
   said of a period due tomorrow). The rule takes that time's offset from
-  this period's due day all the same; this period's reminder goes to the
-  first of the rule's reminder times still ahead, counted from its own
-  due day, its own first (when its own has passed, a later period's), the
-  same task moved; when the rule gives none, it has no reminder. The
-  output is `{"todo": …}` as before: its `reminder` is the one hung, its
-  `repeat.remind` the new offset. Without `--series` a past time is
+  this period's due day all the same. This period's reminder (the same
+  task, moved) keeps that local time and falls back toward its due day:
+  one day nearer, then another, down to the due day itself, at the first
+  still ahead (the example rings on the due day); an offset after the due
+  day is not walked. Only when none on or before the due day is ahead
+  does it go to the first of the rule's reminder times still ahead after
+  the due day, a later period's; when the rule gives none either, it has
+  no reminder. This is the fallback the desktop applies when a day is
+  changed by hand. The output is `{"todo": …}` as before: its `reminder`
+  is the one hung, its `repeat.remind` the new offset. Without `--series` a past time is
   refused as before, and `--series` on a to-do that does not repeat is
   still `not_repeating:`.
 - A rule flag (`add`'s) on a to-do that does not repeat makes it the first

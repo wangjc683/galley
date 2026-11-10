@@ -24,7 +24,7 @@ use crate::api::todo::{
 use crate::todo_by_hand::{when_write, TodoWhenChange, TodoWhenNow};
 use crate::todo_repeat::{
     due_time_of_day, hhmm, next_due_day, next_reminder_ahead, parse_hhmm, period_on, remind_offset,
-    RemindOffset, RepeatRule,
+    reminder_toward_due, RemindOffset, RepeatRule,
 };
 
 use super::helpers::origin_from_stored;
@@ -861,9 +861,11 @@ impl SqliteGalley {
     /// time already past is not [`TIME_IN_PAST`] (main chat ticket 158:
     /// 「以后都提前两天提醒」 on a period due tomorrow): the rule takes it as
     /// its offset all the same, and this period's reminder is hung at the
-    /// first of the rule's reminder times still ahead
-    /// ([`next_reminder_ahead`], its own first), or, with none, not at all.
-    /// Without `series` a past time is refused as before. Everything is
+    /// same local time a day nearer its due day, then another, down to the
+    /// due day itself, the first still ahead; with none of those ahead, at
+    /// the first of the rule's reminder times still ahead after its day
+    /// ([`reminder_toward_due`]); with none at all, not at all. Without
+    /// `series` a past time is refused as before. Everything is
     /// checked before anything is written; the period and its rule are
     /// written in one transaction, its reminder after it.
     ///
@@ -967,11 +969,14 @@ impl SqliteGalley {
         };
         // Ticket 158: `series` with a time already past. The rule takes the
         // time as its offset from this period's due day all the same (below,
-        // `reminder_after`); this period's own reminder goes to the first
-        // of the rule's reminder times still ahead — the rule as this change
-        // leaves it — counted from its own due day, its own first
-        // ([`next_reminder_ahead`]). With none, none is hung, and the one
-        // it had is let go after the write, as Core's own.
+        // `reminder_after`); this period's own reminder falls back toward
+        // its due day first — the same local time a day nearer, down to the
+        // due day itself, the first still ahead (PRD ruling 205 point 6, as
+        // a day changed by hand) — and only with none of those ahead goes
+        // to the first of the rule's reminder times still ahead after its
+        // day, the rule as this change leaves it ([`reminder_toward_due`]).
+        // With none, none is hung, and the one it had is let go after the
+        // write, as Core's own.
         let mut let_reminder_go = false;
         if let (true, Some(due), Some(given)) = (past_for_series, &due, reminder_after) {
             let rule_after = match &rule {
@@ -988,17 +993,15 @@ impl SqliteGalley {
                         rule
                     }),
             };
-            let ahead = rule_after.and_then(|rule| {
-                next_reminder_ahead(
-                    &rule,
-                    due.local_date(&Local),
-                    due_time_of_day(due, &Local),
-                    remind_offset(due, given, &Local),
-                    true,
-                    Utc::now(),
-                    &Local,
-                )
-            });
+            let ahead = reminder_toward_due(
+                due.local_date(&Local),
+                remind_offset(due, given, &Local),
+                true,
+                rule_after.as_ref(),
+                due_time_of_day(due, &Local),
+                Utc::now(),
+                &Local,
+            );
             match ahead {
                 Some(at) => remind_at = Some(Some(instant_to_utc_iso(&at))),
                 None => {

@@ -954,7 +954,10 @@ mod tests {
                 // (Core takes it into the rule, `todo update` §5.32).
                 "time even when it has already passed (this one is due too soon):",
                 "Galley still changes the rule, and this one's reminder moves to the",
-                "first later one's time still ahead. When you tick one off, say",
+                // Ticket 158 follow-up: toward its own day first (PRD
+                // ruling 205 point 6), a later one's only when none is.
+                "same time on the first day still ahead up to its own day, and to a",
+                "later one's time only when there is none. When you tick one off, say",
                 "in a few words when the next is due (「已勾掉，下一次是 11 月 23 日。」).",
             ],
         );

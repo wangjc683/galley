@@ -361,6 +361,50 @@ pub fn next_reminder_ahead<Tz: TimeZone>(
     None
 }
 
+/// Where a reminder `offset` from a to-do's due day `day` is hung (PRD
+/// ruling 205 point 6; main chat tickets 157 and 158): at that instant when
+/// it is still after `now`. Past, and `toward_due`, the same local time a
+/// day nearer the due day, then another, down to the due day itself (0),
+/// the first still ahead — due Friday reminded two days before at 09:00,
+/// asked for on Thursday evening, rings Friday 09:00; an offset below 0 (a
+/// reminder after the due day) is not walked. None of those ahead, a period
+/// of `rule` gets the first reminder time still ahead among the rule's days
+/// after `day` ([`next_reminder_ahead`], `time_of_day` its due time);
+/// `None` when there is none, or no rule. The desktop's change of a day
+/// (`crate::todo_by_hand`) and `todo update --series` with a time already
+/// past (`crate::db`'s `update_todo`) both hang a reminder this way.
+pub fn reminder_toward_due<Tz: TimeZone>(
+    day: NaiveDate,
+    offset: RemindOffset,
+    toward_due: bool,
+    rule: Option<&RepeatRule>,
+    time_of_day: Option<NaiveTime>,
+    now: DateTime<Utc>,
+    tz: &Tz,
+) -> Option<DateTime<Utc>> {
+    let nearest = if toward_due {
+        offset.days_before.min(0)
+    } else {
+        offset.days_before
+    };
+    let mut days_before = offset.days_before;
+    loop {
+        let tried = RemindOffset {
+            days_before,
+            ..offset
+        };
+        let at = period_on(day, None, Some(tried), tz).remind_at?;
+        if at > now {
+            return Some(at);
+        }
+        if days_before <= nearest {
+            break;
+        }
+        days_before -= 1;
+    }
+    rule.and_then(|rule| next_reminder_ahead(rule, day, time_of_day, offset, false, now, tz))
+}
+
 /// `HH:MM` as stored (`time_of_day`, `remind_time`).
 pub fn hhmm(time: NaiveTime) -> String {
     time.format("%H:%M").to_string()
@@ -686,6 +730,56 @@ mod tests {
         // A reminder after the due day reads below zero.
         let offset = remind_offset(&monday, utc("2026-11-17T01:00:00Z"), &Shanghai);
         assert_eq!(offset.days_before, -1);
+    }
+
+    /// Main chat tickets 157 and 158 (PRD ruling 205 point 6): the
+    /// reminder falls back toward the due day before it goes to a later
+    /// period's time; not walked when it does not follow (`toward_due`
+    /// false) or comes after the due day; with no rule, none.
+    #[test]
+    fn a_past_reminder_falls_back_toward_the_due_day_then_to_a_later_period() {
+        for tz in [Shanghai, Los_Angeles] {
+            let at = |day: NaiveDate, h: u32| {
+                resolve_wall_clock(&tz, day.and_hms_opt(h, 0, 0).unwrap()).with_timezone(&Utc)
+            };
+            let nine = |days_before: i64| RemindOffset {
+                days_before,
+                time: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+            };
+            // Weekly on Friday, due Fri Nov 13, two days before at 09:00.
+            let fridays = rule(TodoRepeatKind::Weekly, 1, &[5], day(2026, 11, 13));
+            let fri = day(2026, 11, 13);
+            let hang = |offset, toward, rule: Option<&RepeatRule>, now| {
+                reminder_toward_due(fri, offset, toward, rule, None, now, &tz)
+            };
+            // Still ahead: there.
+            assert_eq!(
+                hang(nine(2), true, Some(&fridays), at(day(2026, 11, 10), 8)),
+                Some(at(day(2026, 11, 11), 9))
+            );
+            // Thursday evening: Wednesday's and Thursday's passed, Friday's.
+            assert_eq!(
+                hang(nine(2), true, Some(&fridays), at(day(2026, 11, 12), 21)),
+                Some(at(fri, 9))
+            );
+            // Not following: the next period's (Fri Nov 20, Wed Nov 18).
+            assert_eq!(
+                hang(nine(2), false, Some(&fridays), at(day(2026, 11, 12), 21)),
+                Some(at(day(2026, 11, 18), 9))
+            );
+            // Friday 10:00: nothing on or before the day is ahead.
+            assert_eq!(
+                hang(nine(2), true, Some(&fridays), at(fri, 10)),
+                Some(at(day(2026, 11, 18), 9))
+            );
+            assert_eq!(hang(nine(2), true, None, at(fri, 10)), None);
+            // After the due day (Saturday 09:00), past: not walked, the
+            // next period's (Sat Nov 21).
+            assert_eq!(
+                hang(nine(-1), true, Some(&fridays), at(day(2026, 11, 14), 10)),
+                Some(at(day(2026, 11, 21), 9))
+            );
+        }
     }
 
     #[test]

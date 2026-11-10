@@ -917,14 +917,18 @@ async fn a_change_is_the_periods_alone_unless_series_takes_it_into_the_rule() {
 
 /// Ticket 158: 「以后都提前两天提醒」 said of a weekly period due tomorrow.
 /// Two days before it has passed: with `series` that is not
-/// `time_in_past:`. The rule takes the offset (two days before, 09:00), and
-/// this period's reminder — the same task, moved — goes to the first of
-/// the rule's reminder times still ahead: its own has passed, so next
-/// week's, two days before the next period's day. The output carries both.
-/// Without `series` the same time is refused as before and nothing moves;
-/// on a to-do that does not repeat, `series` is still `not_repeating:`.
+/// `time_in_past:`. The rule takes the offset (two days before, at the time
+/// given), and this period's reminder — the same task, moved — falls back
+/// toward its due day (PRD ruling 205 point 6, as a day changed by hand):
+/// the same time a day nearer, down to the due day itself, the first still
+/// ahead. Only when none on or before its day is ahead does it go to the
+/// first of the rule's reminder times after its day. The output carries
+/// both. Midnight is the time here: today's has passed whenever this runs,
+/// tomorrow's is ahead. Without `series` the same time is refused as
+/// before and nothing moves; on a to-do that does not repeat, `series` is
+/// still `not_repeating:`.
 #[tokio::test]
-async fn series_takes_a_past_reminder_time_into_the_rule_and_hangs_the_next_ahead() {
+async fn series_takes_a_past_reminder_time_and_falls_back_toward_the_due_day() {
     let (pool, galley) = with_main_chat().await;
     let report = galley
         .create_todo(
@@ -941,13 +945,14 @@ async fn series_takes_a_past_reminder_time_into_the_rule_and_hangs_the_next_ahea
         .await
         .unwrap();
     let task = report.reminder.clone().unwrap().task_id;
-    let two_days_before = || TodoPatch {
-        remind_at: Some(Some(local(day(-1), 9, 0))),
+    // Two days before tomorrow, at midnight: yesterday's, past.
+    let remind_on = |on: NaiveDate| TodoPatch {
+        remind_at: Some(Some(local(on, 0, 0))),
         ..TodoPatch::default()
     };
     // This period alone: refused, as before; nothing moved.
     let err = galley
-        .update_todo(&id(&report), two_days_before(), assistant())
+        .update_todo(&id(&report), remind_on(day(-1)), assistant())
         .await
         .unwrap_err();
     assert!(invalid_with(err, TIME_IN_PAST));
@@ -960,14 +965,15 @@ async fn series_takes_a_past_reminder_time_into_the_rule_and_hangs_the_next_ahea
         reminder_task(&galley, &task).await.fire_at.as_deref(),
         Some(instant(day(1), 9, 0).as_str())
     );
-    // Every one from now on: the rule's offset, and this one's reminder at
-    // the next time still ahead.
+    // Every one from now on: the rule's offset; this one's reminder falls
+    // back to its due day at that time (yesterday's and today's midnight
+    // have passed), not to next week's.
     let updated = galley
         .update_todo(
             &id(&report),
             TodoPatch {
                 series: true,
-                ..two_days_before()
+                ..remind_on(day(-1))
             },
             assistant(),
         )
@@ -976,35 +982,35 @@ async fn series_takes_a_past_reminder_time_into_the_rule_and_hangs_the_next_ahea
     let row = series(&pool, &report).await;
     assert_eq!(
         (row.remind_days_before, row.remind_time.as_deref()),
-        (Some(2), Some("09:00"))
+        (Some(2), Some("00:00"))
     );
     assert_eq!(
         updated.repeat.as_ref().unwrap().remind,
         Some(TodoRepeatRemind {
             days_before: 2,
-            time: "09:00".into()
+            time: "00:00".into()
         })
     );
     let reminder = updated.reminder.clone().unwrap();
     assert_eq!(reminder.task_id, task);
-    assert_eq!(reminder.at, instant(day(6), 9, 0));
+    assert_eq!(reminder.at, instant(day(1), 0, 0));
     assert_eq!(reminder.state, TodoReminderState::Scheduled);
     assert_eq!(updated.due.as_ref().unwrap().date, ymd(day(1)));
     assert_eq!(live_reminders(&pool).await.len(), 1);
-    // A period with no reminder yet gets one, at the same next time.
+    // A period with no reminder yet gets one, the same way.
     let call = repeating(&galley, "回房东电话", &ymd(day(1)), weekly_on(day(1))).await;
     let updated = galley
         .update_todo(
             &id(&call),
             TodoPatch {
                 series: true,
-                ..two_days_before()
+                ..remind_on(day(-1))
             },
             assistant(),
         )
         .await
         .unwrap();
-    assert_eq!(updated.reminder.unwrap().at, instant(day(6), 9, 0));
+    assert_eq!(updated.reminder.unwrap().at, instant(day(1), 0, 0));
     // A rule given in the same command counts too.
     let plain = galley
         .create_todo(
@@ -1024,7 +1030,7 @@ async fn series_takes_a_past_reminder_time_into_the_rule_and_hangs_the_next_ahea
             TodoPatch {
                 repeat: Some(weekly_on(day(1))),
                 series: true,
-                ..two_days_before()
+                ..remind_on(day(-1))
             },
             assistant(),
         )
@@ -1033,39 +1039,78 @@ async fn series_takes_a_past_reminder_time_into_the_rule_and_hangs_the_next_ahea
     let row = series(&pool, &rent).await;
     assert_eq!(
         (row.remind_days_before, row.remind_time.as_deref()),
-        (Some(2), Some("09:00"))
+        (Some(2), Some("00:00"))
     );
-    assert_eq!(rent.reminder.unwrap().at, instant(day(6), 9, 0));
-    // Every two weeks, moved a week on with `--due` in the same command:
-    // the rule counts from the new day, so the next time ahead is two
-    // weeks after it (day 22, nine days before: day 13), not the old
-    // phase's day 15 (day 6).
+    assert_eq!(rent.reminder.unwrap().at, instant(day(1), 0, 0));
+    // Due today, the time already past on every day down to today: the
+    // first of the rule's times after its day, next week's (day 7, two
+    // days before: day 5).
+    let today_one = repeating(&galley, "交日报", &ymd(day(0)), weekly_on(day(0))).await;
+    let later = galley
+        .update_todo(
+            &id(&today_one),
+            TodoPatch {
+                series: true,
+                ..remind_on(day(-2))
+            },
+            assistant(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(later.reminder.unwrap().at, instant(day(5), 0, 0));
+    // Every two weeks, moved a week on with `--due` in the same command
+    // (due a week ago, now today), nothing ahead on or before today: the
+    // rule counts from the new day, so the next time ahead is two weeks
+    // after it (day 14, a day before: day 13), not the old phase's day 7
+    // (day 6).
     let fortnight = repeating(
         &galley,
         "交双周报",
-        &ymd(day(1)),
-        rule(TodoRepeatKind::Weekly, &[weekday(day(1))], &[], 2),
+        &ymd(day(-7)),
+        rule(TodoRepeatKind::Weekly, &[weekday(day(0))], &[], 2),
     )
     .await;
     let moved = galley
         .update_todo(
             &id(&fortnight),
             TodoPatch {
-                due: Some(Some(ymd(day(8)))),
+                due: Some(Some(ymd(day(0)))),
                 series: true,
-                ..two_days_before()
+                ..remind_on(day(-1))
             },
             assistant(),
         )
         .await
         .unwrap();
     let row = series(&pool, &moved).await;
-    assert_eq!(row.anchor_date, ymd(day(8)));
+    assert_eq!(row.anchor_date, ymd(day(0)));
     assert_eq!(
         (row.remind_days_before, row.remind_time.as_deref()),
-        (Some(9), Some("09:00"))
+        (Some(1), Some("00:00"))
     );
-    assert_eq!(moved.reminder.unwrap().at, instant(day(13), 9, 0));
+    assert_eq!(moved.reminder.unwrap().at, instant(day(13), 0, 0));
+    // A reminder after the due day (an offset below 0) is not walked: due
+    // three days ago, reminded two days after it (yesterday): the first of
+    // the rule's times after its day, as before this fallback (day 4, two
+    // days after: day 6).
+    let late = repeating(&galley, "交周记", &ymd(day(-3)), weekly_on(day(-3))).await;
+    let after = galley
+        .update_todo(
+            &id(&late),
+            TodoPatch {
+                series: true,
+                ..remind_on(day(-1))
+            },
+            assistant(),
+        )
+        .await
+        .unwrap();
+    let row = series(&pool, &after).await;
+    assert_eq!(
+        (row.remind_days_before, row.remind_time.as_deref()),
+        (Some(-2), Some("00:00"))
+    );
+    assert_eq!(after.reminder.unwrap().at, instant(day(6), 0, 0));
     // A to-do that does not repeat: `series` is refused first.
     let once = galley
         .create_todo(
@@ -1084,7 +1129,7 @@ async fn series_takes_a_past_reminder_time_into_the_rule_and_hangs_the_next_ahea
             &id(&once),
             TodoPatch {
                 series: true,
-                ..two_days_before()
+                ..remind_on(day(-1))
             },
             assistant(),
         )
