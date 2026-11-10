@@ -9,9 +9,10 @@
 //!
 //! ## History
 //!
-//! Ported from [`core/experiments/bridge-owner/registry.rs`] — the throwaway
-//! prototype that validated Rust-owned subprocess ownership against 17
-//! checklist items (Prototype phase, 2026-05-18). The prototype's
+//! Ported from the bridge-owner prototype's `registry.rs` — the throwaway
+//! that validated Rust-owned subprocess ownership against 17 checklist
+//! items (Prototype phase, 2026-05-18; it lived under `core/experiments/`
+//! until 2026-11-10 and is in git history). The prototype's
 //! `BridgeProcess` is the source pattern for this module's [`RunnerProcess`].
 //! Renamed at port time: `BridgeProcess` → `RunnerProcess` to match the
 //! `runner/` directory rename + the [PRD §5 path-B vocabulary](../../../docs/PRD.md).

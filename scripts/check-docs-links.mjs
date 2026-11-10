@@ -11,8 +11,8 @@
 //    because their own README is the covered entry point.
 //
 // Checked set: root-level *.md plus everything under docs/. Code-adjacent
-// markdown (core/experiments, managed-ga vendored docs, skill reference
-// copies) is out of scope — the skill copies are already gated verbatim by
+// markdown (managed-ga vendored docs, skill reference copies) is out of
+// scope — the skill copies are already gated verbatim by
 // check-supervisor-sop-drift.mjs.
 //
 // Historical docs (docs/devlog/**, docs/archive/**) get a narrower check:

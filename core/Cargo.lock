@@ -1649,7 +1649,6 @@ dependencies = [
 name = "galley-core"
 version = "0.7.7"
 dependencies = [
- "anyhow",
  "async-trait",
  "base64 0.22.1",
  "chrono",

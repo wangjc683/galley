@@ -18,12 +18,9 @@ version = "0.7.7"
 description = "Galley Core — Rust authority layer (Tauri app + business logic)"
 authors = ["JC <wangjc683@github>"]
 edition = "2021"
-# Two `[[bin]]` exist (`galley-core` + `bridge-owner-experiment`). The
-# second is gated by `required-features = ["experiments"]` and shouldn't
-# conflict, but `cargo run` (invoked by Tauri's DevCommand without a
-# `--bin` flag) errored `could not determine which binary to run` after
-# the B1 directory move. `default-run` makes the dev / build path
-# unambiguous.
+# `cargo run` (invoked by Tauri's DevCommand without a `--bin` flag) runs
+# this binary; `default-run` keeps that unambiguous should a second
+# `[[bin]]` ever be added.
 default-run = "galley-core"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -96,18 +93,13 @@ directories = "5"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 
 # Tokio is a production dep (RunnerManager owns Python runner subprocesses
-# from B2 M1 onward — see runner_manager.rs). The feature set is the union
-# of what RunnerManager needs (process, sync, io-util, time, macros,
-# rt-multi-thread) and what the prototype binary still references
-# (net + fs). Prototype binary stays gated behind the `experiments`
-# feature, but its tokio dep is the same crate as production's, so no
-# duplicate compile + no feature flag drift.
+# from B2 M1 onward — see runner_manager.rs). The feature set is what
+# RunnerManager needs (process, sync, io-util, time, macros,
+# rt-multi-thread) plus net (the socket listener, credential IPC, the
+# remote module, the sign-in callback) and fs (conversation images and
+# attachments).
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util", "process", "sync", "time", "net", "fs"] }
 
-# Experiment-only deps that aren't part of the production runner_manager
-# code path. Currently just `anyhow` (prototype uses anyhow::Result;
-# production code uses hand-rolled error enums per GalleyError convention).
-anyhow = { version = "1", optional = true }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-window-state = "2"
@@ -143,24 +135,12 @@ zeroize = "1"
 # can unify features with the rest of the workspace.
 qrcode = { version = "=0.14.1", default-features = false, features = ["svg"] }
 
-[features]
-# Enables the bridge-owner-experiment binary. Not part of any default set.
-# Use: `cargo build --features experiments --bin bridge-owner-experiment`.
-experiments = ["dep:anyhow"]
-
 # Windows-only: restore drop shadow when we run with native decorations off
 # (Galley's TopBar acts as custom chrome on Win; see lib.rs setup hook).
 # Mac builds never fetch or compile this crate.
 [target.'cfg(target_os = "windows")'.dependencies]
 window-shadows-v2 = "0.1"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_System_Memory"] }
-
-# Throwaway prototype binary. Validates Rust-owned Python subprocess equivalence
-# vs current TS ownership. Required for B1 go/no-go (see refactor cursor).
-[[bin]]
-name = "bridge-owner-experiment"
-path = "experiments/bridge-owner/main.rs"
-required-features = ["experiments"]
 
 # Release profile for the shipped desktop app. Defaults are opt-level=3 with
 # no LTO, codegen-units=16, no stripping — fine for iteration, suboptimal for
