@@ -130,7 +130,7 @@ pub fn run() {
         )
         // RunnerManager is the single Rust authority for Python runner
         // subprocesses (B2 M1). Held as Tauri app state inside an `Arc`
-        // so the `spawn_runner` / `send_to_runner` / etc. commands AND
+        // so the `spawn_runner` / `ensure_session_runner` / etc. commands AND
         // the socket_listener task all reach the same instance. Background
         // Mode keeps window close from tearing down the process; true app
         // quit runs `shutdown_all` from Rust before allowing exit.
@@ -286,12 +286,9 @@ pub fn run() {
             delete_memo,
             // B2 runner commands
             runner_commands::spawn_runner,
-            runner_commands::send_to_runner,
             runner_commands::shutdown_runner,
-            runner_commands::kill_runner,
             runner_commands::runner_stderr_tail,
             runner_commands::probe_ga_runtime,
-            runner_commands::shutdown_all_runners,
             runner_commands::list_live_runners,
             runner_commands::ensure_session_runner,
         ])

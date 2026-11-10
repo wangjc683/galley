@@ -1,32 +1,30 @@
 //! Tauri-command surface that wraps [`crate::runner_manager::RunnerManager`].
 //!
-//! Nine `#[tauri::command]`s are registered:
+//! Six `#[tauri::command]`s are registered:
 //!
 //! 1. [`spawn_runner`] — spawn a new Python runner subprocess + start an
 //!    emit task that fans broadcast events to the GUI. Since ticket 02a
 //!    only the GUI's LLM-list warmup uses it (a runner with no session);
 //!    session runners go through [`ensure_session_runner`]
-//! 2. [`send_to_runner`] — write a typed [`IpcCommand`] to the subprocess
-//! 3. [`shutdown_runner`] — graceful shutdown (send `{kind:"shutdown"}` +
+//! 2. [`shutdown_runner`] — graceful shutdown (send `{kind:"shutdown"}` +
 //!    wait), with a kill fallback on timeout
-//! 4. [`kill_runner`] — immediate SIGKILL (no graceful negotiation)
-//! 5. [`runner_stderr_tail`] — pull the last 8 stderr lines for the
+//! 3. [`runner_stderr_tail`] — pull the last 8 stderr lines for the
 //!    abnormal-exit toast
-//! 6. [`probe_ga_runtime`] — validate an external GA checkout before a
+//! 4. [`probe_ga_runtime`] — validate an external GA checkout before a
 //!    session is created (implementation in the `probe` submodule)
-//! 7. [`shutdown_all_runners`] — graceful shutdown of every live runner
-//! 8. [`list_live_runners`] — every runner Core still holds, so a GUI page
+//! 5. [`list_live_runners`] — every runner Core still holds, so a GUI page
 //!    that lost its listeners (webview reload) re-attaches instead of
 //!    re-spawning
-//! 9. [`ensure_session_runner`] — the GUI's entry to Core's shared
+//! 6. [`ensure_session_runner`] — the GUI's entry to Core's shared
 //!    "ensure a runner for this session" path ([`crate::session_runner`]):
 //!    returns the live runner (with its latest `ready` state) or starts
 //!    one from the session row and prefs
 //!
 //! Sending a user message and stopping a run are Core's own paths since
 //! ticket 02c (`send_user_message` / `stop_session_run` in
-//! `commands/send.rs`, over [`crate::session_send`]); `send_to_runner`
-//! stays for the commands the GUI still sends directly.
+//! `commands/send.rs`, over [`crate::session_send`]); the GUI writes no
+//! IPC command to a runner itself. App quit shuts every runner down from
+//! Rust (`RunnerManager::shutdown_all`).
 //!
 //! External-runtime spawn-arg preparation lives in the `external_spawn`
 //! submodule; the managed-runtime spawn path stays in this file. Session
@@ -67,10 +65,8 @@
 
 use crate::api::{GalleyApi, ManagedModelAuthKind, ManagedModelProtocol, RuntimeKind};
 use crate::db::SqliteGalley;
-use crate::ipc::IpcCommand;
 use crate::runner_manager::{
-    BroadcastItem, ReadySnapshot, RunnerManager, RunnerSpawnError, SendCommandError, ShutdownError,
-    SpawnArgs,
+    BroadcastItem, ReadySnapshot, RunnerManager, RunnerSpawnError, ShutdownError, SpawnArgs,
 };
 use crate::session_runner::{
     EnsureOptions, GaConfigPref, LlmChoice, RunnerHost, SessionRunnerError,
@@ -627,18 +623,6 @@ pub async fn spawn_runner(
 }
 
 #[tauri::command]
-pub async fn send_to_runner(
-    session_id: String,
-    command: IpcCommand,
-    manager: State<'_, std::sync::Arc<RunnerManager>>,
-) -> Result<(), String> {
-    manager
-        .send_command(&session_id, &command)
-        .await
-        .map_err(err_to_json::<SendCommandError>)
-}
-
-#[tauri::command]
 pub async fn shutdown_runner(
     session_id: String,
     timeout_ms: Option<u64>,
@@ -651,23 +635,6 @@ pub async fn shutdown_runner(
         // session whose runner already crashed; surfacing that as an error
         // would force every caller to ignore one specific variant. Treat
         // as success at the transport boundary instead.
-        Err(ShutdownError::NotFound { .. }) => Ok(()),
-        Err(e) => Err(err_to_json::<ShutdownError>(e)),
-    }
-}
-
-#[tauri::command]
-pub async fn kill_runner(
-    session_id: String,
-    manager: State<'_, std::sync::Arc<RunnerManager>>,
-) -> Result<(), String> {
-    // Kill is just shutdown with a near-zero timeout — the manager's
-    // shutdown path already falls back to forced kill after the timeout.
-    match manager
-        .shutdown(&session_id, Some(Duration::from_millis(10)))
-        .await
-    {
-        Ok(()) => Ok(()),
         Err(ShutdownError::NotFound { .. }) => Ok(()),
         Err(e) => Err(err_to_json::<ShutdownError>(e)),
     }
@@ -688,14 +655,6 @@ pub async fn runner_stderr_tail(
 #[tauri::command]
 pub async fn probe_ga_runtime(args: ProbeGaRuntimeArgs) -> Result<ProbeGaRuntimeResult, String> {
     Ok(run_ga_runtime_probe(args).await)
-}
-
-#[tauri::command]
-pub async fn shutdown_all_runners(
-    manager: State<'_, std::sync::Arc<RunnerManager>>,
-) -> Result<(), String> {
-    manager.shutdown_all(Duration::from_secs(5)).await;
-    Ok(())
 }
 
 /// One runner Core still holds ([`list_live_runners`]).
