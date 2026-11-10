@@ -338,8 +338,8 @@ New in the `f308ee7` -> `5205f40` range:
   that would rebuild every client from the same config at the next task
   start and drop `extra_sys_prompt` (Galley's managed prompt) and the
   reasoning-effort override. The runner no longer reads
-  `GALLEY_MANAGED_MODEL_CONFIG_PATH` (Core still sets it; the file is
-  still Core's non-secret config). This also closes a latent v0.6.x bug:
+  `GALLEY_MANAGED_MODEL_CONFIG_PATH` (the file is still Core's non-secret
+  config). This also closes a latent v0.6.x bug:
   the old loader reloaded on that file's mtime, old upstream rebuilt on
   `next_llm`, and the bridge installs the managed prompt once at startup,
   so a model switch in an open managed session after a Settings edit

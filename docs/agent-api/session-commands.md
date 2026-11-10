@@ -10,7 +10,7 @@ Returns the CLI version + the schema version of its output protocol.
 
 ```bash
 $ galley version
-{"galleyVersion":"0.2.0","schemaVersion":1}
+{"galleyVersion":"0.7.7","schemaVersion":3}
 ```
 
 Response fields:
@@ -18,7 +18,7 @@ Response fields:
 | Field            | Type   | Notes                                              |
 | ---------------- | ------ | -------------------------------------------------- |
 | `galleyVersion`  | string | semver of the `galley` binary itself               |
-| `schemaVersion`  | int    | this document's stability key (`1`, frozen since v0.2) |
+| `schemaVersion`  | int    | the binary's current schema (`3`); a `--schema=N` pin is validated, not echoed |
 
 ### 5.2 · `galley sessions list [--runtime=current|managed|external|all] [--project=X] [--status=Y] [--archived | --all]`
 
@@ -306,9 +306,9 @@ true` in `session.send`'s args; leaving it out (or `false`) is today's
 behavior. The response body is unchanged: `dispatch` can now be
 `dispatched` where it would have been `persisted_only`.
 
-V1 is text-only for CLI writes. Image attachments may appear in read
+CLI writes are text-only. Image attachments may appear in read
 metadata when created from the GUI, but `galley session send` does not
-accept or dispatch images inside `schemaVersion: 1`.
+accept or dispatch images under any `schemaVersion`.
 
 | Flag           | Default                                  | Notes                                                                |
 | -------------- | ---------------------------------------- | -------------------------------------------------------------------- |
@@ -336,7 +336,7 @@ Response shape:
 **Semantics**: fire-and-forget. The CLI returns as soon as the message
 is persisted; it does **not** wait for the runner to complete the
 agent turn. Pair with `galley session watch <id>` if you need to see
-the resulting events. See [B2 playbook running note N34] for the
+the resulting events. See B2 playbook running note N34 in [B2-bridge-ownership](../archive/refactor/B2-bridge-ownership.md) for the
 rationale.
 
 **Origin handling**: if you pass `--supervisor`, the stored
@@ -377,7 +377,7 @@ defined in [`docs/ipc-protocol.md`](../ipc-protocol.md) §4 — same
 **No backlog support yet.** Subscribers see events from subscribe-time
 forward only. Catching up on the recent history requires
 `galley session show <id> --tail=N` first. A `--from=<event-index>`
-flag is planned (see [B2 playbook running note N35]).
+flag is planned (see B2 playbook running note N35 in [B2-bridge-ownership](../archive/refactor/B2-bridge-ownership.md)).
 
 Exit codes: `0` clean stream end / `3 not_found` (no live runner for
 that session id) / `4 db_unavailable` (Galley Core not running).
@@ -394,22 +394,22 @@ error: the command returns the snapshot and ends cleanly.
 
 ```bash
 $ galley session follow sess_abc --tail=20
-{"schemaVersion":1,"stream":"snapshot","phase":"initial","session":{…},"messages":[…]}
-{"schemaVersion":1,"stream":"event","sessionId":"sess_abc","data":{"kind":"turn_start",…}}
-{"schemaVersion":1,"stream":"snapshot","phase":"final","session":{…},"messages":[…]}
-{"schemaVersion":1,"stream":"end","reason":"subprocess_exited"}
+{"schemaVersion":3,"stream":"snapshot","phase":"initial","session":{…},"messages":[…]}
+{"schemaVersion":3,"stream":"event","sessionId":"sess_abc","data":{"kind":"turn_start",…}}
+{"schemaVersion":3,"stream":"snapshot","phase":"final","session":{…},"messages":[…]}
+{"schemaVersion":3,"stream":"end","reason":"subprocess_exited"}
 ```
 
 If Galley Core is not reachable after the initial snapshot:
 
 ```json
-{"schemaVersion":1,"stream":"end","reason":"core_unavailable"}
+{"schemaVersion":3,"stream":"end","reason":"core_unavailable"}
 ```
 
 If the session exists but has no live runner:
 
 ```json
-{"schemaVersion":1,"stream":"end","reason":"not_live"}
+{"schemaVersion":3,"stream":"end","reason":"not_live"}
 ```
 
 Exit codes: `0` when the session exists and the snapshot can be read /
@@ -429,16 +429,16 @@ Defaults: `--timeout=300`, `--poll=5`, `--tail=20`,
 
 ```bash
 $ galley session wait sess_abc --timeout=300 --poll=5 --tail=20 --final-show
-{"schemaVersion":1,"stream":"wait","phase":"initial","session":{…},"messages":[…]}
-{"schemaVersion":1,"stream":"wait","phase":"final","status":"completed","session":{…},"messages":[…]}
-{"schemaVersion":1,"stream":"end","reason":"completed"}
+{"schemaVersion":3,"stream":"wait","phase":"initial","session":{…},"messages":[…]}
+{"schemaVersion":3,"stream":"wait","phase":"final","status":"completed","session":{…},"messages":[…]}
+{"schemaVersion":3,"stream":"end","reason":"completed"}
 ```
 
 If the deadline passes before a visible agent message exists:
 
 ```json
-{"schemaVersion":1,"stream":"wait","phase":"final","status":"timed_out","session":{…},"messages":[…]}
-{"schemaVersion":1,"stream":"end","reason":"timeout"}
+{"schemaVersion":3,"stream":"wait","phase":"final","status":"timed_out","session":{…},"messages":[…]}
+{"schemaVersion":3,"stream":"end","reason":"timeout"}
 ```
 
 `status:"timed_out"` means the waiter stopped waiting; it does not mean
@@ -455,7 +455,9 @@ pass `--after-turn=N` (additive) to only count agent messages with
 sending, as is (not `turnCount + 1`): the new user message and the first
 agent step of its run both land at turn index `turnCount`.
 `--final-show=false` omits `messages` from the final payload while
-keeping the initial snapshot.
+keeping the initial snapshot. A `timed_out` final payload always carries
+`messages`, whatever `--final-show` says: when nothing finished, the tail
+is what the caller has to go on.
 
 Dead sessions end the wait early (additive): a session persisted in
 `error` or `cancelled` status can no longer produce the awaited output,

@@ -24,7 +24,8 @@ depending on whether the command is read-only or writes state.
 ### Read-only commands → direct SQLite
 
 `sessions list / search`, `session brief / show / wait`, `project list`,
-`project brief`, `project show`, `status`, `health`, `version` open
+`project brief`, `project show`, `status`, `health`, `version`,
+`schedule list / show`, `todo list / show`, `memo list` open
 the SQLite file directly via `GALLEY_DB_PATH` (or the platform default
 path in §2). **No daemon required.** Useful when:
 
@@ -36,9 +37,10 @@ is running. Since 2026-09-09 three of them (`sessions list`,
 `session brief`, `status`) additionally make one best-effort socket call
 (`sessions.run_state`, bounded to 3s) and attach the answer as the
 additive `live` field; when Core is unreachable the field is simply
-omitted and the command still succeeds from SQLite alone. This is the
-one place a read command touches the socket — it never fails because of
-it.
+omitted and the command still succeeds from SQLite alone. `session wait`
+makes the same best-effort probe on every poll to judge live run state
+(below). These are the only places a read command touches the socket — it
+never fails because of it.
 
 ### Write commands → local socket
 
@@ -46,8 +48,9 @@ it.
 per-user local socket served by a running Galley Core process.
 `session follow` and `project follow` are hybrid commands: they read
 SQLite snapshots first, then attempt live socket subscriptions when a
-runner is available. `session wait` remains direct-SQLite only; it
-polls persisted messages rather than subscribing to live events.
+runner is available. `session wait` does not subscribe to live events:
+it polls persisted messages and, on each poll, reads live run state with
+the best-effort `sessions.run_state` probe above.
 
 - **macOS / Linux**: Unix domain socket at `$TMPDIR/galley-$UID.sock`
   (typically `/tmp/galley-501.sock`). Permission `0600` — only the
@@ -58,7 +61,7 @@ polls persisted messages rather than subscribing to live events.
 **No TCP, no token, no TLS.** Auth = filesystem permission (Unix) /
 user-scoped namespace (Windows). Cross-machine access never reaches
 this socket: it goes through Core's own outbound, end-to-end encrypted
-remote module (paired devices only, planned 2026-10), or through GA's
+remote module (paired devices only, `core/src/remote/`, since 2026-10), or through GA's
 IM frontends + Galley CLI on the host machine. See
 [AGENTS.md "Core Never Listens On The Network"](../../AGENTS.md).
 
@@ -166,9 +169,12 @@ BOM). `read_image` accepts `image` kinds up to 10 MiB and returns a data URL
 in `content`; this permits images outside the WebView asset scope without
 widening global filesystem permissions. `reveal` opens directories or
 selects files in the system file manager. `open` hands the file to the
-default application only for documents — `markdown`, `image`, and a data
+default application only for documents — `markdown`, `image`, a data
 subset of `text` (`txt log csv tsv json jsonl ndjson yaml yml toml xml ini cfg
-conf rst tex srt vtt`) — never for scripts, since the default application
+conf rst tex srt vtt`), and the document formats `pdf docx xlsx pptx pages
+numbers html htm` (additive, ticket 73; a Pages / Numbers document saved as
+a package, which is a folder, may be opened too, and `reveal` selects such a
+package instead of opening it) — never for scripts, since the default application
 for `.sh` / `.bat` / `.py` on some desktops executes them; the symlink's
 canonical target is validated by the same rule. No shell command supplied
 by the caller is executed.

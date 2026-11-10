@@ -73,9 +73,11 @@ The live `turn_end` path and the SQLite restore path build the same
 [`gui/src/lib/agent-turn.ts`](./gui/src/lib/agent-turn.ts) — tool-event
 construction, the **final-answer-turn gate** (`no_tool` / zero tools →
 the narrator IS the final answer, no preamble kept), and
-empty-final-answer → null normalization all live there once. Persist
-consumes the built turn (what rendered live is what lands in SQLite);
-live-only derivation of thinking/preamble from raw `responseContent`
+empty-final-answer → null normalization all live there once. Since
+2026-10-07 Core writes the row itself, with a Rust port of this
+derivation (`core/src/turn_persistence/derive.rs`); the shared golden
+fixtures under `core/tests/fixtures/` pin the two to the same output, so
+what rendered live is what lands in SQLite. Live-only derivation of thinking/preamble from raw `responseContent`
 stays in `ipc-handlers`. The round-trip invariant — *live turn ===
 restored turn for the same data* — is pinned by `agent-turn.test.ts`
 (2026-07-11 decision; see devlog).
@@ -105,13 +107,14 @@ the components only map returned keys through the copy table.
 
 ## Socket protocol
 
-The CLI↔Core socket contract (Agent API, `schemaVersion: 1`). Single code
+The CLI↔Core socket contract (Agent API, `schemaVersion: 3`; `1` and `2`
+still served for unchanged commands). Single code
 home: [`core/src/protocol/`](./core/src/protocol/mod.rs) — envelopes,
 per-command args structs, error tags. Neither end hand-writes a command
 name or camelCase field literal; drift is a compile/test failure, not a
 silently dropped argument (2026-07-11 decision; see devlog).
 
-- **Protocol module** — `core/src/protocol/`: the shared schemaVersion 1
+- **Protocol module** — `core/src/protocol/`: the shared socket-protocol
   type home. Rule: every `socket_listener` dispatch arm parses an args
   type from here; every CLI request serializes the same type.
 - **`SocketCommand`** — trait binding a command's wire name (`NAME`) to
@@ -179,9 +182,10 @@ silently dropped argument (2026-07-11 decision; see devlog).
   open run; images take the gate at once or are refused) → persist →
   **pending broadcast** → **derived title** → ensure a runner → dispatch
   `user_message`, or `ask_user_response` when a question is pending.
-  Every failure releases the gate. Not socket `session send`: that one is
-  frozen (no runner → `persisted_only`, never starts one); ADR-0003 keeps
-  the two apart on purpose.
+  Every failure releases the gate. Not socket `session send`: without
+  `ensureRunner` it never starts a runner (no runner → `persisted_only`);
+  with it, Core ensures a runner first on the same ensure path (ADR-0003,
+  2026-10-16). ADR-0003 keeps the two send paths apart on purpose.
 - **Run gate** — the session's `open_run` flag in the outbound queue
   state (`runner_manager::queue`): a dispatched run holds it until its
   `run_complete`. Whoever dispatches reserves it first (`queue_offer`,
@@ -235,15 +239,15 @@ silently dropped argument (2026-07-11 decision; see devlog).
 
 ## Writes
 
-- **Write broadcast** — every session, project and scheduled-task write is
-  announced once by Core through the `Notifier`, whoever made it: CLI /
+- **Write broadcast** — every session, project, scheduled-task, to-do and
+  memo write is announced once by Core through the `Notifier`, whoever made it: CLI /
   supervisor through the socket, the GUI (and later a phone) through Tauri
   commands (`core/src/session_writes.rs`, ticket 02d, 2026-10-10). The
   socket handler and the Tauri command call the same write-and-announce
   method (`Writes`), so it happens once. Events: `session-created-` /
   `-updated-` / `-archived-` / `-unarchived-` / `-moved-` / `-deleted-external`,
   `project-created-` / `-updated-` / `-deleted-external`,
-  `scheduled-tasks:changed`; the table is in
+  `scheduled-tasks:changed`, `todos:changed`, `memos:changed`; the table is in
   [architecture](./docs/architecture.md). Not the Agent API.
 - **Event form** — a row as these events carry it (`SessionBriefEvent`,
   `ProjectBriefEvent`): every optional field written, `null` when empty, so

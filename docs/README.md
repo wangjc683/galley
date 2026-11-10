@@ -23,7 +23,7 @@ subset of the task table below; when the two disagree, this index wins and
 | Understand current project state | [project status](./project-status.md) — current version, release gates, phase state |
 | Understand the architecture | [architecture](./architecture.md) — external-facing system overview |
 | Change product behavior or roadmap | [PRD](./PRD.md) — product definition and roadmap; for the assistant / main chat, the [assistant PRD](../.scratch/assistant/PRD.md) (the foundation, above the main chat and mobile PRDs) |
-| Change CLI output or Agent API | [agent-api](./agent-api/README.md) — stable CLI / socket contract; v1 is frozen, additive-only |
+| Change CLI output or Agent API | [agent-api](./agent-api/README.md) — stable CLI / socket contract; `schemaVersion: 3` current, additive-only within a version |
 | Change the Core ↔ runner wire protocol | [IPC protocol](./ipc-protocol.md) — change docs first, then code |
 | Change remote access (phone ↔ relay ↔ Core) | [remote protocol design](../.scratch/ios-client/issues/05-remote-protocol-design.md), then the [remote-protocol](../remote-protocol/README.md), [relay](../relay/README.md) and [GalleyRemote](../ios/GalleyRemote/README.md) READMEs — Rule 2; the Rust golden fixtures are the contract |
 | Change Supervisor / Agent integration | [Supervisor SOP](./integrations/galley-supervisor-sop.md), then [Supervisor reference](./integrations/galley-supervisor-reference.md) |
@@ -31,7 +31,7 @@ subset of the task table below; when the two disagree, this index wins and
 | Check architecture invariants | [architecture demo](./architecture-demo.md) — code-level proofs and grep gates; hard engineering invariants (I3/I5/I6/I9/I11) are in [engineering workflow](./engineering-workflow.md) |
 | Prepare or update a release | [release / update SOP](./release-update-sop.md) (runbook), then [release workflow](./release-workflow.md) (background) |
 | Write GitHub Release notes | [release notes guide](./release-notes-guide.md) — writing rules and bilingual templates |
-| Retake README screenshots | [screenshot playbook](./screenshot-playbook.md) — scene list, seed script, mv-swap isolation, asset policy |
+| Retake README screenshots / demo assets | [screenshot playbook](./screenshot-playbook.md) — scene list, seed script, mv-swap isolation, binary-asset policy |
 | Close a long coding session or sync project knowledge | [session close SOP](./session-close-sop.md) |
 | Smoke Windows builds | [Windows checklist](./windows-build-checklist.md) |
 | Touch GenericAgent integration | [GA baseline](./ga-baseline.md) — pinned upstream compatibility |
@@ -47,7 +47,6 @@ subset of the task table below; when the two disagree, this index wins and
 | Understand or change Galley's temperament / brand character | [temperament charter](./temperament.md) — the "why" above the execution specs |
 | Touch UI copy, terminology, or localization | [copy and language guidelines](./copy-language-guidelines.md) (what to call things), [copy austerity principles](./copy-austerity-principles.md) (how to say it) |
 | Touch conversation text rendering / CJK typography | [typography principles](./typography-principles.md) — render-only red line |
-| Reshoot README screenshots / demo assets | [screenshot playbook](./screenshot-playbook.md) — includes the binary-asset policy |
 | Review product / UX audit findings | [audits](./audits/README.md) — evidence-backed decision input, not specs |
 | Understand history or decisions | [devlog](./devlog/README.md) — chronological decision provenance |
 | Dig into completed-mission docs (B-phase refactor, old drafts, handoffs) | [archive](./archive/README.md) |

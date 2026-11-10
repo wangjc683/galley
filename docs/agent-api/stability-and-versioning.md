@@ -22,7 +22,7 @@ them. We commit to the rules in
   get reassigned across `schemaVersion` bumps — agents can branch on
   them confidently without parsing JSON.
 - **The socket path is stable.** Per-user Unix socket / named pipe
-  paths in §2A don't change across `schemaVersion: 1` patch releases.
+  paths in §2A don't change across releases or `schemaVersion` bumps.
 - **camelCase everywhere.** Every JSON field on the wire is camelCase
   (`projectId`, `lastActivityAt`, `schemaVersion`, …). No snake_case
   outliers. Pre-freeze adjustment under M6 — see §5.1.
@@ -53,14 +53,15 @@ hold. Each maps 1-1 to an exit code (§3):
 
 These appear on the socket transport envelope (§2A) for transport-level
 failures. They surface to the CLI as exit code 1 (`internal`) so SOPs
-get a clean error path; the JSON envelope carries the original tag.
+get a clean error path. The CLI's JSON then reads `"error":"internal"`:
+only a raw socket caller sees the original tag (errors-and-exit-codes §6).
 
 | `error`            | Surfaces as | When                                                 |
 | ------------------ | ----------- | ---------------------------------------------------- |
 | `unknown_command`  | exit 1      | Server doesn't know that command name (version skew) |
 | `schema_mismatch`  | exit 1      | Client's `schemaVersion` != server's accepted set    |
 | `not_implemented`  | exit 1      | Reserved — no emitter exists today; do not expect it |
-| `idle_timeout`     | exit 1      | Long-lived stream sat idle past 90s                  |
+| `idle_timeout`     | exit 1      | Connection sat idle past 90s waiting for a request line (streams are exempt) |
 
 #### Stable message prefixes (on `invalid_args`)
 
@@ -119,9 +120,7 @@ For NDJSON stream-end frames on `session watch` (§5.5b),
 
 | `reason`             | Meaning                                          |
 | -------------------- | ------------------------------------------------ |
-| `subprocess_exited`  | Runner subprocess exited cleanly                 |
-| `subprocess_error`   | Runner subprocess died unexpectedly              |
-| `cancelled`          | Client disconnected (SIGINT / closed socket)     |
+| `subprocess_exited`  | Runner subprocess exited (any exit code)         |
 | `core_unavailable`   | Snapshot read worked, but no Galley Core socket was reachable |
 | `not_live`           | Session exists but no live runner is subscribed  |
 | `socket_closed`      | Watch socket closed without a stream-end frame   |
@@ -129,6 +128,13 @@ For NDJSON stream-end frames on `session watch` (§5.5b),
 | `all_live_sessions_ended` | Project follow consumed all live subscriptions |
 | `completed`          | `session wait` found a visible agent message     |
 | `timeout`            | `session wait` reached its bounded wait deadline |
+| `session_error`      | `session wait` found the session in the persisted `error` status |
+| `session_cancelled`  | `session wait` found the session in the persisted `cancelled` status |
+| `project_idle`       | `project follow --until-idle` found no session of the project in an active persisted status after its quiet window |
+
+`subprocess_error` and `cancelled`, listed here until 2026-11-10, were
+never emitted: a runner that dies sends `subprocess_exited` too, and a
+client that disconnects gets no end frame.
 
 ### 1.2 Schema pinning
 

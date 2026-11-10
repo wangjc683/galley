@@ -72,3 +72,14 @@ motivation this ADR never weighed. The core decision is untouched: handlers
 remain explicit per-command functions with their own contract-bound failure
 behavior; `HandlerCtx` changes where dependencies come from, not what handlers
 do.
+
+## Note (2026-11-10)
+
+Three of the six handlers in the table (`session.goal_synthesize`,
+`session.goal_master_plan`, the goal worker) were removed with Goal on
+2026-10-13, and with them the sharpest contradiction cited above
+(`session.send` tolerant vs `goal.synthesize` fatal). The decision still
+holds on the handlers that remain: a failed dispatch is a `persisted_only`
+success for `session.send` and `session.checkpoint`, a `runner_error`
+envelope with a `spawn_failed` emit for `session.new`, and mixed for
+`llm.set` (`ProcessGone` → `persisted_only` success, else an error).

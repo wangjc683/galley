@@ -208,8 +208,7 @@ filesystem paths; the composer's only drop intake), and HTML5 drag-and-drop
 never fires in the webview — including text / URL drags, which are consumed
 with no payload and surfaced as a copy-paste toast. This is an upstream
 wry limitation accepted deliberately; the reasoning and source-level
-findings live in `.scratch/composer-file-drop/issues/01` (devlog entry
-lands when that feature's tracker closes).
+findings live in `.scratch/composer-file-drop/issues/01`.
 
 Tauri updater signing is separate from macOS codesigning / Windows Authenticode.
 The private updater key must stay in release secrets; only the public key is
@@ -222,8 +221,8 @@ local Dev and unsigned local builds do not require `TAURI_SIGNING_PRIVATE_KEY`.
 
 The release workflow creates a candidate `latest.json` as a draft Release asset.
 After smoke test and publishing the release, run the manual
-`promote-update-channel.yml` workflow to update the beta manifest that installed
-apps read.
+`promote-update-channel.yml` workflow to update the stable manifest that installed
+apps read (and its legacy beta alias).
 
 ## Bundled Python
 
@@ -294,9 +293,11 @@ The managed-runtime product and upgrade rules live in
 [managed GA runtime](./managed-ga-runtime.md).
 
 Release builds run `node scripts/check-managed-ga-payload.mjs` before packaging.
-That gate verifies the Tauri resource mapping, managed GA manifest, prompt
-files, patch stack, and absence of generated / local / secret-bearing artifacts
-inside `managed-ga/code`.
+That gate verifies the Tauri resource mapping (managed GA and the CLI sidecar),
+managed GA manifest, patch stack, critical code and memory-seed files, the
+absence of `managed-ga/galley-prompts` (the managed prompt is embedded in
+Core), and the absence of generated / local / secret-bearing artifacts inside
+`managed-ga/code` and the memory seed.
 
 ## Release Artifacts
 
@@ -316,4 +317,5 @@ Windows manual smoke lives in [windows build checklist](./windows-build-checklis
 - `macOS` means the operating system. Use for platform names, system
   requirements, and release titles.
 - `Mac` means the hardware family or user device.
-- Release title example: `Galley v0.2.0`.
+- Release title example: `v0.2.0` (the title is exactly the tag; see the
+  [release notes guide](./release-notes-guide.md)).

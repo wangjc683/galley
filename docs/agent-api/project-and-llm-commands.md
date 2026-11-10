@@ -62,7 +62,7 @@ archived sessions in `sessionCount` and `statusCounts`.
 
 ```bash
 $ galley project brief proj_demo
-{"schemaVersion":1,"project":{…},"sessionCount":4,
+{"schemaVersion":3,"project":{…},"sessionCount":4,
  "statusCounts":{"running":2,"completed":2},
  "runningSessions":[{…},{…}],"lastActivityAt":"…"}
 ```
@@ -86,7 +86,7 @@ rollup plus each session's recent transcript tail. Default
 
 ```bash
 $ galley project show proj_demo --tail=10
-{"schemaVersion":1,"project":{…},"sessionCount":2,
+{"schemaVersion":3,"project":{…},"sessionCount":2,
  "statusCounts":{"completed":1,"running":1},
  "sessions":[{"session":{…},"messages":[…]},{"session":{…},"messages":[…]}]}
 ```
@@ -144,18 +144,18 @@ $ galley project follow proj_demo --tail=80 --until-idle --final-show
 
 ```bash
 $ galley project follow proj_demo --tail=10
-{"schemaVersion":1,"stream":"snapshot","phase":"initial","project":{…},"sessions":[…],"followState":{…}}
-{"schemaVersion":1,"stream":"event","sessionId":"s-a","data":{"kind":"turn_start",…}}
-{"schemaVersion":1,"stream":"sessionEnd","sessionId":"s-a","reason":"subprocess_exited"}
-{"schemaVersion":1,"stream":"snapshot","phase":"final","project":{…},"sessions":[…],"followState":{…}}
-{"schemaVersion":1,"stream":"end","reason":"all_live_sessions_ended"}
+{"schemaVersion":3,"stream":"snapshot","phase":"initial","project":{…},"sessions":[…],"followState":{…}}
+{"schemaVersion":3,"stream":"event","sessionId":"s-a","data":{"kind":"turn_start",…}}
+{"schemaVersion":3,"stream":"sessionEnd","sessionId":"s-a","reason":"subprocess_exited"}
+{"schemaVersion":3,"stream":"snapshot","phase":"final","project":{…},"sessions":[…],"followState":{…}}
+{"schemaVersion":3,"stream":"end","reason":"all_live_sessions_ended"}
 ```
 
 If no live sessions produce stream output, the command emits the initial
 snapshot and:
 
 ```json
-{"schemaVersion":1,"stream":"end","reason":"no_live_sessions"}
+{"schemaVersion":3,"stream":"end","reason":"no_live_sessions"}
 ```
 
 If a live-status session has no live runner or Galley Core is not
@@ -176,8 +176,8 @@ surface the side effect.
 
 Per sub-plan O2, this command is honestly named `delete` because the
 operation is destructive. A future release may ship a separate
-reversible `project archive` alongside (§8); schemaVersion 1 doesn't
-support reversible archive.
+reversible `project archive` alongside (§8); no `schemaVersion` supports
+reversible archive today.
 
 ```bash
 $ galley project delete proj_demo --supervisor=ga-claude-1 --reason="merged into MyApp"

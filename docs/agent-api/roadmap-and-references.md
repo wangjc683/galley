@@ -6,7 +6,7 @@
 
 The following are intentionally **not in the current CLI surface yet** —
 mentioned here so SOPs can plan their integration shape. Additions will be
-non-breaking inside `schemaVersion: 1` per §7.
+non-breaking inside the current `schemaVersion` per §7.
 
 - `galley session kill <id>` — runner Shutdown (vs `session stop` which
   Aborts the turn but keeps the bridge alive). Deferred to a future release,

@@ -62,19 +62,31 @@ exit: 3
 
 ### Socket error envelope
 
-Write commands invoke the local socket transport. The socket envelope
-wraps the same `error` / `message` fields with `ok: false` + the
+Write commands invoke the local socket transport. On the socket, the
+envelope wraps the `error` / `message` fields with `ok: false` + the
 caller's `requestId` so a single connection can multiplex many
-in-flight requests:
+in-flight requests, and `error` is the full wire tag (transports §2A):
+
+```json
+{"ok":false,"requestId":null,"error":"not_found","message":"session 'sess_missing' does not exist"}
+```
+
+The CLI does not print that envelope. It maps the wire tag onto one of
+the five classes above and prints the same flat `{error, message}` shape,
+with the §3 exit code:
 
 ```bash
 $ galley session send sess_missing "hi" ; echo "exit: $?"
-{"ok":false,"requestId":null,"error":"not_found","message":"session 'sess_missing' does not exist"}
+{"error":"not_found","message":"session 'sess_missing' does not exist"}
 exit: 3
 ```
 
-The CLI maps each `error` discriminant onto an exit code via the §3
-table. Future error classes get their own discriminant; v1 won't
+Tags outside the five classes do not reach CLI output: the socket-only
+ones (`unknown_command`, `schema_mismatch`, `idle_timeout`, …) print as
+`internal` (exit 1), and the runner-spawn ones (`python_not_found`,
+`managed_model_not_configured`, …) as `runner_error` (exit 5); the
+`message` text is passed through. The CLI maps each `error` discriminant
+onto an exit code via the §3 table. Future error classes get their own discriminant; v1 won't
 rename existing ones.
 
 ## 6A · Shared types

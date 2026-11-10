@@ -25,7 +25,7 @@ Galley (Galley) bridge 与 desktop 之间的通信契约。本文件是**唯一�
 - **macOS/Linux**: Unix domain socket at `${TMPDIR:-/tmp}/galley-${UID}.sock`，permission `0600`
 - **Windows**: Named pipe at `\\.\pipe\galley-${USERNAME}`，user-scoped namespace
 - **Framing**：NDJSON request line → NDJSON response line（行内 JSON 对象，`\n` 终止）
-- **Schema version**：客户端发 `"schemaVersion": 1`，服务端检查匹配（不匹配返回 `error: "schema_mismatch"`）
+- **Schema version**：客户端发 `"schemaVersion"`（当前 `3`，`1`、`2` 仍可钉），服务端检查它在接受集合内（不在则返回 `error: "schema_mismatch"`）
 - **Idle timeout**：90 秒无 IO 服务端断开（streaming 子命令的 push 不算 idle）
 - **Auth**：仅文件系统权限（per-UID socket file）。**不开 TCP, 不持 token**（AGENTS.md § Core Never Listens On The Network）
 
@@ -35,7 +35,7 @@ Galley (Galley) bridge 与 desktop 之间的通信契约。本文件是**唯一�
 {
   "command": "sessions.list",     // dotted name; full list in docs/agent-api.md
   "args": { /* command-specific */ },
-  "schemaVersion": 1,             // optional, default = current
+  "schemaVersion": 3,             // optional, default = current
   "requestId": "uuid"             // optional, echoed in response for client demux
 }
 ```
@@ -61,7 +61,7 @@ Galley (Galley) bridge 与 desktop 之间的通信契约。本文件是**唯一�
 }
 ```
 
-The full stable discriminant table (including `runner_error` and the runner-spawn tags) lives in [agent-api/stability-and-versioning §2/§2A](./agent-api/stability-and-versioning.md) — that document is the single source; do not restate the list here. Since 2026-07-11 the code home is the `ErrorTag` enum in `core/src/protocol/error_tag.rs`, shared by Core's emitters and the CLI's exit-code mapping. Additions are allowed without bumping `schemaVersion`; renames or removals require a bump. (`not_implemented` is reserved — no emitter exists today.)
+The stable discriminant tables live in the Agent API — the CLI classes (including `runner_error`) and the socket-only tags in [stability-and-versioning §1.1](./agent-api/stability-and-versioning.md), the wire-level tags in [transports §2A](./agent-api/transports.md) — do not restate the lists here. The runner-spawn tags are in neither table today (only in code). Since 2026-07-11 the code home is the `ErrorTag` enum in `core/src/protocol/error_tag.rs`, shared by Core's emitters and the CLI's exit-code mapping. Additions are allowed without bumping `schemaVersion`; renames or removals require a bump. (`not_implemented` is reserved — no emitter exists today.)
 
 ### Stream responses (B2 M4+, for `session.watch`)
 
@@ -73,7 +73,7 @@ The full stable discriminant table (including `runner_error` and the runner-spaw
 }
 ```
 
-Stream ends with `{"stream": "end", "requestId": "uuid", "reason": "<why>"}` when the server closes the subscription (session archived, SIGINT from client, etc.).
+Stream ends with `{"stream": "end", "requestId": "uuid", "reason": "<why>"}` when the runner's output closes; Core sends only `reason: "subprocess_exited"` (whatever the exit code). A client that disconnects gets no end frame.
 
 ### Race detection at startup
 
@@ -96,6 +96,7 @@ Bridge 子进程通过 CLI 参数初始化：
 | `--cwd` | 可选 | Legacy escape hatch for explicit runner cwd. Project folders are **not** passed here. Normal Galley spawns omit it so GA can keep using its own runtime/state root. |
 | `--workspace-root` | 可选 | Project Workspace root. When set, bridge asks GA `frontends/workspace_cmd.py` to prepare a Workspace link, sets per-agent Project Mode attributes, and leaves process cwd unchanged. |
 | `--llm-no` | 可选 | 初始 LLM 索引（默认 0） |
+| `--llm-name` | 可选 | 按名字指定初始 LLM（外置 GA 的 `agent.list_llms()` 原名，比较时不计 `Session` 后缀），优先于 `--llm-no`；名字已不存在时退回索引 0。Core 只在外置 GA 下传；内置 GA 在 spawn 前就解析成模型 id、不传它。 |
 | `--reasoning-effort` | 可选 | 会话级推理强度覆盖的初值（`none` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max`）。Core 从 `sessions.reasoning_effort` 填入，restore / 重新 spawn 都靠它带回；缺省 = 跟随模型配置。见 §5.14。 |
 
 ```
@@ -116,7 +117,7 @@ desktop                             bridge subprocess
   │  { kind: "user_message", ... }        │
   │ ───────────────────────────────────► │
   │  ◄──── { kind: "turn_start", ... }    │
-  │  ◄──── { kind: "tool_call_*", ... }   │
+  │  ◄──── { kind: "turn_progress", ... } │
   │  ◄──── { kind: "turn_end", ... }      │
   │  ◄──── { kind: "run_complete", ... }  │
   │                                       │
@@ -190,9 +191,9 @@ agent 进入一轮步骤。Bridge 会在普通 `user_message` / `ask_user_respon
 
 工具开始执行。
 
-**现状（2026-10-20 照代码核对）：runner 不发这个事件。** 它只在协议里定义着：`runner/ipc.py:89` 的 `ToolCallStartEvent` 与 `:488` 的 `EVENT_KINDS` 登记，Core（`core/src/ipc.rs:151`）与 GUI（`gui/src/types/ipc.ts:125`）都认得它，GUI 收到也只记一条 debug 日志（`gui/src/lib/ipc-handlers.ts:817`）；bridge 里没有任何地方构造它。一步里调了哪些工具，要到这一步的 `turn_end` 才随 `toolCalls` 一起到（§4.7，`runner/workbench_bridge.py:1538`）。
+**现状（2026-10-20 照代码核对，2026-11-10 复核）：runner 不发这个事件。** 它只在协议里定义着：`runner/ipc.py` 的 `ToolCallStartEvent` 与 `EVENT_KINDS` 登记，Core（`core/src/ipc.rs` 的 `ToolCallStartEvent`）与 GUI（`gui/src/types/ipc.ts` 的 `ToolCallStartEvent`）都认得它，GUI 收到也只记一条 debug 日志（`gui/src/lib/ipc-handlers.ts` 的 `dispatchIPCEvent`）；bridge 里没有任何地方构造它。一步里调了哪些工具，要到这一步的 `turn_end` 才随 `toolCalls` 一起到（§4.7，`runner/workbench_bridge.py` 的 `_on_turn_end`）。§4.5 `tool_call_end`、§4.6 `tool_call_progress` 同样如此。
 
-GUI 要知道「此刻正在调哪个工具」时（侧栏助理卡片那张脸的神态，主聊天票 65），不靠这个事件，读的是这一步正在流出的原始文字（消息缓存的 `inFlightContent`）里 GA 打出的最后一条派发行：GA 在派发每个工具前先打一行（`managed-ga/code/agent_loop.py:79` 的详细格式：`🛠️ Tool:` 后接反引号里的工具名，再接参数块；`:80` 的紧凑格式：`🛠️ name(args)`），bridge 原样转发，这一步的 `turn_end` 才清掉，所以工具在跑时最后一条派发行就是它。解析在 `gui/src/lib/assistant-face.ts:151` 的 `liveToolCall`，归类在 `:116` 的 `classifyTool`。这是一处读 GA 输出格式的耦合点：GA 改了派发行的写法，脸会退回「在想」，不影响别的界面。协议本身不改；哪天 runner 真发了这个事件，GUI 可以改读它、去掉这处耦合。
+GUI 要知道「此刻正在调哪个工具」时（侧栏助理卡片那张脸的神态，主聊天票 65），不靠这个事件，读的是这一步正在流出的原始文字（消息缓存的 `inFlightContent`）里 GA 打出的最后一条派发行：GA 在派发每个工具前先打一行（`managed-ga/code/agent_loop.py` 的 `agent_runner_loop` 里，详细格式：`🛠️ Tool:` 后接反引号里的工具名，再接参数块；紧凑格式：`🛠️ name(args)`），bridge 原样转发，这一步的 `turn_end` 才清掉，所以工具在跑时最后一条派发行就是它。解析在 `gui/src/lib/assistant-face.ts` 的 `liveToolCall`，归类在同文件的 `classifyTool`。这是一处读 GA 输出格式的耦合点：GA 改了派发行的写法，脸会退回「在想」，不影响别的界面。协议本身不改；哪天 runner 真发了这个事件，GUI 可以改读它、去掉这处耦合。
 
 下面是协议定义的形状：
 
@@ -215,6 +216,8 @@ GUI 要知道「此刻正在调哪个工具」时（侧栏助理卡片那张脸�
 
 工具执行结束。
 
+**现状（2026-11-10 照代码核对）：runner 不发这个事件**，同 §4.4：只在四处镜像（`runner/ipc.py`、`core/src/ipc.rs`、`gui/src/types/ipc.ts`、本文）里定义着，GUI 收到只记 debug 日志；工具结果随 `turn_end` 的 `toolResults` 到（§4.7）。下面是协议定义的形状：
+
 ```json
 {
   "kind": "tool_call_end",
@@ -235,6 +238,8 @@ GUI 要知道「此刻正在调哪个工具」时（侧栏助理卡片那张脸�
 ### 4.6 `tool_call_progress`（兜底）
 
 bridge 解析 GA yield 出来的 markdown 字符串得到的非结构化进度，用于 raw view。**不**作为 desktop 渲染主链路的依据。
+
+**现状（2026-11-10 照代码核对）：runner 不发这个事件**，同 §4.4：只定义、没有构造它的地方。一步里流出的文字走 `turn_progress`（§4.7a）。下面是协议定义的形状：
 
 ```json
 {
@@ -685,6 +690,14 @@ self.system`，所以系统提示的常驻输出要求依然生效——`assets/
 }
 ```
 
+- `firstUserMessage`：会话首条可见用户消息（Core 端截断 ≤500 字符）
+- `finalAnswer`：可选，本次 run 的 `finalContent` 截断；缺失时 Python 默认 `""`
+  （Rust 端 None 序列化为省略字段，勿发 `null`）
+
+成功时 emit `title_generated`（见 4.17）；任何失败（超时 / LLM 错误 / 清洗后为空）
+**静默**丢弃，仅 stderr 记日志——Core 会在下次 `run_complete` 时重试，失败不该
+成为用户可见的错误噪音。
+
 ### 5.14 `set_reasoning_effort`
 
 设置或清除**当前会话**的推理强度覆盖。只有 Core 发这条命令（GUI 调 Tauri 命令
@@ -709,14 +722,6 @@ self.system`，所以系统提示的常驻输出要求依然生效——`assets/
   仅当模型配置文件 mtime 变了才真重建），bridge 在这三处之后重放覆盖，所以 `set_llm`
   和保存模型配置都不会把覆盖丢掉。attach / managed 两模式行为一致；attach 模式的
   依据见 [GA baseline 契约面第 13 项](./ga-baseline.md#contract-surface)。
-
-- `firstUserMessage`：会话首条可见用户消息（Core 端截断 ≤500 字符）
-- `finalAnswer`：可选，本次 run 的 `finalContent` 截断；缺失时 Python 默认 `""`
-  （Rust 端 None 序列化为省略字段，勿发 `null`）
-
-成功时 emit `title_generated`（见 4.17）；任何失败（超时 / LLM 错误 / 清洗后为空）
-**静默**丢弃，仅 stderr 记日志——Core 会在下次 `run_complete` 时重试，失败不该
-成为用户可见的错误噪音。
 
 ### 5.15 `interject`
 
@@ -769,7 +774,7 @@ bridge:   { kind: "turn_start", ... }
 - 已存活但未确认的 runner：空闲时照样回放；正在跑（`agent_running`，或不是调用方自己预留的运行闸门）时不碰。
 - 一次失败（见 §4.11）就静默重启 runner 一次，用同一份参数重新 spawn 后再回放；仍失败，ensure 报 `HistoryReplay` 错误（Tauri 命令返回 `{"error":"history_replay","detail":…}`，GUI 显示「恢复超时」文案）。被替换的 runner 关闭时不发 `runner-closed`，也不向运行闸门报 `Closed`。
 - 每次发送前后经 Tauri 事件 `runner-history-replay` 广播 `{ sessionId, phase: "started" | "done" | "failed" }`，GUI 据此显示「恢复中」。
-- socket `session send` 不走这条路：runner 不在时只落库（`persisted_only`）。
+- socket `session send` 不带 `ensureRunner` 时不走这条路：runner 不在时只落库（`persisted_only`）；带 `ensureRunner` 时先经这条路确保 runner（2026-10-16，ADR-0003）。
 - 02c 起，GUI（以后的手机端）的发送也由 Core 驱动（`core/src/session_send.rs`）：先预留运行闸门再 ensure，回放期间到达的 socket `session send` 因此排队，不会抢在 `load_history` 之前派发；有待回答的 `ask_user` 时 Core 发 `ask_user_response`，否则发 `user_message`。见 [ADR-0003](./adr/0003-gui-and-phone-send-through-core.md)。
 - 主聊天只回放当前段（票 03a，`core/src/session_runner/segment.rs`）：空闲超过 N 小时后的下一条消息开新段，Core 把段界记进 `main_chat_segments`，冷 runner 的 `load_history` 只含从段界起的消息，前面垫上段界之前最近 10 个完整轮次（一轮是一句用户行加上到下一句之前的全部回复，多步运行的答案随它的那句一起带上；叫醒行开头、以静默回复（`<no-reply/>`，没有正文）收尾的一轮不算一轮，不带也不占名额；票 11、77、79，`core/src/session_runner/carry.rs`，合计不超过 15,000 字）；开新段时还开着的 runner 被静默替换（同上面的重启，不发 `runner-closed`），段界之前没有完整轮次、新段也还没有回复时不发 `load_history`。线上格式不变，其他会话照旧。主聊天回放里的回复不带 `<subtask>` 派活说明，派过活的那条回复末尾补一行一个子任务（`[subtask <id>: <标题>]`，没派出去的是 `[subtask not started: <原因>]`，票 06a，`core/src/subtask.rs`）；子任务叫醒主对话的那条用户行（`supervisor = 'galley-report'`）回放成每个子任务一行 `[Galley: subtask <id> "<标题>" finished — details: session show <id>]`，回复原样保留（票 29，`core/src/subtask_report.rs`）。
 
