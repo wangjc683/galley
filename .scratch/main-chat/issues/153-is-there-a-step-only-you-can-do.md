@@ -1,6 +1,6 @@
 # 153 记之前问一句：这件事里有没有只有你能做的一步（手册与评测）
 
-Status: needs-dogfood（2026-11-10 代理交回，rebase 后快进合入 `5f2f67fd`（手册与 Core 测试）、`7eb6593e`（评测）。主会话验收：读过手册两处与 `assistant_manual.rs` 的片段测试；在 worktree 复跑 `cargo test --workspace` 1,354 条全过，`check-docs-links` 507 个文件过，`git diff --check` 干净；新增 1,948 行全量扫过，没有本机路径、密钥、服务商名，主机只有原用例里的 12306；抽核一个数：`whose-expense` 结果表里 WITH 3 / 3、WITHOUT 1 / 2，与回报一致；两份 git 忽略的原始 `results.json` 已从 worktree 拷回主树。合入前 `busy:0`。真机两句待 JC，见「真机步骤」）
+Status: done（2026-11-10 JC 把电脑交给主会话代验。主会话经 `galley session send`（标记 `claude-code`，`--ensure-runner`）在 dev 的主对话里说了两句，逐句查库并截了窗口：① 交给它、要等的一句（周五下午帮忙看周末天气）：它查重后只给自己挂了一个周五 15:00 的一次性提醒，没有新待办，回复说了几点去查，面板里落在「Galley 在办」，36 秒；② 没说谁做的一句（这周得交报销单）：记成用户的一件待办，周五到期、周四 10:00 提醒，备注是提交前核对的要点，没有反问是谁的，回复说了提醒时间，26 秒。走完后那件待办与那个提醒都用 CLI 取消了。此前：needs-dogfood（2026-11-10 代理交回，rebase 后快进合入 `5f2f67fd`（手册与 Core 测试）、`7eb6593e`（评测）。主会话验收：读过手册两处与 `assistant_manual.rs` 的片段测试；在 worktree 复跑 `cargo test --workspace` 1,354 条全过，`check-docs-links` 507 个文件过，`git diff --check` 干净；新增 1,948 行全量扫过，没有本机路径、密钥、服务商名，主机只有原用例里的 12306；抽核一个数：`whose-expense` 结果表里 WITH 3 / 3、WITHOUT 1 / 2，与回报一致；两份 git 忽略的原始 `results.json` 已从 worktree 拷回主树。合入前 `busy:0`。真机两句待 JC，见「真机步骤」））
 
 来源：[主聊天 PRD](../PRD.md) 裁决 203（JC 2026-11-10：「认」「模糊时默认保守」）；顺带一句跟上裁决 206（票 152：收起的一行不画备注）。只改助理手册与评测，不动代码。只在内置运行时；外置运行时没有主对话与待办，零变化。
 
