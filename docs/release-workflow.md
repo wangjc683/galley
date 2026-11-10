@@ -45,9 +45,8 @@ parallel. Push tag to draft-release-ready is roughly **10-12 min** end to end.
 Rosetta 2, validated by [trial run 26016317898](https://github.com/wangjc683/galley/actions/runs/26016317898).
 Rosetta install ~3 min; cross-compile adds ~2-3 min vs native build. More
 durable than keeping GitHub's deprecated macos-13 runner (on a 2026-27
-deprecation path). Local build remains the fallback (see
-[Manual fallback](#manual-fallback-ci-stalled-or-skipped) scheme B when CI is
-unavailable or skipped).
+deprecation path). A local build is not a fallback for a release (see
+[Release path: CI only](#release-path-ci-only)).
 
 **Windows ARM status**: the current release matrix only supports Windows x64.
 Windows ARM needs a `windows-11-arm` / `aarch64-pc-windows-msvc` workflow job,
@@ -189,69 +188,13 @@ Same code as [macOS RC v0.1.0-rc.1](https://.../tag/v0.1.0-rc.1) → theoretical
 
 So users know there are releases for other platforms.
 
-## Manual fallback: CI stalled or skipped
+## Release path: CI only
 
-When CI-built artifacts are unavailable, use the manual fallback path.
-
-### Triggers
-
-In priority order:
-
-1. ⏳ macos-13 Intel runner **queue > 30 min** → fallback (see
-   [CI troubleshooting](#ci-troubleshooting)).
-2. ❌ One platform's build fails but others are OK → fallback (use the
-   successful platforms' artifacts + leave the failed platform for later).
-3. 🚫 You simply don't want to run CI (already built locally + high confidence
-   + urgent) → fallback.
-
-### Full command sequence
-
-```bash
-# 1. Cancel the stuck or unwanted CI run
-gh run list --workflow=release.yml --limit 3   # find the run ID
-gh run cancel <run-id>
-
-# 2a. Download successful CI artifacts locally
-gh run download <run-id> -n galley-macos-15-aarch64   # → Galley_X.Y.Z_macOS_aarch64.dmg
-gh run download <run-id> -n galley-windows-2022-x64   # → Galley_X.Y.Z_Windows_x64-setup.exe
-
-# 2b. Local build for self-arch (Mac x64 / aarch64) — remember to rename
-cd gui && pnpm tauri build --target x86_64-apple-darwin
-../scripts/rename-artifact.sh x86_64-apple-darwin
-# artifact: core/target/x86_64-apple-darwin/release/bundle/dmg/Galley_X.Y.Z_macOS_x64.dmg
-
-# 3. Draft the GitHub Release notes to /tmp/galley-<tag>-notes.md
-# Use the templates in docs/release-notes-guide.md.
-
-# 4. Create a draft release (don't publish directly — leave it for review)
-gh release create vX.Y.Z-rc.N \
-  --draft --prerelease \
-  --title "Galley vX.Y.Z-rc.N · macOS (Release Candidate)" \
-  --notes-file /tmp/galley-rc-notes.md \
-  Galley_X.Y.Z_macOS_aarch64.dmg \
-  Galley_X.Y.Z_macOS_x64.dmg
-
-# 5. Open the draft on GitHub UI (Markdown render / files / metadata)
-
-# 6. publish
-gh release edit vX.Y.Z-rc.N --draft=false
-
-# 7. To mark Latest (must drop the prerelease flag first)
-gh release edit vX.Y.Z-rc.N --prerelease=false --latest
-```
-
-### Key notes
-
-- **Don't forget the `--prerelease` flag** in step 4 — an RC/Alpha release
-  should be prerelease. The tier is conveyed by title + notes; the prerelease
-  flag is the GitHub-level marker.
-- **Keep local-build artifact filenames identical to CI artifacts**
-  (`Galley_X.Y.Z_<arch>.<ext>`); consistent naming avoids user confusion.
-- **A wasted CI run during manual fallback is harmless** — `release.yml`'s
-  `release` job always fails to reach the failed / stuck `build` job
-  (`needs: build`), so it never auto-creates a Release. No conflict.
-- **Tag pushed but no release appeared?** The tag is already on origin →
-  `gh release create <tag>` uses the existing tag; no `--target` flag needed.
+`release.yml` is the only way a release is built and published. A package
+built by hand carries no updater artifacts (the workflow alone turns on
+`createUpdaterArtifacts` and signs with the updater key), so it can never be
+promoted to the update channel. When `release.yml` is broken or its runners
+stall, fix the workflow or wait for it; do not publish a release by hand.
 
 ## CI troubleshooting
 
@@ -264,12 +207,8 @@ resolves it.
 
 1. Check https://www.githubstatus.com for overall Actions status — if it's a
    platform-wide outage, wait.
-2. If only macos-13 is queued → **switch to manual fallback** (see
-   [Manual fallback](#manual-fallback-ci-stalled-or-skipped)):
-   - Cancel the stuck run.
-   - Use the other platforms' built artifacts + a local `pnpm tauri build` for
-     the missing arch.
-   - `gh release create` to produce the release manually.
+2. If only one runner is queued, wait, or cancel and re-run the workflow; do
+   not release by hand (see [Release path: CI only](#release-path-ci-only)).
 3. Root cause: macos-13 is a deprecated runner (see
    [Intel runner deprecation](#intel-runner-deprecation)); unreliable long-term.
 
@@ -352,6 +291,10 @@ Timing: ~7 min vs arm64 native ~4 min (Rosetta install +~3 min, cross-compile
 +~0 min on a cached Rust target).
 
 ### Scheme B (fallback only, since v0.1.2)
+
+Retired 2026-11-10: a hand-built package has no updater artifacts, so this
+path cannot ship a release (see [Release path: CI only](#release-path-ci-only)).
+Kept as the record of the alpha-era releases.
 
 When CI stalls / urgent hotfix / Rosetta install fails after a runner-image
 update, a local build still works:
