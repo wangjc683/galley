@@ -5,10 +5,10 @@
 //! cases isolated.
 
 use galley_core_lib::api::{
-    GalleyApi, MessageId, MessageWindow, OriginVia, RuntimeKind, SearchScope, SessionFilter,
-    SessionId, SessionStatus,
+    GalleyApi, MessageId, MessageVisibility, MessageWindow, Origin, OriginVia, RuntimeKind,
+    SearchScope, SessionFilter, SessionId, SessionStatus,
 };
-use galley_core_lib::db::SqliteGalley;
+use galley_core_lib::db::{PersistAssistantMessage, SqliteGalley};
 use sqlx::SqlitePool;
 
 // Migration SQL — same files Tauri's tauri-plugin-sql runs in
@@ -1059,6 +1059,143 @@ async fn backfill_fts_rebuilds_full_index_in_batches() {
         .expect("search last batch");
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].message_id.0, "m01999");
+}
+
+/// One assistant row as Core's turn persistence writes it.
+async fn persist_step(
+    galley: &SqliteGalley,
+    session_id: &str,
+    turn_index: u32,
+    content: &str,
+    final_answer: Option<&str>,
+) {
+    galley
+        .persist_assistant_message(PersistAssistantMessage {
+            session_id: SessionId(session_id.into()),
+            turn_index,
+            content: content.into(),
+            tool_calls: Some(r#"[{"toolName":"code_run"}]"#.into()),
+            tool_results: None,
+            thinking: None,
+            final_answer: final_answer.map(str::to_string),
+            summary: None,
+            preamble: None,
+            visibility: MessageVisibility::Visible,
+            telemetry: None,
+        })
+        .await
+        .expect("assistant row");
+}
+
+/// A conversation with every row shape the index leaves out: a step
+/// that only called a tool (its raw text has a `<summary>` tag), a
+/// silent reply, an images-only message. Turns 0–4.
+async fn write_turns_without_answers(galley: &SqliteGalley, session_id: &str) {
+    let sid = || SessionId(session_id.into());
+    galley
+        .send_message(sid(), "整理下载文件夹".into(), Origin::gui())
+        .await
+        .expect("user words");
+    persist_step(
+        galley,
+        session_id,
+        1,
+        "<summary>扫描下载文件夹</summary>\n先看看有什么。",
+        None,
+    )
+    .await;
+    persist_step(galley, session_id, 2, "<no-reply/>", None).await;
+    galley
+        .send_message(sid(), String::new(), Origin::gui())
+        .await
+        .expect("images-only message");
+    persist_step(galley, session_id, 4, "整理好了。", Some("整理好了。")).await;
+}
+
+async fn gui_hits(galley: &SqliteGalley, query: &str) -> Vec<String> {
+    galley
+        .search_message_hits(query.into(), 50, None, None)
+        .await
+        .expect("search")
+        .into_iter()
+        .map(|hit| hit.message_id)
+        .collect()
+}
+
+/// The index's one rule (2026-11-10 audit): what the live writers put in
+/// is what the backfill counts, so the rows it leaves out no longer make
+/// every launch rebuild the index.
+#[tokio::test]
+async fn backfill_finds_the_live_index_complete_beside_rows_it_leaves_out() {
+    let pool = fresh_pool().await;
+    seed_session(&pool, "sess_live", "live", "idle", "2026-11-10T00:00:00Z").await;
+    let galley = SqliteGalley::from_pool(pool.clone());
+    // The first backfill of a database writes the rule's marker.
+    assert_eq!(galley.backfill_fts_if_empty().await.expect("first"), 0);
+
+    write_turns_without_answers(&galley, "sess_live").await;
+
+    assert_eq!(galley.backfill_fts_if_empty().await.expect("noop"), 0);
+    let bodies: Vec<String> =
+        sqlx::query_scalar("SELECT body FROM messages_fts ORDER BY turn_index")
+            .fetch_all(&pool)
+            .await
+            .expect("index rows");
+    assert_eq!(bodies, ["整理下载文件夹", "整理好了。"]);
+}
+
+/// An index built by an earlier rule (no marker, or an older number) is
+/// rebuilt once even when its counts look complete, which drops the raw
+/// step text the earlier rebuild put in; the next backfill does nothing.
+#[tokio::test]
+async fn backfill_rebuilds_once_an_index_built_by_an_earlier_rule() {
+    for marker in [None, Some(serde_json::json!(0))] {
+        let pool = fresh_pool().await;
+        seed_session(&pool, "sess_old", "old", "idle", "2026-11-10T00:00:00Z").await;
+        let galley = SqliteGalley::from_pool(pool.clone());
+        write_turns_without_answers(&galley, "sess_old").await;
+        // What the earlier rule's rebuild left: the tool-only step's raw
+        // text, so the index holds more rows than the rule counts.
+        sqlx::query(
+            "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
+             VALUES ('msg_sess_old_1_assistant', 'sess_old', 'assistant', 1, \
+                     '<summary>扫描下载文件夹</summary> 先看看有什么。')",
+        )
+        .execute(&pool)
+        .await
+        .expect("earlier rule's row");
+        if let Some(value) = &marker {
+            galley
+                .set_pref_json("search_index_rule", value.clone())
+                .await
+                .expect("older marker");
+        }
+        assert_eq!(gui_hits(&galley, "summary").await.len(), 1, "{marker:?}");
+
+        assert_eq!(
+            galley.backfill_fts_if_empty().await.expect("rebuild"),
+            2,
+            "{marker:?}"
+        );
+        assert!(gui_hits(&galley, "summary").await.is_empty(), "{marker:?}");
+        assert!(gui_hits(&galley, "扫描下载").await.is_empty(), "{marker:?}");
+        assert_eq!(
+            gui_hits(&galley, "整理好了").await,
+            ["msg_sess_old_4_assistant"]
+        );
+        assert_eq!(
+            galley
+                .get_pref_json("search_index_rule")
+                .await
+                .expect("marker"),
+            Some(serde_json::json!(1))
+        );
+        assert_eq!(
+            galley.backfill_fts_if_empty().await.expect("noop"),
+            0,
+            "{marker:?}"
+        );
+    }
 }
 
 #[tokio::test]

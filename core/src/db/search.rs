@@ -12,6 +12,32 @@ const HIDDEN_FROM_GUI_SEARCH: &str = "NOT (m.role = 'user' AND m.created_via IS 
      AND NOT (s.main_chat = 1 AND m.role = 'assistant' \
          AND TRIM(COALESCE(m.final_answer, '')) = '' AND m.content LIKE '%no-reply%')";
 
+/// The search index's one rule, as the rows it holds and the `body` each
+/// one gets, over `messages`: a user row's `content` and an assistant
+/// row's `final_answer` (the words the user reads), when visible and not
+/// blank. So a tool-only step, a silent reply and an images-only message
+/// are not indexed, and no other role is. The launch backfill counts and
+/// rebuilds with it ([`SqliteGalley::backfill_fts_if_empty`]) and every
+/// live writer inserts with it (`write_message_row`,
+/// [`SqliteGalley::index_message_fts`]), so the count only falls short
+/// after a crash. Callers append `AND …` on `id`. Selects the
+/// `messages_fts` columns in order.
+pub(super) const FTS_SOURCE_ROWS: &str = "SELECT id, session_id, role, turn_index, \
+       CASE role WHEN 'user' THEN content WHEN 'assistant' THEN final_answer END AS body \
+     FROM messages \
+     WHERE visibility = 'visible' \
+       AND TRIM(COALESCE(CASE role WHEN 'user' THEN content \
+         WHEN 'assistant' THEN final_answer END, ''), char(32, 9, 10, 13)) != ''";
+
+/// The prefs key holding which rule the index was last rebuilt by, and
+/// that rule's number. A database whose index was built by an earlier
+/// rule (or by none: no key) is rebuilt once at the next backfill, which
+/// then writes the number. 1: [`FTS_SOURCE_ROWS`] (2026-11-10 audit);
+/// until then a rebuild put an assistant row's raw `content` in when it
+/// had no answer.
+const FTS_RULE_PREF: &str = "search_index_rule";
+const FTS_RULE_VERSION: i64 = 1;
+
 impl SqliteGalley {
     /// Sweep the GUI's abandoned "新对话" rows at hydrate. A row counts
     /// as abandoned only when it holds no message at all: `session.new`
@@ -72,27 +98,22 @@ impl SqliteGalley {
         // time) never sit on the write lock long enough to trip the
         // 5s busy_timeout (CONC-4).
         const BATCH_SIZE: i64 = 500;
-        // Which message rows get indexed, and what `body` is. Shared
-        // by the count probe and the batched rebuild; must stay in
-        // sync with `index_message_fts` callers.
-        const FTS_SOURCE_FILTER: &str = "role IN ('user','assistant') \
-               AND visibility = 'visible' \
-               AND COALESCE(NULLIF(TRIM(CASE \
-                 WHEN role = 'user' THEN content \
-                 WHEN role = 'assistant' THEN COALESCE(final_answer, content) \
-               END), ''), '') != ''";
 
-        let msg_cnt: i64 = sqlx::query_scalar(&format!(
-            "SELECT COUNT(*) FROM messages WHERE {FTS_SOURCE_FILTER}"
-        ))
-        .fetch_one(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
+        // Built by this rule, and every row it counts is in: nothing to do.
+        // A missing or unreadable marker counts as an earlier rule.
+        let rule_current = matches!(
+            self.get_pref_json_db(FTS_RULE_PREF).await,
+            Ok(Some(v)) if v == serde_json::json!(FTS_RULE_VERSION)
+        );
+        let msg_cnt: i64 = sqlx::query_scalar(&format!("SELECT COUNT(*) FROM ({FTS_SOURCE_ROWS})"))
+            .fetch_one(&self.pool)
+            .await
+            .map_err(map_sqlx_err)?;
         let fts_cnt: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM messages_fts")
             .fetch_one(&self.pool)
             .await
             .map_err(map_sqlx_err)?;
-        if fts_cnt >= msg_cnt {
+        if rule_current && fts_cnt >= msg_cnt {
             return Ok(0);
         }
 
@@ -123,12 +144,7 @@ impl SqliteGalley {
             // Upper bound of the next batch, computed from the
             // messages PK index outside the write transaction.
             let batch_max: Option<String> = sqlx::query_scalar(&format!(
-                "SELECT MAX(id) FROM ( \
-                   SELECT id FROM messages \
-                   WHERE {FTS_SOURCE_FILTER} \
-                     AND id > ? \
-                   ORDER BY id \
-                   LIMIT ?)"
+                "SELECT MAX(id) FROM ({FTS_SOURCE_ROWS} AND id > ? ORDER BY id LIMIT ?)"
             ))
             .bind(&last_id)
             .bind(BATCH_SIZE)
@@ -158,18 +174,7 @@ impl SqliteGalley {
                 .map_err(map_sqlx_err)?;
             let res = sqlx::query(&format!(
                 "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
-                 SELECT \
-                   id, \
-                   session_id, \
-                   role, \
-                   turn_index, \
-                   CASE \
-                     WHEN role = 'user' THEN content \
-                     WHEN role = 'assistant' THEN COALESCE(final_answer, content) \
-                   END AS body \
-                 FROM messages \
-                 WHERE {FTS_SOURCE_FILTER} \
-                   AND id > ? AND id <= ?"
+                 {FTS_SOURCE_ROWS} AND id > ? AND id <= ?"
             ))
             .bind(&last_id)
             .bind(&batch_max)
@@ -180,6 +185,12 @@ impl SqliteGalley {
 
             total += res.rows_affected() as u32;
             last_id = batch_max;
+        }
+        // Written last, so a rebuild cut short by a crash runs again in
+        // full even if the counts happen to agree.
+        if !rule_current {
+            self.set_pref_json(FTS_RULE_PREF, serde_json::json!(FTS_RULE_VERSION))
+                .await?;
         }
         Ok(total)
     }
@@ -317,28 +328,19 @@ impl SqliteGalley {
             .collect())
     }
 
-    pub(super) async fn index_message_fts(
-        &self,
-        message_id: &str,
-        session_id: &str,
-        role: &str,
-        turn_index: u32,
-        body: &str,
-    ) {
+    /// (Re)index one written row by [`FTS_SOURCE_ROWS`]: its search row
+    /// is replaced, or dropped when the rule leaves the row out.
+    pub(super) async fn index_message_fts(&self, message_id: &str) {
         let res = async {
             sqlx::query("DELETE FROM messages_fts WHERE message_id = ?")
                 .bind(message_id)
                 .execute(&self.pool)
                 .await?;
-            sqlx::query(
-                "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body)
-                 VALUES (?, ?, ?, ?, ?)",
-            )
+            sqlx::query(&format!(
+                "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
+                 {FTS_SOURCE_ROWS} AND id = ?"
+            ))
             .bind(message_id)
-            .bind(session_id)
-            .bind(role)
-            .bind(i64::from(turn_index))
-            .bind(body)
             .execute(&self.pool)
             .await?;
             std::result::Result::<(), sqlx::Error>::Ok(())

@@ -2097,8 +2097,9 @@ async fn the_desktop_search_leaves_out_reports_and_silent_replies() {
     )
     .await;
 
-    // Index every row the way a rebuild does (the silent reply has no
-    // final answer, so only a rebuild puts it in the index).
+    // A rebuild indexes what the live writes did (one rule since the
+    // 2026-11-10 audit): a step with no answer, the silent reply or the
+    // side chat's tool step, is in neither.
     galley.backfill_fts_if_empty().await.expect("rebuild index");
 
     let hits = |query: &'static str| {
@@ -2119,10 +2120,11 @@ async fn the_desktop_search_leaves_out_reports_and_silent_replies() {
         ("s-side".to_string(), "assistant".to_string()),
         ("s-side".to_string(), "user".to_string()),
     ];
-    // The report's text and the silent reply: through the index, and
-    // through the two-character LIKE fallback.
+    // The report's text and the silent reply: through the index (where
+    // the side chat's tool step is not either), and through the
+    // two-character LIKE fallback, which reads raw text.
     assert!(hits("not a message from the user").await.is_empty());
-    assert_eq!(hits("no-reply").await, side_rows);
+    assert_eq!(hits("no-reply").await, side_rows[1..]);
     assert_eq!(hits("ly").await, side_rows);
     assert!(hits("Ga").await.is_empty());
     // Ordinary rows of the main chat are found.

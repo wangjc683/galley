@@ -83,19 +83,18 @@ export async function deleteDemoSessions(): Promise<number> {
 // assistant row's tool_calls / tool_results JSON columns.
 
 /**
- * One-time backfill of messages_fts from existing messages rows.
- * Runs on hydrate when the FTS table is empty but `messages` has
- * content — covers (a) fresh upgrade to the FTS migration, and
- * (b) recovery if the index ever gets out of sync (deleted from
- * SQLite shell, etc.).
+ * Rebuild of messages_fts from existing messages rows, run on hydrate.
+ * Core rebuilds when the index holds fewer rows than the rule counts
+ * (recovery after a crash, or rows deleted from a SQLite shell), and
+ * once when the index was built by an earlier rule (a prefs marker).
+ * Otherwise it returns 0 without touching the index.
  *
- * Idempotent: returns immediately if FTS row count >= eligible
- * message count, so subsequent hydrates skip the scan.
- *
- * Assistant rows index `final_answer` rather than raw `content` —
- * the markdown the user reads, not the response wrapper that
- * contains raw <thinking> blocks (which would inflate the index
- * with text that isn't user-facing).
+ * One rule decides what is indexed, for this rebuild and for every live
+ * write alike: a visible user row's `content` and a visible assistant
+ * row's `final_answer` (the markdown the user reads), when not blank.
+ * A step that only called tools, a silent reply, an images-only
+ * message and system rows are not indexed; raw `content` with its
+ * <thinking> / <summary> blocks never is.
  */
 export async function backfillFtsIfEmpty(): Promise<number> {
   return invoke<number>("backfill_fts_if_empty");

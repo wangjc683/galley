@@ -432,6 +432,9 @@ async fn a_new_main_chat_opens_with_the_greeting_in_the_ui_language() {
 #[tokio::test]
 async fn the_greeting_is_no_turn_and_never_history() {
     let galley = fresh_galley(RuntimeKind::Managed).await;
+    // A first launch's backfill, with nothing to index yet: it writes the
+    // index rule's marker, so the one below goes by the counts alone.
+    assert_eq!(galley.backfill_fts_if_empty().await.unwrap(), 0);
     let rec = Recorder::default();
     let main = main_chat(&galley, &rec).await;
 

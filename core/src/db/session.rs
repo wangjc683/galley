@@ -661,11 +661,10 @@ impl SqliteGalley {
         .execute(&self.pool)
         .await
         .map_err(map_sqlx_err)?;
-        if p.visibility == MessageVisibility::Visible {
-            if let Some(body) = p.final_answer.as_deref().filter(|s| !s.trim().is_empty()) {
-                self.index_message_fts(&id, p.session_id.as_str(), "assistant", p.turn_index, body)
-                    .await;
-            }
+        // The index's rule decides (`FTS_SOURCE_ROWS`); a row with no
+        // answer is one it never holds, so it skips the round trip.
+        if p.visibility == MessageVisibility::Visible && p.final_answer.is_some() {
+            self.index_message_fts(&id).await;
         }
         Ok(())
     }
@@ -1108,11 +1107,8 @@ impl SqliteGalley {
         .rows_affected()
             > 0;
         tx.commit().await.map_err(map_sqlx_err)?;
-        if written && visibility == MessageVisibility::Visible {
-            if let (Some(body), Ok(turn)) = (final_answer.as_deref(), u32::try_from(turn_index)) {
-                self.index_message_fts(&id, session_id.as_str(), "assistant", turn, body)
-                    .await;
-            }
+        if written && visibility == MessageVisibility::Visible && final_answer.is_some() {
+            self.index_message_fts(&id).await;
         }
         Ok(written)
     }

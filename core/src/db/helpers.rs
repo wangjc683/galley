@@ -536,8 +536,8 @@ struct MessageRowWrite {
     visibility: MessageVisibility,
 }
 
-/// Insert one user / system row with its search row, and move the
-/// session's last activity.
+/// Insert one user / system row, with its search row when the index's
+/// rule takes it, and move the session's last activity.
 async fn write_message_row(
     conn: &mut SqliteConnection,
     row: MessageRowWrite,
@@ -579,22 +579,19 @@ async fn write_message_row(
     // the paths that delete messages delete their search rows too (the
     // demo-session sweep leaves some, under ids no session gets again).
     // So there is nothing to delete first, which would scan the whole FTS
-    // table: `message_id` is UNINDEXED.
-    if visibility == MessageVisibility::Visible {
-        let fts_res = sqlx::query(
-            "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
-             VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(&msg_id)
-        .bind(&session_id.0)
-        .bind(role_sql)
-        .bind(next_turn)
-        .bind(&content)
-        .execute(&mut *conn)
-        .await;
-        if let Err(e) = fts_res {
-            eprintln!("[galley-core] index {role_sql} message fts failed: {e}");
-        }
+    // table: `message_id` is UNINDEXED. The index's rule picks what goes
+    // in (`FTS_SOURCE_ROWS`): a visible user row with words; no system
+    // row, no images-only message.
+    let fts_res = sqlx::query(&format!(
+        "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
+         {} AND id = ?",
+        super::search::FTS_SOURCE_ROWS
+    ))
+    .bind(&msg_id)
+    .execute(&mut *conn)
+    .await;
+    if let Err(e) = fts_res {
+        eprintln!("[galley-core] index {role_sql} message fts failed: {e}");
     }
     sqlx::query("UPDATE sessions SET last_activity_at = ?, updated_at = ? WHERE id = ?")
         .bind(&now)
