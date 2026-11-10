@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 use bytes::Bytes;
-use galley_remote_protocol::frame::{Frame, PeerId, Role};
+use galley_remote_protocol::frame::{Frame, PeerId, Role, MAX_FRAME_LEN};
 use galley_remote_protocol::keys::ChannelKey;
 use tokio::sync::{mpsc, Notify};
 
@@ -117,7 +117,7 @@ impl State {
         role: Role,
     ) -> Result<(Registration, mpsc::UnboundedReceiver<Bytes>), Refused> {
         let conn = self.next_conn.fetch_add(1, Ordering::Relaxed);
-        let (outbox, rx) = Outbox::new();
+        let (outbox, rx) = Outbox::new(control_queue_limit(&self.limits));
         let mut table = self.table();
         let peer = match role {
             Role::Host => {
@@ -298,17 +298,37 @@ pub(crate) struct Outbox {
 struct OutboxShared {
     /// Bytes handed to the queue and not yet written to the socket.
     queued: AtomicUsize,
+    /// [`control_queue_limit`]: past it, a control frame closes the
+    /// connection instead of being queued.
+    control_limit: usize,
     /// Signalled after each write, and on kill.
     drained: Notify,
     killed: OnceLock<Close>,
     kill_signal: Notify,
 }
 
+/// How much a connection's queue may hold, control frames included.
+/// Forwarded `DATA` keeps it within one queue's worth
+/// ([`Limits::outbound_queue_bytes`], or one frame when the queue was
+/// empty); control frames may add as much again on top. Ordinary control
+/// traffic (a `PONG` per `PING` every 25 s, a `PEER` per join or leave, a
+/// `PUSH_RESULT` per push with at most
+/// [`Limits::max_pushes_in_flight`] waiting) is a few hundred bytes, so
+/// only a connection that keeps asking for replies it never reads gets
+/// near it.
+fn control_queue_limit(limits: &Limits) -> usize {
+    limits
+        .outbound_queue_bytes
+        .max(MAX_FRAME_LEN)
+        .saturating_mul(2)
+}
+
 impl Outbox {
-    fn new() -> (Self, mpsc::UnboundedReceiver<Bytes>) {
+    fn new(control_limit: usize) -> (Self, mpsc::UnboundedReceiver<Bytes>) {
         let (tx, rx) = mpsc::unbounded_channel();
         let shared = Arc::new(OutboxShared {
             queued: AtomicUsize::new(0),
+            control_limit,
             drained: Notify::new(),
             killed: OnceLock::new(),
             kill_signal: Notify::new(),
@@ -317,12 +337,22 @@ impl Outbox {
     }
 
     /// Queue a small relay-made frame (`PEER`, `PONG`, `PUSH_RESULT`)
-    /// without waiting: these are bounded by the traffic that causes them.
+    /// without waiting. If that takes the queue past
+    /// [`control_queue_limit`], the connection is not reading what it
+    /// asks for (say, `PING`s whose `PONG`s it never reads): it is closed
+    /// as too slow and the frame dropped, as [`Self::push_data`] does
+    /// after a stall.
     pub(crate) fn push_control(&self, bytes: Vec<u8>) {
         if self.is_killed() {
             return;
         }
-        self.shared.queued.fetch_add(bytes.len(), Ordering::AcqRel);
+        let len = bytes.len();
+        let queued = self.shared.queued.fetch_add(len, Ordering::AcqRel) + len;
+        if queued > self.shared.control_limit {
+            self.shared.queued.fetch_sub(len, Ordering::AcqRel);
+            self.kill(Close::TooSlow);
+            return;
+        }
         let _ = self.tx.send(Bytes::from(bytes));
     }
 

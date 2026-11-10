@@ -636,6 +636,61 @@ async fn a_receiver_that_stops_reading_is_closed_as_too_slow() {
     drop(client);
 }
 
+#[tokio::test]
+async fn a_client_that_pings_without_reading_is_closed_as_too_slow() {
+    // The rate limit out of the way, so the flood is quick.
+    let limits = Limits {
+        rate_bytes_per_sec: 1 << 30,
+        burst_bytes: 1 << 30,
+        outbound_queue_bytes: 64 * 1024,
+        ..Limits::default()
+    };
+    let relay = start(limits).await;
+    let s = secret(19);
+    let mut host = join(&relay, Role::Host, &s).await;
+    let mut client = join(&relay, Role::Client, &s).await;
+    assert_eq!(next_frame(&mut host).await, peer(1, true));
+    assert_eq!(next_frame(&mut client).await, peer(0, true));
+    // Pinging and reading the PONGs is fine.
+    for nonce in 0..100u64 {
+        round_trip(&mut client, nonce).await;
+    }
+
+    // From here on the client keeps pinging and never reads: its PONGs
+    // pile up behind the full sockets until the relay closes it.
+    let (mut client_tx, client_rx) = client.split();
+    let flood = tokio::spawn(async move {
+        let ping = Frame::Ping(7).encode().unwrap();
+        'flood: loop {
+            for _ in 0..1000 {
+                if client_tx.feed(Message::binary(ping.clone())).await.is_err() {
+                    break 'flood;
+                }
+            }
+            if client_tx.flush().await.is_err() {
+                break;
+            }
+        }
+        client_tx
+    });
+    // The host hears nothing until the client is gone.
+    let message = timeout(Duration::from_secs(60), host.next())
+        .await
+        .expect("the client that never read its PONGs was never closed")
+        .unwrap()
+        .unwrap();
+    let Message::Binary(bytes) = message else {
+        panic!("host got {message:?}");
+    };
+    assert_eq!(Frame::decode(&bytes).unwrap(), peer(1, false));
+    flood.abort();
+    let m = metrics(&relay).await;
+    assert_eq!(m["errors"]["slow_consumer"], 1);
+    // The host, which reads, is untouched.
+    round_trip(&mut host, 1).await;
+    drop(client_rx);
+}
+
 struct FixedApns(ApnsResponse);
 
 #[async_trait]

@@ -1,7 +1,8 @@
 //! `galley-relay`: run the relay. See `relay/README.md`.
 
+use std::ffi::OsString;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
 
@@ -36,9 +37,11 @@ struct Cli {
 #[derive(Debug, clap::Args)]
 struct ApnsArgs {
     /// Path of the APNs auth key (`.p8`, PKCS#8 P-256, from the Apple
-    /// developer account).
+    /// developer account). An `OsString`, not a `PathBuf`: clap refuses
+    /// an empty path, and a blank value has to reach
+    /// `ApnsConfig::from_settings` to count as not set.
     #[arg(long, env = "GALLEY_RELAY_APNS_KEY_PATH")]
-    apns_key_path: Option<PathBuf>,
+    apns_key_path: Option<OsString>,
     /// Key ID of that key.
     #[arg(long, env = "GALLEY_RELAY_APNS_KEY_ID")]
     apns_key_id: Option<String>,
@@ -54,7 +57,7 @@ impl ApnsArgs {
     /// The sender these settings ask for; an error refuses to start.
     fn sender(&self) -> Result<Arc<dyn ApnsSender>, String> {
         let config = ApnsConfig::from_settings(
-            self.apns_key_path.as_deref(),
+            self.apns_key_path.as_deref().map(Path::new),
             self.apns_key_id.as_deref(),
             self.apns_team_id.as_deref(),
             self.apns_topic.as_deref(),
@@ -68,8 +71,12 @@ impl ApnsArgs {
         }
     }
 
+    /// After [`Self::sender`] succeeded: a key path that is not blank
+    /// means all four are set.
     fn is_configured(&self) -> bool {
-        self.apns_key_path.is_some()
+        self.apns_key_path
+            .as_ref()
+            .is_some_and(|path| !path.is_empty())
     }
 }
 
@@ -149,4 +156,32 @@ async fn shutdown_signal() {
         let _ = tokio::signal::ctrl_c().await;
     }
     eprintln!("galley-relay: shutting down");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// relay/README.md: a blank value counts as not set, for the key path
+    /// too (an empty line in a systemd `EnvironmentFile`).
+    #[test]
+    fn a_blank_apns_key_path_counts_as_not_set() {
+        let flags = ["galley-relay", "--apns-key-path", "", "--apns-key-id", " "];
+        let cli = Cli::try_parse_from(flags).expect("a blank key path parses");
+        assert!(cli.apns.sender().is_ok());
+        assert!(!cli.apns.is_configured());
+
+        // The same through the environment, as systemd passes it. The only
+        // test in this binary that touches the variable.
+        std::env::set_var("GALLEY_RELAY_APNS_KEY_PATH", "");
+        let parsed = Cli::try_parse_from(["galley-relay"]);
+        std::env::remove_var("GALLEY_RELAY_APNS_KEY_PATH");
+        let cli = parsed.expect("a blank key path from the environment parses");
+        assert!(cli.apns.sender().is_ok());
+        assert!(!cli.apns.is_configured());
+
+        // A partial set still refuses to start.
+        let partial = Cli::try_parse_from(["galley-relay", "--apns-key-id", "KEYID12345"]).unwrap();
+        assert!(partial.apns.sender().is_err());
+    }
 }

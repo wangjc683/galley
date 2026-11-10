@@ -447,9 +447,11 @@ impl RemoteModule {
     }
 
     /// Unpair every phone: tell the connected ones (`CLOSE Unpaired`),
-    /// stop, and delete the master key (and drop a pending one). A later
-    /// [`Self::pair`] makes a new key, so every phone has to scan again
-    /// (design §3.1).
+    /// stop, forget their push devices, and delete the master key (and
+    /// drop a pending one). A later [`Self::pair`] makes a new key, so
+    /// every phone has to scan again (design §3.1) and register for pushes
+    /// again: an unpaired phone could not open a push sealed with the new
+    /// key. The push `seq` stays, so it never goes backwards.
     pub async fn unpair(&self) -> Result<(), RemoteError> {
         let mut slot = self.shared.pairing.lock().await;
         if let Some(pending) = slot.take() {
@@ -460,6 +462,9 @@ impl RemoteModule {
             s.pairing = false;
             s.pairing_error = None;
         });
+        // Devices before the key: if this fails, the pairing is still
+        // whole and unpairing can be tried again.
+        push::forget_push_devices(&self.shared.deps.galley).await?;
         remote_pairing::clear_master_key(&self.shared.deps.galley).await?;
         self.shared.status.update(|s| s.paired = false);
         Ok(())

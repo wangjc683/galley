@@ -27,7 +27,7 @@ use galley_core_lib::db::{PersistAssistantMessage, SqliteGalley};
 use galley_core_lib::ipc::IpcCommand;
 use galley_core_lib::notify::Notifier;
 use galley_core_lib::remote::{
-    push::{push_devices, PUSH_DEVICES_PREF},
+    push::{next_push_seq, push_devices, PUSH_DEVICES_PREF, PUSH_SEQ_PREF},
     resolve_relay_url, RemoteConfig, RemoteDeps, RemoteModule, RemoteStatus, RemoteTuning,
     SESSION_NOT_MANAGED,
 };
@@ -964,6 +964,15 @@ async fn unpairing_closes_phones_and_forgets_the_key() {
     let (fx, keys) = Fixture::paired(fast()).await;
     let mut phone = fx.phone(&keys).await;
     wait_until(|| fx.module.status().online_phones == 1).await;
+    phone
+        .call::<phone::DeviceRegisterPush>(&phone::RegisterPushParams {
+            token: "AABBCC".into(),
+            env: PushEnv::Sandbox,
+        })
+        .await
+        .unwrap();
+    assert_eq!(push_devices(&fx.galley).await.unwrap().len(), 1);
+    let seq = next_push_seq(&fx.galley).await.unwrap();
 
     fx.module.unpair().await.unwrap();
     assert_eq!(phone.expect_close().await, CloseReason::Unpaired);
@@ -971,6 +980,17 @@ async fn unpairing_closes_phones_and_forgets_the_key() {
         .await
         .unwrap()
         .is_none());
+    // The phone's push token goes with the key (a push sealed with the
+    // next pairing's key would reach it unreadable); the counter stays.
+    assert!(push_devices(&fx.galley).await.unwrap().is_empty());
+    assert_eq!(
+        fx.galley
+            .get_pref_json(PUSH_SEQ_PREF)
+            .await
+            .unwrap()
+            .and_then(|value| value.as_u64()),
+        Some(seq)
+    );
     assert_eq!(
         fx.module.status(),
         RemoteStatus {

@@ -95,6 +95,13 @@ pub async fn remove_push_device(galley: &SqliteGalley, token: &str) -> Result<bo
     Ok(true)
 }
 
+/// Forget every registered device (unpairing,
+/// [`super::RemoteModule::unpair`]). The push `seq` stays.
+pub async fn forget_push_devices(galley: &SqliteGalley) -> Result<()> {
+    let _turn = PREFS_LOCK.lock().await;
+    store_devices(galley, &[]).await
+}
+
 /// The next push `seq`: `max(last + 1, now in ms)`, stored before it is
 /// used, so it never goes backwards — not across restarts, and not below
 /// what a phone has seen even if the pref is lost (design §4.3).
