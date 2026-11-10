@@ -4,7 +4,7 @@
 > with [architecture](./architecture.md).
 
 > **Purpose**: M9 T9.1 / A13 acceptance deliverable.
-> **Status**: v0.2.0 shipped, 2026-05-31; invariants re-verified against the 0.3.x tree 2026-07-11 (code references use file + symbol, not line numbers — lines rot).
+> **Status**: v0.2.0 shipped, 2026-05-31; invariants re-verified against the 0.3.x tree 2026-07-11; grep gates rewritten for Rule 2 as it stands and re-run 2026-11-10 (code references use file + symbol, not line numbers — lines rot).
 > **Scope**: 把 v0.2 / B-phase 的 4 个架构不变量逐条 demo 到具体代码位置 + grep / 测试可验证项。
 > [AGENTS.md](../AGENTS.md) 是完整项目宪法；本文件只覆盖这 4 个 verification-facing invariants。
 
@@ -12,11 +12,16 @@
 
 ## 1. Localhost only
 
-> Galley Core 永远只 listen on AF_UNIX socket / named pipe，不开 TCP，不持有 token。
+> Galley Core 只在 AF_UNIX socket / named pipe 上接受本地控制，不开 TCP / HTTP 监听，不持有远程登录 token。
 >
-> 2026-10：宪法 Rule 2 改名「Core Never Listens On The Network」，本不变量不变——Core 仍不监听；
-> 新增的远程模块只向外连接（[iOS 客户端](../.scratch/ios-client/PRD.md)），落地时在此补「无 TCP 监听」的 grep 门禁。
-> 远程访问通过 Supervisor Agent 在外部传输层完成，**不是 Galley 的责任**。
+> 2026-10：宪法 Rule 2 改名「Core Never Listens On The Network」，本不变量不变——Core 仍不监听。
+> 远程访问走 Galley 自己的远程模块（[iOS 客户端](../.scratch/ios-client/PRD.md)，[`core/src/remote/`](../core/src/remote/mod.rs)）：
+> 它跑在 Core 进程里，从桌面向外连接 relay，端到端加密，只和桌面上配对过的设备说话；relay 只见密文与路由元数据，不能发命令。
+> IM bot、SSH 等仍是受支持的传输，但已不是唯一的远程路径。
+>
+> 2026-10-20：唯一的窄例外是用户发起的 Sign in with ChatGPT——登录待完成期间，OAuth 回环回调可开一个绑定 `127.0.0.1`、
+> 临时端口的一次性 HTTP 监听，只收一次 `state` 匹配的回调就关闭、会超时
+> （[`core/src/chatgpt_siwc/callback.rs`](../core/src/chatgpt_siwc/callback.rs)）。下面的门禁只放行这一处监听和远程模块的向外连接。
 
 ### Code references
 
@@ -32,20 +37,32 @@
 ### Grep gates (all should return 0)
 
 ```bash
-# No TCP listener
-grep -rn "TcpListener\|TcpStream\|0\.0\.0\.0" core/src/ | grep -v "test\|//"
+# No TCP listener outside the Sign in with ChatGPT loopback callback (Rule 2 exception)
+grep -rn "TcpListener" core/src/ | grep -v "^core/src/chatgpt_siwc/callback.rs:" | grep -v "test\|//"
 
-# No HTTP server / token machinery
+# ...and that one binds 127.0.0.1 only
+grep -n "TcpListener::bind" core/src/chatgpt_siwc/callback.rs | grep -v "Ipv4Addr::LOCALHOST"
+
+# TcpStream only in that callback (its accepted loopback connection) and the
+# remote module's outbound WSS connection
+grep -rn "TcpStream" core/src/ | grep -v "^core/src/chatgpt_siwc/callback.rs:\|^core/src/remote/" | grep -v "test\|//"
+
+# No wildcard bind
+grep -rn "0\.0\.0\.0" core/src/ | grep -v "test\|//"
+
+# No HTTP server framework
 grep -rn "http_server\|tokio::net::TcpListener\|axum\|warp\|actix" core/src/ | grep -v "test\|//"
-
-# No JWT / OAuth / API key handling
-grep -rin "jwt\|oauth\|api[_-]key\|bearer" core/src/ | grep -v "//\|test"
 ```
+
+The old `jwt|oauth|api_key|bearer` gate is retired: Sign in with ChatGPT and
+provider API keys (`credential_store.rs`) are outbound credentials Galley
+holds for the user, a product feature since 2026-10. What Rule 2 forbids is a
+remote login *into* Core, and the listener gates above cover that.
 
 ### Tests demonstrating principle
 
 - [`core/tests/socket_listener_test.rs`](../core/tests/socket_listener_test.rs) — transport tests drive the AF_UNIX/named-pipe path only; no TCP fallback exists to test
-- B2 M3 sub-plan §1.3 explicitly rejects TCP variant; AGENTS.md § Localhost Only codifies invariant
+- B2 M3 sub-plan §1.3 explicitly rejects TCP variant; AGENTS.md Rule 2「Core Never Listens On The Network」codifies invariant
 
 ---
 
@@ -56,7 +73,7 @@ grep -rin "jwt\|oauth\|api[_-]key\|bearer" core/src/ | grep -v "//\|test"
 
 ### Code references
 
-- **Schema version constant**: `SCHEMA_VERSION` in [`core/src/protocol/`](../core/src/protocol/envelope.rs) — the single home since 2026-07-11; `cli/src/common.rs` and `core/src/socket_listener/` both re-export it. Frozen at `1` since M6 (2026-05-20)
+- **Schema version constant**: `SCHEMA_VERSION` in [`core/src/protocol/`](../core/src/protocol/envelope.rs) — the single home since 2026-07-11; `cli/src/common.rs` and `core/src/socket_listener/` both re-export it. `3` since 2026-10-13; `ACCEPTED_SCHEMA_VERSIONS` (`1`, `2`, `3`) are still served for unchanged commands
 - **`--schema=N` global CLI flag** — clap global flag; mismatch → exit 2 with `schema_mismatch:` prefix
 - **Exit code categorization** — `exit_code_for` in [`cli/src/common.rs`](../cli/src/common.rs); wire-tag → error-class mapping is `galley_error_for_tag` in [`cli/src/client.rs`](../cli/src/client.rs) (exhaustive match over the shared `ErrorTag` enum). Per [agent-api.md §1.1](./agent-api.md):
   - 0 = success
@@ -66,17 +83,17 @@ grep -rin "jwt\|oauth\|api[_-]key\|bearer" core/src/ | grep -v "//\|test"
   - 4 = db_unavailable (Galley Core not running)
   - 5 = runner_error (B4 M1 — bridge unreachable / IPC dispatch failure)
 - **Error enum stable identifiers** — [`core/src/error.rs`](../core/src/error.rs) `GalleyError` 5 variants with stable snake_case tag via serde `#[serde(tag = "error", rename_all = "snake_case")]`; the full wire-tag set is `ErrorTag` in [`core/src/protocol/error_tag.rs`](../core/src/protocol/error_tag.rs)
-- **Origin enum stable** — [`core/src/api/origin.rs`](../core/src/api/origin.rs) `OriginVia { Gui, Cli, Supervisor, System }` SQL CHECK constraint pinned
+- **Origin enum stable** — [`core/src/api/origin.rs`](../core/src/api/origin.rs) `OriginVia { Gui, Cli, Supervisor, System, Subtask }`; the SQL CHECK constraint pins the four stored values (a subtask is stored as `system`)
 
 ### Document references
 
 - [`docs/agent-api.md`](./agent-api.md) §1 stability promise + §1.1 stable identifier sets + §1.2 schema pin pattern + §6 unified flat error envelope `{error, message}`
-- [`docs/agent-api.md`](./agent-api.md) §7 banner: `STATUS: FROZEN for v0.2.0`
+- [`docs/agent-api.md`](./agent-api.md) §7 Versioning: `schemaVersion: 3` current, `1` (frozen) and `2` served for unchanged commands
 
 ### Tests demonstrating principle
 
 - [`cli/tests/cli_test.rs`](../cli/tests/cli_test.rs) schema pin tests (added M6, 2 tests)
-- [`cli/tests/m1_writes.rs`](../cli/tests/m1_writes.rs) 17 tests cover all 11 M1 write commands' exit code categorization
+- [`cli/tests/m1_writes.rs`](../cli/tests/m1_writes.rs) covers the M1 write commands' exit code categorization
 - [`core/tests/socket_listener_test.rs`](../core/tests/socket_listener_test.rs) `schema_mismatch_returns_error` + `unknown_command_returns_error`
 
 ---
@@ -95,21 +112,19 @@ grep -rin "jwt\|oauth\|api[_-]key\|bearer" core/src/ | grep -v "//\|test"
 
 ### Code references — 不存的（supervisor conversation）
 
-- **No `supervisor_chat` / `conversation_log` / `dialogue_history` table** — verify by listing migrations:
+- **No `supervisor_chat` / `conversation_log` / `dialogue_history` table** — verify by listing the tables the migrations create:
   ```bash
-  ls core/migrations/
-  # 001_init.sql 002_add_has_unread.sql 003_add_message_summary.sql
-  # 004_add_messages_fts.sql 005_add_message_preamble.sql
-  # 006_messages_origin.sql 007_sessions_origin.sql
+  grep -rhoiE "CREATE (VIRTUAL )?TABLE (IF NOT EXISTS )?[a-z_]+" core/migrations/ | awk '{print $NF}' | sort -u
   ```
-  None of these create supervisor-conversation storage.
+  None of them is supervisor-conversation storage.
 - **No Galley → supervisor pull** — Galley CLI / socket has zero command that fetches supervisor-side state (Claude session / GA conversation history / IM messages)
 
 ### Grep gates (all should return 0)
 
 ```bash
 # No supervisor chat persistence table / schema
-grep -rn "supervisor_chat\|conversation_log\|supervisor_history\|im_messages" core/src/ core/migrations/
+# (-w: whole words, so GA's `trim_messages_history` in a migration comment does not match)
+grep -rnw "supervisor_chat\|conversation_log\|supervisor_history\|im_messages" core/src/ core/migrations/
 ```
 
 ### Document references
@@ -144,10 +159,10 @@ submodules, untracked symlinks, size limits, and disabled external filters.
 
 ### Code references — Rust 持有权威
 
-- **SQLite writes via trait** — [`core/src/api.rs`](../core/src/api.rs) `GalleyApi` trait with 17 trait methods spanning sessions / messages / projects / origin
+- **SQLite writes via trait** — [`core/src/api.rs`](../core/src/api.rs) `GalleyApi` trait whose methods span sessions / messages / projects / origin and the later command families
 - **Trait impl** — [`core/src/db/`](../core/src/db/mod.rs) `SqliteGalley` is the only writer with `SqlitePool` connection
 - **Bridge subprocess ownership** — [`core/src/runner_manager/manager.rs`](../core/src/runner_manager/manager.rs) `RunnerManager` owns `tokio::process::Child` handles; B2 prototype pattern productionized
-- **Session lifecycle** — [`core/src/runner_manager/process.rs`](../core/src/runner_manager/process.rs) `BridgeProcess` Drop sends SIGKILL on unwind panic (B2 invariant I11)
+- **Session lifecycle** — [`core/src/runner_manager/process.rs`](../core/src/runner_manager/process.rs) `RunnerProcess`: the child is spawned with `kill_on_drop(true)`, so its `Drop` SIGKILLs the child on an unwinding panic (B2 invariant I11)
 - **Command dispatch** — `dispatch_line_with` in [`core/src/socket_listener/mod.rs`](../core/src/socket_listener/mod.rs) routes CLI commands to the same `GalleyApi` trait surface as Tauri commands; handlers receive dependencies via `HandlerCtx` (2026-07-11 seam, see `socket_listener/ctx.rs`)
 
 ### Code references — 前端是 presenter
@@ -161,13 +176,12 @@ submodules, untracked symlinks, size limits, and disabled external filters.
 ### Grep gates (all should return 0)
 
 ```bash
-# No GUI-side direct SQL write outside lib/db.ts (which itself is a thin
-# wrapper over tauri-plugin-sql; B3 M5 verified zero direct UPDATE/INSERT
-# from store slices on the write path).
+# No GUI-side direct SQL write (lib/db.ts only wraps Core Tauri commands via
+# `invoke`; the GUI holds no SQLite connection).
 grep -rn "execute.*UPDATE\|execute.*INSERT\|execute.*DELETE" gui/src/stores/ gui/src/components/
 
-# No GUI-side Python subprocess
-grep -rn "Command::new.*python\|spawn.*workbench_bridge" gui/src/ | grep -v "//\|test"
+# No GUI-side Python subprocess (the last filter drops ` * ` doc-comment lines)
+grep -rn "Command::new.*python\|spawn.*workbench_bridge" gui/src/ | grep -v "//\|test" | grep -vE "^[^:]+:[0-9]+: *\*"
 
 # No GUI-side authoritative state (useAppStore.ts removed)
 test ! -f gui/src/stores/useAppStore.ts || echo "FAIL: useAppStore.ts still exists"
@@ -175,7 +189,7 @@ test ! -f gui/src/stores/useAppStore.ts || echo "FAIL: useAppStore.ts still exis
 
 ### Tests demonstrating principle
 
-- **Rust workspace tests** — `cargo test --workspace` 180/180 cover trait + runner_manager + socket_listener
+- **Rust workspace tests** — `cargo test --workspace` covers trait + runner_manager + socket_listener
 - **GUI typecheck/lint** — `pnpm typecheck && pnpm lint` clean; React 19 strict mode enforced
 - **B3 completion devlog** — [`docs/devlog/2026-05-20-b3-store-slice-complete.md`](./devlog/2026-05-20-b3-store-slice-complete.md) documents the migration: 6 slices + 1 lib/hydrate orchestrator replacing 1431-line useAppStore.ts
 
@@ -190,14 +204,14 @@ test ! -f gui/src/stores/useAppStore.ts || echo "FAIL: useAppStore.ts still exis
 ## 5. Cross-cutting verification (one command per principle)
 
 ```bash
-# Principle 1 — Localhost only
-! grep -rn "TcpListener" core/src/ | grep -v "//\|test"
+# Principle 1 — Localhost only (the SIWC loopback callback is the one allowed listener)
+! grep -rn "TcpListener" core/src/ | grep -v "^core/src/chatgpt_siwc/callback.rs:" | grep -v "//\|test"
 
-# Principle 2 — CLI contract surface frozen
-grep -q 'FROZEN' docs/agent-api.md
+# Principle 2 — CLI contract surface versioned (one schema constant)
+grep -qE "^pub const SCHEMA_VERSION: u32 = [0-9]+;" core/src/protocol/envelope.rs
 
 # Principle 3 — No supervisor conversation persistence
-! grep -rn "supervisor_chat\|conversation_log" core/src/ core/migrations/
+! grep -rnw "supervisor_chat\|conversation_log" core/src/ core/migrations/
 
 # Principle 4 — Path B (no GUI authoritative state)
 ! test -f gui/src/stores/useAppStore.ts

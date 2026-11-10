@@ -20,9 +20,7 @@ Galley GUI (Tauri/React)        Galley CLI (Rust)
                        |
                        v
           Runner processes (Python, one per session)
-                       |
-                       v
-              GenericAgent subprocesses
+          - GenericAgent imported and run in-process
 ```
 
 ## Design Goals
@@ -135,9 +133,10 @@ retired, so neither reaches the drain task as `RunSignal::Closed` (which
 would release the run gate Core's send reserved before calling ensure)
 nor a page as `runner-closed` (which would tear down the listeners of the
 page waiting on this ensure). A held runner that exits and is not
-replaced is announced when the ensure lets go. Socket `session send` is
-unchanged: with no runner it only
-persists (ADR-0002, ruling 1 of the ticket).
+replaced is announced when the ensure lets go. Socket `session send`
+without `ensureRunner` is unchanged: with no runner it only persists
+(ADR-0002, ruling 1 of the ticket); with it, Core ensures a runner first
+(ADR-0003, 2026-10-16).
 
 The main chat is the one session whose runner holds less than its whole
 conversation (ticket 03a, [`segment.rs`](../core/src/session_runner/segment.rs)):
@@ -329,8 +328,9 @@ session's whole live `RunState` — runner registered, mid-turn, run gate
 open, queue length, `ask_user` pending, last exit — whenever it changes,
 deduplicated per session. One publisher task reads the state afresh for
 each reported change, so the last event is always the current state and
-bursts collapse; a change undone before it reads may not appear. The GUI
-does not listen yet.
+bursts collapse; a change undone before it reads may not appear. In the
+GUI the to-do panel re-reads on it (`TODO_REFRESH_EVENTS` in
+`gui/src/lib/assistant-todo.ts`).
 
 A message or session a human created through an app also records which
 app: `messages.client` / `sessions.client` (migration 043), `desktop` from
@@ -371,10 +371,11 @@ the [devlog](./devlog/2026-10-07-core-owned-turn-persistence.md).
 ### Runner
 
 The runner lives in `runner/`. It is the Python bridge into GenericAgent. It
-starts GA as a child process, registers supported hooks, captures events, and
-keeps the integration non-invasive.
+imports GA and runs it in-process, registers supported hooks, captures events,
+and keeps the integration non-invasive.
 
-Each Galley session maps to its own GenericAgent subprocess.
+Core starts one runner process per Galley session; each runner holds that
+session's own GenericAgent instance.
 
 Core also owns long-lived runner processes that are not sessions, all
 managed-runtime only and all spawned, restarted and stopped by Core:
@@ -393,8 +394,14 @@ Galley Core accepts local control through:
 - AF_UNIX socket on macOS/Linux
 - Windows named pipe on Windows
 
-It does not expose a TCP server, HTTP API, token auth, OAuth flow, or remote
-login. Remote access goes through Core's own remote module
+It does not expose a TCP server, HTTP API, token auth, or remote login. The
+one narrow exception is Sign in with ChatGPT: while a sign-in the user started
+is pending, its OAuth loopback redirect gets a one-shot HTTP listener bound to
+`127.0.0.1` on an ephemeral port
+([`core/src/chatgpt_siwc/callback.rs`](../core/src/chatgpt_siwc/callback.rs)),
+which accepts one callback whose `state` matches and then closes
+([constitution Rule 2](../AGENTS.md#2-core-never-listens-on-the-network)).
+Remote access goes through Core's own remote module
 ([`core/src/remote`](../core/src/remote/mod.rs), ticket 05b), which connects
 outward to the relay over WSS and talks only to devices paired on the
 desktop, each over its own end-to-end Noise session (constitution Rule 2,
