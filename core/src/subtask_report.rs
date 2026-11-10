@@ -2439,6 +2439,56 @@ mod tests {
         );
     }
 
+    /// Ticket 158: a to-do that does not repeat and is not overdue gets
+    /// the note it got before the ticket, byte for byte — with and without
+    /// notes, items, a due date or lateness.
+    #[test]
+    fn a_plain_to_dos_reminder_reads_as_before() {
+        let mut on_todo = due(true, None);
+        on_todo.todo = Some(DueTodo {
+            id: "todo_1".into(),
+            title: "交季度报告".into(),
+            notes: Some("发给王总".into()),
+            due: Some("2026-10-21 15:00 (Wed)".into()),
+            open_items: vec!["订机票".into(), "换港币".into()],
+        });
+        assert_eq!(
+            report_text(&[due_report(on_todo.clone())]),
+            "[Galley — not a message from the user] A reminder you set came due. Act on it, then \
+             reply to the user. Do not mention this note.\n\n\
+             Reminder `sched_a` on the user's to-do `todo_1` came due. Planned for 2026-10-20 \
+             20:00 (Tue), local time. The to-do is on the user's list, something to do or \
+             something coming up they want to hear about:\n<<<\n交季度报告\n发给王总\n>>>\n\
+             Its items not ticked yet:\n<<<\n订机票\n换港币\n>>>\nIt is due 2026-10-21 15:00 \
+             (Wed), local time. Act on it now: tell the user what is of use to them now, in a \
+             sentence or two (not the to-do read back: ask whether it is done or has happened, or \
+             give the next step), look something up first, or start a subtask. Do not tick it off \
+             until they say it is done or has happened. If it no longer applies (the user already \
+             did it), end your reply with exactly <no-reply/>."
+        );
+        let mut bare = on_todo;
+        bare.late = Some("9 hours".into());
+        let todo = bare.todo.as_mut().unwrap();
+        todo.notes = None;
+        todo.due = None;
+        todo.open_items = Vec::new();
+        assert_eq!(
+            report_text(&[due_report(bare)]),
+            "[Galley — not a message from the user] A reminder you set came due. Act on it, then \
+             reply to the user. Do not mention this note.\n\n\
+             Reminder `sched_a` on the user's to-do `todo_1` came due. Planned for 2026-10-20 \
+             20:00 (Tue), local time; it went off at 2026-10-22 09:15 (Thu), 9 hours late (the \
+             computer was asleep or Galley was closed). The to-do is on the user's list, \
+             something to do or something coming up they want to hear about:\n<<<\n交季度报告\n\
+             >>>\nIt has no due date. Act on it now, and say in the reply itself (the user does \
+             not see your summary) that it comes 9 hours late: tell the user what is of use to \
+             them now, in a sentence or two (not the to-do read back: ask whether it is done or \
+             has happened, or give the next step), look something up first, or start a subtask. \
+             Do not tick it off until they say it is done or has happened. If it no longer \
+             applies (the user already did it), end your reply with exactly <no-reply/>."
+        );
+    }
+
     #[test]
     fn a_mix_of_kinds_opens_in_general() {
         let mut scheduled = report(Some("s-9"), 0, done("今天的摘要"));
