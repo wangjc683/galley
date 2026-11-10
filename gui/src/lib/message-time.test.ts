@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   calendarDaysBefore,
@@ -9,6 +9,7 @@ import {
   formatMessageTime,
   formatMessageTimeFull,
   formatPastDay,
+  localFileStamp,
   userTimeMarks,
   type MessageTimeDayWords,
 } from "@/lib/message-time";
@@ -608,5 +609,26 @@ describe("formatPastDay (the 备忘 page's group headings, ticket 97)", () => {
 
   it("reads a day after today (a skewed clock) as today", () => {
     expect(zh(local(2026, 10, 17, 9))).toBe("今天");
+  });
+});
+
+describe("localFileStamp", () => {
+  const savedTz = process.env.TZ;
+  afterEach(() => {
+    if (savedTz === undefined) delete process.env.TZ;
+    else process.env.TZ = savedTz;
+  });
+
+  it("stamps the local date just after midnight in a zone ahead of UTC", () => {
+    // Node applies a TZ assigned at runtime to later Date calls.
+    process.env.TZ = "Asia/Shanghai";
+    const justAfterMidnight = local(2026, 11, 10, 0, 30, 5);
+    // 16:30 the day before in UTC: the stamp must not follow it.
+    expect(justAfterMidnight.toISOString()).toBe("2026-11-09T16:30:05.000Z");
+    expect(localFileStamp(justAfterMidnight)).toBe("20261110-003005");
+  });
+
+  it("pads every field to two digits", () => {
+    expect(localFileStamp(local(2026, 1, 2, 3, 4, 5))).toBe("20260102-030405");
   });
 });

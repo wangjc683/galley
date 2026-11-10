@@ -135,6 +135,17 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+/**
+ * `YYYYMMDD-hhmmss` on the local clock, for default filenames (a saved
+ * reply, a saved image): the stamp reads as the time the user sees,
+ * not UTC. One dash between date and time so the name scans.
+ */
+export function localFileStamp(date: Date = new Date()): string {
+  const day = `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}`;
+  const clock = `${pad2(date.getHours())}${pad2(date.getMinutes())}${pad2(date.getSeconds())}`;
+  return `${day}-${clock}`;
+}
+
 // English follows English habits: Intl's en-US defaults, 12-hour clock.
 const EN_TIME = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",

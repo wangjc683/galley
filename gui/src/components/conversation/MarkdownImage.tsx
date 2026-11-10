@@ -13,6 +13,7 @@ import {
   localPathFromMarkdownImageSrc,
   localPathToAssetSrc,
 } from "@/lib/markdown-image-src";
+import { localFileStamp } from "@/lib/message-time";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/ui";
 import { makeAppError } from "@/types/app-error";
@@ -312,12 +313,7 @@ function stripFilenameControlChars(value: string): string {
 }
 
 function fallbackImageFilename(extension: string): string {
-  const stamp = new Date()
-    .toISOString()
-    .slice(0, 19)
-    .replace(/[-:T]/g, "")
-    .replace(/^(\d{8})(\d{6})$/, "$1-$2");
-  return `galley-image-${stamp}.${extension}`;
+  return `galley-image-${localFileStamp()}.${extension}`;
 }
 
 function errorMessage(error: unknown): string {
