@@ -7,7 +7,7 @@ Blocked by: 无
 
 ## 工作位置（硬约束）
 
-- **只在 worktree 里工作**：`/private/tmp/claude-501/-Users-inkstone-Documents-genericagent-webui/ab7a31ac-a0f8-4206-b6ee-0c4affeea868/scratchpad/wt-remove-goal`（下称 `$WT`）。
+- **只在 worktree 里工作**：一个工单 worktree（下称 `$WT`）。
   所有命令都在 `$WT` 下跑，路径都用 `$WT/...`。
 - **绝不碰主工作树** `~/Documents/genericagent-webui`：JC 的 `pnpm tauri dev` 常驻在那里，改它会触发重编、杀掉在跑的会话。
 - **不跑 `tauri dev`**，不 commit，不 push，不改别的票的域（`gui/`、`runner/`、`managed-ga/`、`docs/`、`README*`、
