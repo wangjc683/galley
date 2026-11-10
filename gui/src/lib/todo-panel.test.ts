@@ -350,14 +350,15 @@ describe("a to-do's second line (ruling 97)", () => {
       expect(todoMetaParts(fortnight, false, TODAY, "en-US", en)[1].title).toBe(
         "Repeats every 2 weeks on Mon, Thu",
       );
-      // Overdue, the rule after the warning.
+      // Overdue, the rule after the warning, in full: 「逾期 4 天」 does
+      // not say which day.
       const late = todo({
         ...weekly,
         due: { date: "2026-10-12", hasTime: false },
         reminder: undefined,
         overdue: true,
       });
-      expect(marks(late)).toEqual(["逾期 4 天", "↻每周"]);
+      expect(marks(late)).toEqual(["逾期 4 天", "↻每周一"]);
     });
 
     it("says none on a to-do that does not repeat, one checked or one cancelled", () => {
@@ -388,7 +389,7 @@ describe("a to-do's second line (ruling 97)", () => {
       });
       expect(marks(overdue)).toEqual([
         "逾期 4 天",
-        "↻每周",
+        "↻每周一",
         "🔔10月26日 09:00",
       ]);
       // Under a rule that records no reminder Core moves none on: a

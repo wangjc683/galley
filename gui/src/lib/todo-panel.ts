@@ -233,7 +233,9 @@ export function todoOverdueDays(
  * 09:00」, 「提前 2 天 09:00」, 「提前 1 周 09:00」, the clock alone on the
  * day — rather than with a day of its own (「11月19日 09:00」). Not the
  * clock alone: the clock alone already means the due day itself. A to-do
- * that does not repeat reads as before, word for word.
+ * that does not repeat reads as before, word for word. Overdue by a day or
+ * more the rule is in full again (「逾期 3 天 ↻ 每周五」): the part before it
+ * no longer says the day, so the short words would leave out which.
  */
 export function todoMetaParts(
   item: TodoItem,
@@ -258,8 +260,10 @@ export function todoMetaParts(
   const rule = item.todoRepeat;
   const repeating = rule !== undefined && !checked && !todoCancelled(item);
   if (repeating) {
+    // 「逾期 N 天」 says no day: the rule says it, in full (ticket 159).
+    const dayShown = overdue === null || overdue < 1;
     parts.push({
-      text: todoRepeatLineWords(rule, due?.date, copy),
+      text: todoRepeatLineWords(rule, dayShown ? due?.date : undefined, copy),
       tone: "muted",
       repeat: true,
       title: copy.todo.repeats(todoRepeatWords(rule, copy)),
