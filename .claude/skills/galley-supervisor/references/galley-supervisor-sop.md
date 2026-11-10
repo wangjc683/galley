@@ -6,7 +6,7 @@ self-contained when installed at ~/.claude/skills/.
 CANONICAL SOURCE: docs/integrations/galley-supervisor-sop.md in the
 github.com/wangjc683/galley repository.
 
-Last synced: 2026-11-03 (Goal removed; target schemaVersion 3).
+Last synced: 2026-11-10 (bundled engine's step cap; reference pins schema 3).
 
 If you find divergence between this copy and the canonical file, the
 canonical version wins. Re-sync this copy when you update the canonical.
@@ -158,8 +158,9 @@ finished. Before you report, read `session.live` in the final frame:
 
 - `askPending` — the agent is asking a question; see Continue A Session.
 - otherwise `lastExit` says how the run ended. `MAX_TURNS_EXCEEDED`: it
-  paused mid-work at the engine's per-run step cap (180 steps, 100 in plan
-  mode); nothing is broken — send a continue instruction, then wait again
+  paused mid-work at the engine's per-run step cap (180 steps in Galley's
+  bundled engine; an attached GenericAgent sets its own); nothing is
+  broken — send a continue instruction, then wait again
   with `--after-turn`. `DONE_WITHOUT_EXIT`: an engine error ended it (the
   error text is not in CLI output); check how far it got before retrying.
   `ABORTED`: it was stopped. `CURRENT_TASK_DONE` or any other value: it

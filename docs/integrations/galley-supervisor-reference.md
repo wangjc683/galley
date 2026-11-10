@@ -70,10 +70,10 @@ if (-not (Test-Path $GALLEY)) {
 
 Use `"$GALLEY"` on macOS / Linux and `& $GALLEY` in PowerShell.
 
-When strict forward compatibility matters, pin schema v1:
+When strict forward compatibility matters, pin schema v3:
 
 ```bash
-"$GALLEY" --schema=1 status
+"$GALLEY" --schema=3 status
 ```
 
 If the pin returns `schema_mismatch`, stop and tell the user the SOP/API pair
@@ -152,8 +152,8 @@ frames) therefore attach a `live` object whenever Galley Core is reachable:
   - `EXITED` — the agent exited the loop; includes `ask_user` (check
     `askPending`).
   - `MAX_TURNS_EXCEEDED` — paused mid-work at GA's per-run step cap (180
-    steps, 100 in plan mode). Nothing is broken; send a continue instruction
-    to resume.
+    steps in Galley's bundled engine; an attached GenericAgent sets its
+    own). Nothing is broken; send a continue instruction to resume.
   - `ABORTED` — stopped (`session stop`, `--jump`, or the user).
   - `SLASH_COMMAND_COMPLETED` — a slash command finished.
   - `DONE_WITHOUT_EXIT` — the engine task ended without an exit, after a
@@ -189,16 +189,16 @@ answer, so `--after-turn` is optional there.
 Output is NDJSON:
 
 ```json
-{"schemaVersion":1,"stream":"wait","phase":"initial","session":{},"messages":[]}
-{"schemaVersion":1,"stream":"wait","phase":"final","status":"completed","session":{},"messages":[]}
-{"schemaVersion":1,"stream":"end","reason":"completed"}
+{"schemaVersion":3,"stream":"wait","phase":"initial","session":{},"messages":[]}
+{"schemaVersion":3,"stream":"wait","phase":"final","status":"completed","session":{},"messages":[]}
+{"schemaVersion":3,"stream":"end","reason":"completed"}
 ```
 
 or:
 
 ```json
-{"schemaVersion":1,"stream":"wait","phase":"final","status":"timed_out","session":{},"messages":[]}
-{"schemaVersion":1,"stream":"end","reason":"timeout"}
+{"schemaVersion":3,"stream":"wait","phase":"final","status":"timed_out","session":{},"messages":[]}
+{"schemaVersion":3,"stream":"end","reason":"timeout"}
 ```
 
 Without `--until-idle`, `completed` means a visible agent message arrived,
@@ -450,9 +450,16 @@ SOP" and the managed IM reference copy), and the two skill directories'
 `references/` copies. `scripts/check-supervisor-sop-drift.mjs` fails CI when
 a `references/` copy or the two `SKILL.md` variants drift; the binary embed
 cannot drift. The managed IM entry-layer prompt
-(`core/src/managed_prompt.rs`) restates the hard rules in its own words and
-is guarded by unit tests for the rules that drifted once (reversibility
-split, `--after-turn`, `queued`).
+(`core/src/managed_prompt.rs`) does not restate the SOP: it sends the agent
+to read the SOP before its first Galley CLI write, so the orchestration rules
+have one home. The unit test
+`im_supervisor_prompt_defers_orchestration_details_to_the_sop` guards both
+sides: the prompt must not carry `--after-turn`, `--until-idle`,
+`askPending` or `live.busy`, and the embedded SOP must still carry the rules
+that drifted once (`--after-turn=<turnCount>`, `--until-idle`,
+`askPending`, `dispatch:"queued"`, `live.busy`, "Timeout is not failure",
+the "are reversible" split). Rewording one of those in the SOP fails that
+test.
 
 If this reference or SOP conflicts with [agent-api](../agent-api/README.md),
 follow the Agent API; the schema is the contract.
