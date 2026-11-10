@@ -6,14 +6,11 @@
  *
  * Use `fromIPCError(event)` to lift bridge errors into AppError.
  *
- * The three categories drive *where* the desktop renders the error;
- * see DESIGN.md §6.2 + ipc-protocol.md §4.10:
+ * Every AppError renders as a top-level toast (ToastHost), whatever its
+ * category; the category picks the default title. See DESIGN.md §6.2 +
+ * ipc-protocol.md §4.10.
  *
- *   runtime  → conversation inline message bubble
- *   bridge   → top-level toast
- *   business → top-level toast
- *
- * The optional `hint` selects a tailored Error Card variant.
+ * The optional `hint` swaps the title and line for tailored guidance.
  */
 
 import type { ErrorEvent as IPCErrorEvent } from "@/types/ipc";
@@ -41,7 +38,7 @@ export interface AppError {
   retryable: boolean;
   /** Command name or pipeline stage when the error fired. */
   context: string | null;
-  /** Python traceback (when available; surfaced only in expanded details). */
+  /** Python traceback (when available; not shown, 复制详情 copies it). */
   traceback: string | null;
   /** Optional single-action CTA for positive desktop feedback toasts. */
   action?:

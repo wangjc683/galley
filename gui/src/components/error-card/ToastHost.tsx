@@ -8,7 +8,7 @@ import { resumeDelay } from "@/lib/toast-timing";
 import type { AppError } from "@/types/app-error";
 
 interface ToastHostProps extends ErrorCardActions {
-  /** Active toasts (typically AppErrors with category bridge / business). */
+  /** Active toasts: every IPC error, any category, and desktop feedback. */
   toasts: AppError[];
   onDismiss: (id: string) => void;
   /**
@@ -20,10 +20,11 @@ interface ToastHostProps extends ErrorCardActions {
 }
 
 /**
- * Top-level toast container for non-runtime errors. DESIGN.md §6.2.
+ * Top-level toast container, the only place the Error Card renders.
+ * DESIGN.md §6.2.
  *
- * Bridge / business errors render here so they don't fight for space
- * inside the conversation document. Stacks toasts in the bottom-left
+ * Every error renders here, runtime ones included, so none fights for
+ * space inside the conversation document. Stacks toasts in the bottom-left
  * corner so system feedback has one stable home without covering the
  * Settings close button or the Composer controls. Compact info toasts
  * should feel like quiet system feedback, while warning/error toasts
@@ -130,7 +131,6 @@ function ToastFrame({
     >
       <ErrorCard
         error={toast}
-        variant="toast"
         onDismiss={() => {
           onClose?.();
           onDismiss(toast.id);

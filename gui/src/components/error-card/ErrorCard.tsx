@@ -1,7 +1,4 @@
 import {
-  ArrowSquareOut,
-  CaretDown,
-  Cube,
   FileCode,
   FolderOpen,
   Info,
@@ -21,14 +18,6 @@ import type {
 } from "@/types/app-error";
 
 export interface ErrorCardActions {
-  /** Retry the original request. Shown when error.retryable is true. */
-  onRetry?: () => void;
-  /** Switch LLM (used by quota_exceeded hint). */
-  onSwitchLLM?: () => void;
-  /** Open mykey.py path in editor / Finder (check_llm_config hint). */
-  onOpenMyKey?: () => void;
-  /** Open the GA install / config docs (check_llm_config hint). */
-  onOpenGADocs?: () => void;
   /** Open a project scope from a positive feedback toast. */
   onViewProject?: (projectId: string) => void;
   /** Restart enabled Channels from an actionable toast. */
@@ -39,41 +28,26 @@ export interface ErrorCardActions {
 
 interface ErrorCardProps extends ErrorCardActions {
   error: AppError;
-  /**
-   * "Toast"   — standalone with chrome + close button (top-level toast).
-   * "Inline"  — same chrome but no close (conversation history).
-   * "Card"    — embedded standalone with chrome (e.g. health check).
-   */
-  variant?: "toast" | "inline" | "card";
   onDismiss?: () => void;
 }
 
 /**
- * The Error Card visual. DESIGN.md §6.2.
+ * The Error Card visual, rendered only as a toast (ToastHost).
+ * DESIGN.md §6.2.
  *
- * Same chrome regardless of where it lands (toast / inline / card),
- * with three severity skins and an optional hint variant that wraps
- * the message in actionable guidance ("LLM 配置可能有问题" + buttons,
- * not "401 Unauthorized" + nothing).
- *
- * The expandable "Details" panel surfaces the raw traceback / source —
- * power-user audit trail; default users never see it.
+ * Three severity skins; an info toast is the compact one. A known
+ * `hint` swaps the raw message for tailored guidance ("模型配置可能有
+ * 问题", not "401 Unauthorized"). The raw context / traceback is not
+ * shown; 复制详情 copies it.
  */
 export function ErrorCard({
   error,
-  variant = "card",
   onDismiss,
-  onRetry,
-  onSwitchLLM,
-  onOpenMyKey,
-  onOpenGADocs,
   onViewProject,
   onRestartChannels,
   onTryBrowserControl,
 }: ErrorCardProps) {
   const copy = useCopy();
-  const [open, setOpen] = useState(false);
-  const isInline = variant === "inline";
   const sev = SEVERITY_CONFIG[error.severity];
   const hintCfg = error.hint ? hintConfig(copy)[error.hint] : null;
 
@@ -85,22 +59,15 @@ export function ErrorCard({
   //   3. defaultTitle(error) — category-flavored fallback.
   const title = error.title ?? hintCfg?.title ?? defaultTitle(error, copy);
   const brief = hintCfg?.brief ?? error.message;
-  const hasDetails = hasDiagnosticDetails(error);
-  const isCompactInfoToast = variant === "toast" && error.severity === "info";
-  const actions = (hintCfg?.actions ?? defaultActions(error, copy)).filter(
-    (action) =>
-      isActionAvailable(action, error, {
-        onRetry,
-        onSwitchLLM,
-        onOpenMyKey,
-        onOpenGADocs,
-        onViewProject,
-        onRestartChannels,
-        onTryBrowserControl,
-      }),
+  const actions = defaultActions(error, copy).filter((action) =>
+    isActionAvailable(action, error, {
+      onViewProject,
+      onRestartChannels,
+      onTryBrowserControl,
+    }),
   );
 
-  if (isCompactInfoToast) {
+  if (error.severity === "info") {
     return (
       <div
         className={cn(
@@ -141,15 +108,9 @@ export function ErrorCard({
                 key={a.id}
                 action={a}
                 error={error}
-                onRetry={onRetry}
-                onSwitchLLM={onSwitchLLM}
-                onOpenMyKey={onOpenMyKey}
-                onOpenGADocs={onOpenGADocs}
                 onViewProject={onViewProject}
                 onRestartChannels={onRestartChannels}
                 onTryBrowserControl={onTryBrowserControl}
-                onToggleDetails={() => setOpen((v) => !v)}
-                detailsOpen={open}
               />
             ))}
           </div>
@@ -175,7 +136,7 @@ export function ErrorCard({
             {brief}
           </div>
         </div>
-        {!isInline && onDismiss && (
+        {onDismiss && (
           <IconButton
             onClick={onDismiss}
             ariaLabel={copy.common.close}
@@ -193,32 +154,11 @@ export function ErrorCard({
               key={a.id}
               action={a}
               error={error}
-              onRetry={onRetry}
-              onSwitchLLM={onSwitchLLM}
-              onOpenMyKey={onOpenMyKey}
-              onOpenGADocs={onOpenGADocs}
               onViewProject={onViewProject}
               onRestartChannels={onRestartChannels}
               onTryBrowserControl={onTryBrowserControl}
-              onToggleDetails={() => setOpen((v) => !v)}
-              detailsOpen={open}
             />
           ))}
-        </div>
-      )}
-
-      {open && hasDetails && (
-        <div className="mt-3 rounded-sm border border-line bg-app p-2.5">
-          {error.context && (
-            <div className="select-text font-mono text-[11px] text-ink-muted">
-              context: {error.context}
-            </div>
-          )}
-          {error.traceback && (
-            <pre className="mt-1.5 max-h-[200px] overflow-auto whitespace-pre-wrap font-mono text-[11.5px] leading-[1.55] text-ink-soft">
-              {error.traceback}
-            </pre>
-          )}
         </div>
       )}
     </div>
@@ -233,16 +173,11 @@ interface ActionDef {
   /** "primary" = brand-soft button, "ghost" = no border. */
   kind: "primary" | "ghost";
   handler:
-    | "onRetry"
-    | "onSwitchLLM"
-    | "onOpenMyKey"
-    | "onOpenGADocs"
     | "onViewProject"
     | "onRestartChannels"
     | "onTryBrowserControl"
     | "undo"
-    | "copyDetails"
-    | "toggleDetails";
+    | "copyDetails";
 }
 
 interface SeverityConfig {
@@ -284,66 +219,22 @@ function SeverityIcon({
 interface HintConfig {
   title: string;
   brief: string;
-  actions: ActionDef[];
 }
 
 function hintConfig(copy: AppCopy): Record<AppErrorHint, HintConfig> {
   return {
-  check_llm_config: {
-    title: copy.errors.llmConfig.title,
-    brief: copy.errors.llmConfig.brief,
-    actions: [
-      {
-        id: "open-mykey",
-        label: copy.errors.llmConfig.checkMyKey,
-        kind: "primary",
-        handler: "onOpenMyKey",
-      },
-      {
-        id: "open-docs",
-        label: copy.errors.llmConfig.docs,
-        kind: "ghost",
-        handler: "onOpenGADocs",
-      },
-      {
-        id: "copy-details",
-        label: copy.errors.copyDetails,
-        kind: "ghost",
-        handler: "copyDetails",
-      },
-    ],
-  },
-  network: {
-    title: copy.errors.network.title,
-    brief: copy.errors.network.brief,
-    actions: [
-      { id: "retry", label: copy.common.retry, kind: "primary", handler: "onRetry" },
-      {
-        id: "copy-details",
-        label: copy.errors.copyDetails,
-        kind: "ghost",
-        handler: "copyDetails",
-      },
-    ],
-  },
-  quota_exceeded: {
-    title: copy.errors.quota.title,
-    brief: copy.errors.quota.brief,
-    actions: [
-      {
-        id: "switch-llm",
-        label: copy.errors.switchLLM,
-        kind: "primary",
-        handler: "onSwitchLLM",
-      },
-      {
-        id: "copy-details",
-        label: copy.errors.copyDetails,
-        kind: "ghost",
-        handler: "copyDetails",
-      },
-    ],
-  },
+    check_llm_config: {
+      title: copy.errors.llmConfig.title,
+      brief: copy.errors.llmConfig.brief,
+    },
+    network: {
+      title: copy.errors.network.title,
+      brief: copy.errors.network.brief,
+    },
+    quota_exceeded: {
+      title: copy.errors.quota.title,
+      brief: copy.errors.quota.brief,
+    },
   };
 }
 
@@ -358,6 +249,9 @@ function defaultTitle(error: AppError, copy: AppCopy): string {
   }
 }
 
+/** A toast's buttons: its own action, then 复制详情 when there is
+ * something to copy. A hinted error gets the same: only `fromIPCError`
+ * sets a hint, and it sets no action. */
 function defaultActions(error: AppError, copy: AppCopy): ActionDef[] {
   const actions: ActionDef[] = [];
   if (error.action?.kind === "view_project") {
@@ -392,14 +286,6 @@ function defaultActions(error: AppError, copy: AppCopy): ActionDef[] {
       handler: "undo",
     });
   }
-  if (error.retryable) {
-    actions.push({
-      id: "retry",
-      label: copy.common.retry,
-      kind: "primary",
-      handler: "onRetry",
-    });
-  }
   if (hasDiagnosticDetails(error)) {
     actions.push({
       id: "copy-details",
@@ -414,26 +300,9 @@ function defaultActions(error: AppError, copy: AppCopy): ActionDef[] {
 function isActionAvailable(
   action: ActionDef,
   error: AppError,
-  handlers: Pick<
-    ErrorCardActions,
-    | "onRetry"
-    | "onSwitchLLM"
-    | "onOpenMyKey"
-    | "onOpenGADocs"
-    | "onViewProject"
-    | "onRestartChannels"
-    | "onTryBrowserControl"
-  >,
+  handlers: ErrorCardActions,
 ): boolean {
   switch (action.handler) {
-    case "onRetry":
-      return Boolean(handlers.onRetry);
-    case "onSwitchLLM":
-      return Boolean(handlers.onSwitchLLM);
-    case "onOpenMyKey":
-      return Boolean(handlers.onOpenMyKey);
-    case "onOpenGADocs":
-      return Boolean(handlers.onOpenGADocs);
     case "onViewProject":
       return (
         error.action?.kind === "view_project" && Boolean(handlers.onViewProject)
@@ -452,8 +321,6 @@ function isActionAvailable(
       return error.action?.kind === "undo";
     case "copyDetails":
       return hasDiagnosticDetails(error);
-    case "toggleDetails":
-      return hasDiagnosticDetails(error);
   }
 }
 
@@ -466,40 +333,20 @@ function hasDiagnosticDetails(error: AppError): boolean {
 function ActionButton({
   action,
   error,
-  onRetry,
-  onSwitchLLM,
-  onOpenMyKey,
-  onOpenGADocs,
   onViewProject,
   onRestartChannels,
   onTryBrowserControl,
-  onToggleDetails,
-  detailsOpen,
 }: {
   action: ActionDef;
   error: AppError;
-  onRetry?: () => void;
-  onSwitchLLM?: () => void;
-  onOpenMyKey?: () => void;
-  onOpenGADocs?: () => void;
   onViewProject?: (projectId: string) => void;
   onRestartChannels?: () => void;
   onTryBrowserControl?: () => void;
-  onToggleDetails: () => void;
-  detailsOpen: boolean;
 }) {
   const copy = useCopy();
   const [copied, setCopied] = useState(false);
   const handler = (() => {
     switch (action.handler) {
-      case "onRetry":
-        return onRetry;
-      case "onSwitchLLM":
-        return onSwitchLLM;
-      case "onOpenMyKey":
-        return onOpenMyKey;
-      case "onOpenGADocs":
-        return onOpenGADocs;
       case "onViewProject":
         if (error.action?.kind !== "view_project" || !onViewProject) {
           return undefined;
@@ -528,8 +375,6 @@ function ActionButton({
             window.setTimeout(() => setCopied(false), 1400);
           });
         };
-      case "toggleDetails":
-        return onToggleDetails;
     }
   })();
   const disabled = !handler;
@@ -541,19 +386,7 @@ function ActionButton({
       disabled={disabled}
       variant={action.kind === "primary" ? "brand-soft" : "ghost"}
       size="sm"
-      leadingIcon={
-        Icon ? (
-          <Icon
-            size={12}
-            weight="thin"
-            className={cn(
-              action.handler === "toggleDetails" &&
-                "transition-transform duration-(--motion-fast)",
-              action.handler === "toggleDetails" && detailsOpen && "rotate-180",
-            )}
-          />
-        ) : undefined
-      }
+      leadingIcon={Icon ? <Icon size={12} weight="thin" /> : undefined}
     >
       {copied && action.handler === "copyDetails"
         ? copy.errors.copiedDetails
@@ -562,13 +395,9 @@ function ActionButton({
   );
 }
 
-const ACTION_ICONS: Partial<Record<ActionDef["handler"], typeof Cube>> = {
-  onSwitchLLM: Cube,
-  onOpenMyKey: FileCode,
-  onOpenGADocs: ArrowSquareOut,
+const ACTION_ICONS: Partial<Record<ActionDef["handler"], typeof FileCode>> = {
   onViewProject: FolderOpen,
   copyDetails: FileCode,
-  toggleDetails: CaretDown,
 };
 
 function formatErrorDetails(error: AppError): string {

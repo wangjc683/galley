@@ -228,13 +228,12 @@ export interface RunCompleteEvent {
 /**
  * Structured error event. See docs/ipc-protocol.md §4.10 for the contract.
  *
- * Desktop renders by `category`:
- *   - "runtime"  → conversation inline message bubble
- *   - "bridge"   → top-level toast
- *   - "business" → top-level toast
+ * The desktop renders every one as a top-level toast, whatever its
+ * `category` (DESIGN.md §6.2); `category` picks the default title.
+ * `retryable` is carried but offers no Retry button.
  *
- * `hint` (when present) maps to a tailored Error Card variant per
- * DESIGN.md §6.2:
+ * `hint` (when present) swaps the toast's title and line for tailored
+ * guidance:
  *   - "check_llm_config" — auth / api_key issues
  *   - "network"          — timeout / DNS / connection refused
  *   - "quota_exceeded"   — 429 / rate limits

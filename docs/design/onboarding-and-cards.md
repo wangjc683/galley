@@ -144,15 +144,25 @@ Onboarding，从第一屏开始，不清空历史、不删除对话、不重置�
 | warning | `Warning` | 深琥珀 `#BF7A1F` | `warning` |
 | info | `Info` | muted 灰蓝 `#7A7A8E` | `info` |
 
-#### 三种出场场合
+#### 出场场合：只有 toast
 
-| Category | 场合 | 形态 |
+Error Card 只以 top-level toast 出现（`ToastHost`，左下角）。runner 的每条
+`error` 事件不分 category，都推成一条 toast（`lib/ipc-handlers.ts`）；category
+只决定没有 hint 时的默认标题：
+
+| Category | 场合 | 默认标题 |
 |---|---|---|
-| `runtime` | Tool 执行失败 / LLM 调用失败 / agent 报错 | **Conversation 流内 inline message bubble**（紧跟出错 tool 之后，Tool callout 行保持失败状态） |
-| `bridge` | bridge crash / IPC 协议 mismatch | **Top-level toast**（5s auto-dismiss 或手动叉） |
-| `business` | Attach 路径非法 / 历史恢复失败 / SQLite 损坏 | **Top-level toast** |
+| `runtime` | Tool 执行失败 / LLM 调用失败 / agent 报错 | 工具执行失败 |
+| `bridge` | bridge crash / IPC 协议 mismatch | Galley 错误 |
+| `business` | Attach 路径非法 / 历史恢复失败 / SQLite 损坏 | 操作未能完成 |
 
-Inline 类**不可 dismiss**（属于对话历史）；toast 类可手动 dismiss。
+此前设计里 `runtime` 走对话流内的 inline message bubble，组件也留着 `inline` /
+`card` 两种变体，都从没有调用方，2026-11-10 删掉（[审计 PRD](../../.scratch/audit-1110/PRD.md)
+裁决 A5）。
+
+自动消失看 severity：info toast 6 秒后自己走，warning / error 留到手动点 ×
+（没有 toast 历史，自己消失的错误就再也找不回来）；单条 toast 可以用自己的
+`autoDismissMs` 改掉这条（剪贴板降级这类短提示、撤销回执）。
 
 **自动消失的倒计时会暂停**（2026-08-12）：鼠标悬停在 toast 上、或焦点落在
 toast 内部（动作按钮可 Tab 到）时，计时停住；离开后从**剩余时间**继续，且
@@ -183,28 +193,34 @@ toast 自己的总时长（调用方要 300ms 就是 300ms）。计时规则是�
 
 #### 标准展示
 
-- 标题（14px Inter medium）+ 一行简要（13px muted）
-- 主 action button（杏沙轮廓 ghost / 28px / Phosphor icon + label）
-- 可折叠 details panel（点 `CaretDown` 展开）：
-  - stack trace / 完整 error message / source 字段
-  - 等宽 12px JetBrains Mono
-  - 给 power user 看的，普通用户不需要看
+- 标题（14px Inter medium）+ 一行简要（13px muted）；info toast 是紧凑版
+  （13px 标题 + 12px 一行）
+- 按钮只有 toast 自带的那一个（`AppError.action`：`view_project`「查看项目」、
+  `restart_channels`「重启全部渠道」、`try_browser_control`「试一试」、`undo`
+  「撤销」），再加「复制详情」
+- 「复制详情」：warning / error 带 `context` 或 `traceback` 时才有，把 category、
+  severity、message、context、时间与 traceback 复制成纯文本。界面上不展开
+  traceback：此前设计的可折叠 details panel（点 `CaretDown` 展开）从没接到任何
+  卡片上，2026-11-10 删掉
 
 #### 重试语义
 
 - bridge **不主动 retry**
-- desktop 根据 IPC 字段 `retryable=true` 显示 Retry button
-- 点击 Retry = 触发新的 send_message（参数复用上次），不是隐藏副作用
+- IPC 字段 `retryable` 照传，desktop 不据它显示 Retry 按钮：Retry 自 2026-05-26
+  （`8ee9f056`）起就没有接上处理函数，2026-11-10 删掉。要重发，用户自己再发一次
 
 #### 首次 message 失败的友好引导（hint 系统）
 
-bridge 端检测错误类型，emit 时附 `hint` 字段，desktop 渲染专用引导卡片：
+bridge 端检测错误类型，emit 时附 `hint` 字段，desktop 换掉 toast 的标题与一行：
 
 | hint | 触发条件 | 卡片内容 |
 |---|---|---|
-| `check_llm_config` | 401/403/`api_key`/`unauthorized` keyword | 标题 "模型配置可能有问题" / 一行 "首次发送失败，通常是 API key 或配置问题" / Actions: "检查 mykey.py" / "查看 GA 文档" / "View raw error" |
-| `network` | 网络超时 / DNS 失败 | 标题 "网络无法连接" / Actions: "Retry" / "View raw error" |
-| `quota_exceeded` | 429 / quota keyword | 标题 "API 配额耗尽" / 一行 "可切换其他模型继续" / Actions: "切换模型"（打开 Composer 模型弹层） / "View raw error" |
+| `check_llm_config` | 401/403/`api_key`/`unauthorized` keyword | 标题「模型配置可能有问题」/ 一行「首次发送失败，通常是 API key 或配置问题。」 |
+| `network` | 网络超时 / DNS 失败 | 标题「网络无法连接」/ 一行「请求未能到达模型服务商，可能是超时或 DNS 问题。」 |
+| `quota_exceeded` | 429 / quota keyword | 标题「API 配额耗尽」/ 一行「可切换其他模型继续。」 |
 | （无 hint） | 其他错误 | 标准 Error Card |
+
+按钮与没有 hint 时一样（「复制详情」）。此前表里的「检查 mykey.py」「查看 GA
+文档」「切换模型」「Retry」从没接上处理函数，2026-11-10 删掉，正文照旧。
 
 **为什么不直接显示 "401 Unauthorized"**：普通用户看到原始错误不知道下一步。"哪里出错 → 怎么解决"的翻译是 Galley 比裸跑 GA 增值的关键点。

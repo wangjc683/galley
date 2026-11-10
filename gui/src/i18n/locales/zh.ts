@@ -98,7 +98,6 @@ export const zhCopy = {
     back: "返回",
     continue: "继续",
     choose: "选择",
-    retry: "重试",
     save: "保存",
     remove: "移除",
     restore: "恢复",
@@ -1879,8 +1878,6 @@ export const zhCopy = {
     llmConfig: {
       title: "模型配置可能有问题",
       brief: "首次发送失败，通常是 API key 或配置问题。",
-      checkMyKey: "检查 mykey.py",
-      docs: "查看 GA 文档",
     },
     network: {
       title: "网络无法连接",
@@ -1892,7 +1889,6 @@ export const zhCopy = {
     },
     copyDetails: "复制详情",
     copiedDetails: "已复制",
-    switchLLM: "切换模型",
     managedModelUnavailable:
       "内置内核没有可用模型。在 设置 → 模型 添加模型，或重填 API Key。",
     managedRuntimeInvalid: "Galley 内置运行时不完整。请重新安装或更新 Galley。",

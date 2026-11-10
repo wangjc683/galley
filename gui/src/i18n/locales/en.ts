@@ -112,7 +112,6 @@ export const enCopy: AppCopy = {
     back: "Back",
     continue: "Continue",
     choose: "Choose",
-    retry: "Retry",
     save: "Save",
     remove: "Remove",
     restore: "Restore",
@@ -1823,8 +1822,6 @@ export const enCopy: AppCopy = {
       title: "Model configuration may be wrong",
       brief:
         "The first send failed. This is usually an API key or configuration issue.",
-      checkMyKey: "Check mykey.py",
-      docs: "Open GA docs",
     },
     network: {
       title: "Network connection failed",
@@ -1837,7 +1834,6 @@ export const enCopy: AppCopy = {
     },
     copyDetails: "Copy details",
     copiedDetails: "Copied",
-    switchLLM: "Switch model",
     managedModelUnavailable:
       "The bundled engine has no usable model. Add a model in Models or re-enter the API Key.",
     managedRuntimeInvalid:
