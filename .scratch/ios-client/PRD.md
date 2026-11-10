@@ -95,8 +95,8 @@ Status: needs-info（讨论中；待 JC 内部确认 Apple 开发者账号主体
     依据：裁决 14、16 要求 CI 在同一提交里核对桌面源文件生成的 token / 文案与一致性语料；手机协议三方（Core、relay、iOS）要能原子改动，
     照 `scripts/check-ipc-protocol-drift.mjs` 的先例加漂移门禁；端到端加密的承诺要客户端与 relay 都开源才可审计。
     否决：iOS 单独私有仓（token、语料、协议都要跨仓同步）；relay 与 iOS 各自独立仓。
-23. relay 的部署（Caddy 站点文件、服务定义、DNS 子域、APNs 密钥在哪取）归 inkstone-ops（私有）；galley 只放 relay 源码并由 CI 出构建产物。
-    这是 inkstone-ops「租户部署归租户仓」的例外，理由是 galley 是公开仓，部署细节属于砚石的实例而不是产品；类比网站：内容在站点仓，托管在 inkstone-ops。
+23. relay 的部署（Caddy 站点文件、服务定义、DNS 子域、APNs 密钥在哪取）归公司的运维仓库（私有）；galley 只放 relay 源码并由 CI 出构建产物。
+    这是公司运维仓库「租户部署归租户仓」的例外，理由是 galley 是公开仓，部署细节属于砚石的实例而不是产品；类比网站：内容在站点仓，托管在运维仓库。
 24. 远程协议设计稿（2026-10-10，[issues/05](./issues/05-remote-protocol-design.md) 第 12 节）：P0 握手用 `NNpsk0` 一把配对主密钥，P1 再升 `XXpsk3` + `KK`；
     通知显示真实内容（会话标题加回复摘要或「在问你：问题」），推送端到端加密；票 03 与 02e 的「轮次落库广播」并入 05。
     relay 域名不是产品决策：手机从二维码拿地址，桌面编译期注入，用户不接触。手机这头的 Noise 用 CryptoKit 自己写，两侧跑同一套测试向量。

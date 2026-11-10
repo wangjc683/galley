@@ -167,7 +167,7 @@ startup with the missing names. The key is read and checked at startup
 too: a file that cannot be read, or is not a PKCS#8 ECDSA P-256 key,
 stops the relay rather than failing every push later. The key is the
 `.p8` from the Apple developer account; its location on the server is
-recorded in inkstone-ops, never in this repo. A blank value counts as
+recorded in the operator's own deployment repository, never in this repo. A blank value counts as
 not set.
 
 The APNs environment is not a setting: each `PUSH` names production or

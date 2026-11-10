@@ -56,7 +56,7 @@ iOS App ──WSS(TLS)──▶ Caddy ──▶ relay（127.0.0.1，systemd）�
   WebSocket 按 Apple 的建议用 Network framework 写（外部 §5，TN3151）。
 - **Caddy**：`reverse_proxy` 自动支持 WebSocket。但 reload 默认会关闭已建立的 WebSocket（v2.6.0 起），所以 relay 站点要配 `stream_close_delay 5m`
   （v2.7.0 起有）。Caddy 要 ≥ 2.11.7，因为 2.11.6 引入的默认一分钟空闲超时是否作用于 WebSocket 尚未核实，靠 25 秒心跳兜底（外部 §6）。
-  frankfurt 上层台的维护页开关会 reload Caddy（`inkstone-ops/docs/machines/frankfurt.md` 第五节），客户端必须能无感重连。
+  frankfurt 上层台的维护页开关会 reload Caddy（公司运维仓库里这台机器的档案，第五节），客户端必须能无感重连。
 
 ## 3. 密钥与身份
 
@@ -193,7 +193,7 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
     只留可打印 ASCII、截到 255 字节。10 秒没有回应回 `apns_timeout`，连不上回 `apns_unreachable`，`apns_status` 都是 0。
   - 配置：`GALLEY_RELAY_APNS_KEY_PATH`、`_KEY_ID`、`_TEAM_ID`、`_TOPIC` 四个（也有同名命令行参数）全有才发推送，全无就回 `push_unavailable`，
     只配一部分则拒绝启动并列出缺哪几个。密钥在启动时读取并校验，读不了或不是 PKCS#8 的 P-256 私钥也拒绝启动。
-    密钥是 Apple 开发者账号里下载的 `.p8`，它在服务器上的位置记在 inkstone-ops，不写进本仓。
+    密钥是 Apple 开发者账号里下载的 `.p8`，它在服务器上的位置记在公司的运维仓库，不写进本仓。
   - 计数器：`pushes` 下加 `jwtRefreshes`（签过的 token 数，含第一个）。日志不记任何一条推送的 token、JWT、载荷或 APNs 的回应。
   - 对照 Rule 2：relay 现在持有一把密钥，即 APNs 的签名密钥。凭它能让 APNs 给 App 发通知，但发不出手机解得开的内容，
     手机只会显示占位文案；Core 与手机之间的任何东西它仍然解不开、伪造不了。
@@ -226,7 +226,7 @@ Rule 2 原文：「The relay sees ciphertext and routing metadata, stores no use
     计数从进程启动算起，「每日」由部署侧两次读数相减（06c）。
   - 日志：不记访问日志；stderr 只写启动、关停和服务器错误（如 accept 失败），不带任何标识。收到 SIGTERM 或 Ctrl-C 就停止接新连接，
     以 1001 关闭全部连接，最多等 5 秒。
-- **部署**（归 inkstone-ops，裁决 23）：
+- **部署**（归公司的运维仓库，裁决 23）：
   - 用 systemd 跑二进制，不进 docker：frankfurt 上 docker 会被无人值守升级重启（frankfurt 档案第三节）；
   - Caddy 站点文件配 `stream_close_delay`、关访问日志；
   - DNS 子域；APNs 密钥只写「在哪取」。
@@ -630,7 +630,7 @@ CI：`.github/workflows/ios-protocol.yml`（07a），macOS runner（`macos-26`�
 
 ### 06c — 部署（依赖 06a、06b）
 
-- galley 的 CI 出 `relay-v*` 构建产物；inkstone-ops 写 systemd 服务、Caddy 站点文件（`stream_close_delay`、不记访问日志）、DNS 子域、APNs 密钥在哪取。
+- galley 的 CI 出 `relay-v*` 构建产物；公司的运维仓库写 systemd 服务、Caddy 站点文件（`stream_close_delay`、不记访问日志）、DNS 子域、APNs 密钥在哪取。
 - 动 frankfurt 和 DNS 之前问 JC，挑层台低峰。
 
 ### 07a — Swift 协议包（依赖 05a 的 golden；属票 07，没有界面所以先做）
