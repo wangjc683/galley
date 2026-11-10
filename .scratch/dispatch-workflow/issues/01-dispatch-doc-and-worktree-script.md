@@ -1,6 +1,6 @@
 # 01 派单文档与 worktree 脚本
 
-Status: ready-for-agent
+Status: done（2026-11-10 合入，无真机步骤）
 
 来源：2026-11-10 JC 裁决（五点全按推荐）：分工法转正、规则搬进仓库、派活必传 `model`、票面加第六项、不加审查代理也不加更便宜的执行档。
 
@@ -148,3 +148,8 @@ Status: ready-for-agent
 - 用户验：无。
 
 ## Comments
+
+- 2026-11-10 合入。执行代理实测：`git worktree remove` 带着克隆出来的被忽略目录时不需要 `--force`。
+- `--rust` 克隆 `core/target/debug` 的收益比原先以为的小。主工作树当时只有 `tauri dev` 留下的 build 产物：`cargo check --workspace` 克隆后 1 分 27 秒、空目录 1 分 33 秒；`cargo test --workspace --no-run` 克隆后 2 分 33 秒（重编 68 个 crate）、空目录 3 分 06 秒（405 个）。脚本保留克隆（不占空间，另外三个目录是构建必需的输入），帮助文字与文档按实测写。
+- 验收时主会话补了三处：共用 worktree 时同一分支、整组一起验收合入；放弃的分支用 `git branch -D`；Agent 调用的描述以票名开头（配合子代理状态行）。
+- 没验证到的：非 macOS 上跳过克隆的分支没有实测；本机没装 `shellcheck`。
