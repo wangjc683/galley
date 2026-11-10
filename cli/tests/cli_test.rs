@@ -19,58 +19,6 @@ use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::SqlitePool;
 use tempfile::TempDir;
 
-const MIG_001: &str = include_str!("../../core/migrations/001_init.sql");
-const MIG_002: &str = include_str!("../../core/migrations/002_add_has_unread.sql");
-const MIG_003: &str = include_str!("../../core/migrations/003_add_message_summary.sql");
-const MIG_004: &str = include_str!("../../core/migrations/004_add_messages_fts.sql");
-const MIG_005: &str = include_str!("../../core/migrations/005_add_message_preamble.sql");
-const MIG_006: &str = include_str!("../../core/migrations/006_messages_origin.sql");
-const MIG_007: &str = include_str!("../../core/migrations/007_sessions_origin.sql");
-const MIG_008: &str = include_str!("../../core/migrations/008_runtime_identity.sql");
-const MIG_009: &str = include_str!("../../core/migrations/009_managed_models.sql");
-const MIG_010: &str = include_str!("../../core/migrations/010_managed_model_providers.sql");
-const MIG_011: &str = include_str!("../../core/migrations/011_managed_model_sort_order.sql");
-const MIG_012: &str = include_str!("../../core/migrations/012_managed_model_local_secrets.sql");
-const MIG_013: &str = include_str!("../../core/migrations/013_session_llm_key.sql");
-const MIG_014: &str = include_str!("../../core/migrations/014_managed_model_auth_kind.sql");
-const MIG_015: &str = include_str!("../../core/migrations/015_goal_v1.sql");
-const MIG_016: &str = include_str!("../../core/migrations/016_goal_master_session.sql");
-const MIG_017: &str = include_str!("../../core/migrations/017_message_visibility.sql");
-const MIG_018: &str = include_str!("../../core/migrations/018_goal_deliverable.sql");
-const MIG_019: &str = include_str!("../../core/migrations/019_goal_workspace.sql");
-const MIG_020: &str = include_str!("../../core/migrations/020_message_attachments.sql");
-const MIG_021: &str = include_str!("../../core/migrations/021_native_session_runtime.sql");
-const MIG_022: &str = include_str!("../../core/migrations/022_native_memory_substrate.sql");
-const MIG_023: &str = include_str!("../../core/migrations/023_native_goal_runtime.sql");
-const MIG_024: &str = include_str!("../../core/migrations/024_native_default_runtime.sql");
-const MIG_025: &str = include_str!("../../core/migrations/025_restore_managed_runtime_default.sql");
-const MIG_026: &str = include_str!("../../core/migrations/026_project_workspace.sql");
-const MIG_031: &str = include_str!("../../core/migrations/031_message_goal_id.sql");
-// 034 only ADD COLUMN approval_mode to sessions; 027–033 touch unrelated
-// tables and stay out of this fixture.
-const MIG_034: &str = include_str!("../../core/migrations/034_session_approval_mode.sql");
-// 040 only ADD COLUMN reasoning_effort to sessions — required since
-// SESSIONS_SELECT_COLS reads it.
-const MIG_040: &str = include_str!("../../core/migrations/040_session_reasoning_effort.sql");
-const MIG_042: &str = include_str!("../../core/migrations/042_managed_model_advanced_layers.sql");
-const MIG_043: &str = include_str!("../../core/migrations/043_message_session_client.sql");
-const MIG_044: &str = include_str!("../../core/migrations/044_session_main_chat.sql");
-const MIG_045: &str = include_str!("../../core/migrations/045_ledger_exclusions.sql");
-const MIG_046: &str = include_str!("../../core/migrations/046_main_chat_segments.sql");
-const MIG_047: &str = include_str!("../../core/migrations/047_drop_ledger_exclusions.sql");
-const MIG_048: &str = include_str!("../../core/migrations/048_subtasks.sql");
-const MIG_035: &str = include_str!("../../core/migrations/035_scheduled_tasks.sql");
-const MIG_036: &str = include_str!("../../core/migrations/036_scheduled_tasks_monthly.sql");
-const MIG_037: &str = include_str!("../../core/migrations/037_scheduled_tasks_llm.sql");
-const MIG_049: &str = include_str!("../../core/migrations/049_scheduled_tasks_once_and_wake.sql");
-const MIG_050: &str = include_str!("../../core/migrations/050_todos.sql");
-const MIG_051: &str = include_str!("../../core/migrations/051_cancelled_by.sql");
-const MIG_052: &str = include_str!("../../core/migrations/052_provider_auth_kind_none.sql");
-const MIG_053: &str = include_str!("../../core/migrations/053_memos.sql");
-const MIG_054: &str = include_str!("../../core/migrations/054_todo_subitems.sql");
-const MIG_055: &str = include_str!("../../core/migrations/055_main_chat_title_galley.sql");
-const MIG_056: &str = include_str!("../../core/migrations/056_subtask_background.sql");
-
 /// Build a temp .db file with all migrations applied + (optionally)
 /// seed rows. Returns the path; caller stashes it for the spawned
 /// command via `GALLEY_DB_PATH`.
@@ -80,18 +28,9 @@ async fn seeded_db_at(path: &std::path::Path) -> SqlitePool {
         .filename(path)
         .create_if_missing(true);
     let pool = SqlitePool::connect_with(opts).await.expect("open db");
-    for sql in [
-        MIG_001, MIG_002, MIG_003, MIG_004, MIG_005, MIG_006, MIG_007, MIG_008, MIG_009, MIG_010,
-        MIG_011, MIG_012, MIG_013, MIG_014, MIG_015, MIG_016, MIG_017, MIG_018, MIG_019, MIG_020,
-        MIG_021, MIG_022, MIG_023, MIG_024, MIG_025, MIG_026, MIG_031, MIG_034, MIG_035, MIG_036,
-        MIG_037, MIG_040, MIG_042, MIG_043, MIG_044, MIG_045, MIG_046, MIG_047, MIG_048, MIG_049,
-        MIG_050, MIG_051, MIG_052, MIG_053, MIG_054, MIG_055, MIG_056,
-    ] {
-        sqlx::raw_sql(sql)
-            .execute(&pool)
-            .await
-            .expect("run migration");
-    }
+    galley_core_lib::apply_all_migrations_for_tests(&pool)
+        .await
+        .expect("migrations");
     pool
 }
 
