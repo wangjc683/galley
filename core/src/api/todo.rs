@@ -4,10 +4,11 @@
 //! Galley notes one in the conversation when the user mentions something
 //! they have to do — with a due date or without — and may hang a reminder
 //! on it. The user only ticks it off, unticks it, cancels its reminder or,
-//! since main chat ticket 88, deletes it, and since ticket 107 changes its
-//! title and notes (the desktop's five commands); everything else they say
-//! to Galley, which changes it through the CLI (ticket 40). Core holds the
-//! record (`todos`, migration 050) and decides every write (Rule 5).
+//! since main chat ticket 88, deletes it, since ticket 107 changes its
+//! title and notes, and since ticket 156 its due date, reminder and rule
+//! (the desktop's commands; [`crate::todo_by_hand`]); everything else they
+//! say to Galley, which changes it through the CLI (ticket 40). Core holds
+//! the record (`todos`, migration 050) and decides every write (Rule 5).
 //!
 //! Since main chat ticket 111 (PRD ruling 157) a to-do may have items
 //! under it ([`TodoSubitem`], `todo_subitems`, migration 054): one level,
@@ -599,12 +600,14 @@ pub struct TodoPatch {
 }
 
 impl TodoPatch {
-    /// The desktop's change (main chat ticket 107, PRD ruling 153 point
-    /// 4): the title and the notes, edited in place in the to-do panel,
-    /// and nothing else — the due date and the reminder are said to
-    /// Galley (point 5: moving one leaves the other where it was). Only
-    /// what is given; empty notes take the notes away (Core trims them,
-    /// and empty is none), as `todo update --notes=""` does.
+    /// The desktop's change of words (main chat ticket 107, PRD ruling 153
+    /// point 4): the title and the notes, edited in place in the to-do
+    /// panel. Only what is given; empty notes take the notes away (Core
+    /// trims them, and empty is none), as `todo update --notes=""` does.
+    /// The due date, the reminder and the rule the desktop changes since
+    /// ticket 156 go beside it ([`crate::todo_by_hand::TodoWhenChange`],
+    /// `SqliteGalley::update_todo_by_hand`), the reminder moving with the
+    /// due day; until then they were said to Galley (ruling 153 point 5).
     pub fn words(title: Option<String>, notes: Option<String>) -> Self {
         Self {
             title,
