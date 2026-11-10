@@ -69,7 +69,7 @@ const NOW = new Date().toISOString();
 const HOTEL: TodoItem = {
   kind: "todo",
   id: "todo_hotel",
-  text: "希尔顿酒店项目资料收集",
+  text: "松岚湾酒店项目资料收集",
   state: "open",
   createdBy: "assistant",
   createdIn: { sessionId: "s-main", turnIndex: 236 },
@@ -424,18 +424,18 @@ describe("changing the title (ruling 153 point 4)", () => {
     const field = box()!;
     expect(field.value).toBe(HOTEL.text);
     expect(field.selectionStart).toBe(HOTEL.text.length);
-    type(field, "希尔顿酒店项目资料收集与整理");
+    type(field, "松岚湾酒店项目资料收集与整理");
     key(field, "Enter");
     await settle();
     expect(updates()).toEqual([
       [
         "update_todo",
-        { id: "todo_hotel", title: "希尔顿酒店项目资料收集与整理" },
+        { id: "todo_hotel", title: "松岚湾酒店项目资料收集与整理" },
       ],
     ]);
     expect(box()).toBeNull();
     expect(titleOf(container, "todo_hotel").textContent).toBe(
-      "希尔顿酒店项目资料收集与整理",
+      "松岚湾酒店项目资料收集与整理",
     );
     expect(isOpen(container, "todo_hotel")).toBe(true);
     // Its own change does not light it.

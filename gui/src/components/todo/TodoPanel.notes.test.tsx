@@ -66,11 +66,11 @@ afterAll(() => {
 const NOW = new Date().toISOString();
 const items = (...words: [string, boolean][]): TodoSubitem[] =>
   words.map(([text, done], at) => ({ id: `item_${at}`, text, done }));
-const PATH = "/Users/me/Downloads/希尔顿项目资料收集模板.md";
-const HILTON: TodoItem = {
+const PATH = "/Users/me/Downloads/松岚湾项目资料收集模板.md";
+const INTAKE: TodoItem = {
   kind: "todo",
-  id: "todo_hilton",
-  text: "希尔顿酒店项目上下文资料收集",
+  id: "todo_intake",
+  text: "松岚湾酒店项目上下文资料收集",
   state: "open",
   createdBy: "assistant",
   createdIn: { sessionId: "s-main", turnIndex: 4 },
@@ -97,7 +97,7 @@ const list = (yours: TodoItem[]): AssistantTodo => ({
 });
 
 /** What Core holds; the paths the reading panel was asked to open. */
-const core: AssistantTodo = list([HILTON, SOIL]);
+const core: AssistantTodo = list([INTAKE, SOIL]);
 const activated: string[] = [];
 
 let root: Root | null = null;
@@ -200,9 +200,9 @@ function open(container: HTMLElement, id: string) {
 describe("the open row's layout (ruling 158 point 2)", () => {
   it("draws the items not ticked in ink-soft, a ticked one struck in ink-muted", () => {
     const container = mount();
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     const [brand, place] = Array.from(
-      row(container, "todo_hilton").querySelectorAll<HTMLElement>(
+      row(container, "todo_intake").querySelectorAll<HTMLElement>(
         '[data-role="todo-item-text"]',
       ),
     );
@@ -214,8 +214,8 @@ describe("the open row's layout (ruling 158 point 2)", () => {
 
   it("gives 「添加一项」 a plus in the box column, the words where the items' start", () => {
     const container = mount();
-    open(container, "todo_hilton");
-    const add = row(container, "todo_hilton").querySelector(
+    open(container, "todo_intake");
+    const add = row(container, "todo_intake").querySelector(
       '[data-role="todo-add-item"]',
     )!;
     expect(add.textContent).toBe("添加一项");
@@ -231,18 +231,18 @@ describe("the open row's layout (ruling 158 point 2)", () => {
 
   it("sets the notes 10px under 「添加一项」 and the noted line 10px under them", () => {
     const container = mount();
-    open(container, "todo_hilton");
-    const notes = row(container, "todo_hilton").querySelector(
+    open(container, "todo_intake");
+    const notes = row(container, "todo_intake").querySelector(
       '[data-role="todo-notes"]',
     )!;
     // 「添加一项」's own 2px foot and the notes' 8px.
     expect(notes.parentElement!.className).toContain("mt-2");
-    const items = row(container, "todo_hilton").querySelector(
+    const items = row(container, "todo_intake").querySelector(
       '[data-role="todo-items"]',
     )!;
     expect(items.className).not.toContain("pb-");
     expect(
-      row(container, "todo_hilton").querySelector('[data-role="todo-noted"]')!
+      row(container, "todo_intake").querySelector('[data-role="todo-noted"]')!
         .className,
     ).toContain("mt-2.5");
     // No notes: 「添加备注」 where they would be.
@@ -257,16 +257,16 @@ describe("the open row's layout (ruling 158 point 2)", () => {
 describe("the notes, open (ruling 158 point 3)", () => {
   const paragraphs = (container: HTMLElement) =>
     Array.from(
-      row(container, "todo_hilton").querySelectorAll<HTMLElement>(
+      row(container, "todo_intake").querySelectorAll<HTMLElement>(
         '[data-role="todo-notes"] p',
       ),
     );
 
   it("are a paragraph a line, 6px apart, a run of blank lines one gap", () => {
     const container = mount();
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     expect(paragraphs(container)).toHaveLength(3);
-    const notes = row(container, "todo_hilton").querySelector(
+    const notes = row(container, "todo_intake").querySelector(
       '[data-role="todo-notes"]',
     )!;
     expect(notes.className).toContain("gap-1.5");
@@ -278,9 +278,9 @@ describe("the notes, open (ruling 158 point 3)", () => {
 
   it("set a leading day apart a step darker, in Chinese and English, and nothing else", () => {
     const container = mount();
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     const days = Array.from(
-      row(container, "todo_hilton").querySelectorAll<HTMLElement>(
+      row(container, "todo_intake").querySelectorAll<HTMLElement>(
         '[data-role="todo-notes-day"]',
       ),
     );
@@ -297,32 +297,32 @@ describe("the notes, open (ruling 158 point 3)", () => {
 
   it("draw a full path in backticks as the reply's file reference, by its name; other backticks as written", () => {
     const container = mount();
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     const second = paragraphs(container)[1];
     expect(second.textContent).toBe(
-      "10月28日：资料收集模板做好了：希尔顿项目资料收集模板.md，用 `todo show` 看",
+      "10月28日：资料收集模板做好了：松岚湾项目资料收集模板.md，用 `todo show` 看",
     );
     const file = second.querySelector<HTMLButtonElement>(".file-path-button")!;
-    expect(file.textContent).toBe("希尔顿项目资料收集模板.md");
+    expect(file.textContent).toBe("松岚湾项目资料收集模板.md");
     // A click on it is the file's: the reading panel asked, the notes
     // not opened for changing, the row still open.
     click(file);
     expect(activated).toEqual([PATH]);
     expect(document.querySelector("textarea")).toBeNull();
-    expect(row(container, "todo_hilton").hasAttribute("data-todo-open")).toBe(
+    expect(row(container, "todo_intake").hasAttribute("data-todo-open")).toBe(
       true,
     );
     // A click on the words opens the box with the notes as written.
     click(second.querySelector("[data-caret-from]")!);
-    expect(document.querySelector("textarea")!.value).toBe(HILTON.notes);
+    expect(document.querySelector("textarea")!.value).toBe(INTAKE.notes);
   });
 
   it("are words, the file by its name, without the conversation's file context", () => {
     const container = mount(false);
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     const second = paragraphs(container)[1];
     expect(second.querySelector(".file-path-button")).toBeNull();
-    expect(second.textContent).toContain("希尔顿项目资料收集模板.md");
+    expect(second.textContent).toContain("松岚湾项目资料收集模板.md");
     expect(second.textContent).not.toContain(PATH);
   });
 });
@@ -330,17 +330,17 @@ describe("the notes, open (ruling 158 point 3)", () => {
 describe("the notes, folded", () => {
   it("say a backticked path by its file's name, the backticks gone, and are no button", () => {
     const container = mount();
-    const line = row(container, "todo_hilton").querySelector(
+    const line = row(container, "todo_intake").querySelector(
       '[data-role="todo-notes"]',
     )!;
     expect(line.textContent).toBe(
-      "10月29日：业主说筹开预算下周给 10月28日：资料收集模板做好了：希尔顿项目资料收集模板.md，用 `todo show` 看 Oct 27: the owner sent the address",
+      "10月29日：业主说筹开预算下周给 10月28日：资料收集模板做好了：松岚湾项目资料收集模板.md，用 `todo show` 看 Oct 27: the owner sent the address",
     );
     expect(line.querySelector("button")).toBeNull();
     expect(line.querySelector('[data-role="todo-notes-day"]')).toBeNull();
     // A click on it opens the row, as before.
     click(line);
-    expect(row(container, "todo_hilton").hasAttribute("data-todo-open")).toBe(
+    expect(row(container, "todo_intake").hasAttribute("data-todo-open")).toBe(
       true,
     );
   });

@@ -98,10 +98,10 @@ afterAll(() => {
 const NOW = new Date().toISOString();
 const items = (...words: [string, boolean][]): TodoSubitem[] =>
   words.map(([text, done], at) => ({ id: `item_${at}`, text, done }));
-const HILTON: TodoItem = {
+const INTAKE: TodoItem = {
   kind: "todo",
-  id: "todo_hilton",
-  text: "希尔顿酒店项目上下文资料收集",
+  id: "todo_intake",
+  text: "松岚湾酒店项目上下文资料收集",
   state: "open",
   createdBy: "assistant",
   createdIn: { sessionId: "s-main", turnIndex: 4 },
@@ -128,12 +128,12 @@ const list = (yours: TodoItem[]): AssistantTodo => ({
 });
 
 /** What Core holds, as the moves change it and the reads return. */
-let core: AssistantTodo = list([HILTON, SOIL]);
+let core: AssistantTodo = list([INTAKE, SOIL]);
 let refuse: string | null = null;
 
 let root: Root | null = null;
 beforeEach(() => {
-  core = list([HILTON, SOIL]);
+  core = list([INTAKE, SOIL]);
   refuse = null;
   useAssistantTodoStore.setState({
     todo: core,
@@ -184,7 +184,7 @@ beforeEach(() => {
           };
         }),
       );
-      return { id: "todo_hilton" };
+      return { id: "todo_intake" };
     }
     return undefined;
   });
@@ -272,9 +272,9 @@ describe("the handle (ruling 158 point 1)", () => {
   it("is on each item of an open to-do with two or more, seen on hover or focus, named for its item", () => {
     const container = mount();
     // Folded: no items drawn, no handle.
-    expect(handles(container, "todo_hilton")).toEqual([]);
-    open(container, "todo_hilton");
-    const all = handles(container, "todo_hilton");
+    expect(handles(container, "todo_intake")).toEqual([]);
+    open(container, "todo_intake");
+    const all = handles(container, "todo_intake");
     expect(all).toHaveLength(3);
     expect(all[2].getAttribute("aria-label")).toBe(
       "拖动调整「筹开预算」的位置",
@@ -302,26 +302,26 @@ describe("the handle (ruling 158 point 1)", () => {
 
   it("is not on an item whose words are being changed, nor on one still on its way to Core", async () => {
     const container = mount();
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     click(
-      row(container, "todo_hilton").querySelectorAll(
+      row(container, "todo_intake").querySelectorAll(
         '[data-role="todo-item-text"]',
       )[1],
     );
     expect(
-      row(container, "todo_hilton")
+      row(container, "todo_intake")
         .querySelectorAll("[data-todo-subitem]")[1]
         .querySelector('[data-role="todo-item-handle"]'),
     ).toBeNull();
-    expect(handles(container, "todo_hilton")).toHaveLength(2);
+    expect(handles(container, "todo_intake")).toHaveLength(2);
     act(() =>
       useAssistantTodoStore.setState({
         subitemAdds: {
-          todo_hilton: [{ key: "pending_1", text: "开业时间表" }],
+          todo_intake: [{ key: "pending_1", text: "开业时间表" }],
         },
       }),
     );
-    const pending = row(container, "todo_hilton").querySelector(
+    const pending = row(container, "todo_intake").querySelector(
       "[data-todo-subitem-pending]",
     )!;
     expect(pending.querySelector('[data-role="todo-item-handle"]')).toBeNull();
@@ -329,19 +329,19 @@ describe("the handle (ruling 158 point 1)", () => {
 
   it("is not there while the to-do's tick holds its place", () => {
     const container = mount();
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     act(() =>
       useAssistantTodoStore.setState({
-        flips: { todo_hilton: { done: true, phase: "settling" } },
+        flips: { todo_intake: { done: true, phase: "settling" } },
       }),
     );
-    expect(handles(container, "todo_hilton")).toEqual([]);
+    expect(handles(container, "todo_intake")).toEqual([]);
   });
 });
 
 describe("moving an item from the keyboard", () => {
   async function lift(container: HTMLElement, at: number) {
-    const handle = handles(container, "todo_hilton")[at];
+    const handle = handles(container, "todo_intake")[at];
     act(() => handle.focus());
     press(handle, "Space", " ");
     // The sensor listens a tick after it picks the item up.
@@ -351,47 +351,47 @@ describe("moving an item from the keyboard", () => {
 
   it("Space picks it up, the arrows move it, Space puts it down: drawn at once, then Core", async () => {
     const container = mount();
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     const handle = await lift(container, 2);
     press(handle, "ArrowUp");
     press(handle, "ArrowUp");
     press(handle, "Space", " ");
-    expect(words(container, "todo_hilton")).toEqual([
+    expect(words(container, "todo_intake")).toEqual([
       "筹开预算",
       "具体品牌与管理模式",
       "项目位置",
     ]);
     await settle();
     expect(calls("move_todo_subitem")).toEqual([{ id: "item_2", to: 1 }]);
-    expect(words(container, "todo_hilton")).toEqual([
+    expect(words(container, "todo_intake")).toEqual([
       "筹开预算",
       "具体品牌与管理模式",
       "项目位置",
     ]);
     expect(useAssistantTodoStore.getState().subitemOrders).toEqual({});
     // The row stays open, and does not light for its own move.
-    expect(row(container, "todo_hilton").hasAttribute("data-todo-open")).toBe(
+    expect(row(container, "todo_intake").hasAttribute("data-todo-open")).toBe(
       true,
     );
     await act(async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
-    expect(row(container, "todo_hilton").classList).not.toContain(
+    expect(row(container, "todo_intake").classList).not.toContain(
       LOCATE_FLASH_CLASS,
     );
   });
 
   it("Esc gives up the drag and leaves the row open; put down where it was, nothing is written", async () => {
     const container = mount();
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     let handle = await lift(container, 2);
     press(handle, "ArrowUp");
     press(handle, "Escape");
     await settle();
-    expect(row(container, "todo_hilton").hasAttribute("data-todo-open")).toBe(
+    expect(row(container, "todo_intake").hasAttribute("data-todo-open")).toBe(
       true,
     );
-    expect(words(container, "todo_hilton")).toEqual([
+    expect(words(container, "todo_intake")).toEqual([
       "具体品牌与管理模式",
       "项目位置",
       "筹开预算",
@@ -405,18 +405,18 @@ describe("moving an item from the keyboard", () => {
   it("puts them back as Core has them when Core refuses, the reason under the list", async () => {
     refuse = JSON.stringify({ error: "invalid_args", message: "boom" });
     const container = mount();
-    open(container, "todo_hilton");
+    open(container, "todo_intake");
     const handle = await lift(container, 0);
     press(handle, "ArrowDown");
     press(handle, "Space", " ");
     await settle();
     expect(calls("move_todo_subitem")).toEqual([{ id: "item_0", to: 2 }]);
-    expect(words(container, "todo_hilton")).toEqual([
+    expect(words(container, "todo_intake")).toEqual([
       "具体品牌与管理模式",
       "项目位置",
       "筹开预算",
     ]);
-    const why = row(container, "todo_hilton").querySelector(
+    const why = row(container, "todo_intake").querySelector(
       '[data-role="todo-items"] > [role="alert"]',
     );
     expect(why?.textContent).toBe("没能完成，再试一次。");
@@ -427,7 +427,7 @@ describe("Galley moves an item", () => {
   it("lights the row while the panel is on screen", async () => {
     const container = mount();
     core = list([
-      { ...HILTON, items: [HILTON.items![2], ...HILTON.items!.slice(0, 2)] },
+      { ...INTAKE, items: [INTAKE.items![2], ...INTAKE.items!.slice(0, 2)] },
       SOIL,
     ]);
     await act(async () => {
@@ -436,11 +436,11 @@ describe("Galley moves an item", () => {
     await act(async () => {
       await new Promise((resolve) => requestAnimationFrame(resolve));
     });
-    expect(row(container, "todo_hilton").classList).toContain(
+    expect(row(container, "todo_intake").classList).toContain(
       LOCATE_FLASH_CLASS,
     );
-    open(container, "todo_hilton");
-    expect(words(container, "todo_hilton")).toEqual([
+    open(container, "todo_intake");
+    expect(words(container, "todo_intake")).toEqual([
       "筹开预算",
       "具体品牌与管理模式",
       "项目位置",

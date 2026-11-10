@@ -28,9 +28,9 @@ import type { MessageRow } from "@/types/db";
  */
 
 const MAIN_CHAT = "s-main";
-const HILTON = "todo_4c8e1a7d2b9f3605";
+const INTAKE = "todo_4c8e1a7d2b9f3605";
 const EARLIER_REPLY =
-  "希尔顿那件我先做了一份资料收集模板，你拿到业主那边的资料照着填就行。";
+  "松岚湾那件我先做了一份资料收集模板，你拿到业主那边的资料照着填就行。";
 const REPLY_ID = `msg_${MAIN_CHAT}_43_assistant`;
 
 const at = (hour: number, minute = 0, second = 0) =>
@@ -87,10 +87,10 @@ function reviewRows(): MessageRow[] {
       id: `msg_${MAIN_CHAT}_41_assistant`,
       role: "assistant",
       turn_index: 41,
-      content: "<summary>读了希尔顿那件：备注里还没有模板那一行。</summary>",
-      summary: "读了希尔顿那件：备注里还没有模板那一行。",
+      content: "<summary>读了松岚湾那件：备注里还没有模板那一行。</summary>",
+      summary: "读了松岚湾那件：备注里还没有模板那一行。",
       ...codeRun(
-        `galley todo show ${HILTON}`,
+        `galley todo show ${INTAKE}`,
         '{"todo": {"notes": "收集要点：…"}}',
       ),
       created_at: at(8, 51, 20),
@@ -102,7 +102,7 @@ function reviewRows(): MessageRow[] {
       content: "<summary>在备注最前面补了模板那一行。</summary>",
       summary: "在备注最前面补了模板那一行。",
       ...codeRun(
-        `galley todo update ${HILTON} --notes="10月29日：资料收集模板做好了：…\n收集要点：…"`,
+        `galley todo update ${INTAKE} --notes="10月29日：资料收集模板做好了：…\n收集要点：…"`,
         '{"todo": {"id": "todo_4c8e1a7d2b9f3605"}}',
       ),
       created_at: at(8, 51, 40),
@@ -112,9 +112,9 @@ function reviewRows(): MessageRow[] {
       role: "assistant",
       turn_index: 43,
       content:
-        "<summary>补了希尔顿的进展，没有新东西要说。</summary>\n<no-reply/>",
+        "<summary>补了松岚湾的进展，没有新东西要说。</summary>\n<no-reply/>",
       final_answer: null,
-      summary: "补了希尔顿的进展，没有新东西要说。",
+      summary: "补了松岚湾的进展，没有新东西要说。",
       ...noTool,
       created_at: at(8, 52),
     }),
@@ -156,17 +156,17 @@ describe("a morning review that only adds a line to a to-do's notes", () => {
   });
 
   it("hangs no to-do card on the review: an updated to-do keeps the card of the turn that noted it", () => {
-    const hilton = {
+    const intake = {
       kind: "todo",
-      id: HILTON,
-      text: "希尔顿酒店项目上下文资料收集",
+      id: INTAKE,
+      text: "松岚湾酒店项目上下文资料收集",
       state: "open",
       createdBy: "assistant",
       notes: "10月29日：资料收集模板做好了：…\n收集要点：…",
       createdIn: { sessionId: MAIN_CHAT, turnIndex: 30 },
       createdAt: "2026-10-28T09:44:00+00:00",
     } as TodoItem;
-    const cards = todosByMessage([hilton], MAIN_CHAT);
+    const cards = todosByMessage([intake], MAIN_CHAT);
     expect([...cards.keys()]).toEqual([`msg_${MAIN_CHAT}_30_assistant`]);
     expect(cards.has(REPLY_ID)).toBe(false);
   });

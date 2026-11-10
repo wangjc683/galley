@@ -1533,11 +1533,11 @@ async fn with_nothing_to_look_at_the_review_wakes_nobody() {
     let reports = SubtaskReports::new();
     let review = ensure_review(&galley, &rec).await.expect("made");
     // Ticket 81: what has an alarm of its own does not wake it. A to-do
-    // due later, with its reminder (702) or without, four days on;
+    // due later, with its reminder (905) or without, four days on;
     // Galley's own one-offs, either target.
     users_todo(
         &galley,
-        "702 办公室装修完工",
+        "905 办公室装修完工",
         Some(day_from_today(29)),
         true,
     )
@@ -2279,8 +2279,8 @@ async fn run_by_hand_the_review_names_its_own_window_and_again_today_none() {
 
 use galley_core_lib::api::{CreateTodoInput, TodoBrief, TodoPatch};
 
-/// The Hilton to-do's notes as Galley noted them.
-const HILTON_NOTES: &str = "收集要点：项目地址与业主方；品牌定位与客房数量";
+/// The intake to-do's notes as Galley noted them.
+const INTAKE_NOTES: &str = "收集要点：项目地址与业主方；品牌定位与客房数量";
 
 /// A to-do of the user's the assistant noted, due `due` (`None`: any
 /// time), as if noted at `noted` and last changed at `changed`.
@@ -2296,7 +2296,7 @@ async fn todo_at(
         .create_todo(
             CreateTodoInput {
                 title: title.into(),
-                notes: Some(HILTON_NOTES.into()),
+                notes: Some(INTAKE_NOTES.into()),
                 due,
                 remind_at: None,
                 items: Vec::new(),
@@ -2321,14 +2321,14 @@ async fn the_review_wakes_only_for_what_moved_since_the_last_one() {
     let (pool, galley) = with_main_chat().await;
     let rec = Recorder::default();
     let review = ensure_review(&galley, &rec).await.expect("made");
-    // The Hilton to-do, no date: noted three days ago; the review the day
+    // The intake to-do, no date: noted three days ago; the review the day
     // before yesterday got something done for it and added a line on top
     // of its notes at 9:05. An overdue one and one due in two days, noted
     // a week ago.
-    let hilton = todo_at(
+    let intake = todo_at(
         &galley,
         &pool,
-        "希尔顿酒店项目上下文资料收集",
+        "松岚湾酒店项目上下文资料收集",
         None,
         local_at(-3, 17),
         local_at(-2, 9) + ChronoDuration::minutes(5),
@@ -2377,10 +2377,10 @@ async fn the_review_wakes_only_for_what_moved_since_the_last_one() {
     // notes): changed since, so the next one wakes.
     galley
         .update_todo(
-            &hilton.id,
+            &intake.id,
             TodoPatch {
                 notes: Some(Some(format!(
-                    "10月29日：业主说下周给项目地址\n{HILTON_NOTES}"
+                    "10月29日：业主说下周给项目地址\n{INTAKE_NOTES}"
                 ))),
                 ..TodoPatch::default()
             },
@@ -2485,7 +2485,7 @@ async fn the_review_wakes_for_what_is_new_or_newly_near_and_memos_as_before() {
     todo_at(
         &galley,
         &pool,
-        "希尔顿酒店项目上下文资料收集",
+        "松岚湾酒店项目上下文资料收集",
         None,
         noted(),
         noted(),

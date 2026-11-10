@@ -93,15 +93,15 @@ describe("the day a paragraph starts with", () => {
 describe("a full path in backticks", () => {
   it("is the file, by its name, the backticks gone", () => {
     const notes =
-      "10月28日：资料收集模板做好了：`/Users/me/Downloads/希尔顿项目资料收集模板.md`，等业主发来";
+      "10月28日：资料收集模板做好了：`/Users/me/Downloads/松岚湾项目资料收集模板.md`，等业主发来";
     const [p] = todoNotesParagraphs(notes);
     expect(gist(p.pieces)).toBe(
-      "[10月28日：]资料收集模板做好了：<希尔顿项目资料收集模板.md|/Users/me/Downloads/希尔顿项目资料收集模板.md>，等业主发来",
+      "[10月28日：]资料收集模板做好了：<松岚湾项目资料收集模板.md|/Users/me/Downloads/松岚湾项目资料收集模板.md>，等业主发来",
     );
     const file = p.pieces.find((piece) => piece.kind === "path")!;
     // Where its backticks are in the notes.
     expect(file.kind === "path" && notes.slice(file.start, file.end)).toBe(
-      "`/Users/me/Downloads/希尔顿项目资料收集模板.md`",
+      "`/Users/me/Downloads/松岚湾项目资料收集模板.md`",
     );
   });
 

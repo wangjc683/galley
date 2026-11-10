@@ -2124,7 +2124,7 @@ mod tests {
     fn nothing_to_look_at() -> (Vec<TodoBrief>, Vec<ScheduledTaskBrief>, Vec<SubtaskFacts>) {
         let noted = "2026-10-10T00:00:00+00:00";
         let todos = vec![
-            // 702: due 11-20, its reminder that morning.
+            // 905: due 11-20, its reminder that morning.
             with_reminder(
                 todo("t-far", Some(date(2026, 11, 20)), noted),
                 "2026-11-20T01:00:00+00:00",
@@ -2312,8 +2312,8 @@ mod tests {
     #[test]
     fn the_review_wakes_only_for_what_moved_since_the_last_one() {
         let noted = "2026-10-10T00:00:00+00:00";
-        // What did not move since yesterday's review: any time (Hilton's
-        // kind: the thing handed over, no word since), overdue, today,
+        // What did not move since yesterday's review: any time (the intake
+        // to-do's kind: the thing handed over, no word since), overdue, today,
         // Sun the 18th (yesterday's three days), Tue the 20th (beyond
         // today's), one changed a second before the review; subtasks not
         // finished whose last activity was before it (running too); and
@@ -2443,7 +2443,7 @@ mod tests {
             assert!(looks_since(&quiet, &tasks, &with, YESTERDAY), "{id}");
             assert!(looks_since(&[], &[], &[moved], YESTERDAY), "{id} alone");
         }
-        // Due beyond today's three days stays out, changed since (702's
+        // Due beyond today's three days stays out, changed since (905's
         // kind: news moved it) or noted since: its reminder raises it.
         let beyond = [
             changed(

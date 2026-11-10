@@ -2114,7 +2114,7 @@ mod tests {
     /// ruling 112): +105 bytes, the to-do sentence widened to what comes
     /// up on a date and will be worth raising then, with two examples (a
     /// renovation due to finish, a lease ending). Without it a remark like
-    /// 「装修师傅说 702 办公室 11 月 20 号能完工」 has no CLI write in
+    /// 「装修师傅说 905 办公室 11 月 20 号能完工」 has no CLI write in
     /// sight (the sentence named only what the user has to do), so the
     /// model would not open `todos.md`, where the test of when to follow
     /// something up unasked is. Raised 2568 → 2675 by ticket 63 (main chat
@@ -2909,7 +2909,7 @@ mod tests {
             declined(
                 TodoKind::Task,
                 "sched_7a1b2c3d4e5f6a7b",
-                "提醒用户确认 702 装修进度",
+                "提醒用户确认 905 装修进度",
                 "2026-10-15T13:30:00+00:00",
                 DeclinedBy::User,
                 None,
@@ -2917,7 +2917,7 @@ mod tests {
             declined(
                 TodoKind::Todo,
                 "todo_5e6f7a8b9c0d1e2f",
-                "702 装修验收",
+                "905 装修验收",
                 "2026-10-14T01:12:00+00:00",
                 DeclinedBy::Assistant,
                 Some("用户说装修这类的别提醒"),
@@ -2929,8 +2929,8 @@ mod tests {
             "",
             "",
             "Follow-ups the user turned down (to-dos and reminders you set that were cancelled on the desktop or at their request, last 90 days):",
-            "- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-15 21:30 (Thu) by the user on the desktop: 提醒用户确认 702 装修进度",
-            "- `todo_5e6f7a8b9c0d1e2f` cancelled 2026-10-14 09:12 (Wed) by you at the user's request: 702 装修验收 (reason: 用户说装修这类的别提醒)",
+            "- `sched_7a1b2c3d4e5f6a7b` cancelled 2026-10-15 21:30 (Thu) by the user on the desktop: 提醒用户确认 905 装修进度",
+            "- `todo_5e6f7a8b9c0d1e2f` cancelled 2026-10-14 09:12 (Wed) by you at the user's request: 905 装修验收 (reason: 用户说装修这类的别提醒)",
         ]
         .join("\n");
         assert_eq!(text, format!("{want}{fourth}"));
@@ -3406,19 +3406,19 @@ mod tests {
             listed("订机票", true),
             listed("换港币", false),
         ];
-        let mut hilton = open_todo(
+        let mut intake = open_todo(
             "todo_6f7a8b9c0d1e2f3a",
-            "希尔顿酒店项目资料收集",
+            "松岚湾酒店项目资料收集",
             None,
             false,
             None,
         );
-        hilton.items = vec![listed("品牌", false), listed("预算", false)];
+        intake.items = vec![listed("品牌", false), listed("预算", false)];
         let soil = open_todo("todo_4d5e6f7a8b9c0d1e", "买营养土", None, false, None);
         let todo = AssistantTodo {
             yours: YourTodos {
                 later: vec![trip],
-                anytime: vec![hilton, soil],
+                anytime: vec![intake, soil],
                 ..YourTodos::default()
             },
             ..AssistantTodo::default()
@@ -3426,7 +3426,7 @@ mod tests {
         let text = in_hand_section(&todo, &[], at("2026-10-16T06:05:00Z"), &shanghai()).unwrap();
         for line in [
             "- `todo_5e6f7a8b9c0d1e2f` due 2026-10-21 (Wed), reminder 2026-10-20 20:00 (Tue), 2 of 3 items done: 去上海出差",
-            "- `todo_6f7a8b9c0d1e2f3a` no due date, 0 of 2 items done: 希尔顿酒店项目资料收集",
+            "- `todo_6f7a8b9c0d1e2f3a` no due date, 0 of 2 items done: 松岚湾酒店项目资料收集",
             "- `todo_4d5e6f7a8b9c0d1e` no due date: 买营养土",
         ] {
             assert!(text.contains(line), "{line}\n{text}");

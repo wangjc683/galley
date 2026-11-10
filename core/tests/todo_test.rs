@@ -1193,7 +1193,7 @@ async fn the_follow_ups_turned_down_and_only_the_main_chat_reads_them() {
         &galley,
         CreateTodoInput {
             remind_at: Some(hours(4)),
-            ..titled("702 装修验收")
+            ..titled("905 装修验收")
         },
     )
     .await;
@@ -1449,7 +1449,7 @@ async fn the_desktop_changes_a_to_dos_title_and_notes_and_nothing_else() {
             due: Some("2026-11-20".into()),
             remind_at: Some(at.clone()),
             notes: Some("收集要点：具体位置".into()),
-            ..titled("希尔顿酒店项目上下文资料收集")
+            ..titled("松岚湾酒店项目上下文资料收集")
         },
     )
     .await;
@@ -1469,7 +1469,7 @@ async fn the_desktop_changes_a_to_dos_title_and_notes_and_nothing_else() {
         notes.notes.as_deref(),
         Some("收集要点：具体位置、预算\n联系人")
     );
-    assert_eq!(notes.title, "希尔顿酒店项目上下文资料收集");
+    assert_eq!(notes.title, "松岚湾酒店项目上下文资料收集");
     assert_eq!(notes.due, hotel.due);
     assert_eq!(notes.reminder, hotel.reminder);
     assert_eq!(
@@ -1484,19 +1484,19 @@ async fn the_desktop_changes_a_to_dos_title_and_notes_and_nothing_else() {
     let title = writes
         .update_todo(
             &id(&hotel),
-            TodoPatch::words(Some("希尔顿酒店项目资料收集".into()), None),
+            TodoPatch::words(Some("松岚湾酒店项目资料收集".into()), None),
             Origin::desktop(),
         )
         .await
         .expect("change the title");
-    assert_eq!(title.title, "希尔顿酒店项目资料收集");
+    assert_eq!(title.title, "松岚湾酒店项目资料收集");
     assert_eq!(title.notes, notes.notes);
     assert_eq!(title.due, hotel.due);
     assert_eq!(reminder_id(&title), task);
     assert_eq!(title.reminder.as_ref().unwrap().at, at);
     assert_eq!(
         galley.scheduled_task(task.as_str()).await.unwrap().prompt,
-        "希尔顿酒店项目资料收集"
+        "松岚湾酒店项目资料收集"
     );
 
     // Empty notes take them away.
@@ -1509,7 +1509,7 @@ async fn the_desktop_changes_a_to_dos_title_and_notes_and_nothing_else() {
         .await
         .expect("clear the notes");
     assert!(cleared.notes.is_none());
-    assert_eq!(cleared.title, "希尔顿酒店项目资料收集");
+    assert_eq!(cleared.title, "松岚湾酒店项目资料收集");
 
     // An empty title is refused and changes nothing.
     let err = writes
@@ -1522,7 +1522,7 @@ async fn the_desktop_changes_a_to_dos_title_and_notes_and_nothing_else() {
         .unwrap_err();
     assert!(invalid_with(err, "update_todo: a to-do needs a title"));
     let now = galley.todo(hotel.id.as_str()).await.unwrap();
-    assert_eq!(now.title, "希尔顿酒店项目资料收集");
+    assert_eq!(now.title, "松岚湾酒店项目资料收集");
     assert!(now.notes.is_none());
 
     // One deleted meanwhile: not there any more.
@@ -1629,7 +1629,7 @@ async fn a_main_chat_reset_clears_every_to_do_and_their_reminders() {
 #[tokio::test]
 async fn a_main_chat_reset_forgets_what_the_user_turned_down() {
     let (pool, galley) = with_main_chat().await;
-    let reno = note(&galley, titled("702 装修验收")).await;
+    let reno = note(&galley, titled("905 装修验收")).await;
     galley
         .cancel_todo(&id(&reno), turned_down("装修这类别提醒"))
         .await
@@ -1915,17 +1915,17 @@ async fn an_item_moves_to_its_place_and_the_rest_close_up_around_it() {
     // Main chat ticket 112 (PRD ruling 158): the panel's drag, `todo item
     // move --to`.
     let (pool, galley) = with_main_chat().await;
-    let hilton = note(
+    let intake = note(
         &galley,
         items(
-            titled("希尔顿酒店项目资料收集"),
+            titled("松岚湾酒店项目资料收集"),
             &["品牌", "位置", "证照", "预算", "人员"],
         ),
     )
     .await;
-    let budget = item_id(&hilton, 3);
+    let budget = item_id(&intake, 3);
     galley
-        .complete_todo_subitem(&item_id(&hilton, 1), Origin::desktop())
+        .complete_todo_subitem(&item_id(&intake, 1), Origin::desktop())
         .await
         .unwrap();
     // To the first place: the ones before it move down one.
@@ -1949,7 +1949,7 @@ async fn an_item_moves_to_its_place_and_the_rest_close_up_around_it() {
         ("证照", 4),
         ("人员", 5),
     ];
-    let kept = positions(&pool, &id(&hilton)).await;
+    let kept = positions(&pool, &id(&intake)).await;
     assert_eq!(
         kept.iter()
             .map(|(t, p)| (t.as_str(), *p))
@@ -1957,7 +1957,7 @@ async fn an_item_moves_to_its_place_and_the_rest_close_up_around_it() {
         want
     );
     assert_eq!(
-        texts(&galley.todo(hilton.id.as_str()).await.unwrap()),
+        texts(&galley.todo(intake.id.as_str()).await.unwrap()),
         ["预算", "品牌", "位置", "证照", "人员"]
     );
     // Down: the ones after it move up one.
@@ -1989,12 +1989,12 @@ async fn an_item_moves_to_its_place_and_the_rest_close_up_around_it() {
         );
     }
     assert_eq!(
-        texts(&galley.todo(hilton.id.as_str()).await.unwrap()),
+        texts(&galley.todo(intake.id.as_str()).await.unwrap()),
         ["品牌", "位置", "证照", "人员", "预算"]
     );
     // Added after a move: after the last, wherever it was moved from.
     let more = galley
-        .add_todo_subitems(&id(&hilton), &strings(&["系统"]), assistant())
+        .add_todo_subitems(&id(&intake), &strings(&["系统"]), assistant())
         .await
         .unwrap();
     assert_eq!(
@@ -2011,7 +2011,7 @@ async fn an_item_moves_to_its_place_and_the_rest_close_up_around_it() {
         .await
         .unwrap();
     assert_eq!(texts(&moved), ["系统", "位置", "证照", "人员", "预算"]);
-    let kept: Vec<i64> = positions(&pool, &id(&hilton))
+    let kept: Vec<i64> = positions(&pool, &id(&intake))
         .await
         .into_iter()
         .map(|(_, p)| p)
@@ -2234,14 +2234,14 @@ async fn every_item_write_stamps_its_to_do_and_a_write_that_changes_nothing_does
 async fn an_item_write_wakes_the_next_review_as_a_change_to_the_notes_does() {
     // PRD ruling 157 point 8: the review reads the to-do's `updated_at`.
     let (pool, galley) = with_main_chat().await;
-    let hilton = note(
+    let intake = note(
         &galley,
-        items(titled("希尔顿酒店项目资料收集"), &["品牌", "预算"]),
+        items(titled("松岚湾酒店项目资料收集"), &["品牌", "预算"]),
     )
     .await;
     let last = LastReview::read(Some(&hours(1)), &Local).unwrap();
     // Noted before the review: it does not wake for it.
-    stamp_back(&pool, &id(&hilton)).await;
+    stamp_back(&pool, &id(&intake)).await;
     let today = Local::now().date_naive();
     assert!(!read(&galley)
         .await
@@ -2249,7 +2249,7 @@ async fn an_item_write_wakes_the_next_review_as_a_change_to_the_notes_does() {
     // An item ticked after the review moved it.
     let last = LastReview::read(Some(&hours(-1)), &Local).unwrap();
     galley
-        .complete_todo_subitem(&item_id(&hilton, 0), Origin::desktop())
+        .complete_todo_subitem(&item_id(&intake, 0), Origin::desktop())
         .await
         .unwrap();
     assert!(read(&galley)

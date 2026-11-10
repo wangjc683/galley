@@ -650,7 +650,7 @@ async fn todo_item_move_puts_an_item_in_its_place() {
         &[
             "todo",
             "add",
-            "希尔顿酒店项目资料收集",
+            "松岚湾酒店项目资料收集",
             "--item=品牌",
             "--item=位置",
             "--item=证照",
@@ -659,9 +659,9 @@ async fn todo_item_move_puts_an_item_in_its_place() {
         ],
     )
     .await;
-    let hilton = json_of(&out)["todo"].clone();
-    let tid = hilton["id"].as_str().unwrap().to_string();
-    let budget = hilton["items"][3]["id"].as_str().unwrap().to_string();
+    let intake = json_of(&out)["todo"].clone();
+    let tid = intake["id"].as_str().unwrap().to_string();
+    let budget = intake["items"][3]["id"].as_str().unwrap().to_string();
     // Printed as every item write: the to-do with all its items.
     let out = ok(
         dir,

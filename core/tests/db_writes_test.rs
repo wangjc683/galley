@@ -3502,7 +3502,7 @@ async fn migration_054_adds_the_items_under_a_to_do_and_leaves_the_to_dos_as_the
     }
     sqlx::query(
         "INSERT INTO todos (id, title, notes, created_via, created_at, updated_at) \
-         VALUES ('todo_before', '希尔顿酒店项目资料收集', '收集要点：品牌、预算', \
+         VALUES ('todo_before', '松岚湾酒店项目资料收集', '收集要点：品牌、预算', \
                  'supervisor', '2026-10-28T09:46:38+00:00', '2026-10-28T09:46:38+00:00')",
     )
     .execute(&pool)
@@ -3587,7 +3587,7 @@ async fn migration_051_records_who_cancelled_and_leaves_older_cancels_unknown() 
     sqlx::query(
         "INSERT INTO todos (id, title, cancelled_at, created_via, created_by_supervisor, \
             created_at, updated_at) \
-         VALUES ('todo_gone', '702 装修验收', '2026-10-16T01:00:00+00:00', 'supervisor', \
+         VALUES ('todo_gone', '905 装修验收', '2026-10-16T01:00:00+00:00', 'supervisor', \
                  'galley-assistant', 't', 't')",
     )
     .execute(&pool)
