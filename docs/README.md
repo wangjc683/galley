@@ -71,7 +71,8 @@ lines), split it into a directory with its own `README.md` routing index,
 grouped by what a session typically needs together. The original path stays
 behind as a redirect stub so external references keep resolving. Current
 stubs: `docs/DESIGN.md`, [docs/agent-api.md](./agent-api.md),
-[docs/managed-ga-runtime.md](./managed-ga-runtime.md).
+[docs/managed-ga-runtime.md](./managed-ga-runtime.md),
+[docs/design/conversation.md](./design/conversation.md).
 
 ## Update Triggers
 

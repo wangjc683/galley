@@ -10,7 +10,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 - **Claude 给**：暖色调、文学性可读性、对话感、克制
 - **二者结合 = 在文档工作区里跟一个温和但严肃的助手协作**
 
-不是「驾驶舱盯着野兽工作」，不是 IDE，不是双侧气泡的 chat IM，不是 dashboard。（用户消息的单侧容器不算 IM——那是「用户在容器里、助手是散文」的文档形态，2026-09-17 起采纳，见 [conversation §4.3](./conversation.md)。助手的对话是有意的例外：它要读起来像和一个人的长期 IM，两边都是气泡，2026-10-15 起，见 [conversation「助手的对话」](./conversation.md#助手的对话2026-10-15)；工作台照旧。）
+不是「驾驶舱盯着野兽工作」，不是 IDE，不是双侧气泡的 chat IM，不是 dashboard。（用户消息的单侧容器不算 IM——那是「用户在容器里、助手是散文」的文档形态，2026-09-17 起采纳，见 [conversation §4.3](./conversation.md)。助手的对话是有意的例外：它要读起来像和一个人的长期 IM，两边都是气泡，2026-10-15 起，见 [conversation「助手的对话」](./conversation/assistant.md#助手的对话2026-10-15)；工作台照旧。）
 
 ### 1.1 三个统摄性约束（PRD §15.4 重申，DESIGN 落地）
 
@@ -23,7 +23,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | 源头 | 借用 | 不借用 |
 |---|---|---|
 | **Notion** | sidebar 树、文档留白、callout 块 | 数据库视图复杂度、cover image、emoji-heavy 页面装饰 |
-| **Claude.ai** | 暖底色、衬线正文、hero composer、对话节奏、用户消息的单侧平涂容器（2026-09-17 起） | 双侧气泡（工作台：回复是纸上的散文；你的话 2026-10-16 起靠右，同 ChatGPT，见 [conversation「User vs Agent 三重区分」](./conversation.md#user-vs-agent-三重区分单侧容器不是-im-双侧气泡)；助手的对话照一对一 IM 用双侧气泡，见 [conversation「助手的对话」](./conversation.md#助手的对话2026-10-15)）、artifact 侧边栏（V0.1） |
+| **Claude.ai** | 暖底色、衬线正文、hero composer、对话节奏、用户消息的单侧平涂容器（2026-09-17 起） | 双侧气泡（工作台：回复是纸上的散文；你的话 2026-10-16 起靠右，同 ChatGPT，见 [conversation「User vs Agent 三重区分」](./conversation/turns.md#user-vs-agent-三重区分单侧容器不是-im-双侧气泡)；助手的对话照一对一 IM 用双侧气泡，见 [conversation「助手的对话」](./conversation/assistant.md#助手的对话2026-10-15)）、artifact 侧边栏（V0.1） |
 | **Linear** | 键盘优先、Command Palette、密度 | dark-first、cyan/emerald 信号、紧凑驾驶舱感 |
 | **Raycast** | overlay Command Palette 形态 | 顶部贴边、酷炫渐变 |
 
@@ -93,7 +93,7 @@ Galley 的视觉与交互气质 = **Notion + Claude**。
 | `--color-brand` | `bg-brand` / `text-brand` / `ring-brand` | `#D9A78A` | 杏沙，体温色 + Composer Submit CTA 例外 |
 | `--color-brand-soft` | `bg-brand-soft` | `#F8EDDA` | 杏沙最浅 tint |
 | `--color-brand-tint` | `bg-brand-tint` | `#F1DECE` | 比 brand-soft 更实的杏沙 band，用作用户消息底（长对话滚动可扫） |
-| `--color-assistant-tint` | `bg-assistant-tint` | `#F0F0F0` | 助手的气泡底（主对话里它的回复、提问与问候，[conversation「助手的对话」](./conversation.md#助手的对话2026-10-15)），与 brand-tint 对称的中性灰：离 app ΔL* −3.2、离杏沙 ΔE 约 12，两边靠色相分开。值同 `--color-hover`（试用时借的它），2026-10-15 单立 token，调悬停色时气泡不跟着变（主聊天 PRD 裁决 67）。气泡里的行内代码、代码块与表头另走 `bg-line` / 透明 |
+| `--color-assistant-tint` | `bg-assistant-tint` | `#F0F0F0` | 助手的气泡底（主对话里它的回复、提问与问候，[conversation「助手的对话」](./conversation/assistant.md#助手的对话2026-10-15)），与 brand-tint 对称的中性灰：离 app ΔL* −3.2、离杏沙 ΔE 约 12，两边靠色相分开。值同 `--color-hover`（试用时借的它），2026-10-15 单立 token，调悬停色时气泡不跟着变（主聊天 PRD 裁决 67）。气泡里的行内代码、代码块与表头另走 `bg-line` / 透明 |
 | `--color-avatar-ring` | `shadow-[inset_0_0_0_1px_var(--color-avatar-ring)]` | `rgba(0,0,0,0.12)` | 助手头像（应用图标裁成圆）里侧的 1px 描边，压在图上、不改外尺寸：图标的浅底（L* 89）和浅色侧栏的底只差 L* 1–5，没有它就没有边界（主聊天 PRD 裁决 70，[layout-and-chrome](./layout-and-chrome.md)「助手卡片」的「头像」）。画法是盖在图上的一层 inset 阴影，不用 `border` / `ring`：那两种画在盒子外缘或要改盒子尺寸 |
 | `--color-brand-strong` | `bg-brand-strong` / `text-brand-strong` | `#C68762` | 杏沙 hover/active；当前 step 状态 icon、Submit hover |
 | `--color-success` | `text-success` / `bg-success` | `#5A8C5A` | 成功状态 line icon |

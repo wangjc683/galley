@@ -13,7 +13,7 @@ code span; it does not assert that the file is an Agent-produced deliverable.
 `gui/src/lib/local-file-path.ts` owns recognition and document-relative URL
 resolution; `core/src/local_file.rs` owns native validation, bounded reading,
 and OS opening. `LocalFileWorkspace` owns only transient preview state; Markdown resets
-on session switch. Behavior: [conversation design](./docs/design/conversation.md#本地文件引用与-markdown-预览).
+on session switch. Behavior: [conversation design](./docs/design/conversation/files-and-git-review.md#本地文件引用与-markdown-预览).
 
 ## Git worktree review
 
@@ -24,7 +24,7 @@ view. `core/src/git_review.rs` owns discovery, bounded Git reads and baseline
 validation; `GalleyApi::review_git` is shared by Tauri and socket. The reading
 panel owns only transient selection/layout, retained at window scope across
 session/project switches. No Git initialization, snapshot
-store, or runner integration. See [conversation design](./docs/design/conversation.md#git-工作区改动审阅).
+store, or runner integration. See [conversation design](./docs/design/conversation/files-and-git-review.md#git-工作区改动审阅).
 
 ## Turn numbering
 

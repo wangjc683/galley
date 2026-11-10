@@ -12,7 +12,7 @@ Date: 2026-10-16
 ## 为什么是这条
 
 1. **只改渲染出不来「生动」**。库里 450 条最终回复：带表格 32%（工作台 47%）、代码块 12%，mermaid 与本地 .html 路径都是 0；工具调用里也没写过 .html / .png / .svg（[research.md](./research.md)「Galley 现状」）。模型不会自己画，要生动就得给它一条输出通道。这等于重开 10-06 的否决：「界面渲染能力，804 条最终回答里 mermaid / LaTeX 为 0，没有事故」（[devlog](../../docs/devlog/2026-10-06-runtime-prompt-budget.md) 第 32 行）。这次的驱动是产品方向，不是事故。
-2. **落点现成**。助理的对话已经是 IM 气泡，子任务卡片紧贴气泡下 12px（[conversation「助手的对话」](../../docs/design/conversation.md#助手的对话2026-10-15)）；`<subtask>` 已经是「回复里写标签 → GUI 剥掉 → 画成卡片」（`gui/src/lib/ipc/ga-output-cleaning.ts`）；按需读的说明书也有先例：助理手册由 Core 编译进去、主对话启动时写到状态目录（`core/src/assistant_manual.rs`），系统提示只指过去。
+2. **落点现成**。助理的对话已经是 IM 气泡，子任务卡片紧贴气泡下 12px（[conversation「助手的对话」](../../docs/design/conversation/assistant.md#助手的对话2026-10-15)）；`<subtask>` 已经是「回复里写标签 → GUI 剥掉 → 画成卡片」（`gui/src/lib/ipc/ga-output-cleaning.ts`）；按需读的说明书也有先例：助理手册由 Core 编译进去、主对话启动时写到状态目录（`core/src/assistant_manual.rs`），系统提示只指过去。
 3. **业内**：开源桌面助手（Cherry Studio、LobeHub、Open WebUI、Chatbox）基本都是「增强 Markdown + 模型写 HTML 进沙箱」，没有一家在主对话里用组件 DSL；Claude 的内联 visuals（2026-03）与 OpenClaw 的 `show_widget`（本地助手 + IM 渠道 + 手机节点，形态最像 Galley）是同一形态。
 4. **不用 OpenUI**：默认整条回复必须是 Lang、聊天库 prompt 约 1.4 万 token、解析失败返回空、没有文本降级与 Swift 渲染器、小模型合法率 44–61%、1.0 刚发且约 90% 提交来自一家公司、默认有联网行为。细节见 [research.md](./research.md)「OpenUI」。
 

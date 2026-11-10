@@ -300,7 +300,10 @@ update channel.
 
 After publish and update-channel verification, update
 [project status](./project-status.md) so the repository reflects the released
-state.
+state. That includes the new release's paragraph at the top of the release
+paragraphs under Current Target; in the same edit, delete the paragraph that
+is now the fourth-newest release's (only the latest three stay; older
+narratives live in their release devlogs).
 
 For a docs-only status sync, do not wait for full `check.yml` before moving on.
 Run the lightweight whitespace check, commit, push, and confirm that GitHub
