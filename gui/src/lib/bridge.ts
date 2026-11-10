@@ -16,13 +16,11 @@ import type { RuntimeKind } from "@/types/session";
  * ## B2 M2 update
  *
  * The body of `spawnBridge` and the `BridgeClient` methods are now Tauri
- * `invoke()` wrappers against the Rust-side `RunnerManager`. The function
- * signatures are byte-identical to the v0.1 plugin-shell-backed version
- * (B2 invariant I1 locks the surface so callers don't change shape).
- * All bridge-process ownership lives in Rust now — spawn / stdin /
- * stdout / stderr / kill are commands invoked into Rust, and IPC events
- * arrive as Tauri events that this file fans back out to the registered
- * `BridgeHandlers` callbacks.
+ * `invoke()` wrappers against the Rust-side `RunnerManager`, in place of
+ * the v0.1 plugin-shell-backed version. All bridge-process ownership
+ * lives in Rust now — spawn / stdin / stdout / stderr / kill are
+ * commands invoked into Rust, and IPC events arrive as Tauri events that
+ * this file fans back out to the registered `BridgeHandlers` callbacks.
  *
  * ## Why this is still wired in TS
  *
