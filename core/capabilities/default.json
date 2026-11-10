@@ -9,7 +9,6 @@
     "autostart:default",
     "notification:default",
     "opener:default",
-    "shell:default",
     "dialog:default",
     "dialog:allow-save",
     "dialog:allow-open",
@@ -26,57 +25,6 @@
     {
       "identifier": "opener:allow-open-path",
       "allow": [{ "path": "$APPDATA/browser-control/**" }]
-    },
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        { "name": "python-bundled", "cmd": "$RESOURCE/python/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-bundled-win", "cmd": "$RESOURCE/python/python.exe", "args": true, "sidecar": false },
-        { "name": "python-ga-venv", "cmd": "$HOME/Documents/GenericAgent/.venv/bin/python", "args": true, "sidecar": false },
-        { "name": "python-ga-venv-alt", "cmd": "$HOME/Documents/GenericAgent/venv/bin/python", "args": true, "sidecar": false },
-        { "name": "python-brew-arm", "cmd": "/opt/homebrew/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-brew-intel", "cmd": "/usr/local/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-14", "cmd": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-13", "cmd": "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-12", "cmd": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-11", "cmd": "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3", "args": true, "sidecar": false },
-        { "name": "python3", "cmd": "python3", "args": true, "sidecar": false },
-        { "name": "python", "cmd": "python", "args": true, "sidecar": false }
-      ]
-    },
-    {
-      "identifier": "shell:allow-stdin-write",
-      "allow": [
-        { "name": "python-bundled", "cmd": "$RESOURCE/python/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-bundled-win", "cmd": "$RESOURCE/python/python.exe", "args": true, "sidecar": false },
-        { "name": "python-ga-venv", "cmd": "$HOME/Documents/GenericAgent/.venv/bin/python", "args": true, "sidecar": false },
-        { "name": "python-ga-venv-alt", "cmd": "$HOME/Documents/GenericAgent/venv/bin/python", "args": true, "sidecar": false },
-        { "name": "python-brew-arm", "cmd": "/opt/homebrew/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-brew-intel", "cmd": "/usr/local/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-14", "cmd": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-13", "cmd": "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-12", "cmd": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-11", "cmd": "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3", "args": true, "sidecar": false },
-        { "name": "python3", "cmd": "python3", "args": true, "sidecar": false },
-        { "name": "python", "cmd": "python", "args": true, "sidecar": false }
-      ]
-    },
-    {
-      "identifier": "shell:allow-kill",
-      "allow": [
-        { "name": "python-bundled", "cmd": "$RESOURCE/python/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-bundled-win", "cmd": "$RESOURCE/python/python.exe", "args": true, "sidecar": false },
-        { "name": "python-ga-venv", "cmd": "$HOME/Documents/GenericAgent/.venv/bin/python", "args": true, "sidecar": false },
-        { "name": "python-ga-venv-alt", "cmd": "$HOME/Documents/GenericAgent/venv/bin/python", "args": true, "sidecar": false },
-        { "name": "python-brew-arm", "cmd": "/opt/homebrew/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-brew-intel", "cmd": "/usr/local/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-14", "cmd": "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-13", "cmd": "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-12", "cmd": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3", "args": true, "sidecar": false },
-        { "name": "python-framework-3-11", "cmd": "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3", "args": true, "sidecar": false },
-        { "name": "python3", "cmd": "python3", "args": true, "sidecar": false },
-        { "name": "python", "cmd": "python", "args": true, "sidecar": false }
-      ]
     }
   ]
 }
