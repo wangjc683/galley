@@ -1,6 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import { shouldUseBundledPython } from "./bridge";
+import { copyForLanguage } from "@/lib/i18n";
+import { usePrefsStore } from "@/stores/prefs";
+import { resetStores } from "@/test/store-reset";
+
+import { formatInvokeError, shouldUseBundledPython } from "./bridge";
 
 describe("shouldUseBundledPython", () => {
   it("never uses the bundle in dev builds", () => {
@@ -55,5 +59,38 @@ describe("shouldUseBundledPython", () => {
       shouldUseBundledPython({ isProd: true, useExternalPython: true }),
     ).toBe(false);
     expect(shouldUseBundledPython({ isProd: true })).toBe(true);
+  });
+});
+
+describe("formatInvokeError · the runner-start errors that say what to do", () => {
+  beforeEach(() => {
+    resetStores();
+  });
+
+  const tagged = (error: string) =>
+    JSON.stringify({ error, detail: "from Core" });
+
+  it("words them in the UI's language, from the locale", () => {
+    for (const language of ["zh-CN", "en-US"] as const) {
+      usePrefsStore.setState({ languagePreference: language });
+      const errors = copyForLanguage(language).errors;
+      expect(formatInvokeError(tagged("managed_model_not_configured"))).toBe(
+        errors.managedModelUnavailable,
+      );
+      expect(formatInvokeError(tagged("managed_runtime_invalid"))).toBe(
+        errors.managedRuntimeInvalid,
+      );
+      expect(formatInvokeError(tagged("ga_path_invalid"))).toBe(
+        errors.gaPathInvalid,
+      );
+    }
+  });
+
+  it("keeps the tag and detail for every other error", () => {
+    usePrefsStore.setState({ languagePreference: "en-US" });
+    expect(formatInvokeError(tagged("python_not_found"))).toBe(
+      "Python not found: from Core",
+    );
+    expect(formatInvokeError("plain failure")).toBe("plain failure");
   });
 });

@@ -1,9 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+import { copyForLanguage } from "@/lib/i18n";
+import { resolveLanguagePreference } from "@/lib/language";
 import { logPerf, perfNow } from "@/lib/perf";
 import { isWindows } from "@/lib/platform";
 import { findCandidateByAlias } from "@/lib/python-probe";
+import { usePrefsStore } from "@/stores/prefs";
 import type { IPCCommand, IPCEvent, ReadyEvent } from "@/types/ipc";
 import type { RuntimeKind } from "@/types/session";
 
@@ -703,13 +706,16 @@ export function formatInvokeError(e: unknown): string {
 }
 
 function actionableInvokeError(tag: string): string | null {
+  const errors = copyForLanguage(
+    resolveLanguagePreference(usePrefsStore.getState().languagePreference),
+  ).errors;
   switch (tag) {
     case "managed_model_not_configured":
-      return "内置内核模型不可用。请在 Models 添加模型，或重新输入 API Key。";
+      return errors.managedModelUnavailable;
     case "managed_runtime_invalid":
-      return "Galley 内置运行时不完整。请重新安装或更新 Galley。";
+      return errors.managedRuntimeInvalid;
     case "ga_path_invalid":
-      return "接入的 GenericAgent 路径不可用。请到设置的 Runtime 页面重新选择 GA 目录。";
+      return errors.gaPathInvalid;
     default:
       return null;
   }
