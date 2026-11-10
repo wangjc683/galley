@@ -1,6 +1,6 @@
 # 07 内置内核载荷：不带演示媒体与测试，从指定提交取源
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-10 合入；打包映射与包体积要等下次发版的 CI 与安装包核对）
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 D22、D23（JC：「按建议推进」）。
 
@@ -69,3 +69,13 @@ git diff --check main..HEAD
 | 合入后 dev 里用内置内核跑一轮带工具调用的任务、一个 IM 渠道收发一条 | 下次发版的包体积比 v0.7.7 小约 22 MB（发版时核对） |
 
 ## Comments
+
+**2026-11-10 合入（主会话）**
+
+- `managed-ga/code` 从 27.9 MB 降到 4.8 MB，只删了 8 个文件（演示目录里 7 个，PDF 1 个；票面写的「两张 PNG」不对，是三张），其余逐字节不变。
+- 反例：把新克隆切到上游最新提交，放进被忽略的目录、未跟踪文件并改一个源文件，新脚本仍重建出相同的载荷。
+- 打包门禁在 `mac-x64` 上通过。没跑真正的 `tauri build`：`runner/*.py` 这条新映射是用 Tauri 构建脚本复制资源的结果加一个模拟应用包验的；Windows 的安装包那条路没有验证。JC 裁定这次不做 `release.yml` 的 dry-run，所以第一次真验证是下次发版的 CI。
+- 本机打包更严了：`managed-ga/` 下出现 `.DS_Store` 会让应用包门禁失败（有意，CI 不受影响）。
+- 上游自己的 `frontends/tests/`（约 252 KB）仍在载荷里，排除清单要求写窄，没有列它。
+- `AGENTS.md` 的 Product Shape 仍写「upstream GA + Galley's patch stack」，没改：排除的只是没有代码读的媒体文件，细节在载荷定义一节。
+- 票外没动的：`core/src/managed_runtime.rs` 的 `CRITICAL_MEMORY_SEED_FILES` 是第三份手抄清单，也缺 `ultraplan_sop.md`，而且影响运行时（重置主对话时检查种子是否完整）；关键代码文件清单里没有 Telegram 的前端文件；本机跑 pytest 不设 `GA_PATH` 时导入的是维护者主目录下的 GA 检出，不是仓库里的载荷。

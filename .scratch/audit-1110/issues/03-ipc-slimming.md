@@ -1,6 +1,6 @@
 # 03 瘦身：没人发的事件、Goal 遗留的命令、实验目录、演示会话清理
 
-Status: ready-for-agent
+Status: done（2026-11-10 合入；主会话在 dev 里代验，无 JC 步骤）
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 B9、B11、C14、C15、C17（JC：「按建议推进」）。
 
@@ -80,3 +80,12 @@ worktree 里没有 `.venv`，用主工作树的解释器只读地跑，当前目
 | 合入后 dev 重启正常，发一条消息走完一轮；`session watch` 一轮的帧里没有被删的事件类型；socket 上三个旧命令回 `unknown_command` | 无（不应有可见变化） |
 
 ## Comments
+
+**2026-11-10 合入与代验（主会话）**
+
+- 删前的调用方 grep：三个 socket 命令带引号的名字在 `cli/src`、`gui/src`、`runner`、`managed-ga`、`docs`、两份 skill 副本里都没有命中。
+- 代验：合入后 dev 重启正常，四个 IM 渠道与浏览器桥起来；直接连 Core 的 socket 发三个旧命令，在 schema 1、2、3 下都回 `unknown_command`，批量的 `sessions.run_state` 与 `ping` 照常；用 CLI 起一个一次性会话走完一轮带工具调用的任务，`session watch` 的帧是 `ready`、`turn_start`、`turn_progress`、`turn_end`、`run_complete`，没有被删的事件类型。测试会话已永久删除。
+- `scripts/check-ipc-protocol-drift.mjs` 原来读 GUI 的版本常量，常量删掉后只比 Python 与 Rust 两侧（两侧不一致时仍会失败）。
+- 主工作树里 `core/experiments/tray-mode/` 下被忽略的构建残留与 `.gitignore` 里为它留的三行，JC 说「顺手删掉」，已删。
+- 没动的：手机协议的金样文件仍拿 `tool_call_start` 当示例事件（载荷不透明，不影响测试；改它要动 iOS 测试读的文件）；ADR-0002 的表里仍列着 `session.checkpoint`；`docs/devlog/deferred.md` 里「计划模式撞 100 步上限不提示」那一节因上游去掉计划模式而失效，没删。
+- 删除后仍在、已不可达的：`insert_message_inner` 的 `MessageRole::System` 分支，`insert_user_message_inner` 的 `visibility` 参数（调用方全传 `Visible`）。

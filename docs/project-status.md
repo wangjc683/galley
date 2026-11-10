@@ -421,6 +421,34 @@ entry-layer eval's raw `results.json` no longer tracked, README text for
 memos. The main session verified the CLI fixes and the index in dev against
 the real database; the GUI changes wait for JC's dogfood (tickets 02, 08).
 
+A second wave merged the same day (tickets 03, 06, 07, 09; `ca83fb45` …
+`e987acf9`). IPC: the three `tool_call_*` events nothing sent are gone from
+the protocol and its three mirrors (15 events now); `ready.protocolVersion`
+is documented as diagnostic. Socket: `session.checkpoint`,
+`session.shutdown_runner` and the single-session `session.run_state`, Goal-era
+and never in the Agent API docs, answer `unknown_command` (recorded in the
+stability chapter); the bulk `sessions.run_state` stays. Also removed:
+the write side of per-message `visibility` (the column and every read filter
+stay), `core/experiments/` with its feature and `anyhow`, the v0.1
+demo-session sweep at every launch. Bundled engine payload:
+`managed-ga/code` leaves out upstream's demo media and technical-report PDF
+(27.9 MB to 4.8 MB; the list is `scripts/managed-ga-excluded-paths.txt`),
+the app bundles `runner/*.py` without `runner/tests`, and
+`build-managed-ga.sh` reads the baseline commit with `git archive` from a
+source clone that must be named. **Both runner and managed GA changed, so the
+next release needs the bundled-runtime gate, and its CI run is the first real
+check of the new resource mapping** (the gate passed on `mac-x64` in a
+worktree; no `tauri build` was run, and JC chose to skip the `release.yml`
+dry-run). Open-source hygiene: fixture home folders use a neutral
+placeholder, a private repository is named by role, and two real to-dos
+quoted in the assistant manual, tests, fixtures, docs and eval cases are
+fictional now (the manual's examples changed, so the `wake` and `todo` eval
+suites were rerun: 14 of 16 and 56 of 62, the failing cases differing from
+the replaced runs except `w-long`, which failed before too). Devlog entries
+were left as they are, by JC's ruling. The main session verified in dev: the
+removed socket commands, one full round with a tool call, the manual's new
+examples in the binary.
+
 **Owed from the `v0.7.7` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. The database shows the draft's
 first launch (09:00:44 UTC) caught up a due reminder that woke the main
