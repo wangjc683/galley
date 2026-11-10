@@ -61,6 +61,12 @@ core/python-bundle/
 .env.local
 *.log
 
+# Main chat entry-layer eval: raw per-run transcripts stay on the machine
+# that ran the suite (run.py --render-only rebuilds results.md from them);
+# the tracked results.md summaries are the evidence.
+.scratch/main-chat/entry-layer-eval/**/results.json
+.scratch/main-chat/entry-layer-eval/dispatch-results.json
+
 # Design handoff bundle: keep prototype, drop the uploads/ duplicates
 # (those are AGENTS.md / PRD.md / DESIGN.md copies the design agent
 # received as input; the canonical files live elsewhere in docs/).
