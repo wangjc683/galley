@@ -11,15 +11,21 @@ title and notes (as `update --title` / `--notes` do; since main chat ticket
 107), add, tick, untick, change, delete and drag into order the items
 under it (as `todo item …` does; since main chat tickets 111 and 112),
 skip a period of a repeating one and stop it repeating (as `todo skip` and
-`update --no-repeat` do; since main chat ticket 154), or change its due
+`update --no-repeat` do; the desktop's commands since main chat ticket
+154, on the to-do panel's row menu since ticket 157), or change its due
 date, its reminder and its rule (since main chat ticket 156: the
 desktop's own write, which `update --due` / `--no-due`, `--remind-at` /
 `--no-remind` and a rule flag mirror, except that on the desktop the
 reminder moves with the due day — the same days before it, the same
-local time —, a reminder time already passed is not hung, and a
-repeating period's goes to the first reminder time still ahead among its
-rule's later days instead; `update --due` here moves no reminder) on the
-desktop; everything else goes through Galley, which uses these commands.
+local time; a repeating period's reminder Core re-armed past its due day
+by the rule's offset instead (ticket 157) —, a moved reminder whose time
+has passed falls back toward the new due day, the same time one day
+nearer at a time down to the due day itself, and is hung at the first
+still ahead (ticket 157), a reminder time still passed (or one picked
+explicitly that has passed) is not hung, and a repeating period's goes
+to the first reminder time still ahead among its rule's later days
+instead; `update --due` here moves no reminder) on the desktop;
+everything else goes through Galley, which uses these commands.
 
 - **Due date**: either a day with no time ("by Friday", stored as that local
   calendar day: it stays Friday wherever the computer goes) or a day with a
