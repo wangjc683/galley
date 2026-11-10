@@ -10562,6 +10562,7 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
 
     dry_test_wake([r for r in results if r["id"].startswith("wake-")], wake_scripts, wcases, now, check)
     dry_test_t147([r for r in results if r["id"].startswith("t147-")], wcases, now, check)
+    dry_test_meta_carry(next((r for r in results if r["id"] == "wake-w-table"), None), check)
     dry_test_sched([r for r in results if r["id"].startswith("sched-")], sched_scripts, scases, snow, check)
     dry_test_todo([r for r in results if r["id"].startswith("todo-")], todo_scripts, tcases, snow, check)
     dry_test_chat([r for r in results if r["id"].startswith("chat-")], chat_scripts, ccases, check)
@@ -10782,6 +10783,66 @@ def dry_test_t147(results: list[dict[str, Any]], cases: dict[str, dict[str, Any]
     check(not bad["pass"] and any("只讲一块" in x for x in bad["reasons"])
           and any("出处" in x for x in bad["reasons"]),
           f"the judge: a part per table and no sources fail ({bad['reasons']})")
+
+
+def dry_test_meta_carry(run: dict[str, Any] | None, check: Any) -> None:
+    """Audit 2026-11-10 ticket 10: a plain wake run (no --control, --t147
+    or --wake-prompt) merged into results that already hold other runs keeps
+    every meta key it found, ticket 147's runs (meta.ticket147_runs) among
+    them. main() runs for real on a results file in a temp dir; the model's
+    run is the dry w-table run, and the page is not rendered."""
+    print("meta carried over by a plain wake run")
+    check(run is not None and run["status"] == "ok", "the dry w-table run to stand in for the model's")
+    if run is None or run["status"] != "ok":
+        return
+    fake = json.loads(json.dumps({k: v for k, v in run.items() if k not in ("request", "requests")}))
+    fake.update(id="w-table", variant="core-1", wording="core", repeat=1)
+    seeded = {
+        "ran_at": "2026-10-15 23:50", "partial_reruns": [],
+        "superseded_runs": [{"reason": "dry", "at": "2026-11-03 17:12", "runs": []}],
+        "ticket59_note": ["dry"], "ticket143_control": [{"id": "w-merge-three", "variant": "core-1"}],
+        "ticket143_control_at": "2026-11-04 08:29",
+        "prompt_v8_runs": [{"id": "w-merge-three", "variant": "core-1"}], "prompt_v8_runs_at": "2026-11-04 11:54",
+        T147_KEY: [{"id": "w-merge-two-long", "variant": "both-1", "t147": {"config": "both", "at": "2026-11-04 17:24"}}],
+        T147_KEY + "_at": "2026-11-04 17:24",
+    }
+    tmp = Path(tempfile.mkdtemp(prefix="eleval-meta-"))
+    (tmp / "results.json").write_text(json.dumps({"meta": seeded, "results": []}, ensure_ascii=False),
+                                      encoding="utf-8")
+    dry_keys = {"native_oai_config_0": {"name": "gpt-6.1-sol", "apikey": "dry-test-no-key",
+                                        "apibase": "https://dry.invalid/v1", "model": "gpt-6.1-sol"}}
+    g = globals()
+    patches = {"WAKE_JSON": tmp / "results.json", "WAKE_MD": tmp / "results.md",
+               "run_jobs": lambda jobs, *a, **k: [json.loads(json.dumps(fake))],
+               "model_from_galley_db": lambda *a, **k: {}, "ga_mykeys_from_galley_model": lambda m: dry_keys,
+               "render_wake_md": lambda data, cases: ""}
+    saved = {k: g[k] for k in patches}
+    argv, hosts = sys.argv, set(API_HOSTS)
+    lock = Path(tempfile.gettempdir()) / f"entry-layer-eval-{tmp.name}-results.lock"
+    code: Any = None
+    try:
+        g.update(patches)
+        sys.argv = ["run.py", "--suite", "wake", "--variant", "core", "--cases", "w-table", "--repeats", "1"]
+        import contextlib
+        import io
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = main()
+    except SystemExit as e:
+        code = f"exit {e.code}"
+    finally:
+        g.update(saved)
+        sys.argv = argv
+        API_HOSTS.clear()
+        API_HOSTS.update(hosts)
+        lock.unlink(missing_ok=True)
+    meta = json.loads((tmp / "results.json").read_text(encoding="utf-8"))["meta"]
+    shutil.rmtree(tmp, ignore_errors=True)
+    check(code == 0, f"main() ran the plain wake path ({code})")
+    lost = [k for k in seeded if k not in meta]
+    check(not lost, f"no meta key of the results it merged into was dropped ({lost})")
+    check(meta.get(T147_KEY) == seeded[T147_KEY] and meta.get(T147_KEY + "_at") == seeded[T147_KEY + "_at"],
+          f"meta.{T147_KEY} and its time are still there, unchanged")
 
 
 def dry_test_sandbox(results: list[dict[str, Any]], scripts: dict[tuple[str, str], str],
@@ -14608,10 +14669,13 @@ def main() -> int:
             "start_subtask_fake_result": FAKE_DISPATCH_RESULTS["P"],
         }
     # Ticket 145: what a later run's meta would drop (a control or a note
-    # of a ticket not in the list above, --wake-prompt's runs) is carried.
+    # of a ticket not in the list above, --wake-prompt's runs) is carried;
+    # so are ticket 147's runs (--t147), which a plain wake run dropped
+    # until audit 2026-11-10 ticket 10 (the dry test guards it).
     for key, val in previous_meta.items():
         if key not in data["meta"] and (key.endswith(("_control", "_control_at", "_note"))
-                                        or (key.startswith("prompt_") and key.endswith(("_runs", "_runs_at")))):
+                                        or (key.startswith("prompt_") and key.endswith(("_runs", "_runs_at")))
+                                        or key in (T147_KEY, T147_KEY + "_at")):
             data["meta"][key] = val
     # Ticket 145: each v7 variant's model; a v7 run on a model other than
     # the default leaves the file's model (the earlier variants') as it was.
