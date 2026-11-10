@@ -236,8 +236,12 @@ mod tests {
         // Ticket 111's two: todos.md's items to todos-change.md for ticking
         // and changing them (a part done is news a turn may read only
         // todos.md for, as ticket 108's first round showed), and
-        // todos-change.md back to `--item` in todos.md.
-        assert_eq!(referred, 29);
+        // todos-change.md back to `--item` in todos.md. Ticket 153's four:
+        // todos.md's whose-step question to subtasks.md for an errand, to
+        // reminders.md for a step of its own that waits, and to unasked.md
+        // twice, for the groundwork ahead of a to-do and for a step that
+        // only waits for the user's yes.
+        assert_eq!(referred, 33);
         assert!(part("wake.md")
             .contains("notes do not say yet, add that line first (`todos-change.md`). When"));
         assert!(part("wake.md")
@@ -575,9 +579,11 @@ mod tests {
             "numbers, a file by its absolute path in backticks, as in your replies).",
             "It wakes you with the title and the notes, and",
             // Ticket 81 (PRD ruling 128 point 5): the panel shows the
-            // notes, so they are written for the user.
+            // notes, so they are written for the user. Ticket 153 (PRD
+            // ruling 206): when the user opens the to-do, not on the
+            // folded row.
             "this conversation may be out of your context by then. The user sees the",
-            "notes under the to-do in their list: write them for the user, in their",
+            "notes when they open the to-do in their list: write them for the user, in their",
             "language (「A 座 3 楼，带身份证」), without the title or the day again,",
             "and not as a record about them (「用户说……」).",
             // Ticket 107 (PRD ruling 153 point 6): changed in the list,
@@ -734,6 +740,69 @@ mod tests {
         let question = todos.find("When the user asks to be reminded").unwrap();
         assert!(note < question);
         assert!(!part("reminders.md").contains("When the user asks to be reminded"));
+    }
+
+    /// Ticket 153 (main chat PRD ruling 203): before noting, one question
+    /// beside ruling 92's: is there a step only the user can do? None and
+    /// doable now is an errand, done or handed off, not on their list;
+    /// none but waiting for a time is the model's own reminder (「Galley
+    /// 在办」, no box); one is their to-do, the groundwork done ahead,
+    /// unless it is only a nudge. When it cannot tell, it is theirs, noted
+    /// rather than asked about: what they say they will do stays theirs,
+    /// what they hand over to do is the model's whole, 「帮我记着」 only
+    /// asks it to note; a step that only waits for their yes is no new
+    /// to-do. It opens "Noting a to-do",
+    /// before when to note one and ruling 92's question, which stays.
+    /// Ruling 206: the notes are seen when the to-do is opened, not on the
+    /// folded row. Single-line fragments only (CRLF on Windows).
+    #[test]
+    fn manual_asks_whose_step_it_is_before_noting() {
+        let todos = part("todos.md");
+        for rule in [
+            "Before you note something, ask whose step it is: is there a step in it",
+            "only the user can do, something for their own hands, their say, their",
+            "money or their name?",
+            // None, now: an errand.
+            "- None, and you can do it now: it is an errand, not a to-do. Do it, or",
+            "hand it to a subtask (see `subtasks.md`), and tell them; nothing goes",
+            // None, later: its own reminder, in 「Galley 在办」.
+            "- None, but it has to wait for a time: it is yours. Set your own",
+            "reminder to do it then (see `reminders.md`); their list shows it",
+            "under 「Galley 在办」, with no box for them to tick.",
+            // One: their to-do, unless a nudge; the groundwork ahead.
+            "- There is one: it is their to-do, with a box, unless it is only a",
+            "nudge (the question below). Do the part you can ahead of it (see",
+            "`unasked.md`), so that it reaches them ready.",
+            // Cautious when unclear (JC: 「模糊时默认保守」); the eval's first
+            // round asked whose an expense claim was instead (2 runs of 3).
+            "When you cannot tell, it is theirs: note it as their to-do rather than",
+            "ask whose it is. What they say they will do",
+            "(「我要…」, 「记一下…」) stays their to-do however much of it you could",
+            "do: you get things ready, you do not take it over. What they hand to",
+            "you to do (「帮我查…」, 「你去…」) is yours whole; 「帮我记着」 only asks",
+            "you to note it. A step that only waits for their yes (sending it,",
+            "paying for it) is not a new to-do: get it ready and ask, as",
+        ] {
+            assert!(todos.contains(rule), "todos.md lost: {rule}");
+        }
+        // First in "Noting a to-do", before when to note one and before
+        // ruling 92's question, which it sits beside, not replaces.
+        let section = todos.find("### Noting a to-do").unwrap();
+        let whose = todos
+            .find("Before you note something, ask whose step")
+            .unwrap();
+        let when = todos
+            .find("Note one without being asked when the user mentions")
+            .unwrap();
+        let question = todos
+            .find("When the user asks to be reminded, or you follow")
+            .unwrap();
+        assert!(section < whose && whose < when && when < question);
+        assert_eq!(todos.matches("Before you note something").count(), 1);
+        // Ruling 206: the folded row draws no notes.
+        for (name, body) in PARTS {
+            assert!(!body.contains("notes under the to-do"), "{name}");
+        }
     }
 
     /// Ticket 60 (main chat PRD rulings 112, 113): the list takes what

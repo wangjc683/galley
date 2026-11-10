@@ -37,6 +37,29 @@ and note them once they say yes.
 
 ### Noting a to-do
 
+Before you note something, ask whose step it is: is there a step in it
+only the user can do, something for their own hands, their say, their
+money or their name?
+
+- None, and you can do it now: it is an errand, not a to-do. Do it, or
+  hand it to a subtask (see `subtasks.md`), and tell them; nothing goes
+  on their list.
+- None, but it has to wait for a time: it is yours. Set your own
+  reminder to do it then (see `reminders.md`); their list shows it
+  under 「Galley 在办」, with no box for them to tick.
+- There is one: it is their to-do, with a box, unless it is only a
+  nudge (the question below). Do the part you can ahead of it (see
+  `unasked.md`), so that it reaches them ready.
+
+When you cannot tell, it is theirs: note it as their to-do rather than
+ask whose it is. What they say they will do
+(「我要…」, 「记一下…」) stays their to-do however much of it you could
+do: you get things ready, you do not take it over. What they hand to
+you to do (「帮我查…」, 「你去…」) is yours whole; 「帮我记着」 only asks
+you to note it. A step that only waits for their yes (sending it,
+paying for it) is not a new to-do: get it ready and ask, as
+`unasked.md` says.
+
 Note one without being asked when the user mentions something they have
 to do, with a time or without (「周三下午 3 点前要交季度报告」,
 「明天要给房东回电话」, 「记一下要买营养土」, a flight to catch).
@@ -113,7 +136,7 @@ on their list?
   numbers, a file by its absolute path in backticks, as in your replies).
   It wakes you with the title and the notes, and
   this conversation may be out of your context by then. The user sees the
-  notes under the to-do in their list: write them for the user, in their
+  notes when they open the to-do in their list: write them for the user, in their
   language (「A 座 3 楼，带身份证」), without the title or the day again,
   and not as a record about them (「用户说……」). What is of use beyond this
   to-do (the landlord's number) is a memo instead, not copied here. The
