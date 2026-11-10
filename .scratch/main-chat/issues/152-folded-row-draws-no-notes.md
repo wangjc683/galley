@@ -1,6 +1,6 @@
 # 152 待办面板：收起的一行不画备注
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-10 代理交回，rebase 后快进合入 `7fafedff`。主会话验收：逐块读过 `TodoPanel.tsx`、`lib/todo-panel.ts`、`lib/todo-notes.ts` 与设计文档的改动（`NotesLine`、`todoNotesLine`、`todoNotesFolded` 三个删掉的东西各只有本票删掉的调用方）；在 worktree 复跑 typecheck、lint 过，`TZ=UTC` vitest 266 个文件 2,982 条全过，`check-docs-links` 507 个文件过，`git diff --check` 干净，新增行没有本机路径。dev 服务器给出的 `TodoPanel.tsx` 里已没有 `NotesLine`。没验到：合入时屏幕锁着，截不了 dev 窗口，收起的行高（带时间约 51px、只有标题约 32px）与底边间距还没在真窗口量，等 JC 回来看一眼，或解锁后主会话补截）
 
 来源：[主聊天 PRD](../PRD.md) 裁决 206（JC 2026-11-10：「同意」「不留『有备注』的记号」「直接改」）；定位那句来自裁决 202。只改 GUI 与设计文档；只在内置运行时有主对话时有这个面板，外置运行时零变化。不碰 Core、库、CLI、runner、手册。
 
