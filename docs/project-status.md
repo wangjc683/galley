@@ -398,6 +398,30 @@ No migration, no Agent API change. Gates on the merged branch: `cargo test
 files, 2,961 tests), pytest (765), the six gate scripts. Nothing was walked
 in the app before the merge.
 
+Also merged, managed runtime only (the main chat's to-dos; an external
+runtime sees no change): the to-do list as the user's main list, 2026-11-10
+and 11 (main chat PRD rulings 202–207, tickets 152–159,
+[devlog](./devlog/2026-11-10-todo-is-the-main-list.md)). User-visible: a
+to-do can repeat (daily, weekly, monthly, yearly, every N; the next period
+is made when one is ticked off or skipped, and one left unticked is reminded
+again at each later period's time); the panel's open row changes the due
+day, time, reminder and repeat by hand in a popover, with 「跳过这一次」 and
+「不再重复」 in the row menu; a folded row draws its title and time line only,
+no notes; the time line says a rule and its reminder in fewer words and the
+open row wraps instead of cutting. One migration, `057_todo_series.sql`
+(table `todo_series`, `todos.series_id`, `todos.skipped`). Agent API,
+additive inside schema 3 (`docs/agent-api/todo-commands.md`): the repeat
+flags on `todo add` / `update`, `update --series` and `--no-repeat`, `todo
+skip`, and the repeat fields in to-do JSON. The assistant manual teaches
+repeating to-dos and asks whose step is next before noting one. Gates on the
+merged tree: `cargo test --workspace` (1,425 tests, three time zones for the
+last Rust change), vitest in two time zones (268 files, 3,063 tests), the
+six gate scripts. Walked in the dev app by the main session (the panel with
+real mouse and keyboard, Core through the CLI, the manual through main-chat
+sentences). Not walked: a reminder actually going off and being re-armed and
+the new wake note (automated tests only), a 280px panel, the English time
+line, the keyboard focus ring on the date trigger, Windows.
+
 The audit's 28 open findings were ruled on the same day (`.scratch/audit-1110/PRD.md`)
 and a first wave merged (tickets 01, 02, 04, 05, 08; `2898a7d4` … `f864da9a`).
 CLI, all inside schema 3 and recorded as behavior fixes in the Agent API's
