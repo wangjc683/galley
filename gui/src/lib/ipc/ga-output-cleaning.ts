@@ -245,11 +245,14 @@ const TOOL_ACTION_LINE = /^\[Action\] [^\n]*$/gm;
 const PHASE_PREAMBLE = /^\*{0,2}当前阶段\*{0,2}\s*[：:][\s\S]*?(?=\n\n|$)/gm;
 
 /**
- * Mirror of bridge's `_clean_response_for_display`. Strips GA's
- * structured tags so the user sees the prose-ish final answer
- * MarkdownView can render directly. Bridge emits the raw responseContent
- * in turn_end (to keep the wire faithful); this is the desktop
- * equivalent of that python helper.
+ * Strips GA's structured tags so the user sees the prose-ish final
+ * answer MarkdownView can render directly. Bridge emits the raw
+ * responseContent in turn_end (to keep the wire faithful); this is the
+ * desktop counterpart of its `_clean_response_for_display`
+ * (runner/workbench_bridge.py), and a superset of it: besides the
+ * tags and `[FILE:]` markers that one strips, it drops `<goal-status>`,
+ * `<subtask>` (and an unclosed one's tail), `<no-reply/>`, the
+ * `LLM Running` marker, `[Action]` lines and the phase preamble.
  */
 export function cleanFinalAnswer(text: string): string {
   if (!text) return "";

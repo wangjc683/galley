@@ -1,10 +1,10 @@
 /**
- * IPC Protocol v0.1 — desktop-side TypeScript mirror of bridge/ipc.py.
+ * IPC Protocol v0.1 — desktop-side TypeScript mirror of runner/ipc.py.
  *
  * Wire format reference: docs/ipc-protocol.md.
  * Every field uses camelCase to match the JSON Lines payload directly.
  *
- * KEEP IN SYNC: when bridge/ipc.py changes, update this file in the same
+ * KEEP IN SYNC: when runner/ipc.py changes, update this file in the same
  * commit. The protocol doc is the source of truth; both Python dataclasses
  * and these TS types implement it.
  */

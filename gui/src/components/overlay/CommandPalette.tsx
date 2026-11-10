@@ -116,9 +116,9 @@ export interface CommandPaletteProps {
  *   - "New chat" / "New project" (always first, ungrouped)
  *   - Recent sessions (≤8, fuzzy on title)
  *   - Full-text message hits (SQLite FTS5, query ≥ 2 chars)
- *   - Actions: Switch LLM (nested submenu) / Re-run health check /
+ *   - Actions: To-dos (with a main chat) / Switch LLM (nested submenu) /
  *     Review repository changes / Reset layout / Open settings /
- *     Settings → Agent / Attach GA folder
+ *     Settings → Agent
  *
  * Everything below the pinned creation rows sits in a labeled
  * Command.Group — the root list mixes four semantic kinds, so

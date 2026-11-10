@@ -75,12 +75,9 @@ export interface SettingsProps {
 /**
  * Settings — DESIGN.md §9.
  *
- * Spec calls for a true independent macOS window (so users can keep
- * Settings open while operating the main session). Doing that needs a
- * Tauri WebviewWindow + a second React entry, which lands in #10
- * alongside IPC. For #7 we ship a modal-style overlay with the same
- * 1040x680 frame and the same tab/content split — when #10 graduates
- * to a real window the React API stays exactly the same.
+ * A modal overlay (Radix Dialog), not an independent window: the
+ * separate Settings window is a retired direction
+ * (docs/design/overlays-and-settings.md §9).
  *
  * Layout:
  *   - 1040x680, centered (uses portal + backdrop scrim)

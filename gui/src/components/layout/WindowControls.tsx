@@ -7,11 +7,11 @@ import { cn } from "@/lib/utils";
 
 /**
  * Windows-only custom window controls: minimize / maximize-restore /
- * close. Lives at the far right of TopBar and hugs the window's right
- * edge (TopBar drops its pr-3 on Win for exactly this).
+ * close. Lives at the far right of MainHeader and hugs the window's right
+ * edge (MainHeader drops its pr-3 on Win for exactly this).
  *
  * Per Win 11 Fluent: each button is 46px wide and full-height (44px
- * here to match TopBar; Win 11's own title bar is 32px, but a 44px
+ * here to match MainHeader; Win 11's own title bar is 32px, but a 44px
  * chrome bar reads as "Galley chrome with Win-flavored controls"
  * which we prefer over centred 30px buttons floating in a taller bar).
  * Buttons touch each other with no gap.
@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
  *
  * Defensive: if `getCurrentWindow()` is unavailable (Vite dev in plain
  * browser, no Tauri host), the buttons render but no-op on click. We
- * never reach this path in shipped builds because TopBar gates
+ * never reach this path in shipped builds because MainHeader gates
  * rendering on `!isMac`.
  */
 export function WindowControls() {

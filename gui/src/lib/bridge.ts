@@ -579,9 +579,9 @@ export async function attachBridge(
  * In production with bundled mode, the bundled interpreter wins
  * regardless of `userPath` — same behaviour as the v0.1.1 design.
  *
- * v0.2 plan: retire the capability alias list entirely (now that we
- * spawn through Rust, arbitrary absolute paths just work). Until then,
- * this shim keeps existing dogfood `gaConfig.python` values working.
+ * The alias list stays so `gaConfig.python` values saved as aliases
+ * keep working; runners spawn through Rust, so any absolute path works
+ * as well.
  *
  * Core resolves session runners with a Rust copy of this rule
  * (`session_runner::resolve_user_python`); the shared fixture

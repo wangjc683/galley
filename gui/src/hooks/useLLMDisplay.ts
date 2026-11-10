@@ -30,7 +30,7 @@ export function useLLMDisplay({
 }) {
   // LLM / runtimeInfo state lives in runtimeStore (M3a). Subscribe to
   // the active session's per-runtime entry so the Composer pill +
-  // dropdown + Inspector tab re-render on changes.
+  // dropdown re-render on changes.
   const activeSessionLLMs = useActiveRuntime((r) => r.llms, undefined);
   const activeSessionLLMDisplayName = useActiveRuntime(
     (r) => r.llmDisplayName,

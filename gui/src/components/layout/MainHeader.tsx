@@ -65,7 +65,8 @@ export interface MainHeaderProps {
    * omitted (no button) on the managed runtime (ruling 106). */
   onOpenSupervisorSop?: () => void;
   /**
-   * App-update awareness (`.scratch/topbar-update-indicator/PRD.md`).
+   * App-update awareness
+   * (`docs/devlog/2026-07-15-topbar-update-indicator-and-toast-severity.md`).
    * available / downloading / ready render an UpdateIndicator badge at
    * the tail of the status cluster; every other kind renders nothing.
    * `hasRunningSessions` gates the restart action inside its popover.
@@ -388,7 +389,7 @@ export function MainHeader({
           onOpenSettings={onOpenSettings}
         />
         {/* Windows-only custom chrome: min / max-restore / close. Hugs
-            the window's right edge (TopBar drops pr-3 on Win for this).
+            the window's right edge (MainHeader drops pr-3 on Win for this).
             Mac path renders nothing — the traffic light on the left
             already owns the window-control role. */}
         {!isMac && <WindowControls />}

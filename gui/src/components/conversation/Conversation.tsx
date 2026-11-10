@@ -173,20 +173,6 @@ export interface ConversationProps {
   };
 }
 
-/**
- * The conversation document — user turns, agent turns, and the two
- * horizontal-rule rhythms that DESIGN.md §4.3 codifies:
- *
- *   - hr-strong  : full-width, at end of agent turn before finalAnswer.
- *                  "Result-first" rhythm — separates plan/execution from
- *                  conclusion.
- *   - hr-soft    : 60% centered, between turns. Quiet pacing.
- *
- * Both kinds use --color-line; the strong one uses line-strong width
- * via the visual contrast of full-width vs 60% rather than a different
- * color. (DESIGN.md says "稍深 1px 全宽 vs 极淡 1px 60% 居中"; opacity
- * 60% on the soft one approximates the prototype.)
- */
 /** `removedOrdinals` when nothing was deleted: one stable reference. */
 const NO_ORDINALS: readonly number[] = Object.freeze([]);
 
@@ -194,6 +180,13 @@ const NO_ORDINALS: readonly number[] = Object.freeze([]);
  * (240ms) plus its unmount margin, the same 300ms it uses itself. */
 const SETTLE_SWEEP_MS = 300;
 
+/**
+ * The conversation document — user turns and agent turns. One
+ * horizontal rule is left (docs/design/conversation.md): `StrongHr`,
+ * line-strong and the column's full width, between a flat run's steps
+ * and its answer — the action → conclusion rhythm. The soft rule
+ * between turns was removed (see the note near the end of this file).
+ */
 export function Conversation({
   turns,
   askUserPending = false,

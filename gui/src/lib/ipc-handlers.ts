@@ -268,25 +268,31 @@ export function applyReadySnapshot(
 }
 
 /**
- * Routes an IPC event from the bridge into store actions.
- *
- * #10b coverage:
+ * Routes an IPC event from the bridge into store actions:
  *
  *   ready             → connected status + replace LLMs
  *   llm_changed       → flip currentness in llms[]
- *   error             → push toast (fromIPCError)
+ *   reasoning_effort_changed
+ *                     → the runner's own effort report
+ *   error             → push toast (fromIPCError) and end the run's
+ *                       running state; an unpromoted subtask's card
+ *                       shows the error
+ *   turn_start        → the current step; drops a pending ask_user
+ *                       question and the step-limit pause
+ *   turn_progress     → append the streaming delta
  *   turn_end          → append agent turn (thinking + tools + final
  *                       answer). Core writes the messages row and the
  *                       session bump itself (core/src/turn_persistence)
  *                       — this page only renders, flags unread, notifies
- *   tool_call_end     → no-op for V0.1 (the conversation rebuilds the
- *                       tool's final state from turn_end's
- *                       toolResults; we don't need a separate row)
- *   tool_call_progress→ debug log (not in conversation rendering)
- *   ask_user          → V0.1: log; ask_user surfaces via the existing
- *                       conversation flow when GA exits the loop
  *   run_complete      → clear the running state for the session
- *   history_loaded    → log
+ *   ask_user          → pendingAskUser (tags stripped) + the
+ *                       "waiting for you" notification
+ *   system_message    → append a system turn
+ *   tell_user         → append the main chat's mid-run line as a turn
+ *   tool_call_start / tool_call_progress / tool_call_end,
+ *   history_loaded, interject_delivered / interject_returned,
+ *   title_generated   → log only (turn_end carries the tools' results;
+ *                       Core acts on the others)
  *
  * Tool ids: turn_end's toolCalls / toolResults are positional, so we
  * walk them in order with synthetic ids when none is supplied.
@@ -581,14 +587,15 @@ export function dispatchIPCEvent(event: IPCEvent): void {
       if (eventVisibility(event) === "internal") {
         return;
       }
-      // Last-resort clear: turn_end already cleared agentRunning for
-      // the normal happy path; this catches ABORTED / DENIED exits
-      // where turn_end_callback didn't fire on the GA side.
+      // The run's terminus: turn_end is per step and leaves
+      // agentRunning on (see there), so this is what clears it — also
+      // for ABORTED exits where turn_end_callback didn't fire on the GA
+      // side.
       messages.setAgentRunning(event.sessionId, false);
       messages.setCurrentTurnIndex(event.sessionId, null);
       messages.clearInFlightContent(event.sessionId);
       // Run terminus: the happy path already consumed the flag at the
-      // final turn_end; ABORTED / DENIED exits should not notify.
+      // final turn_end; an ABORTED exit should not notify.
       clearReplyNotifyPending(event.sessionId);
       return;
     }

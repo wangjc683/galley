@@ -93,10 +93,9 @@ export const createSessionArchiveSlice: SessionsSliceCreator<
   },
 
   deleteSessionPermanently: async (sessionId) => {
-    // Defensive: shut down any live bridge before yanking the row.
-    // Archived sessions shouldn't have one (LRU 5 typically reaps),
-    // but covering the edge so we don't leak a process pointing at
-    // a deleted id.
+    // Shut down any live bridge before yanking the row, so we don't
+    // leak a process pointing at a deleted id. Archiving does not stop
+    // a runner; only Core's runner cap (20, LRU) evicts an idle one.
     try {
       await useRuntimeStore.getState().shutdownBridge(sessionId);
     } catch (e) {

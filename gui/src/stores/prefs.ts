@@ -386,8 +386,8 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     const displayCandidate = await findCandidateByAlias(merged.python);
     const pythonDisplay = displayCandidate?.displayPath ?? merged.python;
     set({ gaConfig: merged });
-    // Reflect into runtimeInfo so the Settings → Runtime tab and
-    // Inspector → Runtime card show the new path immediately.
+    // Reflect into runtimeInfo so the Settings → Runtime tab shows the
+    // new path immediately.
     useRuntimeStore.getState().patchRuntimeInfo({
       gaPath: merged.gaPath,
       pythonVersion: pythonDisplay,

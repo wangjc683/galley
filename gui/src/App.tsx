@@ -554,8 +554,7 @@ function App() {
     setScreen("main");
   };
 
-  // Onboarding takeover: no AppShell, no overlays besides the dev
-  // toggle.
+  // Onboarding takeover: no AppShell, no overlays.
   if (screen === "onboarding") {
     return (
       <OnboardingScreen

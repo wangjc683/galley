@@ -829,7 +829,7 @@ export const createSessionLifecycleSlice: SessionsSliceCreator<
             ? (brief.reasoningEffort ?? null)
             : s.reasoningEffort,
           // llm.set / the model picker ride this channel — the Composer
-          // pill / Inspector pick up the persisted choice.
+          // pill picks up the persisted choice.
           selectedLlmIndex: sent("selectedLlmIndex")
             ? (brief.selectedLlmIndex ?? undefined)
             : s.selectedLlmIndex,

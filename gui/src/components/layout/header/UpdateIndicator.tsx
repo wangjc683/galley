@@ -24,7 +24,8 @@ import {
 } from "./update-indicator-status";
 
 /**
- * TopBar app-update indicator (`.scratch/topbar-update-indicator/PRD.md`).
+ * TopBar app-update indicator
+ * (`docs/devlog/2026-07-15-topbar-update-indicator-and-toast-severity.md`).
  *
  * Visible only for `available` / `downloading` / `ready` — the three
  * states where "a new version exists" is true and worth ambient

@@ -133,8 +133,8 @@ export function SettingsShortcuts() {
         <section key={g.title}>
           <SettingsSectionLabel>{g.title}</SettingsSectionLabel>
           <ul className="m-0 mt-2 list-none divide-y divide-line overflow-hidden rounded-sm border border-line bg-surface p-0">
-            {/* Combos are unique within a group (Esc sits in two
-                groups, each its own list), so they key the rows. */}
+            {/* Combos are unique within a group, so they key the
+                rows. */}
             {g.rows.map((r) => (
               <li
                 key={r.combo}

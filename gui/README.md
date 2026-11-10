@@ -38,4 +38,4 @@ That action restarts enabled Channel processes without logging the user out.
 
 ## IPC types
 
-`src/types/ipc.ts` 镜像 `../bridge/ipc.py`。协议改时三处同改：`docs/ipc-protocol.md` → `bridge/ipc.py` → `desktop/src/types/ipc.ts`。
+`src/types/ipc.ts` 镜像 `../runner/ipc.py` 与 `../core/src/ipc.rs`。协议改时四处同改：`docs/ipc-protocol.md` → `runner/ipc.py` → `core/src/ipc.rs` → `gui/src/types/ipc.ts`，步骤见 [engineering-workflow](../docs/engineering-workflow.md#ipc-protocol-changes)。

@@ -458,7 +458,7 @@ function runtimeFailureMessage(
 
 async function fsExists(path: string): Promise<boolean> {
   // Routes through our custom `path_exists` Tauri command (Rust side,
-  // core/src/lib.rs) instead of `@tauri-apps/plugin-fs`'s
+  // core/src/commands/system.rs) instead of `@tauri-apps/plugin-fs`'s
   // `exists()`. The plugin-fs version is gated by `fs:scope` in
   // capabilities/default.json which defaults to a user-profile glob
   // allow-list — fine for Tauri's sandboxed-web threat model, but

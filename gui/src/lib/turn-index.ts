@@ -19,9 +19,9 @@
 // Invariant:  absolute = step + offset   and   base = offset + 1
 //        ⇒    displayStep = absolute − base + 1 = step   (round-trip identity)
 //
-// Core is authoritative: it assigns the user-row `turn_index`, the GUI ships
-// it to the runner (as `absoluteTurnIndex`), and the runner echoes
-// `absoluteTurnIndex` on each event. The offset path is the fallback for
+// Core is authoritative: it assigns the user-row `turn_index`, ships it to
+// the runner with the message it dispatches (as `absoluteTurnIndex`), and
+// the runner echoes `absoluteTurnIndex` on each event. The offset path is the fallback for
 // events / rows that predate that or arrive without it.
 
 /** An event carrying GA's per-message step and, when Core supplied it, the

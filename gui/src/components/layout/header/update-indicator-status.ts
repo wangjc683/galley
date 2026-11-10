@@ -3,11 +3,11 @@ import type { AppUpdateStatus } from "@/stores/app-update";
 
 /**
  * Which app-update states earn a TopBar presence
- * (`.scratch/topbar-update-indicator/PRD.md`): available / downloading
- * / ready — the states where "a new version exists". `error` never
- * shows in the TopBar (2026-07-15): update errors show only in
- * Settings → About, and a failed background download raises no notice;
- * the next launch's check tries again.
+ * (`docs/devlog/2026-07-15-topbar-update-indicator-and-toast-severity.md`):
+ * available / downloading / ready — the states where "a new version
+ * exists". `error` never shows in the TopBar (2026-07-15): update
+ * errors show only in Settings → About, and a failed background
+ * download raises no notice; the next launch's check tries again.
  *
  * Lives outside UpdateIndicator.tsx so MainHeader / StatusCluster can
  * import the gate without tripping react-refresh's
