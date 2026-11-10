@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { enCopy } from "@/i18n/locales/en";
 import { zhCopy } from "@/i18n/locales/zh";
+import type { TodoItem } from "@/lib/assistant-todo";
 import {
   addDays,
   addMonths,
@@ -18,6 +19,8 @@ import {
   newReminderTime,
   nextMonday,
   parseDay,
+  periodReminder,
+  reminderMovedOn,
   reminderOffset,
   repeatChoice,
   repeatRuleFor,
@@ -354,5 +357,73 @@ describe("the rule's five choices", () => {
     expect(
       [1, 2, 3, 4, 5, 6, 7].map(enCopy.todo.date.weekdayHead).join(" "),
     ).toBe("M T W T F S S");
+  });
+});
+
+// Main chat ticket 157: a repeating period's reminder Core moved on to a
+// later period's time once it went off (ticket 154 behaviour 13).
+describe("a period's reminder moved on", () => {
+  const due = { date: "2026-11-16", hasTime: false };
+  const period = (at: string, remind = true): TodoItem => ({
+    kind: "todo",
+    id: "todo_w",
+    text: "交周报",
+    state: "open",
+    createdBy: "assistant",
+    due,
+    reminder: { taskId: "sched_w", at, state: "scheduled" },
+    todoRepeat: {
+      kind: "weekly",
+      weekdays: [1],
+      ...(remind ? { remind: { daysBefore: 1, time: "20:00" } } : {}),
+    },
+  });
+
+  it("is one after the period's day, under a rule that records a reminder", () => {
+    // The next period's evening before: six days after this one's day.
+    const moved = period(localIso("2026-11-22", 20, 0));
+    expect(reminderMovedOn(moved)).toBe(true);
+    expect(reminderOffset(moved.due, moved.reminder!.at)).toEqual({
+      daysBefore: -6,
+      time: "20:00",
+    });
+    // Read as the rule's offset, not 「到期后 6 天」.
+    expect(periodReminder(moved)).toEqual({ daysBefore: 1, time: "20:00" });
+  });
+
+  it("is not its own, on or before its day, nor one set by hand", () => {
+    const own = period(localIso("2026-11-15", 20, 0));
+    expect(reminderMovedOn(own)).toBe(false);
+    expect(periodReminder(own)).toEqual({ daysBefore: 1, time: "20:00" });
+    // Two days before at 09:00, set on the period: read as it is.
+    const byHand = period(localIso("2026-11-14", 9, 0));
+    expect(periodReminder(byHand)).toEqual({ daysBefore: 2, time: "09:00" });
+    // The same day: as it is.
+    expect(periodReminder(period(localIso("2026-11-16", 8, 0)))).toEqual({
+      daysBefore: 0,
+      time: "08:00",
+    });
+  });
+
+  it("is not under a rule that records none, nor on a to-do that does not repeat", () => {
+    const after = localIso("2026-11-22", 20, 0);
+    const unrecorded = period(after, false);
+    expect(reminderMovedOn(unrecorded)).toBe(false);
+    expect(periodReminder(unrecorded)).toEqual({
+      daysBefore: -6,
+      time: "20:00",
+    });
+    const ordinary = { ...period(after), todoRepeat: undefined };
+    expect(reminderMovedOn(ordinary)).toBe(false);
+    expect(periodReminder(ordinary)?.daysBefore).toBe(-6);
+  });
+
+  it("reads no reminder as none", () => {
+    const none = {
+      ...period(localIso("2026-11-22", 20, 0)),
+      reminder: undefined,
+    };
+    expect(reminderMovedOn(none)).toBe(false);
+    expect(periodReminder(none)).toBeNull();
   });
 });

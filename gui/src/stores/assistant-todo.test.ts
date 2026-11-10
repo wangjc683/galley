@@ -72,6 +72,7 @@ beforeEach(() => {
     cancelling: {},
     deleting: {},
     deleteToastId: null,
+    skipToastId: null,
     editing: {},
   });
   useUiStore.setState({ toasts: [] });
@@ -754,6 +755,191 @@ describe("deleting a to-do", () => {
     expect(toasts()[0].title).toBe(words.deleted("交季度报告"));
     await vi.runAllTimersAsync();
     expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
+// Main chat ticket 157 (PRD ruling 204 point 6): 跳过这一次, a delete's
+// way through the same record, its own toast; 不再重复 at once.
+describe("skipping a period", () => {
+  const words = zhCopy.todo.skipTodo;
+  const WEEKLY: TodoItem = {
+    ...OPEN,
+    id: "todo_w",
+    text: "交周报",
+    todoRepeat: { kind: "weekly", weekdays: [1] },
+    seriesId: "series_w",
+  };
+  const NEXT: TodoItem = { ...WEEKLY, id: "todo_w2" };
+  const SOIL: TodoItem = { ...OPEN, id: "todo_2", text: "买营养土" };
+  const both: AssistantTodo = {
+    ...EMPTY_TODO,
+    yours: { today: [WEEKLY], later: [], anytime: [SOIL] },
+    todayCount: 1,
+  };
+  const skippedList: AssistantTodo = {
+    ...EMPTY_TODO,
+    yours: { today: [], later: [NEXT], anytime: [SOIL] },
+  };
+
+  const todos = () => useAssistantTodoStore.getState();
+  const toasts = () => useUiStore.getState().toasts;
+  const sent = (invoke: ReturnType<typeof getTauriMocks>["invoke"]) =>
+    invoke.mock.calls
+      .filter(
+        ([command]) => command === "skip_todo" || command === "cancel_todo",
+      )
+      .map(([command, args]) => [command, (args as { id: string }).id]);
+  const drawn = () =>
+    [
+      ...todoWithoutDeleting(todos().todo, todos().deleting).yours.today,
+      ...todoWithoutDeleting(todos().todo, todos().deleting).yours.later,
+      ...todoWithoutDeleting(todos().todo, todos().deleting).yours.anytime,
+    ].map((item) => item.id);
+  function runOut(id: string): void {
+    const toast = toasts().find((each) => each.id === id)!;
+    toast.onClose?.();
+    useUiStore.getState().dismissToast(toast.id);
+  }
+
+  beforeEach(() => {
+    useAssistantTodoStore.setState({ todo: both });
+  });
+
+  it("takes the row off at once under its own toast; Core hears nothing yet", async () => {
+    const invoke = answer([]);
+    todos().skipTodo(WEEKLY);
+    expect(todos().deleting).toEqual({
+      todo_w: { order: expect.any(Number), committing: false, skip: true },
+    });
+    expect(drawn()).toEqual(["todo_2"]);
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0]).toMatchObject({
+      severity: "info",
+      title: words.skipped("交周报"),
+      autoDismissMs: UNDO_DELETE_MS,
+      action: { kind: "undo", label: words.undo },
+    });
+    expect(todos().skipToastId).toBe(toasts()[0].id);
+    expect(todos().deleteToastId).toBeNull();
+    await vi.advanceTimersByTimeAsync(UNDO_DELETE_MS * 2);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("撤销 puts it back and Core never hears of it", async () => {
+    const invoke = answer([]);
+    todos().skipTodo(WEEKLY);
+    const toast = toasts()[0];
+    if (toast.action?.kind === "undo") toast.action.run();
+    expect(todos().deleting).toEqual({});
+    expect(drawn()).toEqual(["todo_w", "todo_2"]);
+    toast.onClose?.();
+    await vi.runAllTimersAsync();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it("asks Core (`skip_todo`) once the toast goes; the next period comes with the read that lets it go", async () => {
+    const invoke = answer([skippedList]);
+    todos().skipTodo(WEEKLY);
+    runOut(toasts()[0].id);
+    await todos().commitSkips();
+    expect(sent(invoke)).toEqual([["skip_todo", "todo_w"]]);
+    expect(calls(invoke)).toEqual(["skip_todo", ...READ]);
+    expect(todos().deleting).toEqual({});
+    expect(drawn()).toEqual(["todo_w2", "todo_2"]);
+  });
+
+  it("keeps skips and deletes apart: each toast takes back and sends its own", async () => {
+    const invoke = answer([skippedList]);
+    todos().skipTodo(WEEKLY);
+    todos().deleteTodo(SOIL);
+    // Two toasts, the newest first.
+    expect(toasts().map((toast) => toast.title)).toEqual([
+      zhCopy.todo.deleteTodo.deleted("买营养土"),
+      words.skipped("交周报"),
+    ]);
+    // 撤销 on the delete's: the skip still waits.
+    const deleteToast = toasts()[0];
+    if (deleteToast.action?.kind === "undo") deleteToast.action.run();
+    expect(Object.keys(todos().deleting)).toEqual(["todo_w"]);
+    // The skip's toast goes: only the skip is sent.
+    runOut(todos().skipToastId!);
+    await todos().commitSkips();
+    expect(sent(invoke)).toEqual([["skip_todo", "todo_w"]]);
+  });
+
+  it("several in a row are one toast", () => {
+    answer([]);
+    const OTHER: TodoItem = { ...WEEKLY, id: "todo_m", text: "交月报" };
+    todos().skipTodo(WEEKLY);
+    todos().skipTodo(OTHER);
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0].title).toBe(words.skippedCount(2));
+  });
+
+  it("a send into the main chat commits it first", async () => {
+    const invoke = answer([skippedList]);
+    todos().skipTodo(WEEKLY);
+    const flushing = todos().flushDeletes();
+    expect(flushing).not.toBeNull();
+    expect(toasts()).toEqual([]);
+    await flushing;
+    expect(sent(invoke)).toEqual([["skip_todo", "todo_w"]]);
+    expect(todos().deleting).toEqual({});
+  });
+
+  it("takes only a period of a rule", () => {
+    answer([]);
+    todos().skipTodo(SOIL);
+    expect(todos().deleting).toEqual({});
+    expect(toasts()).toEqual([]);
+  });
+
+  it("leaves one Galley ticked off meanwhile done: not skipped", async () => {
+    const ticked: TodoItem = {
+      ...WEEKLY,
+      state: "done",
+      at: "2026-11-10T08:00:00Z",
+    };
+    const afterTick: AssistantTodo = {
+      ...EMPTY_TODO,
+      yours: { today: [], later: [NEXT], anytime: [SOIL] },
+      done: [ticked],
+    };
+    const invoke = answer([afterTick, afterTick]);
+    todos().skipTodo(WEEKLY);
+    await todos().load();
+    runOut(toasts()[0].id);
+    await todos().commitSkips();
+    expect(sent(invoke)).toEqual([]);
+    expect(todos().deleting).toEqual({});
+    expect(todos().failures).toEqual({});
+  });
+
+  it("不再重复 goes to Core at once; refused, says why under the row", async () => {
+    const { invoke } = getTauriMocks();
+    invoke.mockImplementation(async (command) => {
+      if (command === "stop_todo_repeat") {
+        throw JSON.stringify({ error: "invalid_args", message: "no" });
+      }
+      return command === "list_noted_todos" ? [] : both;
+    });
+    todos().stopRepeat("todo_w");
+    await vi.runAllTimersAsync();
+    expect(calls(invoke)).toEqual(["stop_todo_repeat"]);
+    expect(todos().failures).toEqual({ todo_w: "failed" });
+    expect(toasts()).toEqual([]);
+    // The next try clears it.
+    invoke.mockImplementation(async (command) =>
+      command === "list_noted_todos"
+        ? []
+        : command === "stop_todo_repeat"
+          ? { id: "todo_w" }
+          : both,
+    );
+    todos().stopRepeat("todo_w");
+    expect(todos().failures).toEqual({});
+    await vi.runAllTimersAsync();
+    expect(todos().failures).toEqual({});
   });
 });
 

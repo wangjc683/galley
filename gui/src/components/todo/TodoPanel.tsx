@@ -798,7 +798,11 @@ function useTodoWrite(id: string) {
  * precise targets side by side make the row's hover loud). Since ticket
  * 88 (PRD ruling 132 point 3) the ⋯ after 「说说这件」 is that second
  * target, ruling 85's way in to 删除: its menu, and the row's
- * right-click, hold 说说这件, 在对话里查看 (ticket 107), 取消提醒 and 删除.
+ * right-click, hold 说说这件, 在对话里查看 (ticket 107), 取消提醒 and 删除;
+ * on a period of a rule (ticket 157, PRD ruling 204 point 6) 跳过这一次
+ * and 不再重复 too, above 删除 — the first a delete's way (no confirm, the
+ * row off at once, five seconds to undo, then `skip_todo`), the second
+ * at once (`stop_todo_repeat`), its undo the popover's 「重复」.
  * Not on a row ticked and holding its place (yours, or Galley's tick,
  * ticket 87): that one is on its way to 已完成, where no row has it.
  *
@@ -845,6 +849,8 @@ function YourRow({
   const todayStartMs = useDayStamp();
   const cancelReminder = useAssistantTodoStore((s) => s.cancelReminder);
   const deleteTodo = useAssistantTodoStore((s) => s.deleteTodo);
+  const skipTodo = useAssistantTodoStore((s) => s.skipTodo);
+  const stopRepeat = useAssistantTodoStore((s) => s.stopRepeat);
   const editTodo = useAssistantTodoStore((s) => s.editTodo);
   const { flip, failure, cancelling } = useTodoWrite(item.id);
   const subitemTicks = useAssistantTodoStore((s) => s.subitemTicks);
@@ -1095,11 +1101,16 @@ function YourRow({
       </div>
     ) : null;
 
+  // A period of a rule (ticket 157, PRD ruling 204 point 6): 跳过这一次
+  // and 不再重复 above 删除.
+  const repeating = item.todoRepeat !== undefined;
   const menu: TodoRowMenuModel = {
     canCancelReminder,
     onTalkAbout: () => onTalkAbout(item),
     onViewInChat: target ? () => onGo(target) : undefined,
     onCancelReminder: () => cancelReminder(item.id),
+    onSkip: repeating ? () => skipTodo(item) : undefined,
+    onStopRepeat: repeating ? () => stopRepeat(item.id) : undefined,
     onDelete: () => deleteTodo(item),
   };
   // Open, a failed save says why under its box; folded, under the row.
@@ -1124,7 +1135,11 @@ function YourRow({
           count={count}
           date={editable ? item : undefined}
           after={
-            canCancelReminder && (
+            // By the bell it takes away: none on a line that draws no
+            // bell (a period's reminder moved on past its day, ticket
+            // 157); the menu's 取消提醒 stays.
+            canCancelReminder &&
+            parts.some((part) => part.bell) && (
               <CancelReminder
                 disabled={cancelling}
                 onClick={() => cancelReminder(item.id)}
@@ -1346,7 +1361,14 @@ function CancelReminder({
  * 8px from the time as the bell's part is set apart, no 「·」; the line's
  * own ink, never warning (that is overdue's), the digits tabular. Outside
  * the open row's date button: it is not a time. With no time it is the
- * line alone; on an open row, after 「添加日期」. */
+ * line alone; on an open row, after 「添加日期」.
+ *
+ * A period of a rule (main chat ticket 157, PRD ruling 204 point 7): its
+ * rule is one of `parts` (`todoMetaParts`), the repeat glyph and the rule
+ * in words after when it is due, before the bell, 8px either side
+ * (TodoMetaText) — folded and open alike, open inside the date button. A
+ * narrow row cuts that run of words at its end, never the count or the
+ * reminder's cancel. */
 function MetaLine({
   parts,
   checked,

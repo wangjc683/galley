@@ -5,6 +5,8 @@ import {
   BellSimpleSlash,
   ChatTeardropText,
   DotsThree,
+  RepeatOnce,
+  SkipForward,
   Trash,
 } from "@phosphor-icons/react";
 import type { ReactElement } from "react";
@@ -28,11 +30,15 @@ import { useCopy } from "@/lib/i18n";
  * ruling 132 point 3): 「说说这件」, 「在对话里查看」 when it was noted in
  * a reply (ticket 107, PRD ruling 153 point 3: the jump its title made
  * before the row opened on a click), 「取消提醒」 when it has a reminder
- * still to go off, a separator, 「删除」. Two ways in, one list, as the
- * message menu's (MessageMenu.tsx, rulings 85, 99, 105): a right-click
- * on the row (`TodoRowContextMenu`) and the ⋯ that ends the row's hover
- * actions (`TodoRowMenuButton`) — the ⋯ is 删除's way in for whoever
- * looks for it. 说说这件 and 取消提醒 are the row's own hover buttons
+ * still to go off, a separator, 「删除」 — and since ticket 157 (PRD ruling
+ * 204 point 6), on a period of a rule, 「跳过这一次」 and 「不再重复」 just
+ * above that separator (`onSkip`, `onStopRepeat`): the three in the order
+ * 跳过这一次, 不再重复, 删除, a to-do that does not repeat as before. Two
+ * ways in, one list, as the message menu's (MessageMenu.tsx, rulings 85,
+ * 99, 105): a right-click on the row (`TodoRowContextMenu`) and the ⋯
+ * that ends the row's hover actions (`TodoRowMenuButton`) — the ⋯ is
+ * 删除's way in for whoever looks for it (and 跳过这一次's, which has no
+ * other). 说说这件 and 取消提醒 are the row's own hover buttons
  * again, as your bubble's chips are its menu's 复制 and 引用. Drawn in
  * the message menu's register (message-menu-styles.ts) through the
  * sidebar's context / dropdown seam. Closing it moves no focus (说说这件
@@ -54,6 +60,10 @@ export interface TodoRowMenuModel {
   /** 取消提醒 is on it: a reminder still to go off (`todoReminderCancellable`). */
   canCancelReminder?: boolean;
   onCancelReminder?: () => void;
+  /** 跳过这一次 (ticket 157): only on a period of a rule. */
+  onSkip?: () => void;
+  /** 不再重复 (ticket 157): only on a period of a rule. */
+  onStopRepeat?: () => void;
   onDelete: () => void;
 }
 
@@ -101,7 +111,31 @@ function TodoRowMenuRows({
           {copy.todo.cancelReminder}
         </SidebarRowMenuItem>
       )}
-      {(model.onTalkAbout || model.onViewInChat || cancelReminder) && (
+      {model.onSkip && (
+        <SidebarRowMenuItem
+          kind={kind}
+          onSelect={model.onSkip}
+          className={MENU_ITEM_CLASS}
+        >
+          <SkipForward size={13} weight="thin" />
+          {copy.todo.skipTodo.menuItem}
+        </SidebarRowMenuItem>
+      )}
+      {model.onStopRepeat && (
+        <SidebarRowMenuItem
+          kind={kind}
+          onSelect={model.onStopRepeat}
+          className={MENU_ITEM_CLASS}
+        >
+          <RepeatOnce size={13} weight="thin" />
+          {copy.todo.stopRepeat}
+        </SidebarRowMenuItem>
+      )}
+      {(model.onTalkAbout ||
+        model.onViewInChat ||
+        cancelReminder ||
+        model.onSkip ||
+        model.onStopRepeat) && (
         <SidebarRowMenuSeparator kind={kind} className="my-1 h-px bg-line" />
       )}
       <SidebarRowMenuItem

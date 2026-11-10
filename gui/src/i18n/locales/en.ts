@@ -2105,6 +2105,13 @@ export const enCopy: AppCopy = {
       deletedCount: (n: number) => `Deleted ${n} to-dos`,
       undo: "Undo",
     },
+    skipTodo: {
+      menuItem: "Skip this one",
+      skipped: (title: string) => `Skipped “${title}”`,
+      skippedCount: (n: number) => `Skipped ${n} to-dos`,
+      undo: "Undo",
+    },
+    stopRepeat: "Stop repeating",
     notedOn: (day: string) => `Noted ${day}`,
     notedToday: "today",
     notedYesterday: "yesterday",
@@ -2134,6 +2141,7 @@ export const enCopy: AppCopy = {
                 ? "1 day after"
                 : `${-daysBefore} days after`,
       remindTime: "Reminder time",
+      remindPassed: "That time has already passed, so no reminder was set",
       repeatNone: "Never",
       repeatDaily: "Daily",
       repeatWeekly: "Weekly",
@@ -2197,6 +2205,10 @@ export const enCopy: AppCopy = {
     overdueAt: (when: string) => `Overdue · ${when}`,
     reminderAt: (when: string) => `Reminder ${when}`,
     reminderPaused: (when: string) => `Reminder ${when} · Paused`,
+    // The rule's words start a sentence ("Weekly on Mon"): lowered here,
+    // as Core's In Hand line says it ("repeats weekly on Mon").
+    repeats: (rule: string) =>
+      `Repeats ${rule.charAt(0).toLowerCase()}${rule.slice(1)}`,
     nextAt: (when: string) => `Next ${when}`,
     dayToday: "Today",
     dayTomorrow: "Tomorrow",
@@ -2208,6 +2220,7 @@ export const enCopy: AppCopy = {
     stateFiredSession: "Ran",
     stateCancelled: "Cancelled",
     stateDeleted: "Deleted",
+    stateSkipped: "Skipped",
     stateRunning: "Working",
     stateAsking: "Waiting for you",
     stateFailed: "Error",

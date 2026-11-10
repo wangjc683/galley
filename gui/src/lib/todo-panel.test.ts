@@ -295,6 +295,119 @@ describe("a to-do's second line (ruling 97)", () => {
     expect(line(noted)).toEqual([]);
   });
 
+  // Main chat ticket 157 (PRD ruling 204 point 7).
+  describe("a period of a rule", () => {
+    // Weekly on Monday; this period due Mon Oct 19, reminded that day at
+    // 09:00, the rule recording it.
+    const weekly = todo({
+      due: { date: "2026-10-19", hasTime: false },
+      reminder: {
+        taskId: "sched_w",
+        at: local(2026, 10, 19, 9, 0),
+        state: "scheduled",
+      },
+      todoRepeat: {
+        kind: "weekly",
+        weekdays: [1],
+        remind: { daysBefore: 0, time: "09:00" },
+      },
+      seriesId: "series_w",
+    });
+    const marks = (
+      item: TodoItem,
+      options: { checked?: boolean; today?: number } = {},
+      language: "zh-CN" | "en-US" = "zh-CN",
+    ) =>
+      todoMetaParts(
+        item,
+        options.checked ?? false,
+        options.today ?? TODAY,
+        language,
+        language === "zh-CN" ? zh : en,
+      ).map((p) => (p.bell ? `🔔${p.text}` : p.repeat ? `↻${p.text}` : p.text));
+
+    it("says its rule after when it is due, before the bell, with the repeat glyph", () => {
+      expect(marks(weekly)).toEqual(["周一", "↻每周一", "🔔09:00"]);
+      const parts = todoMetaParts(weekly, false, TODAY, "zh-CN", zh);
+      expect(parts[1]).toEqual({
+        text: "每周一",
+        tone: "muted",
+        repeat: true,
+        title: "重复：每周一",
+      });
+      // English: the rule's words, its name a sentence.
+      const en1 = todoMetaParts(weekly, false, TODAY, "en-US", en)[1];
+      expect(en1.text).toBe("Weekly on Mon");
+      expect(en1.title).toBe("Repeats weekly on Mon");
+      // A rule none of the five, in its words.
+      const fortnight = todo({
+        ...weekly,
+        todoRepeat: { kind: "weekly", weekdays: [1, 4], every: 2 },
+      });
+      expect(marks(fortnight)[1]).toBe("↻每 2 周的周一·四");
+      expect(todoMetaParts(fortnight, false, TODAY, "en-US", en)[1].title).toBe(
+        "Repeats every 2 weeks on Mon, Thu",
+      );
+      // Overdue, the rule after the warning.
+      const late = todo({
+        ...weekly,
+        due: { date: "2026-10-12", hasTime: false },
+        reminder: undefined,
+        overdue: true,
+      });
+      expect(marks(late)).toEqual(["逾期 4 天", "↻每周一"]);
+    });
+
+    it("says none on a to-do that does not repeat, one checked or one cancelled", () => {
+      const plain = todo({ ...weekly, todoRepeat: undefined });
+      expect(marks(plain)).toEqual(["周一", "🔔09:00"]);
+      expect(marks(weekly, { checked: true })).toEqual(["周一"]);
+      // Cancelled (a card's; it says 已删除 or 已跳过 in their place): no
+      // mark.
+      expect(
+        marks(todo({ ...weekly, cancelledAt: local(2026, 10, 16, 8, 0) })),
+      ).toEqual(["周一", "🔔09:00"]);
+    });
+
+    it("draws no bell pointing past its day while it is not overdue; overdue, it does", () => {
+      // Went off and moved on to the next period's time (Mon Oct 26),
+      // the period still open and due Monday: no bell.
+      const movedOn = todo({
+        ...weekly,
+        reminder: { ...weekly.reminder!, at: local(2026, 10, 26, 9, 0) },
+      });
+      expect(marks(movedOn)).toEqual(["周一", "↻每周一"]);
+      // Overdue (due Mon Oct 12, its reminder moved on to Mon Oct 26): it
+      // says when it rings again.
+      const overdue = todo({
+        ...movedOn,
+        due: { date: "2026-10-12", hasTime: false },
+        overdue: true,
+      });
+      expect(marks(overdue)).toEqual([
+        "逾期 4 天",
+        "↻每周一",
+        "🔔10月26日 09:00",
+      ]);
+      // Under a rule that records no reminder Core moves none on: a
+      // reminder after the day is drawn as it is.
+      const unrecorded = todo({
+        ...movedOn,
+        todoRepeat: { kind: "weekly", weekdays: [1] },
+      });
+      expect(marks(unrecorded)).toEqual([
+        "周一",
+        "↻每周一",
+        "🔔10月26日 09:00",
+      ]);
+      // Nor on a to-do that does not repeat.
+      expect(marks(todo({ ...movedOn, todoRepeat: undefined }))).toEqual([
+        "周一",
+        "🔔10月26日 09:00",
+      ]);
+    });
+  });
+
   it("shows checked what Core says, or the tick on its way", () => {
     expect(todoChecked(todo())).toBe(false);
     expect(todoChecked(todo({ state: "done" }))).toBe(true);
@@ -1222,6 +1335,43 @@ describe("what lights up (ticket 87, ruling 131 points 3 and 5)", () => {
       flash: [],
       held: [],
     });
+  });
+
+  // Main chat ticket 157: the next period of a rule, made by Core as one
+  // is ticked off or skipped.
+  it("lights the next period Galley's tick or skip made, not one this window's made", () => {
+    const P = todo({ id: "todo_p1", text: "交周报", seriesId: "series_w" });
+    const NEXT = todo({ id: "todo_p2", text: "交周报", seriesId: "series_w" });
+    const doneP = {
+      ...P,
+      state: "done" as const,
+      doneBy: "assistant" as const,
+    };
+    const before = list({ yours: yours(A, P) });
+    const ticked = list({ yours: yours(A, NEXT), done: [doneP] });
+    // Galley ticked it off: held and lit, and the next period lit too.
+    const galleys = todoPanelChanges(before, ticked, none);
+    expect(galleys.flash).toEqual(["todo_p2", "todo_p1"]);
+    expect(galleys.held.map((hold) => hold.item.id)).toEqual(["todo_p1"]);
+    // This window ticked it off (its flip on the way): neither.
+    expect(todoPanelChanges(before, ticked, new Set(["todo_p1"]))).toEqual({
+      flash: [],
+      held: [],
+    });
+    // Skipped: the period just goes. Galley's skip lights the next one;
+    // this window's (`deleting`) does not.
+    const skipped = list({ yours: yours(A, NEXT) });
+    expect(lit(before, skipped)).toEqual(["todo_p2"]);
+    expect(lit(before, skipped, new Set(["todo_p1"]))).toEqual([]);
+    // Another rule's new period, or a new to-do, still lights.
+    const other = todo({ id: "todo_q2", seriesId: "series_q" });
+    expect(
+      lit(
+        before,
+        list({ yours: yours(A, NEXT, other, B) }),
+        new Set(["todo_p1"]),
+      ),
+    ).toEqual(["todo_q2", "todo_b"]);
   });
 
   it("holds by who ticked it in this window, not by `doneBy`", () => {

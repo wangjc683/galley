@@ -21,6 +21,7 @@ import {
 } from "@/lib/message-time";
 import { todoItemWords } from "@/lib/reminder-first-line";
 import { repeatSummary } from "@/lib/scheduled-tasks";
+import { reminderMovedOn, todoRepeatWords } from "@/lib/todo-date";
 import type { TodoGlance } from "@/lib/todo-open";
 import { TODO_PLACES, type TodoPlace } from "@/lib/todo-panel-memory";
 
@@ -142,15 +143,19 @@ export function todoChecked(item: TodoItem, flip?: TodoFlip): boolean {
 }
 
 /** A row's second line, in parts: when it is due (warning when
- * overdue) and the reminder. */
+ * overdue), the rule it repeats by, and the reminder. */
 export interface TodoMetaPart {
   text: string;
   tone: "muted" | "warning";
   /** The reminder: drawn as a bell before its text, set apart by a gap,
    * not 「·」 (main chat PRD ruling 97). */
   bell?: boolean;
-  /** What the part says in full (「提醒 周三 14:00」), its accessible
-   * name and hover text. */
+  /** The rule a repeating period repeats by (main chat ticket 157, PRD
+   * ruling 204 point 7): drawn as the repeat glyph before its words, set
+   * apart as the bell's part is. */
+  repeat?: boolean;
+  /** What the part says in full (「提醒 周三 14:00」, 「重复：每周一」),
+   * its accessible name and hover text. */
   title?: string;
 }
 
@@ -205,6 +210,15 @@ export function todoOverdueDays(
  * under that reply. A checked one shows its due date quietly and no
  * reminder: a tick cancels a reminder that has not gone off (Core), and
  * a tick still settling hides it as the tick will.
+ *
+ * A period of a rule (main chat ticket 157, PRD ruling 204 point 7):
+ * after when it is due, the repeat glyph and the rule in words
+ * (`todoRepeatWords`: 「周一 ↻ 每周一 🔔 9:00」), set apart as the bell is;
+ * not on one checked (已完成 draws none) nor on one cancelled. Its bell is
+ * not drawn while it is not overdue and its reminder is one Core moved on
+ * to a later period's time once it went off (`reminderMovedOn`, ticket
+ * 154 behaviour 13): it points past this period's day. Overdue, it is
+ * drawn: it says when it rings again.
  */
 export function todoMetaParts(
   item: TodoItem,
@@ -215,8 +229,8 @@ export function todoMetaParts(
 ): TodoMetaPart[] {
   const parts: TodoMetaPart[] = [];
   const due = item.due;
+  const overdue = due && !checked ? todoOverdueDays(item, todayStartMs) : null;
   if (due) {
-    const overdue = checked ? null : todoOverdueDays(item, todayStartMs);
     const when = dueWhen(due, todayStartMs, language, copy);
     if (overdue !== null && overdue >= 1) {
       parts.push({ text: copy.todo.overdueDays(overdue), tone: "warning" });
@@ -226,8 +240,19 @@ export function todoMetaParts(
       parts.push({ text: when, tone: "muted" });
     }
   }
+  const rule = item.todoRepeat;
+  if (rule && !checked && !todoCancelled(item)) {
+    const words = todoRepeatWords(rule, copy);
+    parts.push({
+      text: words,
+      tone: "muted",
+      repeat: true,
+      title: copy.todo.repeats(words),
+    });
+  }
   const reminder = item.reminder;
   if (!reminder || checked || reminder.state === "fired") return parts;
+  if (overdue === null && reminderMovedOn(item)) return parts;
   const full = scheduleTime(reminder.at, todayStartMs, language, copy);
   const at = Date.parse(reminder.at);
   const day = Number.isNaN(at) ? null : localDayStart(at);
@@ -453,7 +478,8 @@ export interface TodoPanelChange {
 /** Ids with a write of this window's on its way — a tick or untick
  * (`flips`), a reminder being cancelled (`cancelling`), a to-do deleted
  * and not yet by Core (`deleting`, main chat ticket 88: staged under its
- * undo toast or sent), a title or notes changed in place (`editing`,
+ * undo toast or sent; a period skipped too, ticket 157), a title or
+ * notes changed in place (`editing`,
  * ticket 107), and since ticket 111 a write of an item under it — added
  * or its words changed (`subitemWriting`, by to-do id), ticked or
  * unticked (`subitemTicks`), deleted (`subitemDeleting`; both by item id,
@@ -674,7 +700,8 @@ function isSubtaskItem(item: TodoItem): boolean {
  * Core (main chat ticket 88, PRD ruling 132 point 4): without them, in
  * whichever group — off the panel the moment 删除 is chosen, and back
  * on 撤销 or when Core refuses. The same object when nothing is waiting.
- * Only the rows: 「今天 N」 follows Core once it has deleted them.
+ * Only the rows: 「今天 N」 follows Core once it has deleted them. A
+ * period skipped (「跳过这一次」, main chat ticket 157) waits among them.
  */
 export function todoWithoutDeleting(
   todo: AssistantTodo,
@@ -794,6 +821,13 @@ function byId(items: readonly TodoItem[]): Map<string, TodoItem> {
  * routine's next time moving on as it goes off; a one-off reminder going
  * off into 已完成; anything else new in 已完成; a row that leaves (a
  * cancelled one just goes: the panel draws nothing cancelled).
+ *
+ * The next period of a rule Core makes as one is ticked off or skipped
+ * (main chat ticket 157): new to the user's to-dos, so lit when Galley
+ * settled the one before (its tick or `todo skip`), as anything it puts
+ * there is; not when this window did (`mine` has the period settled,
+ * whose rule — `seriesId` — the new one shares): what you do yourself
+ * does not light.
  */
 export function todoPanelChanges(
   previousList: AssistantTodo,
@@ -807,17 +841,23 @@ export function todoPanelChanges(
     before: readonly TodoItem[],
     after: readonly TodoItem[],
     changed: (before: TodoItem, after: TodoItem) => boolean,
+    quiet: ReadonlySet<string> = mine,
   ) => {
     const was = byId(before);
     for (const item of after) {
-      if (mine.has(item.id)) continue;
+      if (quiet.has(item.id)) continue;
       const old = was.get(item.id);
       if (!old || changed(old, item)) flash.add(item.id);
     }
   };
   const yoursBefore = yourTodos(previous);
   const yoursAfter = yourTodos(next);
-  compare(yoursBefore, yoursAfter, yourTodoChanged);
+  compare(
+    yoursBefore,
+    yoursAfter,
+    yourTodoChanged,
+    withNextPeriods(mine, [...yoursBefore, ...previous.done], yoursAfter),
+  );
   compare(previous.assistant, next.assistant, assistantRowChanged);
   compare(previous.routine, next.routine, routineChanged);
 
@@ -843,6 +883,31 @@ export function todoPanelChanges(
     flash: order.filter((item) => flash.has(item.id)).map((item) => item.id),
     held,
   };
+}
+
+/**
+ * `mine` and the periods new to the user's to-dos (`after`, not in
+ * `before`) of a rule one of `mine` is a period of (main chat ticket 157):
+ * the next period Core made as this window ticked off or skipped the one
+ * before. The same set when there is none.
+ */
+function withNextPeriods(
+  mine: ReadonlySet<string>,
+  before: readonly TodoItem[],
+  after: readonly TodoItem[],
+): ReadonlySet<string> {
+  const rules = new Set(
+    before
+      .filter((item) => item.seriesId && mine.has(item.id))
+      .map((item) => item.seriesId),
+  );
+  if (rules.size === 0) return mine;
+  const was = new Set(before.map((item) => item.id));
+  const next = after.filter(
+    (item) => !was.has(item.id) && item.seriesId && rules.has(item.seriesId),
+  );
+  if (next.length === 0) return mine;
+  return new Set([...mine, ...next.map((item) => item.id)]);
 }
 
 /**

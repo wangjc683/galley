@@ -317,9 +317,10 @@ export type TodoChange = TodoWordsChange & TodoWhenChange;
 /** Change a to-do (`update_todo`): its title or notes (main chat ticket
  * 107), and since ticket 156 its due date, reminder and rule. Neither
  * `remind` nor `noRemind`, the reminder moves with the due day; Core
- * works that out, hangs no reminder whose time has passed (a repeating
- * period's goes to the next time still ahead) and leaves a period's rule
- * as it is. Core sends `todos:changed`; `not_found` for one cancelled or
+ * works that out — since ticket 157 one whose time has passed falls back
+ * toward the due day at the same time —, hangs no reminder whose time has
+ * passed (a repeating period's goes to the next time still ahead) and
+ * leaves a period's rule as it is. Core sends `todos:changed`; `not_found` for one cancelled or
  * gone, `invalid_args` (`repeat_needs_due:`) for taking a repeating
  * one's due date away. */
 export async function updateTodo(
@@ -337,8 +338,9 @@ export async function stopTodoRepeat(id: string): Promise<TodoBrief> {
 }
 
 /** 「跳过这一次」 (`skip_todo`, main chat ticket 154): this period is
- * skipped and the next one made at once. Returns the skipped period. Not
- * wired to the panel yet (a later ticket draws the menu item). */
+ * skipped and the next one made at once. Returns the skipped period.
+ * Since ticket 157 the row menu's item, sent once its undo toast goes
+ * (stores/assistant-todo.ts `skipTodo`). */
 export async function skipTodo(id: string): Promise<TodoBrief> {
   return invoke<TodoBrief>("skip_todo", { id });
 }

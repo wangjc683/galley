@@ -57,6 +57,13 @@ export interface TooltipLabelProps {
    * sparingly — consistent timing across the app is what makes the
    * tooltip system feel cohesive. */
   delay?: number;
+  /** Open as the caller says (Radix's controlled tooltip), with
+   * `onOpenChange` hearing what the pointer and the focus ask for: for a
+   * trigger that must not open on a focus it did not ask for (the to-do
+   * panel's 「改日期」, main chat ticket 157: the focus handed back as its
+   * popover closes). Left out, Radix opens and closes it itself. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
 }
 
@@ -68,6 +75,8 @@ export function TooltipLabel({
   alignOffset,
   contentClassName,
   delay,
+  open,
+  onOpenChange,
   children,
 }: TooltipLabelProps) {
   const trigger = (
@@ -98,7 +107,7 @@ export function TooltipLabel({
   if (delay != null) {
     return (
       <Tooltip.Provider delayDuration={delay}>
-        <Tooltip.Root>
+        <Tooltip.Root open={open} onOpenChange={onOpenChange}>
           {trigger}
           {content}
         </Tooltip.Root>
@@ -107,7 +116,7 @@ export function TooltipLabel({
   }
 
   return (
-    <Tooltip.Root>
+    <Tooltip.Root open={open} onOpenChange={onOpenChange}>
       {trigger}
       {content}
     </Tooltip.Root>

@@ -50,7 +50,13 @@ import { useAssistantTodoStore } from "@/stores/assistant-todo";
  * thing, one word (main chat ticket 88, PRD ruling 132 point 5; a
  * reminder card's 「已取消」 is cancelling a reminder, and stays). A
  * to-do deleted from the panel reads so at once, while its undo toast is
- * up (`deleting`), and back as it was on 撤销.
+ * up (`deleting`), and back as it was on 撤销. A repeating period skipped
+ * (main chat ticket 157, `skipped`; or skipped from the panel, its toast
+ * up) looks the same, 「已跳过」 in the place of 「已删除」.
+ *
+ * A period of a rule not done (ticket 157, PRD ruling 204 point 7) carries
+ * the panel's repeat glyph after its time, alone: the rule's words are in
+ * its hover, the card being one line.
  *
  * Its title opens the to-do panel at its row (main chat ticket 87, PRD
  * ruling 131 point 3), as the panel's title leads back to the sentence:
@@ -79,6 +85,9 @@ function TodoCard({ item }: { item: TodoItem }) {
   const failure = useAssistantTodoStore((s) => s.failures[item.id] ?? null);
   const listed = useAssistantTodoStore((s) => todoListed(s.todo, item.id));
   const deleting = useAssistantTodoStore((s) => item.id in s.deleting);
+  const skipping = useAssistantTodoStore(
+    (s) => s.deleting[item.id]?.skip === true,
+  );
   const mainChatId = item.createdIn?.sessionId;
   const cancelled = todoCancelled(item) || deleting;
   const checked = !deleting && todoChecked(item, flip);
@@ -87,8 +96,19 @@ function TodoCard({ item }: { item: TodoItem }) {
   // ticked.
   const done = item.state === "done" && !cancelled;
   const parts = cancelled
-    ? [{ text: copy.todo.stateDeleted, tone: "muted" as const }]
-    : todoMetaParts(item, checked, todayStartMs, language, copy);
+    ? [
+        {
+          text:
+            skipping || item.skipped
+              ? copy.todo.stateSkipped
+              : copy.todo.stateDeleted,
+          tone: "muted" as const,
+        },
+      ]
+    : // The repeat glyph without the rule's words (ticket 157).
+      todoMetaParts(item, checked, todayStartMs, language, copy).map((part) =>
+        part.repeat ? { ...part, text: "" } : part,
+      );
   const opens = listed && !deleting && Boolean(mainChatId);
   // The name in ink-soft, ink while its line is hovered or it has focus;
   // a ticked or cancelled one keeps its muted strike.

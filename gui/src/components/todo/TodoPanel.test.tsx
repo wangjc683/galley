@@ -9,6 +9,7 @@ import {
   type TodoItem,
 } from "@/lib/assistant-todo";
 import { CopyProvider } from "@/lib/i18n";
+import { isoWeekday } from "@/lib/todo-date";
 import type { TodoFlip } from "@/lib/todo-panel";
 
 import { TodoPanel } from "./TodoPanel";
@@ -127,6 +128,23 @@ const DONE_TODO = todo({
   state: "done",
   at: inDays(0, 7),
 });
+
+/** A period of a weekly rule, due in three days and reminded that day at
+ * 09:00 (main chat ticket 157). */
+const WEEKLY = todo({
+  id: "todo_weekly",
+  text: "交周报",
+  due: { date: dayIn(3), hasTime: false },
+  reminder: { taskId: "sched_w", at: inDays(3, 9), state: "scheduled" },
+  todoRepeat: {
+    kind: "weekly",
+    weekdays: [isoWeekday(dayIn(3))],
+    remind: { daysBefore: 0, time: "09:00" },
+  },
+  seriesId: "series_w",
+});
+/** Its rule in words: 「每周一」, the weekday its own. */
+const WEEKLY_RULE = `每周${"一二三四五六日"[isoWeekday(dayIn(3)) - 1]}`;
 
 // One of Galley's own one-off reminders (ticket 80).
 const OWN_REMINDER: TodoItem = {
@@ -476,6 +494,34 @@ describe("the panel's rows", () => {
     expect(row(html, "sched_water")).toMatch(
       /<button[^>]*hover:underline[^>]*>提醒喝水</,
     );
+  });
+
+  // Main chat ticket 157 (PRD ruling 204 point 7).
+  it("marks a period of a rule on its time line: the repeat glyph and the rule, after when it is due, before the bell", () => {
+    const html = panel({
+      ...EMPTY_TODO,
+      yours: { today: [], later: [WEEKLY, REMINDED], anytime: [] },
+    });
+    const weekly = row(html, "todo_weekly");
+    const meta = weekly.slice(weekly.indexOf('data-role="todo-meta"'));
+    const mark = meta.match(
+      /<span title="([^"]*)" aria-label="([^"]*)" data-role="todo-meta-repeat" class="ml-2 whitespace-nowrap"><svg[^]*?<\/svg><span aria-hidden="true" class="ml-\[3px\]">([^<]*)<\/span><\/span>/,
+    );
+    expect(mark).not.toBeNull();
+    expect(mark![1]).toBe(`重复：${WEEKLY_RULE}`);
+    expect(mark![2]).toBe(`重复：${WEEKLY_RULE}`);
+    expect(mark![3]).toBe(WEEKLY_RULE);
+    // After when it is due, before the bell; no 「·」 either side.
+    expect(meta.indexOf("todo-meta-repeat")).toBeLessThan(
+      meta.indexOf('aria-label="提醒 '),
+    );
+    expect(meta).not.toContain(" · ");
+    // The glyph the bell's size and weight (Phosphor `Repeat`, 11px).
+    expect(meta).toMatch(
+      /data-role="todo-meta-repeat"[^>]*><svg[^>]*width="11" height="11"/,
+    );
+    // A to-do that does not repeat: none.
+    expect(row(html, "todo_report")).not.toContain("todo-meta-repeat");
   });
 
   it("gives what Galley will come back to no box but the clock, and its subtasks no row (ruling 197)", () => {
@@ -1132,6 +1178,62 @@ describe("the card under the reply", () => {
     // A tick on its way does not tick it either.
     store.flips = { todo_report: { done: true, phase: "settling" } };
     expect(cards([REMINDED])).not.toContain('checked=""');
+  });
+
+  // Main chat ticket 157 (PRD ruling 204 point 7): the glyph alone.
+  it("carries the repeat glyph after its time on a period of a rule, not the rule's words", () => {
+    const html = cards([WEEKLY, REMINDED]);
+    const weekly = html.slice(
+      html.indexOf('data-todo-id="todo_weekly"'),
+      html.indexOf('data-todo-id="todo_report"'),
+    );
+    expect(weekly).toMatch(
+      new RegExp(
+        `<span title="重复：${WEEKLY_RULE}" aria-label="重复：${WEEKLY_RULE}" data-role="todo-meta-repeat" class="ml-2 whitespace-nowrap"><svg[^]*?</svg></span>`,
+      ),
+    );
+    // Its words only in its hover and name.
+    expect(weekly.split(WEEKLY_RULE)).toHaveLength(3);
+    expect(weekly.indexOf("todo-meta-repeat")).toBeLessThan(
+      weekly.indexOf('aria-label="提醒 '),
+    );
+    expect(
+      html.slice(html.indexOf('data-todo-id="todo_report"')),
+    ).not.toContain("todo-meta-repeat");
+    // Done: none, as under 已完成.
+    expect(cards([{ ...WEEKLY, state: "done" }])).not.toContain(
+      "todo-meta-repeat",
+    );
+  });
+
+  // Main chat ticket 157: a period skipped.
+  it("skipped: struck as a deleted one, 「已跳过」 in its place — skipped from the panel too, its toast up", () => {
+    const skipped = cards([{ ...CANCELLED, skipped: true }]);
+    expect(skipped).toContain('data-todo-state="cancelled"');
+    expect(skipped).toContain('disabled=""');
+    expect(skipped).toMatch(/text-ink-muted line-through"[^>]*>买营养土</);
+    expect(skipped).toMatch(/data-role="todo-meta"[^>]*><span>[^]*>已跳过</);
+    expect(skipped).not.toContain("已删除");
+    expect(
+      renderToStaticMarkup(
+        <CopyProvider language="en-US">
+          <Tooltip.Provider>
+            <TodoCards items={[{ ...CANCELLED, skipped: true }]} />
+          </Tooltip.Provider>
+        </CopyProvider>,
+      ),
+    ).toContain(">Skipped<");
+    // Skipped on the panel, Core not yet told.
+    store.deleting = {
+      todo_weekly: { order: 1, committing: false, skip: true },
+    };
+    const staged = cards([WEEKLY]);
+    expect(staged).toMatch(/data-role="todo-meta"[^>]*><span>[^]*>已跳过</);
+    expect(staged).toMatch(/text-ink-muted line-through"[^>]*>交周报</);
+    expect(staged).not.toContain("todo-meta-repeat");
+    // Deleted instead: 「已删除」, as before.
+    store.deleting = { todo_weekly: { order: 1, committing: false } };
+    expect(cards([WEEKLY])).toMatch(/>已删除</);
   });
 
   it("draws the three in the order given, a reply's in the order noted", () => {

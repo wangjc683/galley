@@ -14,6 +14,7 @@ import {
   removeTodoSubitem,
   reopenTodo,
   reopenTodoSubitem,
+  skipTodo as skipPeriod,
   stopTodoRepeat,
   todoFailureKind,
   updateTodo,
@@ -94,6 +95,18 @@ import { makeAppError } from "@/types/app-error";
  *   deleted row never shows between; one Core refused comes back with
  *   its reason (`failures`). One ticked off meanwhile (Galley's tick, in
  *   the list's 已完成 when the toast goes) is not sent: it stays done.
+ * - **Skip a repeating period** (`skipTodo`, 「跳过这一次」, main chat
+ *   ticket 157, PRD ruling 204 point 6): a delete's way, through the same
+ *   record (`deleting`, its entry marked `skip`) — off the panel at once,
+ *   its card reading 已跳过, 「已跳过「…」 · 撤销」 at the foot, its own
+ *   toast (`skipToastId`; 「已跳过 N 件待办」 for several), Core asked
+ *   (`skip_todo`) only when that toast goes; 撤销 puts them back. Core
+ *   makes the next period as it skips this one; it comes in with the
+ *   read that lets the skip go, and does not light (it is this window's).
+ *   A send into the main chat commits skips too (`flushDeletes`).
+ * - **Stop a rule from the row's menu** (`stopRepeat`, 「不再重复」,
+ *   ticket 157): `stopTodoRepeat`'s write, at once and with no undo, its
+ *   failure under the row (`failures`).
  * - **Change a title or notes** (`editTodo`, main chat ticket 107, PRD
  *   ruling 153 point 4): straight to Core (`update_todo`), no hold, no
  *   confirm, then read again; on its way it is this window's own write
@@ -154,10 +167,13 @@ interface AssistantTodoState {
    * id. */
   cancelling: Record<string, true>;
   /** To-dos deleted on the page and not yet by Core, by id (ticket 88):
-   * off the panel, their cards reading 已删除. */
+   * off the panel, their cards reading 已删除; since ticket 157 repeating
+   * periods skipped too (`skip`), their cards reading 已跳过. */
   deleting: Record<string, TodoDelete>;
   /** The undo toast up now, if any. */
   deleteToastId: string | null;
+  /** The skips' undo toast up now, if any (ticket 157). */
+  skipToastId: string | null;
   /** Title and notes changes on their way to Core, by to-do id: how
    * many (ticket 107). */
   editing: Record<string, number>;
@@ -176,8 +192,18 @@ interface AssistantTodoState {
    * Core has answered for them (and any sent before) and the list is
    * read again. Never rejects: one refused comes back with its reason. */
   commitDeletes: () => Promise<void>;
+  /** 跳过这一次 (ticket 157): a repeating period off the panel at once,
+   * 撤销 offered; Core skips it once the toast goes. */
+  skipTodo: (item: TodoItem) => void;
+  /** 撤销 on the skips' toast: every skip not yet sent put back. */
+  undoSkip: () => void;
+  /** Send every skip not yet sent; as `commitDeletes`. */
+  commitSkips: () => Promise<void>;
+  /** 不再重复 from the row's menu (ticket 157): the rule ends at once;
+   * why it failed under the row. */
+  stopRepeat: (id: string) => void;
   /** Before a send into the main chat: commit, and the promise to wait
-   * for; null when no deletion is waiting or on its way. */
+   * for; null when no deletion (or skip) is waiting or on its way. */
   flushDeletes: () => Promise<void> | null;
   /** Change a to-do's title or notes (ticket 107), and since ticket 156
    * its due date, reminder or rule; resolves once Core has it and the
@@ -287,6 +313,9 @@ export interface TodoDelete {
   order: number;
   /** Sent to Core: past undoing, still off the panel until it answers. */
   committing: boolean;
+  /** A repeating period skipped, not deleted (ticket 157): `skip_todo`,
+   * under its own toast. */
+  skip?: true;
 }
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -321,10 +350,44 @@ function deleteItemCopy() {
   ).todo.deleteItems;
 }
 
-function deleteCopy() {
-  return copyForLanguage(
+/** The undo toast's words for a delete, or since ticket 157 a skip. */
+function stagedCopy(skip: boolean): {
+  one: (title: string) => string;
+  many: (n: number) => string;
+  undo: string;
+} {
+  const copy = copyForLanguage(
     resolveLanguagePreference(usePrefsStore.getState().languagePreference),
-  ).todo.deleteTodo;
+  ).todo;
+  return skip
+    ? {
+        one: copy.skipTodo.skipped,
+        many: copy.skipTodo.skippedCount,
+        undo: copy.skipTodo.undo,
+      }
+    : {
+        one: copy.deleteTodo.deleted,
+        many: copy.deleteTodo.deletedCount,
+        undo: copy.deleteTodo.undo,
+      };
+}
+
+/** Whether a staged entry is a skip (`skip`) or a delete. */
+function stagedAs(entry: TodoDelete, skip: boolean): boolean {
+  return (entry.skip === true) === skip;
+}
+
+/** The record of the toast up for deletes, or for skips. */
+function toastKey(skip: boolean): "skipToastId" | "deleteToastId" {
+  return skip ? "skipToastId" : "deleteToastId";
+}
+
+/** That record set to `id`. */
+function toastSet(
+  skip: boolean,
+  id: string | null,
+): { skipToastId: string | null } | { deleteToastId: string | null } {
+  return skip ? { skipToastId: id } : { deleteToastId: id };
 }
 
 function without<T>(record: Record<string, T>, id: string): Record<string, T> {
@@ -402,6 +465,8 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
   // in on `todos:changed`) is not asked for: a done to-do is never
   // rewritten to 已删除 (PRD ruling 132 point 2), so it drops out of
   // `deleting` with the rest, to 已完成, its card 已完成, and no reason.
+  // A period skipped (ticket 157) goes the same way, `skip_todo` for it:
+  // one ticked off meanwhile is done, and Core refuses a done period.
   const sendDeletes = async (ids: readonly string[]) => {
     const refused: Record<string, TodoFailure> = {};
     for (const id of ids) {
@@ -411,7 +476,7 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
         continue;
       }
       try {
-        await cancelTodo(id);
+        await (get().deleting[id]?.skip ? skipPeriod(id) : cancelTodo(id));
       } catch (e) {
         refused[id] = todoFailureKind(e);
       }
@@ -426,6 +491,113 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
         failures: { ...s.failures, ...refused },
       };
     });
+  };
+
+  // A delete (ticket 88), or a skip (ticket 157): off the panel at once,
+  // its own toast up — several of a kind in five seconds one toast, its
+  // time from the latest — and Core asked only when that toast goes.
+  const stage = (item: TodoItem, skip: boolean) => {
+    const id = item.id;
+    if (item.kind !== "todo" || todoCancelled(item) || get().deleting[id]) {
+      return;
+    }
+    // Only a period of a rule still running is skipped.
+    if (skip && !item.todoRepeat) return;
+    staging += 1;
+    const deleting: Record<string, TodoDelete> = {
+      ...get().deleting,
+      [id]: skip
+        ? { order: staging, committing: false, skip: true }
+        : { order: staging, committing: false },
+    };
+    const waiting = Object.values(deleting).filter(
+      (entry) => !entry.committing && stagedAs(entry, skip),
+    ).length;
+    const key = toastKey(skip);
+    const previousToast = get()[key];
+    // A fresh toast each time: its five seconds start over.
+    const toastId = `todo-${skip ? "skip" : "delete"}-undo-${staging}`;
+    set((s) => ({
+      deleting,
+      ...toastSet(skip, toastId),
+      failures: without(s.failures, id),
+    }));
+    const copy = stagedCopy(skip);
+    const ui = useUiStore.getState();
+    ui.pushToast(
+      makeAppError({
+        id: toastId,
+        category: "business",
+        severity: "info",
+        title:
+          waiting === 1
+            ? copy.one(todoToastTitle(item.text))
+            : copy.many(waiting),
+        message: "",
+        hint: null,
+        retryable: false,
+        context: skip ? "skip_todo" : "delete_todo",
+        traceback: null,
+        autoDismissMs: UNDO_DELETE_MS,
+        action: {
+          kind: "undo",
+          label: copy.undo,
+          run: () => (skip ? get().undoSkip() : get().undoDelete()),
+        },
+        // Ran out, or its ×: now Core is asked. Only while it is the
+        // toast up — a later one of its kind replaced it otherwise.
+        onClose: () => {
+          if (get()[key] !== toastId) return;
+          void (skip ? get().commitSkips() : get().commitDeletes());
+        },
+      }),
+    );
+    if (previousToast) ui.dismissToast(previousToast);
+  };
+
+  // 撤销: every one of a kind not yet sent put back; Core hears nothing.
+  const undoStaged = (skip: boolean) => {
+    const key = toastKey(skip);
+    const { deleting } = get();
+    const toastId = get()[key];
+    set({
+      deleting: Object.fromEntries(
+        Object.entries(deleting).filter(
+          ([, entry]) => entry.committing || !stagedAs(entry, skip),
+        ),
+      ),
+      ...toastSet(skip, null),
+    });
+    if (toastId) useUiStore.getState().dismissToast(toastId);
+  };
+
+  // Send every one of a kind not yet sent, after the ones on their way.
+  const commitStaged = (skip: boolean): Promise<void> => {
+    const key = toastKey(skip);
+    const { deleting } = get();
+    const toastId = get()[key];
+    const batch = Object.entries(deleting)
+      .filter(([, entry]) => !entry.committing && stagedAs(entry, skip))
+      .sort(([, a], [, b]) => a.order - b.order)
+      .map(([id]) => id);
+    if (toastId) {
+      set(toastSet(skip, null));
+      useUiStore.getState().dismissToast(toastId);
+    }
+    if (batch.length === 0) return inflightDeletes ?? Promise.resolve();
+    set((s) => {
+      const next = { ...s.deleting };
+      for (const id of batch) next[id] = { ...next[id], committing: true };
+      return { deleting: next };
+    });
+    const run = (inflightDeletes ?? Promise.resolve()).then(() =>
+      sendDeletes(batch),
+    );
+    inflightDeletes = run;
+    void run.finally(() => {
+      if (inflightDeletes === run) inflightDeletes = null;
+    });
+    return run;
   };
 
   // A change of a to-do on its way (ticket 107's words, ticket 156's day,
@@ -532,6 +704,7 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
     cancelling: {},
     deleting: {},
     deleteToastId: null,
+    skipToastId: null,
     editing: {},
     subitemTicks: {},
     subitemFailures: {},
@@ -575,107 +748,43 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
 
     cancelTask: (id) => cancel(id, cancelScheduledTask),
 
-    deleteTodo: (item) => {
-      const id = item.id;
-      if (item.kind !== "todo" || todoCancelled(item) || get().deleting[id]) {
-        return;
-      }
-      staging += 1;
-      const deleting = {
-        ...get().deleting,
-        [id]: { order: staging, committing: false },
-      };
-      const waiting = Object.values(deleting).filter(
-        (entry) => !entry.committing,
-      ).length;
-      const previousToast = get().deleteToastId;
-      // A fresh toast each time: its five seconds start over.
-      const toastId = `todo-delete-undo-${staging}`;
-      set((s) => ({
-        deleting,
-        deleteToastId: toastId,
-        failures: without(s.failures, id),
-      }));
-      const copy = deleteCopy();
-      const ui = useUiStore.getState();
-      ui.pushToast(
-        makeAppError({
-          id: toastId,
-          category: "business",
-          severity: "info",
-          title:
-            waiting === 1
-              ? copy.deleted(todoToastTitle(item.text))
-              : copy.deletedCount(waiting),
-          message: "",
-          hint: null,
-          retryable: false,
-          context: "delete_todo",
-          traceback: null,
-          autoDismissMs: UNDO_DELETE_MS,
-          action: {
-            kind: "undo",
-            label: copy.undo,
-            run: () => get().undoDelete(),
-          },
-          // Ran out, or its ×: now Core deletes. Only while it is the
-          // toast up — a later deletion replaced it otherwise.
-          onClose: () => {
-            if (get().deleteToastId === toastId) void get().commitDeletes();
-          },
-        }),
-      );
-      if (previousToast) ui.dismissToast(previousToast);
-    },
+    deleteTodo: (item) => stage(item, false),
 
-    undoDelete: () => {
-      const { deleting, deleteToastId } = get();
-      set({
-        deleting: Object.fromEntries(
-          Object.entries(deleting).filter(([, entry]) => entry.committing),
-        ),
-        deleteToastId: null,
-      });
-      if (deleteToastId) useUiStore.getState().dismissToast(deleteToastId);
-    },
+    undoDelete: () => undoStaged(false),
 
-    commitDeletes: () => {
-      const { deleting, deleteToastId } = get();
-      const batch = Object.entries(deleting)
-        .filter(([, entry]) => !entry.committing)
-        .sort(([, a], [, b]) => a.order - b.order)
-        .map(([id]) => id);
-      if (deleteToastId) {
-        set({ deleteToastId: null });
-        useUiStore.getState().dismissToast(deleteToastId);
-      }
-      if (batch.length === 0) return inflightDeletes ?? Promise.resolve();
-      set((s) => {
-        const next = { ...s.deleting };
-        for (const id of batch) next[id] = { ...next[id], committing: true };
-        return { deleting: next };
-      });
-      const run = (inflightDeletes ?? Promise.resolve()).then(() =>
-        sendDeletes(batch),
-      );
-      inflightDeletes = run;
-      void run.finally(() => {
-        if (inflightDeletes === run) inflightDeletes = null;
-      });
-      return run;
+    commitDeletes: () => commitStaged(false),
+
+    skipTodo: (item) => stage(item, true),
+
+    undoSkip: () => undoStaged(true),
+
+    commitSkips: () => commitStaged(true),
+
+    stopRepeat: (id) => {
+      set((s) => ({ failures: without(s.failures, id) }));
+      void get()
+        .stopTodoRepeat(id)
+        .then((failed) => {
+          if (failed) {
+            set((s) => ({ failures: { ...s.failures, [id]: failed } }));
+          }
+        });
     },
 
     // Since ticket 111 the items' deletions too: Galley reads the to-do
-    // before it answers, and an item deleted must not be under it.
+    // before it answers, and an item deleted must not be under it. Since
+    // ticket 157 the periods skipped: the next one must be there.
     flushDeletes: () => {
       const todos =
-        Object.keys(get().deleting).length > 0 ? get().commitDeletes() : null;
+        Object.keys(get().deleting).length > 0
+          ? Promise.all([get().commitDeletes(), get().commitSkips()])
+          : null;
       const items =
         Object.keys(get().subitemDeleting).length > 0
           ? get().commitSubitemDeletes()
           : null;
       if (todos && items) return Promise.all([todos, items]).then(() => {});
-      return todos ?? items;
+      return todos ? todos.then(() => {}) : items;
     },
 
     editTodo: (id, change) => writeTodo(id, () => updateTodo(id, change)),

@@ -193,6 +193,44 @@ describe("the panel on screen", () => {
     ).toContain("1");
   });
 
+  // Main chat ticket 157: the next period of a rule, made by Core as one
+  // is ticked off or skipped.
+  it("lights the next period Galley's tick made; not one this window's skip made", async () => {
+    const rule = { kind: "weekly" as const, weekdays: [1] };
+    const P = todo("todo_p1", { seriesId: "series_w", todoRepeat: rule });
+    const NEXT = todo("todo_p2", { seriesId: "series_w", todoRepeat: rule });
+    act(() =>
+      useAssistantTodoStore.setState({ todo: list([A, P]), deleting: {} }),
+    );
+    const container = mount(panel());
+    act(() =>
+      useAssistantTodoStore.setState({
+        todo: list([A, NEXT], [{ ...P, state: "done", doneBy: "assistant" }]),
+      }),
+    );
+    await frame();
+    expect(lit(container)).toEqual(["todo_p2", "todo_p1"]);
+
+    // Skipped here: under its undo toast, then Core's read with the next
+    // period lets it go in one set — nothing lights.
+    act(() => root?.unmount());
+    root = null;
+    document.body.innerHTML = "";
+    act(() =>
+      useAssistantTodoStore.setState({
+        todo: list([A, P]),
+        deleting: { todo_p1: { order: 1, committing: true, skip: true } },
+      }),
+    );
+    const again = mount(panel());
+    act(() =>
+      useAssistantTodoStore.setState({ todo: list([A, NEXT]), deleting: {} }),
+    );
+    await frame();
+    expect(row(again, "todo_p2")).not.toBeNull();
+    expect(lit(again)).toEqual([]);
+  });
+
   it("does nothing while closed, and makes up for nothing on opening", async () => {
     act(() =>
       useAssistantTodoStore.setState({ todo: list([A, B, C, todo("todo_d")]) }),

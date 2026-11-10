@@ -1,6 +1,7 @@
 import type { AppCopy } from "@/i18n/types";
 import type {
   TodoDue,
+  TodoItem,
   TodoRepeat,
   TodoRepeatRemind,
   TodoRepeatRule,
@@ -250,6 +251,37 @@ export function reminderOffset(
     daysBefore: daysBetween(day, due.date),
     time: `${pad2(date.getHours())}:${pad2(date.getMinutes())}`,
   };
+}
+
+/**
+ * Whether a repeating period's reminder is one Core moved on (main chat
+ * ticket 157): its rule records a reminder, and the reminder reads as
+ * after the period's due day. A period's reminder goes off once; left
+ * unsettled, Core arms the same reminder again at a later period's time
+ * (ticket 154 behaviour 13, PRD ruling 204 point 12), which is after this
+ * period's day — a reminder the popover can set never is (its choices are
+ * the same day or days before). Read off where it is, it would be
+ * 「到期后 7 天」. Not on a rule that records none: Core moves nothing then.
+ */
+export function reminderMovedOn(item: TodoItem): boolean {
+  if (!item.todoRepeat?.remind) return false;
+  const read = reminderOffset(item.due, item.reminder?.at);
+  return read !== null && read.daysBefore < 0;
+}
+
+/**
+ * A to-do's reminder as the date popover reads it (ticket 156's
+ * `reminderOffset`), but a repeating period's that Core moved on
+ * (`reminderMovedOn`) as its rule's offset (`todoRepeat.remind`, main
+ * chat ticket 157) — what each period of the rule gets, and what Core
+ * moves it by when the day changes (`core/src/todo_by_hand.rs`). A
+ * period's own reminder set by hand reads as it is, as one on a rule that
+ * records none does; no reminder (cancelled, or none) reads as none.
+ */
+export function periodReminder(item: TodoItem): TodoRepeatRemind | null {
+  const read = reminderOffset(item.due, item.reminder?.at);
+  const rule = item.todoRepeat?.remind;
+  return read && rule && reminderMovedOn(item) ? rule : read;
 }
 
 /** The five choices of 「重复」, and what a rule that is none of them

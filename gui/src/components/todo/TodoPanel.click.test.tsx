@@ -19,6 +19,7 @@ import {
   type TodoItem,
 } from "@/lib/assistant-todo";
 import { CopyProvider } from "@/lib/i18n";
+import { LOCATE_FLASH_CLASS } from "@/lib/locate-flash";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { usePrefsStore } from "@/stores/prefs";
 import { useUiStore } from "@/stores/ui";
@@ -98,6 +99,8 @@ beforeEach(() => {
     cancelling: {},
     deleting: {},
     deleteToastId: null,
+    skipToastId: null,
+    editing: {},
   });
   useUiStore.setState({ toasts: [] });
   usePrefsStore.setState({ languagePreference: "zh-CN" });
@@ -409,6 +412,213 @@ describe("your to-do's menu (ticket 88)", () => {
     });
     await settle();
     expect(menuRows()).toEqual(["说说这件", "删除"]);
+  });
+});
+
+// Main chat ticket 157 (PRD ruling 204 point 6): a period of a rule.
+describe("a repeating period's menu (ticket 157)", () => {
+  const WEEKLY: TodoItem = {
+    kind: "todo",
+    id: "todo_weekly",
+    text: "交周报",
+    state: "open",
+    createdBy: "assistant",
+    due: { date: "2099-01-05", hasTime: false },
+    todoRepeat: { kind: "weekly", weekdays: [1] },
+    seriesId: "series_w",
+  };
+  const NEXT: TodoItem = {
+    ...WEEKLY,
+    id: "todo_weekly_2",
+    due: { date: "2099-01-12", hasTime: false },
+  };
+  const SOIL: TodoItem = {
+    kind: "todo",
+    id: "todo_soil",
+    text: "买营养土",
+    state: "open",
+    createdBy: "assistant",
+  };
+  const MENU = '[data-role="todo-row-menu"]';
+  const weeklyRow = (container: HTMLElement) =>
+    container.querySelector('[data-todo-row="todo_weekly"]');
+  const menuRows = () =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>(`${MENU} [role="menuitem"]`),
+    ).map((item) => item.textContent);
+  const toasts = () => useUiStore.getState().toasts;
+  const commands = () =>
+    getTauriMocks().invoke.mock.calls.map(([command]) => command);
+
+  async function settle(): Promise<void> {
+    await act(async () => {
+      for (let i = 0; i < 6; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    });
+  }
+
+  async function openMenu(row: Element | null): Promise<void> {
+    if (!row) throw new Error("no row");
+    await act(async () => {
+      row.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          cancelable: true,
+          clientX: 10,
+          clientY: 10,
+        }),
+      );
+    });
+    await settle();
+  }
+
+  async function choose(label: string): Promise<void> {
+    const item = Array.from(
+      document.querySelectorAll<HTMLElement>(`${MENU} [role="menuitem"]`),
+    ).find((row) => row.textContent === label);
+    if (!item) throw new Error(`no ${label}`);
+    await act(async () => item.click());
+    await settle();
+  }
+
+  // Core: 跳过 settles the period and makes the next one; 不再重复 ends
+  // the rule.
+  let core: AssistantTodo;
+  beforeEach(() => {
+    core = {
+      ...EMPTY_TODO,
+      yours: { today: [], later: [WEEKLY], anytime: [SOIL] },
+    };
+    useAssistantTodoStore.setState({ todo: core });
+    getTauriMocks().invoke.mockImplementation(async (command) => {
+      if (command === "list_assistant_todo") return core;
+      if (command === "list_noted_todos") return [];
+      if (command === "skip_todo") {
+        core = { ...core, yours: { ...core.yours, later: [NEXT] } };
+        return { id: "todo_weekly" };
+      }
+      if (command === "stop_todo_repeat") {
+        core = {
+          ...core,
+          yours: {
+            ...core.yours,
+            later: [{ ...WEEKLY, todoRepeat: undefined }],
+          },
+        };
+        return { id: "todo_weekly" };
+      }
+      return undefined;
+    });
+  });
+
+  it("holds 跳过这一次 and 不再重复 above 删除 on a period only", async () => {
+    const container = mount();
+    await openMenu(weeklyRow(container));
+    expect(menuRows()).toEqual(["说说这件", "跳过这一次", "不再重复", "删除"]);
+    expect(
+      document.querySelectorAll(`${MENU} [role="separator"]`),
+    ).toHaveLength(1);
+    // The separator right above 删除.
+    const content = document.querySelector(MENU)!;
+    const kinds = Array.from(content.children).map((el) =>
+      el.getAttribute("role") === "separator" ? "—" : el.textContent,
+    );
+    expect(kinds).toEqual(["说说这件", "跳过这一次", "不再重复", "—", "删除"]);
+    // A to-do that does not repeat: as before.
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    });
+    await settle();
+    await openMenu(container.querySelector('[data-todo-row="todo_soil"]'));
+    expect(menuRows()).toEqual(["说说这件", "删除"]);
+  });
+
+  it("跳过这一次 takes the row off under an undo toast; 撤销 brings it back, Core told nothing", async () => {
+    const container = mount();
+    await openMenu(weeklyRow(container));
+    await choose("跳过这一次");
+    expect(weeklyRow(container)).toBeNull();
+    expect(toasts()).toHaveLength(1);
+    expect(toasts()[0].title).toBe("已跳过「交周报」");
+    expect(commands()).toEqual([]);
+    const toast = toasts()[0];
+    await act(async () => {
+      if (toast.action?.kind === "undo") toast.action.run();
+    });
+    expect(weeklyRow(container)).not.toBeNull();
+    expect(toasts()).toEqual([]);
+    // Its late close skips nothing.
+    await act(async () => toast.onClose?.());
+    await settle();
+    expect(commands()).toEqual([]);
+  });
+
+  it("跳过这一次 asks Core once the toast goes; the next period comes in, not lit", async () => {
+    const container = mount();
+    await openMenu(weeklyRow(container));
+    await choose("跳过这一次");
+    const toast = toasts()[0];
+    await act(async () => {
+      toast.onClose?.();
+      useUiStore.getState().dismissToast(toast.id);
+    });
+    await settle();
+    expect(commands()).toEqual([
+      "skip_todo",
+      "list_assistant_todo",
+      "list_noted_todos",
+    ]);
+    expect(getTauriMocks().invoke).toHaveBeenCalledWith("skip_todo", {
+      id: "todo_weekly",
+    });
+    const next = container.querySelector<HTMLElement>(
+      '[data-todo-row="todo_weekly_2"]',
+    );
+    expect(next).not.toBeNull();
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    });
+    expect(next!.classList.contains(LOCATE_FLASH_CLASS)).toBe(false);
+  });
+
+  it("不再重复 goes to Core at once, no toast; the row stays, its mark gone", async () => {
+    const container = mount();
+    expect(
+      weeklyRow(container)?.querySelector('[data-role="todo-meta-repeat"]'),
+    ).not.toBeNull();
+    await openMenu(weeklyRow(container));
+    await choose("不再重复");
+    expect(getTauriMocks().invoke).toHaveBeenCalledWith("stop_todo_repeat", {
+      id: "todo_weekly",
+    });
+    expect(toasts()).toEqual([]);
+    expect(weeklyRow(container)).not.toBeNull();
+    expect(
+      weeklyRow(container)?.querySelector('[data-role="todo-meta-repeat"]'),
+    ).toBeNull();
+    // Not repeating now: the menu as any to-do's.
+    await openMenu(weeklyRow(container));
+    expect(menuRows()).toEqual(["说说这件", "删除"]);
+  });
+
+  it("不再重复 refused says why under the row", async () => {
+    getTauriMocks().invoke.mockImplementation(async (command) => {
+      if (command === "stop_todo_repeat") {
+        throw JSON.stringify({ error: "invalid_args", message: "no" });
+      }
+      if (command === "list_assistant_todo") return core;
+      if (command === "list_noted_todos") return [];
+      return undefined;
+    });
+    const container = mount();
+    await openMenu(weeklyRow(container));
+    await choose("不再重复");
+    expect(
+      weeklyRow(container)?.querySelector('[role="alert"]')?.textContent,
+    ).toBe("没能完成，再试一次。");
   });
 });
 

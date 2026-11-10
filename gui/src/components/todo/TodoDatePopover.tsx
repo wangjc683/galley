@@ -6,6 +6,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { flushSync } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
@@ -26,8 +27,8 @@ import {
   dueWrite,
   newReminderTime,
   nextMonday,
+  periodReminder,
   REMIND_DAY_CHOICES,
-  reminderOffset,
   repeatChoice,
   repeatRuleFor,
   timeValue,
@@ -36,6 +37,7 @@ import {
   type DayKey,
   type RepeatChoice,
 } from "@/lib/todo-date";
+import { yourTodos } from "@/lib/todo-panel";
 import { cn } from "@/lib/utils";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 
@@ -52,6 +54,17 @@ import { TodoCalendar } from "./TodoCalendar";
  * `border-line`, `rounded-md`, `shadow-elevated`), under the line and
  * moving aside where the panel is narrow; Esc and a click outside close
  * it, and the focus goes back to this button.
+ *
+ * Since main chat ticket 157 (the main session's walk of the real window):
+ * closing the popover never opens 「改日期」 — the focus handed back to
+ * the button is not one the user moved there, so the tooltip, which opens
+ * on focus, stays shut; it opens on a pointer's hover and on a focus the
+ * user brings (Tab), never while the popover is open, and below the time
+ * line, off the title above it. A close begun with the pointer (a day, a
+ * quick pick) hands the focus back with no ring (`quietRing`, until the
+ * focus moves or a key is pressed there); one begun from the keyboard (Esc,
+ * Enter on a day) with its ring, as before. A press outside closes it and
+ * leaves the focus where the press put it (Radix's own way).
  */
 export function TodoDateButton({
   item,
@@ -66,13 +79,35 @@ export function TodoDateButton({
   const copy = useCopy();
   const [open, setOpen] = useState(false);
   const content = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  // 「改日期」, held shut while the focus is handed back (ticket 157).
+  const [tip, setTip] = useState(false);
+  const handingBack = useRef(false);
+  // How the popover is left: a press in it or outside it, or a key.
+  const closedBy = useRef<"pointer" | "keyboard">("keyboard");
+  const pressedOutside = useRef(false);
+  // The focus handed back after a pointer's close: no ring on it.
+  const [quietRing, setQuietRing] = useState(false);
+  const onOpenChange = (next: boolean) => {
+    if (next) {
+      closedBy.current = "keyboard";
+      pressedOutside.current = false;
+      setTip(false);
+    }
+    setOpen(next);
+  };
   const button = (
     <Popover.Trigger asChild>
       <button
+        ref={trigger}
         type="button"
         data-role={empty ? "todo-add-date" : "todo-meta-date"}
+        data-ring={quietRing ? "quiet" : undefined}
+        onBlur={() => setQuietRing(false)}
+        onKeyDown={() => setQuietRing(false)}
         className={cn(
-          "min-w-0 truncate rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
+          "min-w-0 truncate rounded-sm text-left outline-none",
+          !quietRing && "focus-visible:ring-2 focus-visible:ring-brand/30",
           empty && "text-ink-muted hover:text-ink-soft",
         )}
       >
@@ -81,11 +116,23 @@ export function TodoDateButton({
     </Popover.Trigger>
   );
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
+    <Popover.Root open={open} onOpenChange={onOpenChange}>
       {empty ? (
         button
       ) : (
-        <TooltipLabel text={copy.todo.dateHint}>{button}</TooltipLabel>
+        <TooltipLabel
+          text={copy.todo.dateHint}
+          side="bottom"
+          align="start"
+          open={tip && !open}
+          onOpenChange={(next) => {
+            // Not on the focus handed back as the popover closes.
+            if (next && handingBack.current) return;
+            setTip(next);
+          }}
+        >
+          {button}
+        </TooltipLabel>
       )}
       <Popover.Portal>
         <Popover.Content
@@ -96,6 +143,27 @@ export function TodoDateButton({
           collisionPadding={8}
           aria-label={copy.todo.dateHint}
           data-role="todo-date-popover"
+          onPointerDownCapture={() => {
+            closedBy.current = "pointer";
+          }}
+          onKeyDownCapture={() => {
+            closedBy.current = "keyboard";
+          }}
+          onInteractOutside={() => {
+            pressedOutside.current = true;
+          }}
+          onCloseAutoFocus={(event) => {
+            // The focus handed back here, not by Radix: so the tooltip
+            // knows it is not the user's, and a pointer's close paints no
+            // ring. A press outside keeps the focus where it went.
+            event.preventDefault();
+            if (pressedOutside.current) return;
+            // Drawn without its ring before the focus lands on it.
+            flushSync(() => setQuietRing(closedBy.current === "pointer"));
+            handingBack.current = true;
+            trigger.current?.focus();
+            handingBack.current = false;
+          }}
           onOpenAutoFocus={(event) => {
             // The month's day in the Tab order takes the focus, not the
             // first quick pick: the arrows move from there at once. A
@@ -168,7 +236,11 @@ const LABEL_CLASS = "text-[12px] leading-7 text-ink-muted";
  * (`stop_todo_repeat`), the other four give it that rule from the due
  * date. A rule that is none of the four reads as itself, read only, with
  * 「改规则跟 Galley 说」 under it; picking one of the five replaces it. A
- * period cannot be without a due date: 「不定日子」 is off.
+ * period cannot be without a due date: 「不定日子」 is off. Its reminder,
+ * once Core moved it on to a later period's time (it went off and the
+ * period stayed open, ticket 154 behaviour 13), reads as the rule's offset
+ * (`periodReminder`, ticket 157), which Core moves it by when the day
+ * changes; one set by hand on the period reads as it is.
  */
 function TodoDatePanel({
   item,
@@ -198,15 +270,18 @@ function TodoDatePanel({
   // A time field being typed in: null shows the time as it stands.
   const [timeDraft, setTimeDraft] = useState<string | null>(null);
   const [remindTimeDraft, setRemindTimeDraft] = useState<string | null>(null);
+  // The reminder just picked was not hung, its time having passed
+  // (ticket 157): said under its row until the next change.
+  const [remindPassed, setRemindPassed] = useState(false);
 
   const due: DueShown | null = pendingDue
     ? pendingDue.value
     : item.due
       ? { day: item.due.date, time: dueTime(item.due) }
       : null;
-  const remind = pendingRemind
-    ? pendingRemind.value
-    : reminderOffset(item.due, item.reminder?.at);
+  // A repeating period's reminder Core moved on to a later period's time
+  // reads as its rule's offset (ticket 157), not 「到期后 7 天」.
+  const remind = pendingRemind ? pendingRemind.value : periodReminder(item);
   const repeat = pendingRepeat
     ? pendingRepeat.value
     : (item.todoRepeat ?? null);
@@ -230,6 +305,7 @@ function TodoDatePanel({
   ): Promise<TodoFailure | null> => {
     hold(mine);
     fail(block, null);
+    setRemindPassed(false);
     const failed = await write();
     hold(null, mine);
     if (failed) fail(block, failed);
@@ -281,10 +357,19 @@ function TodoDatePanel({
     void writeDue("time", { day: due.day, time });
   };
 
-  const writeRemind = (next: TodoRepeatRemind | null) =>
-    send("remind", { value: next }, holdRemind, () =>
+  const writeRemind = async (next: TodoRepeatRemind | null) => {
+    const failed = await send("remind", { value: next }, holdRemind, () =>
       editTodo(item.id, next ? { remind: next } : { noRemind: true }),
     );
+    if (failed || !next) return;
+    // A reminder asked for and none came back: Core hangs none whose time
+    // has passed (ticket 156), and says nothing. A repeating period's it
+    // hangs at a later time instead: nothing to say there.
+    const now = yourTodos(useAssistantTodoStore.getState().todo).find(
+      (each) => each.id === item.id,
+    );
+    if (now && !now.reminder && !now.todoRepeat) setRemindPassed(true);
+  };
 
   const pickRemindDays = (value: string) => {
     if (!due) return;
@@ -381,8 +466,9 @@ function TodoDatePanel({
           size="sm"
           data-quick="no-date"
           className="px-2"
-          // A period of a rule keeps a due date (`repeat_needs_due:`).
-          disabled={picking || repeat !== null}
+          // A period of a rule keeps a due date (`repeat_needs_due:`); one
+          // with none has nothing to take away (ticket 157).
+          disabled={picking || repeat !== null || !due}
           onClick={() => void pickDay(null)}
         >
           {words.noDate}
@@ -488,6 +574,14 @@ function TodoDatePanel({
         </div>
         {failures.remind && (
           <BlockFailure kind={failures.remind} className="col-start-2" />
+        )}
+        {remindPassed && (
+          <p
+            data-role="todo-date-remind-passed"
+            className="col-start-2 -mt-0.5 text-[11.5px] leading-[1.45] text-ink-muted"
+          >
+            {words.remindPassed}
+          </p>
         )}
 
         <span className={LABEL_CLASS}>{words.repeat}</span>

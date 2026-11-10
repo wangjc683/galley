@@ -145,6 +145,19 @@ const LATE = todo("todo_late", {
   due: onDay(inDays(10)),
   reminder: remindAt(inDays(11), 9, 0),
 });
+/** A weekly period due in three days whose reminder, the rule's (the day
+ * itself at 09:00), went off and Core moved on to the next period's time
+ * (main chat ticket 157). */
+const MOVED = todo("todo_moved", {
+  due: onDay(inDays(3)),
+  reminder: remindAt(inDays(10), 9, 0),
+  todoRepeat: {
+    kind: "weekly",
+    weekdays: [isoWeekday(inDays(3))],
+    remind: { daysBefore: 0, time: "09:00" },
+  },
+  seriesId: "series_m",
+});
 
 const list = (yours: TodoItem[]): AssistantTodo => ({
   ...EMPTY_TODO,
@@ -177,10 +190,17 @@ function apply(item: TodoItem, args: UpdateArgs): TodoItem {
   if (args.noRemind) next = { ...next, reminder: undefined };
   if (args.remind && next.due) {
     const [h, m] = args.remind.time.split(":").map(Number);
-    next = {
-      ...next,
-      reminder: remindAt(addDays(next.due.date, -args.remind.daysBefore), h, m),
-    };
+    const reminder = remindAt(
+      addDays(next.due.date, -args.remind.daysBefore),
+      h,
+      m,
+    );
+    // A time passed is not hung; a repeating period's Core hangs later
+    // (here: where asked, which is all the panel reads back).
+    next =
+      Date.parse(reminder.at) <= Date.now() && !next.todoRepeat
+        ? { ...next, reminder: undefined }
+        : { ...next, reminder };
   }
   if (args.repeat) next = { ...next, todoRepeat: args.repeat };
   return next;
@@ -191,7 +211,17 @@ let refuse: string | null = null;
 let root: Root | null = null;
 
 beforeEach(() => {
-  core = list([REPORT, MEETING, SOIL, PACK, WEEKLY, FORTNIGHT, EARLY, LATE]);
+  core = list([
+    REPORT,
+    MEETING,
+    SOIL,
+    PACK,
+    WEEKLY,
+    FORTNIGHT,
+    EARLY,
+    LATE,
+    MOVED,
+  ]);
   refuse = null;
   useAssistantTodoStore.setState({
     todo: core,
@@ -554,10 +584,12 @@ describe("the reminder (ticket 156 二、三)", () => {
     expect(
       inPopover<HTMLInputElement>('[data-role="todo-date-remind-time"]').value,
     ).toBe("20:00");
-    choose(days, "7");
+    // Three days before a day five days out: still ahead (a week before
+    // would have passed, and Core hangs no such reminder, ticket 157).
+    choose(days, "3");
     await settle();
     expect(updates()).toEqual([
-      { id: "todo_report", remind: { daysBefore: 7, time: "20:00" } },
+      { id: "todo_report", remind: { daysBefore: 3, time: "20:00" } },
     ]);
     expect(popover()).not.toBeNull();
     const time = inPopover<HTMLInputElement>(
@@ -568,7 +600,7 @@ describe("the reminder (ticket 156 二、三)", () => {
     await settle();
     expect(last()).toEqual({
       id: "todo_report",
-      remind: { daysBefore: 7, time: "21:15" },
+      remind: { daysBefore: 3, time: "21:15" },
     });
     choose(inPopover('[data-role="todo-date-remind"]'), "none");
     await settle();
@@ -782,5 +814,188 @@ describe("the month from the keyboard (ticket 156 二)", () => {
     expect(row(container, "todo_soil").hasAttribute("data-todo-open")).toBe(
       true,
     );
+  });
+});
+
+// Main chat ticket 157 (PRD ruling 204 point 7; 四).
+describe("a period of a rule (ticket 157)", () => {
+  it("open, its repeat mark is inside the time line's button", () => {
+    const container = mount();
+    click(row(container, "todo_weekly"));
+    const button = row(container, "todo_weekly").querySelector(
+      '[data-role="todo-meta-date"]',
+    )!;
+    expect(
+      button.querySelector('[data-role="todo-meta-repeat"]'),
+    ).not.toBeNull();
+    // Folded too, outside any button.
+    click(row(container, "todo_weekly"));
+    expect(
+      row(container, "todo_weekly").querySelector(
+        '[data-role="todo-meta-repeat"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  it("reads a reminder Core moved on as the rule's offset, not 「到期后 7 天」; its bell not drawn", () => {
+    const container = mount();
+    // Not overdue, its reminder past its day: no bell, no 取消提醒 by it.
+    const meta = row(container, "todo_moved").querySelector(
+      '[data-role="todo-meta"]',
+    )!;
+    expect(meta.querySelector('[aria-label^="提醒 "]')).toBeNull();
+    expect(meta.querySelector('button[aria-label="取消提醒"]')).toBeNull();
+    openPopover(container, "todo_moved");
+    const days = inPopover<HTMLSelectElement>('[data-role="todo-date-remind"]');
+    expect(selectedText(days)).toBe("当天");
+    expect(
+      inPopover<HTMLInputElement>('[data-role="todo-date-remind-time"]').value,
+    ).toBe("09:00");
+  });
+});
+
+// Main chat ticket 157, the main session's addendum (the real window).
+describe("the popover's addendum (ticket 157)", () => {
+  const tooltip = () => document.querySelector('[role="tooltip"]');
+  const dateButton = (container: HTMLElement) =>
+    row(container, "todo_report").querySelector<HTMLElement>(
+      '[data-role="todo-meta-date"]',
+    )!;
+
+  it("a day picked with the pointer: the focus back on the time line, no tooltip, no ring", async () => {
+    const container = mount();
+    openPopover(container, "todo_report");
+    const other = Array.from(
+      popover()!.querySelectorAll<HTMLElement>(
+        '[data-role="todo-calendar-day"]',
+      ),
+    ).find((day) => day.dataset.day !== inDays(5))!;
+    act(() => {
+      other.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, button: 0 }),
+      );
+    });
+    click(other);
+    await settle();
+    await settle();
+    expect(popover()).toBeNull();
+    const button = dateButton(container);
+    expect(document.activeElement).toBe(button);
+    expect(tooltip()).toBeNull();
+    expect(button.dataset.ring).toBe("quiet");
+    expect(button.className).not.toContain("focus-visible:ring-2");
+    // A key pressed there brings the ring back.
+    key(button, "Shift");
+    expect(button.dataset.ring).toBeUndefined();
+    expect(button.className).toContain("focus-visible:ring-2");
+  });
+
+  it("Esc: the focus back with its ring, no tooltip; a hover still shows it, below the time line", async () => {
+    const container = mount();
+    openPopover(container, "todo_report");
+    key(document.activeElement!, "Escape");
+    await settle();
+    await settle();
+    const button = dateButton(container);
+    expect(document.activeElement).toBe(button);
+    expect(tooltip()).toBeNull();
+    expect(button.dataset.ring).toBeUndefined();
+    expect(button.className).toContain("focus-visible:ring-2");
+    // The pointer over it: 「改日期」, under the line, off the title.
+    act(() => {
+      button.dispatchEvent(
+        new PointerEvent("pointermove", {
+          bubbles: true,
+          pointerType: "mouse",
+        }),
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    });
+    expect(tooltip()?.textContent).toBe("改日期");
+    expect(tooltip()!.closest("[data-side]")?.getAttribute("data-side")).toBe(
+      "bottom",
+    );
+  });
+
+  it("a focus the user brings (Tab) shows it; none while the popover is open", async () => {
+    const container = mount();
+    click(row(container, "todo_report"));
+    const button = dateButton(container);
+    act(() => button.focus());
+    expect(tooltip()?.textContent).toBe("改日期");
+    click(button);
+    expect(popover()).not.toBeNull();
+    expect(tooltip()).toBeNull();
+  });
+
+  it("says so when a reminder just picked was not hung, its time passed; not after 不提醒, nor on a period", async () => {
+    const passed = () =>
+      popover()!.querySelector('[data-role="todo-date-remind-passed"]');
+    const container = mount();
+    // Due in three days at 15:00; a week before has passed.
+    openPopover(container, "todo_meeting");
+    choose(inPopover('[data-role="todo-date-remind"]'), "7");
+    await settle();
+    expect(last()).toEqual({
+      id: "todo_meeting",
+      remind: { daysBefore: 7, time: "15:00" },
+    });
+    expect(
+      inPopover<HTMLSelectElement>('[data-role="todo-date-remind"]').value,
+    ).toBe("none");
+    expect(passed()?.textContent).toBe("这个时刻已经过了，没有挂提醒");
+    expect(passed()!.className).toContain("text-ink-muted");
+    expect(passed()!.className).not.toContain("text-error");
+    // The next change takes it away.
+    choose(inPopover('[data-role="todo-date-remind"]'), "1");
+    await settle();
+    expect(passed()).toBeNull();
+    // 「不提醒」 itself: nothing to say.
+    choose(inPopover('[data-role="todo-date-remind"]'), "none");
+    await settle();
+    expect(last()).toEqual({ id: "todo_meeting", noRemind: true });
+    expect(passed()).toBeNull();
+    // Gone once it closes.
+    choose(inPopover('[data-role="todo-date-remind"]'), "7");
+    await settle();
+    expect(passed()).not.toBeNull();
+    key(document.activeElement!, "Escape");
+    await settle();
+    // The row is still open: its time line again.
+    click(
+      row(container, "todo_meeting").querySelector(
+        '[data-role="todo-meta-date"]',
+      )!,
+    );
+    expect(popover()).not.toBeNull();
+    expect(passed()).toBeNull();
+    key(document.activeElement!, "Escape");
+    await settle();
+    // A period of a rule: Core hangs it later; nothing said.
+    openPopover(container, "todo_weekly");
+    choose(inPopover('[data-role="todo-date-remind"]'), "7");
+    await settle();
+    const time = inPopover<HTMLInputElement>(
+      '[data-role="todo-date-remind-time"]',
+    );
+    typeTime(time, "00:00");
+    act(() => time.blur());
+    await settle();
+    expect(last()).toEqual({
+      id: "todo_weekly",
+      remind: { daysBefore: 7, time: "00:00" },
+    });
+    expect(passed()).toBeNull();
+  });
+
+  it("「不定日子」 is off on a to-do with no due date", () => {
+    const container = mount();
+    openPopover(container, "todo_soil");
+    expect(quickPick("no-date").disabled).toBe(true);
+    key(document.activeElement!, "Escape");
+    openPopover(container, "todo_report");
+    expect(quickPick("no-date").disabled).toBe(false);
   });
 });

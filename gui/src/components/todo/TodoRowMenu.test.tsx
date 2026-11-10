@@ -109,6 +109,42 @@ describe("your to-do's menu", () => {
     ]);
   });
 
+  // Main chat ticket 157 (PRD ruling 204 point 6).
+  it("holds 跳过这一次 and 不再重复 above 删除 on a period of a rule, in that order", () => {
+    const repeating = {
+      ...MODEL,
+      onSkip: () => {},
+      onStopRepeat: () => {},
+    };
+    expect(rows(render(repeating))).toEqual([
+      `item:${words.talkAbout}`,
+      `item:${words.cancelReminder}`,
+      `item:${words.skipTodo.menuItem}`,
+      `item:${words.stopRepeat}`,
+      "separator",
+      `item:${words.deleteTodo.menuItem}`,
+    ]);
+    expect(rows(render(repeating, "en-US"))).toEqual([
+      `item:${enCopy.todo.talkAbout}`,
+      `item:${enCopy.todo.cancelReminder}`,
+      "item:Skip this one",
+      "item:Stop repeating",
+      "separator",
+      "item:Delete",
+    ]);
+    expect(words.skipTodo.menuItem).toBe("跳过这一次");
+    expect(words.stopRepeat).toBe("不再重复");
+    // Neither red: only 删除 is.
+    const markup = render(repeating);
+    for (const label of [words.skipTodo.menuItem, words.stopRepeat]) {
+      const style = new RegExp(
+        `<div data-row="item" data-class="([^"]*)">(?:<svg[^]*?</svg>)?${label}</div>`,
+      ).exec(markup)?.[1];
+      expect(style).toContain("text-ink-soft");
+      expect(style).not.toContain("text-error");
+    }
+  });
+
   it("draws 删除 in the message menu's destructive style, opening from the ⋯'s right edge", () => {
     const markup = render(MODEL);
     const styles = new Map(

@@ -2140,6 +2140,18 @@ export const zhCopy = {
       deletedCount: (n: number) => `已删除 ${n} 件待办`,
       undo: "撤销",
     },
+    /** 在重复的那一期（主聊天票 157，裁决 204 第 6 条），「⋯」与右键菜单里「删除」上面的
+     * 「跳过这一次」：照删除的做法，不确认，这一行立刻离开，提示条 5 秒走了才交给 Core，
+     * Core 随之生出下一期；5 秒内连跳几件合成一条，「撤销」全部放回。 */
+    skipTodo: {
+      menuItem: "跳过这一次",
+      skipped: (title: string) => `已跳过「${title}」`,
+      skippedCount: (n: number) => `已跳过 ${n} 件待办`,
+      undo: "撤销",
+    },
+    /** 同一处的「不再重复」：立刻交给 Core，这一期留成普通待办，不出撤销提示条
+     * （在改日期的浮层里把「重复」选回去就是撤销）。 */
+    stopRepeat: "不再重复",
     /** 打开的待办（主聊天票 107，裁决 153）最下面一行「10月28日记下 · 在对话里查看」：
      * 日子照备忘页的写法（今天、昨天、几月几日），不写星期。 */
     notedOn: (day: string) => `${day}记下`,
@@ -2175,6 +2187,9 @@ export const zhCopy = {
               : `到期后 ${-daysBefore} 天`,
       /** 提醒那一行时间输入的无障碍名。 */
       remindTime: "提醒的时刻",
+      /** 刚选的提醒因为时刻已经过了没挂上（主聊天票 157）：提醒那一行下面一行小字，
+       * 同「改规则跟 Galley 说」的样子；下一次改动或关掉浮层就不在了。重复的那一期不写。 */
+      remindPassed: "这个时刻已经过了，没有挂提醒",
       repeatNone: "不重复",
       repeatDaily: "每天",
       repeatWeekly: "每周",
@@ -2231,6 +2246,9 @@ export const zhCopy = {
     /** 铃铛的悬停文字与无障碍名称。 */
     reminderAt: (when: string) => `提醒 ${when}`,
     reminderPaused: (when: string) => `提醒 ${when} · 已暂停`,
+    /** 重复的那一期，时间那一行的重复记号的悬停文字与无障碍名（主聊天票 157）：规则用
+     * todo.date.rule 写成的字。 */
+    repeats: (rule: string) => `重复：${rule}`,
     /** 例行的下次时刻。 */
     nextAt: (when: string) => `下次 ${when}`,
     /** 只有日期的截止。 */
@@ -2247,6 +2265,8 @@ export const zhCopy = {
     /** 回复下待办卡片上取消了的待办：你在面板里删的、让 Galley 删的都写「已删除」
      * （主聊天票 88，裁决 132 第 5 条：一件事一个词）；提醒卡片照旧写「已取消」。 */
     stateDeleted: "已删除",
+    /** 回复下待办卡片上被跳过的那一期（主聊天票 157）：样子同「已删除」，只换字。 */
+    stateSkipped: "已跳过",
     stateRunning: "正在工作",
     stateAsking: "等你回复",
     stateFailed: "出错",
