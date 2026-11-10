@@ -575,25 +575,22 @@ async fn write_message_row(
     .execute(&mut *conn)
     .await
     .map_err(map_sqlx_err)?;
+    // The id is new (the plain INSERT above fails on an existing one), and
+    // the paths that delete messages delete their search rows too (the
+    // demo-session sweep leaves some, under ids no session gets again).
+    // So there is nothing to delete first, which would scan the whole FTS
+    // table: `message_id` is UNINDEXED.
     if visibility == MessageVisibility::Visible {
-        let fts_res = async {
-            sqlx::query("DELETE FROM messages_fts WHERE message_id = ?")
-                .bind(&msg_id)
-                .execute(&mut *conn)
-                .await?;
-            sqlx::query(
-                "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
-                 VALUES (?, ?, ?, ?, ?)",
-            )
-            .bind(&msg_id)
-            .bind(&session_id.0)
-            .bind(role_sql)
-            .bind(next_turn)
-            .bind(&content)
-            .execute(&mut *conn)
-            .await?;
-            std::result::Result::<(), sqlx::Error>::Ok(())
-        }
+        let fts_res = sqlx::query(
+            "INSERT INTO messages_fts (message_id, session_id, role, turn_index, body) \
+             VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(&msg_id)
+        .bind(&session_id.0)
+        .bind(role_sql)
+        .bind(next_turn)
+        .bind(&content)
+        .execute(&mut *conn)
         .await;
         if let Err(e) = fts_res {
             eprintln!("[galley-core] index {role_sql} message fts failed: {e}");

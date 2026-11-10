@@ -307,12 +307,14 @@ pub async fn mark_replay_rows(
 }
 
 /// The main chat's dispatches, each named as [`mark_replay_rows`] names
-/// it: by its session's current title while the session is there.
+/// it: by its session's current title while the session is there. The
+/// records only: their `send_backs` are not counted (left 0), since
+/// [`mark_rows`] and [`replay_marker`] do not read them.
 pub async fn named_dispatches(
     galley: &SqliteGalley,
     main_chat: &SessionId,
 ) -> Result<Vec<SubtaskDispatch>, GalleyError> {
-    let mut dispatches = galley.subtask_dispatches(main_chat).await?;
+    let mut dispatches = galley.subtask_dispatch_records(main_chat).await?;
     let titles = galley.subtask_session_titles(main_chat).await?;
     for dispatch in &mut dispatches {
         if let Some(title) = dispatch.session_id.as_ref().and_then(|id| titles.get(id)) {

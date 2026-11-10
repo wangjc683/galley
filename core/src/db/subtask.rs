@@ -357,15 +357,7 @@ impl SqliteGalley {
         &self,
         parent_session_id: &SessionId,
     ) -> Result<Vec<SubtaskDispatch>> {
-        let rows = sqlx::query_as::<_, SubtaskDispatchRow>(&format!(
-            "SELECT {SUBTASK_DISPATCH_COLS} \
-             FROM subtask_dispatches WHERE parent_session_id = ? \
-             ORDER BY turn_index, ordinal"
-        ))
-        .bind(parent_session_id.as_str())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(map_sqlx_err)?;
+        let mut dispatches = self.subtask_dispatch_records(parent_session_id).await?;
         let counts = count_send_backs(
             sqlx::query_as::<_, SendBackRow>(&send_back_rows_sql(
                 "session_id IN (SELECT session_id FROM subtask_dispatches \
@@ -377,15 +369,34 @@ impl SqliteGalley {
             .await
             .map_err(map_sqlx_err)?,
         );
+        for dispatch in &mut dispatches {
+            if let Some(id) = &dispatch.session_id {
+                dispatch.send_backs = counts.get(id).copied().unwrap_or(0);
+            }
+        }
+        Ok(dispatches)
+    }
+
+    /// [`Self::subtask_dispatches`] without the send-back counts, which
+    /// read every reply of every subtask (`send_backs` stays 0): for the
+    /// readers that only need the records, such as the main chat's history
+    /// replay ([`crate::subtask::named_dispatches`]).
+    pub async fn subtask_dispatch_records(
+        &self,
+        parent_session_id: &SessionId,
+    ) -> Result<Vec<SubtaskDispatch>> {
+        let rows = sqlx::query_as::<_, SubtaskDispatchRow>(&format!(
+            "SELECT {SUBTASK_DISPATCH_COLS} \
+             FROM subtask_dispatches WHERE parent_session_id = ? \
+             ORDER BY turn_index, ordinal"
+        ))
+        .bind(parent_session_id.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(map_sqlx_err)?;
         Ok(rows
             .into_iter()
-            .map(|row| {
-                let mut dispatch = row.into_dispatch();
-                if let Some(id) = &dispatch.session_id {
-                    dispatch.send_backs = counts.get(id).copied().unwrap_or(0);
-                }
-                dispatch
-            })
+            .map(SubtaskDispatchRow::into_dispatch)
             .collect())
     }
 
