@@ -8,6 +8,24 @@ use serde::Serialize;
 // exactly what `galley_core_lib::protocol` defines.
 pub(crate) use galley_core_lib::protocol::{ACCEPTED_SCHEMA_VERSIONS, SCHEMA_VERSION};
 
+/// The caller's `--schema=N` pin, recorded once by `main` after checking
+/// it against [`ACCEPTED_SCHEMA_VERSIONS`]. One CLI process answers one
+/// command, so a process-wide value is the whole scope.
+static SCHEMA_PIN: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+
+pub(crate) fn set_schema_pin(version: u32) {
+    let _ = SCHEMA_PIN.set(version);
+}
+
+/// The `schemaVersion` this invocation's payloads and frames carry: the
+/// `--schema=N` pin, or [`SCHEMA_VERSION`] without one, so a request
+/// pinned to an older version is answered exactly as before (stability
+/// §1.2, §7.1). `galley version` does not use it: it reports the
+/// binary's default whatever the pin.
+pub(crate) fn answer_schema_version() -> u32 {
+    SCHEMA_PIN.get().copied().unwrap_or(SCHEMA_VERSION)
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct StreamEndPayload<'a> {

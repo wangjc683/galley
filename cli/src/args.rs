@@ -12,7 +12,8 @@ pub(crate) struct Cli {
     /// `3` and still accept `1` and `2` for every command that survived
     /// unchanged. A mismatch exits 2 (`invalid_args`) with a message
     /// prefixed `schema_mismatch:`. Omit to use the binary's default
-    /// (currently `3`).
+    /// (currently `3`). Payloads that carry `schemaVersion` echo the pin;
+    /// `galley version` always reports the default.
     #[arg(long = "schema", value_name = "N", global = true)]
     pub(crate) schema: Option<u32>,
 

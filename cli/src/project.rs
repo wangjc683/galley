@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use crate::client::{call_print, client, next_watch_frame_strict};
 use crate::common::{
-    emit_json, is_live_candidate, live_run_ended, probe_live_states, StreamEndPayload,
-    SCHEMA_VERSION,
+    answer_schema_version, emit_json, is_live_candidate, live_run_ended, probe_live_states,
+    StreamEndPayload,
 };
 use galley_core_lib::api::{
     GalleyApi, MessageBrief, ProjectBrief, SessionBrief, SessionFilter, SessionStatus,
@@ -239,7 +239,7 @@ async fn project_rollup_payload(
         .cloned()
         .collect::<Vec<_>>();
     Ok(ProjectRollupPayload {
-        schema_version: SCHEMA_VERSION,
+        schema_version: answer_schema_version(),
         last_activity_at: project.last_activity_at.clone(),
         project,
         session_count: sessions.len(),
@@ -278,7 +278,7 @@ async fn project_show_payload(
     let session_count = sessions.len();
     let details = project_session_details(galley, &sessions, tail).await?;
     Ok(ProjectShowPayload {
-        schema_version: SCHEMA_VERSION,
+        schema_version: answer_schema_version(),
         project,
         session_count,
         status_counts,
@@ -295,7 +295,7 @@ async fn project_snapshot_payload(
 ) -> Result<ProjectSnapshotPayload, GalleyError> {
     let show = project_show_payload(galley, project_id, tail, all).await?;
     Ok(ProjectSnapshotPayload {
-        schema_version: SCHEMA_VERSION,
+        schema_version: answer_schema_version(),
         stream: "snapshot",
         phase,
         project: show.project,
@@ -441,13 +441,13 @@ async fn forward_project_watch(
 fn emit_project_watch_item(item: ProjectWatchItem) -> Result<(), GalleyError> {
     match item {
         ProjectWatchItem::Event { session_id, data } => emit_json(&ProjectEventPayload {
-            schema_version: SCHEMA_VERSION,
+            schema_version: answer_schema_version(),
             stream: "event",
             session_id,
             data,
         }),
         ProjectWatchItem::End { session_id, reason } => emit_json(&ProjectSessionEndPayload {
-            schema_version: SCHEMA_VERSION,
+            schema_version: answer_schema_version(),
             stream: "sessionEnd",
             session_id,
             reason,
@@ -504,7 +504,7 @@ async fn project_follow_until_idle(
                                 .await?;
                         }
                         emit_json(&StreamEndPayload {
-                            schema_version: SCHEMA_VERSION,
+                            schema_version: answer_schema_version(),
                             stream: "end",
                             reason: if saw_stream_item {
                                 "all_live_sessions_ended"
@@ -524,7 +524,7 @@ async fn project_follow_until_idle(
                         emit_project_final_snapshot(&project_id, tail, all, "until_idle").await?;
                     }
                     emit_json(&StreamEndPayload {
-                        schema_version: SCHEMA_VERSION,
+                        schema_version: answer_schema_version(),
                         stream: "end",
                         reason: "project_idle",
                     })?;
@@ -567,7 +567,7 @@ pub(crate) async fn project_follow(
             emit_project_final_snapshot(&project_id, tail, all, mode).await?;
         }
         emit_json(&StreamEndPayload {
-            schema_version: SCHEMA_VERSION,
+            schema_version: answer_schema_version(),
             stream: "end",
             reason: "no_live_sessions",
         })?;
@@ -600,7 +600,7 @@ pub(crate) async fn project_follow(
             emit_project_final_snapshot(&project_id, tail, all, mode).await?;
         }
         emit_json(&StreamEndPayload {
-            schema_version: SCHEMA_VERSION,
+            schema_version: answer_schema_version(),
             stream: "end",
             reason: "no_live_sessions",
         })?;
@@ -609,7 +609,7 @@ pub(crate) async fn project_follow(
 
     emit_project_final_snapshot(&project_id, tail, all, mode).await?;
     emit_json(&StreamEndPayload {
-        schema_version: SCHEMA_VERSION,
+        schema_version: answer_schema_version(),
         stream: "end",
         reason: "all_live_sessions_ended",
     })?;

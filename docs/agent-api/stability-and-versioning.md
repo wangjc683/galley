@@ -151,6 +151,21 @@ Omitting the pin uses the server's default, `3`. `galley version`
 prints the default (`schemaVersion`); the accepted set is documented
 here rather than exposed as a field.
 
+**A pinned answer says the pin.** Every payload and frame the CLI
+prints with a `schemaVersion` field (`session follow` and `session wait`
+frames, `project brief` / `show` / `follow`) carries the version the
+caller pinned: `--schema=1` prints `1`, `--schema=2` prints `2`, and
+without a pin it prints the current version, `3`. That is what lets a
+pinned request be "answered exactly as before" (§7.1). The one
+exception is `galley version`: it reports what the binary speaks, so it
+prints the default whatever the pin (§7.4). On the socket, an answer
+carries no `schemaVersion` of its own: the unary envelope is `ok` /
+`requestId` / `result` or `error` / `message`, and a stream frame is
+`stream` / `requestId` / `data` or `reason` ([transports](./transports.md)
+§2A). The only socket answer that names a version is the `version`
+command's, which reports the server's default, like `galley version`.
+Until 2026-11-10 the CLI printed `3` under every pin (§7.1).
+
 SOPs that want forward compatibility instead can omit the pin and
 rely on the additive-only promise: new fields appear, but the ones
 they read keep their names + semantics inside the current major.
@@ -297,6 +312,15 @@ and error discriminants unchanged):
   seconds. No command, flag, field, exit code or error changed. Also
   under `--schema=1` and `--schema=2`. See "Timeouts" in
   [transports.md](./transports.md) §2A.
+- 2026-11-10 — Behavior fix: the `schemaVersion` the CLI prints echoes
+  the pin. The `session follow`, `session wait` and `project follow`
+  frames and the `project brief` / `show` payloads printed `3` whatever
+  `--schema=N` said, so a request pinned to `1` or `2` was not answered
+  exactly as before; they now print `N`, and `3` without a pin.
+  `galley version` and the socket `version` command still report the
+  default (§1.2). Socket answers carry no `schemaVersion` field, so the
+  wire is unchanged. No command, flag, field name, exit code or error
+  changed. See §1.2.
 
 ### 7.2 `schemaVersion: 2` (served for unchanged commands, since 2026-09-16)
 

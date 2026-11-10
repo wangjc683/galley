@@ -1046,6 +1046,30 @@ mod tests {
         assert_eq!(resp.error.as_deref(), Some("schema_mismatch"));
     }
 
+    /// Stability §1.2: socket answers carry no `schemaVersion` of their
+    /// own, so there is nothing to echo; the `version` command is a
+    /// capability report and names the server's default under every pin.
+    #[tokio::test]
+    async fn version_reports_the_default_under_every_pin() {
+        let mgr = RunnerManager::new();
+        for pin in ACCEPTED_SCHEMA_VERSIONS {
+            for command in ["version", "ping"] {
+                let line = format!(r#"{{"command":"{command}","schemaVersion":{pin}}}"#);
+                let resp = expect_unary(dispatch_line(&line, None, &mgr).await);
+                assert!(resp.ok, "{command} under {pin}");
+                let wire = serde_json::to_value(&resp).unwrap();
+                assert_eq!(wire.get("schemaVersion"), None, "{command} under {pin}");
+                if command == "version" {
+                    assert_eq!(
+                        resp.result.unwrap()["schemaVersion"],
+                        SCHEMA_VERSION,
+                        "pin {pin}"
+                    );
+                }
+            }
+        }
+    }
+
     #[tokio::test]
     async fn dispatch_session_watch_unknown_session_returns_not_found() {
         let mgr = RunnerManager::new();

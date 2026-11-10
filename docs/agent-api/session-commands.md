@@ -18,7 +18,7 @@ Response fields:
 | Field            | Type   | Notes                                              |
 | ---------------- | ------ | -------------------------------------------------- |
 | `galleyVersion`  | string | semver of the `galley` binary itself               |
-| `schemaVersion`  | int    | the binary's current schema (`3`); a `--schema=N` pin is validated, not echoed |
+| `schemaVersion`  | int    | the binary's current schema (`3`), whatever the pin: this is a capability report. A `--schema=N` pin is validated here, not echoed; every other payload's `schemaVersion` echoes it ([stability](./stability-and-versioning.md) §1.2) |
 
 ### 5.2 · `galley sessions list [--runtime=current|managed|external|all] [--project=X] [--status=Y] [--archived | --all]`
 

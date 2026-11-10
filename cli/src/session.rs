@@ -1,8 +1,8 @@
 use crate::args::RuntimeArg;
 use crate::client::{call_print, call_value, client, next_watch_frame_strict};
 use crate::common::{
-    emit_json, emit_line, live_run_ended, parse_status_arg, probe_live_states,
-    runtime_arg_for_session_new, runtime_filter, with_live, StreamEndPayload, SCHEMA_VERSION,
+    answer_schema_version, emit_json, emit_line, live_run_ended, parse_status_arg,
+    probe_live_states, runtime_arg_for_session_new, runtime_filter, with_live, StreamEndPayload,
 };
 use galley_core_lib::api::{
     parse_local_time_bound, GalleyApi, MessageBrief, MessageId, MessageRole, MessageWindow,
@@ -179,7 +179,7 @@ async fn session_snapshot_payload(
     let session = galley.session_brief(session_id.clone()).await?;
     let messages = galley.session_messages(session_id, Some(tail)).await?;
     Ok(SessionSnapshotPayload {
-        schema_version: SCHEMA_VERSION,
+        schema_version: answer_schema_version(),
         stream: "snapshot",
         phase,
         session,
@@ -335,7 +335,7 @@ fn finish_wait(
         show_messages,
     )?)?;
     emit_json(&StreamEndPayload {
-        schema_version: SCHEMA_VERSION,
+        schema_version: answer_schema_version(),
         stream: "end",
         reason,
     })
@@ -348,7 +348,7 @@ fn wait_payload(
     show_messages: bool,
 ) -> Result<SessionWaitPayload, GalleyError> {
     Ok(SessionWaitPayload {
-        schema_version: SCHEMA_VERSION,
+        schema_version: answer_schema_version(),
         stream: "wait",
         phase,
         status,
@@ -424,7 +424,7 @@ pub(crate) async fn session_follow(id: String, tail: usize) -> Result<(), Galley
         Ok(lines) => lines,
         Err(GalleyError::DbUnavailable { .. }) => {
             emit_json(&StreamEndPayload {
-                schema_version: SCHEMA_VERSION,
+                schema_version: answer_schema_version(),
                 stream: "end",
                 reason: "core_unavailable",
             })?;
@@ -436,7 +436,7 @@ pub(crate) async fn session_follow(id: String, tail: usize) -> Result<(), Galley
     loop {
         match next_watch_frame_strict(&mut lines).await {
             Ok(Some(WatchFrame::Event(data))) => emit_json(&SessionEventPayload {
-                schema_version: SCHEMA_VERSION,
+                schema_version: answer_schema_version(),
                 stream: "event",
                 session_id: id.clone(),
                 data,
@@ -445,7 +445,7 @@ pub(crate) async fn session_follow(id: String, tail: usize) -> Result<(), Galley
                 let galley = SqliteGalley::open().await?;
                 emit_json(&session_snapshot_payload(&galley, &id, "final", tail).await?)?;
                 emit_json(&StreamEndPayload {
-                    schema_version: SCHEMA_VERSION,
+                    schema_version: answer_schema_version(),
                     stream: "end",
                     reason: &reason,
                 })?;
@@ -458,7 +458,7 @@ pub(crate) async fn session_follow(id: String, tail: usize) -> Result<(), Galley
                 let galley = SqliteGalley::open().await?;
                 emit_json(&session_snapshot_payload(&galley, &id, "final", tail).await?)?;
                 emit_json(&StreamEndPayload {
-                    schema_version: SCHEMA_VERSION,
+                    schema_version: answer_schema_version(),
                     stream: "end",
                     reason: "socket_closed",
                 })?;
@@ -466,7 +466,7 @@ pub(crate) async fn session_follow(id: String, tail: usize) -> Result<(), Galley
             }
             Err(GalleyError::NotFound { .. }) => {
                 emit_json(&StreamEndPayload {
-                    schema_version: SCHEMA_VERSION,
+                    schema_version: answer_schema_version(),
                     stream: "end",
                     reason: "not_live",
                 })?;

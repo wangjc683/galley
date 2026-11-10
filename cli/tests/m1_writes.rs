@@ -632,6 +632,57 @@ async fn project_follow_running_session_without_core_marks_session_end() {
     assert_eq!(end["reason"], "all_live_sessions_ended");
 }
 
+/// Every payload and frame that carries `schemaVersion` echoes the
+/// `--schema=N` pin, and says the current version without one, so a
+/// pinned request is answered exactly as before; `galley version` is a
+/// capability report and says the default under every pin (stability
+/// §1.2). No Core here: every command below answers from SQLite.
+#[tokio::test]
+async fn payloads_echo_the_schema_pin() {
+    let td = tempdir();
+    let db = td.path().join("test.db");
+    let pool = seeded_db_at(&db).await;
+    seed_project(&pool, "proj_batch", "Release check", "2026-05-20T00:00:00Z").await;
+    seed_project_session(
+        &pool,
+        "s_done",
+        "proj_batch",
+        "Done",
+        "idle",
+        "2026-05-20T00:00:02Z",
+    )
+    .await;
+    seed_message(&pool, "m1", "s_done", 0, 0, "user", "do it").await;
+    seed_message(&pool, "m2", "s_done", 0, 1, "assistant", "done").await;
+    drop(pool);
+
+    let commands: [&[&str]; 5] = [
+        &["project", "brief", "proj_batch"],
+        &["project", "show", "proj_batch"],
+        &["project", "follow", "proj_batch"],
+        &["session", "follow", "s_done"],
+        &["session", "wait", "s_done", "--timeout=1"],
+    ];
+    for (pin, want) in [(None, 3), (Some("1"), 1), (Some("2"), 2), (Some("3"), 3)] {
+        let pin_args: Vec<&str> = pin.map(|p| vec!["--schema", p]).unwrap_or_default();
+        for command in commands {
+            let args: Vec<&str> = pin_args.iter().chain(command).copied().collect();
+            let (stdout, code) = run_galley_isolated(&db, td.path(), &args);
+            assert_eq!(code, Some(0), "{args:?}: {stdout}");
+            let frames = ndjson(&stdout);
+            assert!(!frames.is_empty(), "{args:?}: no output");
+            for frame in &frames {
+                assert_eq!(frame["schemaVersion"], want, "{args:?}: {frame}");
+            }
+        }
+        let args: Vec<&str> = pin_args.iter().copied().chain(["version"]).collect();
+        let (stdout, code) = run_galley_isolated(&db, td.path(), &args);
+        assert_eq!(code, Some(0), "{args:?}: {stdout}");
+        let version: serde_json::Value = serde_json::from_str(stdout.trim()).expect("json");
+        assert_eq!(version["schemaVersion"], 3, "{args:?}");
+    }
+}
+
 // ---------------- project commands against a live Core ----------------
 
 #[cfg(unix)]

@@ -71,7 +71,7 @@ $ galley project brief proj_demo
 
 | Field             | Type              | Notes                                      |
 | ----------------- | ----------------- | ------------------------------------------ |
-| `schemaVersion`   | int               | Current CLI schema version.                |
+| `schemaVersion`   | int               | The `--schema=N` pin, or the current version (`3`) without one ([stability](./stability-and-versioning.md) §1.2). The same holds on `project show` and every `project follow` frame. |
 | `project`         | `ProjectBrief`    | Project row.                               |
 | `sessionCount`    | int               | Sessions in the project after filters.     |
 | `statusCounts`    | object            | Keys are `SessionBrief.status` values (the persisted status, which reads `idle` or `archived` for every current session). |

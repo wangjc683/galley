@@ -68,7 +68,8 @@ async fn main() -> ExitCode {
     // §1.2 schema pin: if the caller pinned --schema=N, verify this binary
     // answers that schema. Every accepted version still answers every
     // command that survived unchanged (stability §1). Mismatch exits 2
-    // (`invalid_args`) with the stable `schema_mismatch:` prefix.
+    // (`invalid_args`) with the stable `schema_mismatch:` prefix. An
+    // accepted pin is what the payloads' `schemaVersion` then says.
     if let Some(pinned) = cli.schema {
         if !ACCEPTED_SCHEMA_VERSIONS.contains(&pinned) {
             let err = GalleyError::InvalidArgs {
@@ -79,6 +80,7 @@ async fn main() -> ExitCode {
             emit_line(&serde_json::to_string(&err).expect("serialize GalleyError"));
             return ExitCode::from(exit_code_for(&err));
         }
+        common::set_schema_pin(pinned);
     }
     match run(cli).await {
         Ok(()) => ExitCode::SUCCESS,
