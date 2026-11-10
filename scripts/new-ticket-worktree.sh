@@ -18,8 +18,9 @@ Usage: scripts/new-ticket-worktree.sh <name> [--rust] [--dir <parent>]
                   Path:   <parent>/<main-worktree-dir-name>-wt-<name>
   --rust          Also clone core/target/debug, core/target/tauri-sidecars,
                   core/python-bundle and core/gen from the main worktree
-                  (APFS clonefile on macOS) so the first cargo build is
-                  incremental, not full.
+                  (APFS clonefile on macOS). The last three are inputs the
+                  build needs; the debug output only saves whatever the main
+                  worktree has already compiled.
   --dir <parent>  Parent directory for the worktree.
                   Default: the main worktree's parent directory.
 

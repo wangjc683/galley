@@ -9,7 +9,8 @@ its own git worktree, and takes the work back. Tickets themselves live in the
 
 - **Main session**: discusses, writes tickets, dispatches, verifies, merges,
   commits.
-- **Executor agent**: runs in the background, one ticket per worktree.
+- **Executor agent**: runs in the background, normally one ticket per
+  worktree.
 - One main session at a time. When more than one is open anyway, they share
   the in-flight limits below.
 
@@ -19,6 +20,8 @@ its own git worktree, and takes the work back. Tickets themselves live in the
   agents (Explore) included. Omitting `model` inherits the parent's model; when
   the main session runs a more expensive model, that spends it on reading
   files and running gates.
+- Start the Agent call's `description` with the ticket name, so the agent
+  panel row says which ticket it is.
 - Executor agents use `model: "opus"`.
 - Effort has three levels:
   - `high`: mechanical tickets: locale changes whose copy is already fixed
@@ -83,8 +86,10 @@ When writing a ticket:
   pushed are missing.
 - The executor works only inside its own worktree: it does not touch the main
   worktree and does not run `tauri dev`.
-- Parallel tickets whose directories do not overlap may share one worktree;
-  only one of their agents compiles Rust.
+- Parallel tickets whose directories do not overlap may share one worktree
+  and its branch; only one of their agents compiles Rust. They are then
+  accepted and merged as one unit: each agent commits only its own files, and
+  the merge check covers the files of all of them.
 
 ## Standing constraints for executor agents
 
@@ -133,7 +138,8 @@ Done by the main session.
   `live.busy` is 0.
 - After merging, delete the worktree and branch with the two commands the
   script printed (`git worktree remove <path>` needs no `--force` for the
-  ignored build output; stray untracked files still block it), then set the
+  ignored build output; stray untracked files still block it; an abandoned,
+  unmerged branch needs `git branch -D`), then set the
   ticket's `Status:` to `needs-dogfood` or `done` (see
   [triage labels](./triage-labels.md)).
 
