@@ -1027,7 +1027,7 @@ channel). Positioning (JC, 2026-10-06): **IM does the work itself, reached
 from a phone** — not a control surface that delegates by default. Since
 2026-10-21 each channel keeps its own agent (IM polish PRD ruling 4,
 `.scratch/im-polish/`), and the layer says plainly what that agent shares
-with the desktop. It says four things:
+with the desktop. It says five things:
 
 - **Who, and what it shares**: the user's Galley in this chat; do the work
   yourself. It shares GA's long-term memory with the desktop app (the IM
@@ -1051,6 +1051,21 @@ with the desktop. It says four things:
   dropped link targets and `1.` numbers; Galley's WeChat handler
   (`runner/im_wechat.py`, 2026-10-10) no longer calls it, and the phone
   renders both.
+- **The process is retold, not shown**: the user sees only the final reply,
+  never the steps; asked how it did something, or to see the process (过程),
+  it recounts it in a few lines from what it already did and does not run it
+  again. Since 2026-11-11 an IM answer carries only the answer on all four
+  channels (no 过程 button, panel or `N 步 · 用时 X` line;
+  [devlog](../devlog/2026-11-11-im-answer-only.md)), so asking is the way to
+  the process, and the agent keeps its own history across restarts
+  (`runner/im_resume.py`). In the eval (gpt-6.1-sol, a task then the ask,
+  live and after a resume) the model retold the steps for 「怎么查的」 and
+  「做了哪几步」 without this paragraph, but reran the task for 「过程给我看看」
+  in 3 of 4 runs; with it, 12 of 12 scored runs retold without a tool call
+  and replies got shorter (median 379 → 281 characters). Not measured: a
+  task with side effects. Asked how long it took, the model looked the
+  timestamps up in 1 of 4 runs without the paragraph and in 0 of 4 with it;
+  too few runs to tell whether the paragraph did that.
 - **Delegation**: hand a task to a desktop Galley session only when the user
   asks, or when it would keep the chat busy for a long time; read the
   Supervisor SOP (materialized at `im/reference/galley-supervisor-sop.md`,
@@ -1062,7 +1077,8 @@ with the desktop. It says four things:
 
 Budget: `IM_PROMPT_BUDGET_BYTES` caps the template (empty SOP path, `\r` not
 counted) on the longest platform variant, same rule as the static budget:
-1630 bytes since 2026-10-21 (+264 for what IM shares with the desktop).
+1821 bytes since 2026-11-11 (+191 for the paragraph on retelling the
+process; 1630 from 2026-10-21, +264 for what IM shares with the desktop).
 
 ## Profile Id And Hash
 
@@ -1118,6 +1134,7 @@ row.
 | Feature map and redirect sentence for every conversation: "Every conversation's top bar: the to-do (…), opening beside it"; "To-dos, reminders and scheduled tasks are kept by the assistant, in the Galley conversation atop the sidebar: … never say one is noted or set." (the redirect sentence rewritten 2026-10-22, below) | main chat PRD ruling 95 (2026-10-17): the to-do panel opens beside any conversation, read-only outside Galley, and a workbench model could otherwise `galley todo add` or say 「记下了」 when the user asks there. Paid for in the same diff ("at the top of" → "atop", "which opens" → "opening", "The Galley conversation's … its" → "Every conversation's … the"): the static text stays at 6826 bytes (Windows) / 6808 (POSIX) and the cap is unchanged |
 | Feature map: the to-do on its own line, "The Galley conversation's top bar: its to-do (…), which opens beside it", off the sidebar line (rewritten by ruling 95, above) | main chat PRD ruling 93 (2026-10-17): the to-do's entry moved from the row under the sidebar's Galley card to the Galley conversation's top bar; the map names where things are, so the old sidebar line would send the user to the wrong place. Static cap 6775 → 6826 (Windows; POSIX 6808), +44 for this line and +7 owed by ruling 90 (see the budget paragraph above) |
 | IM entry layer, first paragraph: "their Galley here"; shares long-term memory with the desktop app, not its conversations (never act as if it knew what was said there); reminders, to-dos and scheduled tasks are not set from here; to the user it is their assistant (助理), inner workings out of replies | IM polish PRD ruling 4, ticket 02 (2026-10-21): the channels keep their own agent, and the paragraph's "the same assistant as in Galley's desktop app" promised what it could not keep (the main chat is not in its context and it has no hands for reminders). Compared with and without on the IM channels' model (`.scratch/im-polish/entry-layer-eval/`); JC took the shorter of two drafts, since the longer one's lookup clause and "on their computer, in the Galley conversation" repeated what the shared rules already made the model do. IM cap raised 1376 → 1630 with it (+264; the layer had been 10 bytes under the cap) |
+| IM entry layer: "The user sees only your final reply, never your steps. Asked how you did something, or to see the process (过程), recount it in a few lines from what you already did; do not run it again." | IM answer-only PRD ruling 5 as revised, ticket 02 (2026-11-11): IM answers lost their process entry on all four channels (the 过程 button's steps lived in the channel process's memory and were gone at every restart), so the process is asked for, and the agent has it across restarts. Run on gpt-6.1-sol, a task then the ask, live and after a resume: without the paragraph 9 of 12 scored runs passed, the three misses all 「过程给我看看」 rerunning the task; with it 12 of 12, no tool call after the ask, shorter replies. `IM_PROMPT_BUDGET_BYTES` 1630 → 1821. Not measured: a task with side effects |
 | Redirect sentence outside the main chat: "To-dos, reminders and scheduled tasks are the assistant's: ask the user to tell it in the Galley conversation atop the sidebar (a top bar's to-do only lists them; its ＋ goes there), and never say one is noted or set." | JC ruling, 2026-10-22, v0.7.0 pre-flight item 40: on the checklist's first live run of item 40 (gpt-6.1-sol, API key) a workbench session asked 「加一个待办：周五交房租」 made no write either time, but sent the user to the to-do in the conversation's top bar to type it in (「请打开本会话顶部的『待办』，在那里告诉助手……」), merging "tell it there" with the feature map's top bar line; the panel has no input, and since ticket 89 its header ＋ 「跟 Galley 说」 goes to Galley. Compared old and new on that model with the prompts the Rust code writes (`.scratch/release-v0.7.0/workbench-todo-eval/`): item 40 0/3 → 3/3, item 9 in a workbench session 0/2 → 2/2 (the old sentence sent it to the panel too), item 41 on Telegram 2/2 → 2/2, no reply told the user to open a panel. Static cap 6826 → 6869 (+43, Windows; POSIX 6851) in the same diff; the feature map is unchanged, and the main chat's static rules are byte for byte as before (it swaps the whole paragraph for its own) |
 | Main chat static rules: the standing in place of the opening line (「In this conversation you are the user's personal assistant, with a team behind you …」), `MAIN_CHAT_STATIC_PROMPT_BUDGET_BYTES`; the entry layer's dispatch paragraph as the costs of each path, one starting point, the user's memos first, a line on how it will go about it, the user's way noted as a memo | main chat PRD ruling 194, ticket 145 (2026-11-04): the dispatch paragraph had eight versions in a month, each a line drawn finer; JC asked for the standing and the abilities instead, and the model to judge. The model's prompt opened with GA's executor role, and the team behind it was only in `subtasks.md`. Run on three models with an outcome eval (plan line, time to first words, sourced facts, following a preference memo; `.scratch/main-chat/entry-layer-eval/`). Main chat cap 7092 (Windows; POSIX 7074); entry layer cap 5268 → 5008 |
 | Main chat entry layer: ruling 193's default back after the costs (something to decide by that takes looking into to subtasks, split and merged; a question, a remark or a single fact here), the user's word on here or handed off; the line on how it will go about it removed | main chat PRD ruling 195, ticket 145's second round (2026-11-04): given the costs alone the models took the quick path (v7: gpt-6.1-sol 10 of 90 handed off, 25 under ruling 193) and the line had no effect (47 of 84 runs against 47 of 83), while a plain memo was followed every time; JC wants both a default and the model's judgment, a memo overriding the default. Run on three models (v8, `.scratch/main-chat/entry-layer-eval/`). Entry layer cap 5008 → 5183 |

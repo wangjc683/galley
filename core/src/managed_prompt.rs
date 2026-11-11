@@ -1375,6 +1375,10 @@ Your replies are read on a phone screen:
   `内存：20 GB（63%）`. No headings; use bold sparingly.
 - Keep paragraphs and lists short, and code blocks to a few lines.
 
+The user sees only your final reply, never your steps. Asked how you did
+something, or to see the process (过程), recount it in a few lines from what
+you already did; do not run it again.
+
 Hand a task to a desktop Galley session only when the user asks for one, or
 when it would keep this chat busy for a long time. Before your first Galley
 CLI write in this conversation, read the Galley Supervisor SOP at {sop_path}:
@@ -4008,6 +4012,22 @@ mod tests {
         }
     }
 
+    /// IM answers carry only the answer since 2026-11-11 (no 过程 button,
+    /// panel or `N 步 · 用时 X` line under them), so how it did something
+    /// is asked. Without this paragraph the model retold the steps for
+    /// 「怎么查的」 and 「做了哪几步」 but reran the task for 「过程给我看看」
+    /// in 3 of 4 runs; with it, 12 of 12 scored runs retold without a tool
+    /// call (`.scratch/im-answer-only/` ticket 02).
+    #[test]
+    fn im_supervisor_prompt_retells_the_process_when_asked() {
+        for platform in ["wechat", "feishu", "telegram", "discord"] {
+            let prompt = im_supervisor_prompt("/tmp/sop.md", platform, "galley-im/x");
+            assert!(prompt.contains("sees only your final reply, never your steps"));
+            assert!(prompt.contains("the process (过程)"));
+            assert!(prompt.contains("do not run it again"));
+        }
+    }
+
     /// Byte cap on the IM entry layer, same rule as
     /// `STATIC_PROMPT_BUDGET_BYTES`: set with no headroom on the longest
     /// platform variant (Telegram, the longest channel name), measured on the
@@ -4021,8 +4041,11 @@ mod tests {
     /// ticket 02): +264 bytes for it, and back to no headroom (the layer
     /// had been 1366 bytes, 10 under the cap). JC took the shorter of the
     /// two tested wordings; the longer one (1738) repeated what the shared
-    /// rules already make the model do.
-    const IM_PROMPT_BUDGET_BYTES: usize = 1630;
+    /// rules already make the model do. Raised 1630 → 1821 on 2026-11-11
+    /// for the paragraph that says the user never sees the steps and that
+    /// the process is retold, not rerun, when asked
+    /// (`.scratch/im-answer-only/` ticket 02): +191 bytes, no headroom.
+    const IM_PROMPT_BUDGET_BYTES: usize = 1821;
 
     #[test]
     fn im_supervisor_prompt_stays_within_budget() {
