@@ -376,7 +376,22 @@ Post-release follow-up:
 ## Unreleased On Main
 
 Release-scope truth is `git log v0.7.8..HEAD`. Merged since `v0.7.8`:
-the release docs. None of that changes the app.
+the release docs, and one change to the app:
+
+- **IM answers carry only the answer** (2026-11-11,
+  [devlog](./devlog/2026-11-11-im-answer-only.md)): the 过程 button on
+  Telegram and Discord, the 过程 panel on Feishu and WeChat's
+  `N 步 · 用时 X` last line are gone; the live status message, stop
+  receipts, questions and the error line are as they were; a 过程 button
+  already sent loses itself when tapped. The IM entry layer gained a
+  paragraph: the user never sees the steps, and asked for the process the
+  agent retells it and does not run it again (eval on gpt-6.1-sol: 9 of 12
+  without it, 12 of 12 with it). `managed-ga/` (patches `0023`, `0024`,
+  `0026`, `0029`), `runner/` and `core/` changed, so the next release runs
+  the bundled-runtime gate. Not yet seen on a real channel: JC's dogfood is
+  open (`.scratch/im-answer-only/`, ticket 01 section 6), stripping an old
+  button was tested on fakes only, and a task with side effects asked
+  「过程给我看看」 was not measured.
 
 **Owed from the `v0.7.8` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. What the database and the
