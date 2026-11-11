@@ -1,6 +1,6 @@
 # 01 四个渠道撤掉过程入口
 
-Status: ready-for-agent
+Status: needs-dogfood
 
 来源：[PRD](../PRD.md) 裁决 1–4、6。先读 `docs/agents/dispatch.md`（执行代理的常设约束）与 `docs/managed-ga-runtime/code-state-and-patches.md`（「How To Modify An Existing Patch」）。
 
@@ -103,3 +103,51 @@ git diff --check
 | 逐 hunk 读 diff；独立 worktree 里重跑上面的门禁；干净克隆重放补丁；dev 里「重启 Channels」后看四个渠道日志无异常 | Telegram：发一个多步问题，回答下面没有按钮；点一条旧消息的「过程」，按钮消失、没有提示；问一句「刚才怎么查的」。飞书：多步回答的卡片里没有面板。微信：多步回答末尾没有「N 步 · 用时」。Discord 免测与否由 JC 定 |
 
 ## Comments
+
+### 2026-11-11 执行代理（实现提交 6564623a）
+
+**改了什么**
+
+- Telegram：`_send_answer(run, raw, step_text)` 只发回答，不挂 `reply_markup`，最后一段不再留空间（`_md_segments` 去掉 `room`，回到只按消息上限切）；`_reply_markdown` 去掉 `sent` 回调，回到 10-21 之前的样子。删 `_Process`、`_processes`、`_process_block`、`_process_quote`、`_process_markup`、`_edit_process`、`_PROCESS_BUDGET`、`_PROCESS_CACHE_LIMIT`、`_PROCESS_SHOW` / `_PROCESS_HIDE`，以及只为它们服务的 `OrderedDict` 导入和四个过程名的导入。`handle_process_callback` 成墓碑：锁定、owner 检查照旧，`query.answer()` 不带文字，`edit_message_reply_markup(reply_markup=None)` 只摘按钮；摘不掉吞掉，打一行 `[TG process button cleanup]`。`_PROCESS_CALLBACK_PREFIX` 与 `^proc:` 的注册保留。`_send_answer` 的 `steps` / `seconds` 参数随之去掉（`runner/im_resume.py` 的 `arming` 以 `*args, **kwargs` 透传，不受影响）。
+- `galley_im_display.py`：删 `process_lines`、`fit_process` 与六个 `PROCESS_*` 常量；`fold_label`、`stopped_text` 留着。
+- Discord：回答不挂 view；删 `_PROCESS_*`、`PROCESS_BUTTON_TEXT`、`PROCESS_GONE_TEXT`、`_process_lines`、`_fit_process`、`_process_text`、`_send_answer_text`、`_remember_process`、`_on_process_click`、`self._processes`。`galley-dc:proc` 不再例外，落到 `_ack_stale`（defer，摘按钮，不回 ephemeral）。`_send_answer` 去掉 `steps` / `elapsed`，`_finish_run` 随之不再算它们。`_fold_label` 留着（出错行、停止回执）。
+- 飞书：`_answer_card(body, notice="")`；删 `_process_panel`、`_process_lines`、`_PROCESS_STEP_LINES`、`_PANEL_ICON`，`_post_answer` 里按宽度挑面板、只给最后一段挂面板的循环，以及只为这个循环存在的 `_CARD_BYTES_LIMIT`（连同它上面那行 30 KB 的注释）；`_post_answer` 去掉 `seconds`。票里写的是 `_send_answer`，飞书里对应的函数叫 `_post_answer`。
+- 微信：`_post_answer` 不接末行，正文为空又没有文件时照旧发 `...`；去掉 `seconds` 参数；文件头注释与 coupling 列表同步（`fold_label` 不再用）。`_post_question`、`_post_stopped` 没动。
+- `runner/im_resume.py`：只改 docstring。它对 `sent` 没有专门的透传代码，走的是通用的 `**kwargs`。
+
+**summaries 怎么判的**
+
+- Telegram 留：提问之后续跑时，状态消息第一行读 `run.summaries.get(base_steps)`，也就是从提问那边带过来的那条摘要（既有用例 `test_ask_row_click_continues_run_with_carried_counts` 里第二条状态消息的「02 确认方向」就是它）。`carry["summaries"]` 原样保留。
+- Discord 删：状态消息读的是 `last_summary`，跨提问带的是 `carry["summary"]`，`summaries` 字典只供过程按钮。`observe` 回到 10-21 之前直接算 `last_summary` 的写法，行为等价。
+- 飞书也删。票面没点名，按同一判法：飞书没有状态消息，`summaries` 只供面板。删了 `_FsRun.summaries`、`carry["summaries"]` 和 `step_summary` 导入；`turn_texts` 随之只写不读，一并删掉，`observe` 只算步数（等价改写）。这一条超出票面字面，验收时请看这几个 hunk。
+
+**补丁**
+
+- 先把已提交的栈在临时克隆里重放成提交链：与 payload 逐字节一致，导出的 29 个补丁也逐字节一致。改 `0023`（dcapp）、`0024`（tgapp、galley_im_display）、`0029`（fsapp）三个链提交，其余 cherry-pick。
+- 只有 `0026` 在新 `0023` 上有冲突，两处，与 10-21 那次同一位置。`DiscordApp.__init__`：`0026` 删 `_stale_channels` 块，`0023` 不再加 `_processes` 那行，两边的删除都留。`_send_answer`：`0023` 去掉 `steps` / `elapsed` 与过程那句，`0026` 加 `notice`，两边都留。新 `0026` 仍是 34 个 hunk，正文只有这两处不同，其余只是 hunk 头行号。
+- 解完冲突后的 `dcapp.py` 与工作区逐字节一致。`build-managed-ga.sh` 从干净克隆重建：四个文件逐字节等于测试跑的版本，`managed-ga/code` 与 `state-seed` 其余无变化。再从干净克隆把新栈重放成链、导出，29 个补丁与入库的逐字节一致。`0025`、`0027`、`0028`、`0030`、`0031` 不碰这几个文件，没变。manifest 的 `0023`、`0024`、`0029` 行与顶部重放记录已更新。
+
+**删掉的东西各自的调用方核对**
+
+删前 grep 了 `managed-ga/code`、`runner/`、`core/src`、`cli`、`gui/src`、`scripts`，另查了 `.scratch` 与 `docs`。
+
+- `process_lines`、`fit_process`、`PROCESS_MIN_STEPS`：只在 galley_im_display 自身、tgapp 被删的过程代码、两份测试里。
+- `PROCESS_STEP_LINES`、`PROCESS_LINE_WIDTHS`：只在 galley_im_display 自身。
+- `PROCESS_BUTTON_TEXT`、`PROCESS_GONE_TEXT`：galley_im_display、tgapp 被删的代码、dcapp 自己那一份、测试。
+- `PROCESS_HIDE_BUTTON_TEXT`：galley_im_display、tgapp 被删的代码、测试。
+- tgapp 的 `_Process`、`_processes`、`_process_block`、`_process_quote`、`_process_markup`、`_edit_process`、`_PROCESS_BUDGET`、`_PROCESS_CACHE_LIMIT`、`_PROCESS_SHOW` / `_PROCESS_HIDE`：只在 tgapp 被删的代码与 Telegram 测试里。`OrderedDict` 导入只为 `_processes`（`0024` 加的）。
+- `_reply_markdown` 的 `sent`：`tgapp.py` 里唯一的 `sent=` 是 `_send_answer` 里的 `sent=process.sent`；`runner/im_resume.py` 只经 `**kwargs` 透传；`runner/im_reporter.py` 不调 `_reply_markdown`。没有别的调用方。
+- dcapp 的 `_process_lines`、`_fit_process`、`_process_text`、`_PROCESS_*`、`self._processes`、`_remember_process`、`_on_process_click`、`_send_answer_text`：只在 dcapp 被删的代码与 Discord 测试里。
+- fsapp 的 `_process_panel`、`_process_lines`、`_PROCESS_STEP_LINES`、`_PANEL_ICON`、`_CARD_BYTES_LIMIT`：只在 fsapp 被删的代码里。
+- `.scratch` 与 `docs/devlog` 里的命中都是旧票与历史，没有评测脚本或接缝镜像导入这些名字。
+- 上游原有的 `_step_panel`（`_TaskCard` 里）：没动。它只被 `_TaskCard._build` 调，而全文件没有任何地方实例化 `_TaskCard`，`_make_task_hook` 也没人调，所以它不在任何运行路径上（ledger 的 `0029` 行早写了 off the run path）。
+
+**剩下的「过程」命中**：四处，都是注释，说的是墓碑或历史。tgapp 的 `_PROCESS_CALLBACK_PREFIX` 那行与 `handle_process_callback` 的 docstring；dcapp `_handle_interaction` 里说明旧 `galley-dc:proc` 走过期按钮那条路的注释；fsapp `0029` 段头注释里的「no 「过程」 panel since 2026-11-11」。
+
+**测试**：Telegram 删 12 条只测过程的用例，1 条改名去掉过程断言（`/fold` 那条），新增 5 条：多步回答什么都不挂、多步回答与一步同样分段（最后一段不留空）、旧按钮静默应答并摘掉（含展开过的）、陌生人和锁定时旧按钮不动、摘按钮失败不抛。Discord 删 6 条，新增 2 条：多步回答（含分段）不带 view、旧按钮静默应答并摘掉且陌生人点了不动。飞书改写 3 条：卡片元素里只有正文、没有 `collapsible_panel`；分段卡片只有正文；卡片被拒时纯文字只有回答；提问续跑的步数累计改用 `_RUNS[0].total_steps()` 核。微信去掉断言里的末行，并新增 1 条：回复之后 `/stop`，回执跨提问累计步数与用时、不算等待（补回末行删掉后丢的覆盖）。`test_im_resume` 里展开过程那条改成多步回答只有通知行与回答。停止回执、提问消息、出错行的既有用例没改期望，原样通过。
+
+**文档**：§9 里没有飞书的对话形态条目（票面说四条，实际只有 Discord、Telegram、微信三条），所以在 Discord 条目前新加一条「四个渠道：回答里只有回答」，三条改成指向它。devlog 链接是占位的 `../devlog/2026-11-11-im-answer-only.md`，主会话补上文件之前，`node scripts/check-docs-links.mjs` 会报这一处断链。§9 里 grep「不要 / 有意 / 分叉」，没有与本票冲突的定论：命中的是 Telegram 与飞书换 token 的差异、状态消息不要「已完成 N 步」头、StatusBadge 的分叉，以及微信条里「要不要跟进见 IM 打磨 PRD 待定」，本票裁决 3 正好结了它。`docs/ga-baseline.md` 冒烟清单四条已同步；Contract Surface 15、16 里没有随之不成立的话。
+
+**门禁**：pytest 754 passed、6 deselected；`mypy runner` 无问题；`ruff check runner` 通过；`check-managed-ga-payload`、`check-ga-baseline-drift` 都 OK；`git diff --check` 干净；`check-docs-links` 只有上面那一处占位断链。
+
+**没验证到的**：四个真渠道都没跑（第 6 节两列都还在）。旧按钮的墓碑只在假对象上测过：Telegram 对很旧的消息 `edit_message_reply_markup` 会不会报错、Discord 对旧消息 defer 后 `edit(view=None)` 能不能成，都靠吞错兜底，没在真平台上看过。
