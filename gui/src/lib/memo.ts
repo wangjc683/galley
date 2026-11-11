@@ -94,9 +94,33 @@ export async function deleteMemo(id: string): Promise<MemoBrief> {
   return invoke<MemoBrief>("delete_memo", { id });
 }
 
-/** A memo's words as the undo toast quotes them: the to-do toast's cut
- * (`todoToastTitle`). */
-export const memoToastText = todoToastTitle;
+/**
+ * A memo's words as they are drawn (PRD ruling 209 point 1): without the
+ * one full stop that ends them. A page of one-sentence lines each closed
+ * by 「。」 reads as a column of specks down its right side; the list's
+ * line break already ends the sentence. Only the drawing: the record,
+ * what `galley memo` prints and what the main chat reads keep the stop.
+ *
+ * One 「。」 or 「.」 at the very end, after any trailing blanks; not an
+ * ellipsis's last dot (「..」 before it), not 「！」「？」「…」, not a stop
+ * inside a closing quote. Words that are nothing but the stop stay.
+ * Drawn so on the page's rows, the cards under a reply and the delete's
+ * undo toast: one sentence, the same in all three.
+ */
+export function memoShownText(text: string): string {
+  const trimmed = text.trimEnd();
+  const last = trimmed.slice(-1);
+  if (last !== "。" && last !== ".") return trimmed;
+  if (last === "." && trimmed.slice(-2, -1) === ".") return trimmed;
+  const shown = trimmed.slice(0, -1).trimEnd();
+  return shown === "" ? trimmed : shown;
+}
+
+/** A memo's words as the undo toast quotes them: as drawn
+ * (`memoShownText`), in the to-do toast's cut (`todoToastTitle`). */
+export function memoToastText(text: string): string {
+  return todoToastTitle(memoShownText(text));
+}
 
 // ---- The 备忘 page -----------------------------------------------------------
 
@@ -256,7 +280,8 @@ export function memosByMessage(
 }
 
 /** A card's line: 「记下了 · …」, 「改为 · …」, 「不再记 · …」, with the
- * words as they were at that write. */
+ * words as they were at that write, drawn as the page draws them
+ * (`memoShownText`: without the full stop that ends them). */
 export function memoCardParts(
   event: Pick<MemoEventItem, "action" | "text">,
   copy: AppCopy,
@@ -267,7 +292,7 @@ export function memoCardParts(
       : event.action === "update"
         ? copy.memo.cardChanged
         : copy.memo.cardDropped;
-  return { prefix, text: event.text };
+  return { prefix, text: memoShownText(event.text) };
 }
 
 /**

@@ -150,6 +150,39 @@ describe("the 备忘 page", () => {
     }
   });
 
+  // PRD ruling 209 point 2.
+  it("draws no label when every memo is in one period, whichever it is", () => {
+    store.memos = [CILANTRO, TRIP];
+    const today = render();
+    expect(count(today, "data-memo-group=")).toBe(1);
+    expect(today).toContain('data-memo-group="today"><div data-memo-row=');
+    expect(today).not.toContain(label("今天"));
+    store.memos = [
+      memo("memo_old", { updatedAt: daysAgo(45) }),
+      memo("memo_older", { updatedAt: daysAgo(90) }),
+    ];
+    const earlier = render();
+    expect(earlier).toContain('data-memo-group="earlier"><div data-memo-row=');
+    expect(earlier).not.toContain("更早");
+    // A second period, and both are labelled.
+    store.memos = [CILANTRO, memo("memo_old", { updatedAt: daysAgo(45) })];
+    const two = render();
+    expect(two).toContain(label("今天"));
+    expect(two).toContain(label("更早"));
+  });
+
+  // PRD ruling 209 point 1.
+  it("does not draw the full stop that ends a memo, a button or not", () => {
+    store.memos = [
+      memo("memo_stop", { text: "你不吃香菜。" }),
+      memo("memo_stop_cli", { text: "叫你小林。", changedIn: undefined }),
+    ];
+    const html = render();
+    expect(html).toContain(">你不吃香菜</button>");
+    expect(html).toContain('<span class="break-words">叫你小林</span>');
+    expect(html).not.toContain("。");
+  });
+
   it("leaves an empty period out", () => {
     store.memos = [CILANTRO, memo("memo_old", { updatedAt: daysAgo(45) })];
     const html = render();
@@ -333,6 +366,11 @@ describe("the memo cards under a reply", () => {
     expect(text).toContain("记下了 · 你不吃香菜");
     expect(text).toContain("改为 · 你不吃香菜和葱");
     expect(text).toContain("不再记 · 这周在上海出差");
+    // The full stop that ends the words is not drawn (ruling 209), on
+    // the line or in its hover's full text.
+    const stopped = renderCards([event(4, { text: "你不吃香菜。" })]);
+    expect(stopped.replace(/<[^>]+>/g, "")).toContain("记下了 · 你不吃香菜");
+    expect(stopped).not.toContain("。");
     // A 24px line (ruling 182), no frame of its own.
     expect(html).toContain('data-memo-event="1" class="rounded-sm"');
     expect(html).toContain("flex h-6 min-w-0 items-center rounded-sm px-2");

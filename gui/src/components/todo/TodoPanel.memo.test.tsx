@@ -350,14 +350,17 @@ describe("a row on the 备忘 page", () => {
     return mount(panel());
   }
 
-  // Ticket 121, PRD ruling 166.
-  it("sits under its time period's label, in the sidebar's words", () => {
+  // Ticket 121, PRD ruling 166; ruling 209 point 2.
+  it("sits in its time period's group; with one period on the page, under no label", () => {
     const container = onMemoPage();
     const groups = container.querySelectorAll<HTMLElement>("[data-memo-group]");
     expect(groups).toHaveLength(1);
     expect(groups[0].dataset.memoGroup).toBe("today");
-    // The label first, then the period's memos.
-    expect(groups[0].firstElementChild?.textContent).toBe("今天");
+    // One period: its memos, no label over them (the labels are in
+    // MemoPage.test.tsx).
+    expect(
+      (groups[0].firstElementChild as HTMLElement).dataset.memoRow,
+    ).toBeDefined();
     expect(
       Array.from(groups[0].querySelectorAll<HTMLElement>("[data-memo-row]"))
         .map((row) => row.dataset.memoRow)

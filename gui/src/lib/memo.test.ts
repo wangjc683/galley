@@ -16,7 +16,9 @@ import {
   memoPageGroups,
   memoRowTarget,
   memosByMessage,
+  memoShownText,
   memosWithoutDeleting,
+  memoToastText,
   memoUntilLabel,
   type MemoEventItem,
   type MemoItem,
@@ -196,6 +198,42 @@ describe("a row's day, shown on its hover", () => {
   });
 });
 
+// PRD ruling 209 point 1.
+describe("a memo's words as drawn", () => {
+  it("leave out the one full stop that ends them, in either script", () => {
+    expect(memoShownText("你不吃香菜。")).toBe("你不吃香菜");
+    expect(memoShownText("Doesn't eat cilantro.")).toBe("Doesn't eat cilantro");
+    // Blanks after the stop, or before it, go with it.
+    expect(memoShownText("你不吃香菜。 ")).toBe("你不吃香菜");
+    expect(memoShownText("办公室在 905 。")).toBe("办公室在 905");
+  });
+
+  it("keep everything else: no stop, a stop inside, other marks, an ellipsis, a closing quote", () => {
+    for (const words of [
+      "你不吃香菜",
+      "叫你小林。做室内设计",
+      "周末还加班吗？",
+      "别在九点前吵你！",
+      "常问湖人、雷霆……",
+      "and so on...",
+      "常说「先这样。」",
+    ]) {
+      expect(memoShownText(words)).toBe(words);
+    }
+    // One stop only: a second one before it stays.
+    expect(memoShownText("你不吃香菜。。")).toBe("你不吃香菜。");
+  });
+
+  it("stay as they are when they are nothing but the stop", () => {
+    expect(memoShownText("。")).toBe("。");
+    expect(memoShownText(".")).toBe(".");
+  });
+
+  it("are what the undo toast quotes, in the to-do toast's cut", () => {
+    expect(memoToastText("你不吃香菜。")).toBe("你不吃香菜");
+  });
+});
+
 describe("the page's memos", () => {
   it("leave out what is deleted here and waiting for its undo", () => {
     const memos = [memo("a"), memo("b")];
@@ -301,6 +339,13 @@ describe("the cards", () => {
     );
     expect(memoCardParts(event(3, { action: "delete" }), enCopy).prefix).toBe(
       "No longer noted",
+    );
+  });
+
+  // PRD ruling 209 point 1.
+  it("draw the words as the page does: without the full stop that ends them", () => {
+    expect(memoCardParts(event(1, { text: "你不吃香菜。" }), zhCopy).text).toBe(
+      "你不吃香菜",
     );
   });
 

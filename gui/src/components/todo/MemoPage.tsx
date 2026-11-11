@@ -8,6 +8,7 @@ import {
   memoDayMs,
   memoPageGroups,
   memoRowTarget,
+  memoShownText,
   memosWithoutDeleting,
   memoUntilLabel,
   type MemoBucket,
@@ -34,9 +35,13 @@ import {
  * (ticket 121, PRD ruling 166; lib/memo.ts `memoPageGroups`; a memo
  * changed moves to the period of its change) — under the to-do page's
  * group labels (GroupLabel) and its 12px between groups; an empty
- * period is not drawn. The day itself shows on a row's hover, left of
- * its ⋯ (`MemoRow`). One sentence a row, 13px, the panel's width, never
- * cut: it wraps. A memo with a last day says 「到 11月1日」 on the right
+ * period is not drawn, and with every memo in one period its label is
+ * not either (PRD ruling 209 point 2: memos come days apart, so most
+ * days the page is one period, and a lone 「本月」 or 「更早」 over the
+ * whole page says nothing). The day itself shows on a row's hover, left
+ * of its ⋯ (`MemoRow`). One sentence a row, 13px, the panel's width,
+ * never cut: it wraps; the full stop that ends it is not drawn (ruling
+ * 209 point 1, lib/memo.ts `memoShownText`). A memo with a last day says 「到 11月1日」 on the right
  * of its first line, 12px `ink-muted` as a to-do's time; no icon, box
  * or tag (a noticed interest says so in its own words, ruling 140
  * point 6).
@@ -75,11 +80,14 @@ export function MemoPage({
     month: copy.sidebar.bucketMonth,
     earlier: copy.sidebar.bucketEarlier,
   };
+  const groups = memoPageGroups(memos, todayStartMs);
+  // A label tells one period from another: with one period, none.
+  const labelled = groups.length > 1;
   return (
     <div data-role="memo-groups" className="space-y-3">
-      {memoPageGroups(memos, todayStartMs).map((group) => (
+      {groups.map((group) => (
         <section key={group.bucket} data-memo-group={group.bucket}>
-          <GroupLabel label={labels[group.bucket]} />
+          {labelled && <GroupLabel label={labels[group.bucket]} />}
           {group.memos.map((memo) => (
             <MemoRow
               key={memo.id}
@@ -139,6 +147,7 @@ function MemoRow({
   const until = memoUntilLabel(memo, todayStartMs, language, copy);
   const day = memoDayLabel(memoDayMs(memo), todayStartMs, language, copy);
   const menu: TodoRowMenuModel = { onDelete: () => deleteMemo(memo) };
+  const shown = memoShownText(memo.text);
   const words = target ? (
     <button
       type="button"
@@ -148,10 +157,10 @@ function MemoRow({
         "underline-offset-2 hover:underline hover:decoration-ink-muted/60 focus-visible:ring-2 focus-visible:ring-brand/30",
       )}
     >
-      {memo.text}
+      {shown}
     </button>
   ) : (
-    <span className="break-words">{memo.text}</span>
+    <span className="break-words">{shown}</span>
   );
   return (
     <TodoRowContextMenu
