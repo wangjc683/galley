@@ -1295,6 +1295,28 @@ code {
   }
 }
 
+/* The same button's today count when it changes (main chat ticket 162,
+   PRD ruling 208 point 4; hooks/useTodoButtonMotion.ts keys the number
+   by each change, so every change plays it again, and the mount does
+   not): the sidebar's step tick — from 0.56 and 1px low into place,
+   `--motion-slow`. One-shot, set off by a change in the list, never
+   looping; the catch's pop, on the button or its glyph, runs beside it.
+   A class of its own for reduced motion: `.sidebar-step-tick` stops
+   there, this one only fades (foundations §2.7 「只淡不移」). */
+.todo-count-tick {
+  animation: sidebar-step-tick var(--motion-slow) ease-out;
+}
+@keyframes todo-count-fade {
+  from {
+    opacity: 0.56;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo-count-tick {
+    animation-name: todo-count-fade;
+  }
+}
+
 /* Scroll-to-bottom button state signal (MainView). Two states, two
    visual grammars: while the agent is running the button carries a
    looping pulse ring — motion = content is landing below, click

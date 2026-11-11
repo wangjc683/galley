@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useDayStamp } from "@/hooks/useDayStamp";
+import { useTodoButtonMotion } from "@/hooks/useTodoButtonMotion";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { isMac } from "@/lib/platform";
 import { todoButtonShape, todoCapsule } from "@/lib/todo-button";
@@ -42,6 +43,12 @@ import { TopBarIconButton } from "../TopBarIconButton";
  * icon and N (`CAPSULE`); otherwise the icon and N alone (`icon`). The
  * list it reads is the panel's: without the to-dos deleted there and
  * waiting on their undo (ticket 88).
+ *
+ * When N changes after it mounted, the number ticks — 「+N」 on the
+ * capsule too — and the button's width, with the number or with its
+ * look, glides from the old to the new rather than jumping; a number
+ * that goes stays for the glide, fading and cut by the narrowing edge
+ * (ticket 162, PRD ruling 208 point 4; hooks/useTodoButtonMotion.ts).
  */
 
 /**
@@ -154,6 +161,14 @@ export function TodoToggleButton({
   };
 
   const count = todayCount > 0 ? todayCount : null;
+  // A change of N ticks the number and glides the width (ticket 162,
+  // PRD ruling 208 point 4; hooks/useTodoButtonMotion.ts): the number
+  // keyed by the changes, the one that goes drawn as it was while the
+  // button narrows.
+  const { motion, buttonRef } = useTodoButtonMotion(count, shape);
+  const shown = count ?? motion.leaving?.count ?? null;
+  const folded = count !== null ? !!capsule : !!motion.leaving?.folded;
+  const tick = motion.ticks > 0 && "todo-count-tick";
   const label = count ? copy.todoWithToday(count) : copy.todoLabel;
   const full = capsule ? copy.todoWithFirst(capsule.when, capsule.title) : null;
   const lang = language === "zh-CN" ? "zh" : "en";
@@ -162,6 +177,7 @@ export function TodoToggleButton({
   return (
     <TooltipLabel text={full && cut ? full : label}>
       <TopBarIconButton
+        ref={buttonRef}
         data-role="topbar-todo"
         data-shape={shape}
         aria-label={full ?? label}
@@ -192,14 +208,17 @@ export function TodoToggleButton({
             {copy.todo}
           </span>
         )}
-        {count && (
+        {shown !== null && (
           <span
+            key={motion.ticks}
+            data-todo-count-leaving={count === null ? "" : undefined}
             className={cn(
               "text-[12px] leading-none tabular-nums",
-              capsule && fit.folded,
+              folded && fit.folded,
+              tick,
             )}
           >
-            {count}
+            {shown}
           </span>
         )}
         {capsule && (
@@ -232,7 +251,13 @@ export function TodoToggleButton({
               {capsule.title}
             </span>
             {capsule.more > 0 && (
-              <span className="ml-1 shrink-0 tabular-nums text-ink-muted">
+              <span
+                key={motion.ticks}
+                className={cn(
+                  "ml-1 shrink-0 tabular-nums text-ink-muted",
+                  tick,
+                )}
+              >
                 +{capsule.more}
               </span>
             )}
