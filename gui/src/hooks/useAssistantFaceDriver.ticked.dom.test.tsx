@@ -11,6 +11,7 @@ import {
   vi,
 } from "vitest";
 
+import { basePose } from "@/lib/assistant-face-motion";
 import { EMPTY_TODO, type TodoItem } from "@/lib/assistant-todo";
 import type { FaceClock } from "@/lib/assistant-face-director";
 import { useAssistantFaceStore } from "@/stores/assistant-face";
@@ -24,7 +25,8 @@ import { useAssistantFaceDriver } from "./useAssistantFaceDriver";
  * ruling 208 point 5): it reads the to-do store's hold starting — the
  * click on one of your to-dos' boxes in this window — and nothing else
  * there; dozing, the tick wakes it instead (as any touch does); after an
- * error, behind other windows, under reduced motion it does nothing.
+ * error it nods and goes back to that pose, as `look` does; behind
+ * other windows, off screen, under reduced motion it does nothing.
  * The main chat's status is stood in for; the clock is moved by hand.
  */
 
@@ -212,12 +214,15 @@ describe("you tick off one of your to-dos", () => {
     expect(nods()).toBe(0);
   });
 
-  it("does not nod after an error: the pose it struck stands", () => {
+  it("nods after an error too, as `look` and `sent` do", () => {
     view.status = "error";
     mount(false);
     expect(played).toContain("errorEnter");
     flip(true);
-    expect(nods()).toBe(0);
+    expect(played[played.length - 1]).toBe("ticked");
+    expect(useAssistantFaceStore.getState().beat?.end).toEqual(
+      basePose("error"),
+    );
   });
 
   it("does nothing behind other windows, off screen, or under reduced motion", () => {

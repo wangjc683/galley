@@ -16,9 +16,10 @@ import type { TodoFlip } from "@/lib/todo-panel";
 /**
  * The face nodding when you tick off one of your to-dos (main chat
  * ticket 163, PRD ruling 208 point 5): which clicks count, the nod
- * itself (`MOTION.ticked`), and the director playing it — once, not
- * while it waits for your answer or holds after an error, not when it
- * is still or paused. The driver's half (reading the to-do store, a
+ * itself (`MOTION.ticked`), and the director playing it — once,
+ * cutting in and handing back to the pose it holds, as `look` and
+ * `sent` do, waiting for your answer and after an error too; not when
+ * it is still or paused. The driver's half (reading the to-do store, a
  * doze woken instead) is in hooks/useAssistantFaceDriver.ticked.dom.test.tsx.
  */
 
@@ -189,16 +190,20 @@ describe("the director plays it", () => {
     }
   });
 
-  it("not while it waits for your answer or holds after an error: the pose stands", () => {
+  it("waiting for your answer and after an error too, as `look` and `sent`: it cuts in and goes back to the pose it struck", () => {
     for (const activity of ["ask", "error"] as const) {
       const r = rig();
       r.director.setActivity(activity);
       r.advance(5_000);
-      const count = r.beats.length;
       r.director.react("ticked");
-      r.advance(10_000);
+      const nod = r.beats[r.beats.length - 1].beat;
+      expect(nod.name, activity).toBe("ticked");
+      expect(nod.end, activity).toEqual(basePose(activity));
+      const count = r.beats.length;
+      r.advance(5_000 + nod.duration + 60_000);
+      // Then it holds that pose again: nothing more plays.
       expect(r.beats.length, activity).toBe(count);
-      expect(r.names(), activity).not.toContain("ticked");
+      expect(r.names().filter((n) => n === "ticked")).toHaveLength(1);
     }
   });
 
