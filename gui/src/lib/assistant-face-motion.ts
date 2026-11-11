@@ -559,6 +559,41 @@ export const MOTION = {
     outMs: 280,
     wagT3: -32,
   },
+  /** You ticked off one of your to-dos (ticket 163, ruling 208 point 5):
+   * it saw you finish one — a nod, the head about 2px down, tipping
+   * forward a little, and back, under half a second in all. Three
+   * variants, one drawn each time, their sizes and timings drawn anew:
+   * a plain nod with a blink at the bottom (`nod`); a glance your way
+   * first, toward the conversation and the panel, then the nod
+   * (`glance`); a softer, slower nod, the eyes easing half shut on the
+   * way down — 嗯 (`soft`). The head comes back on a spring, so it
+   * lands. */
+  ticked: {
+    nod: {
+      /** Down, units (57 a pixel): 1.8–2.2px. */
+      y: [105, 125],
+      deg: [2, 3.5],
+      downMs: [110, 140],
+      backMs: [200, 250],
+    },
+    glance: {
+      /** The eyes to the right and a little down, quickly. */
+      eyes: { gx: [60, 85], gy: [20, 35], look: 0.35 },
+      eyesMs: [70, 90],
+      y: [100, 120],
+      deg: [2, 3],
+      downMs: [110, 130],
+      backMs: [200, 230],
+    },
+    soft: {
+      y: [90, 110],
+      deg: [1.5, 2.5],
+      downMs: [170, 200],
+      backMs: [240, 280],
+      /** How far the eyes close on the way down. */
+      lid: 0.45,
+    },
+  },
   /** Something dragged in: ！, eyes as wide as they go, mouth a small o,
    * a jump — oh?! */
   drop: {
@@ -1645,6 +1680,76 @@ export function scaleBeat(beat: FaceBeat, k: number): FaceBeat {
   return { ...beat, duration, end, tracks };
 }
 
+/** The head down and tipping forward from the pose it goes back to,
+ * and back on a spring: the nod of `MOTION.ticked`. */
+function nodVoice(
+  start: number,
+  end: FacePose,
+  y: number,
+  deg: number,
+  downMs: number,
+  backMs: number,
+): Voice {
+  return new Voice(start)
+    .to(downMs, { y: end.y + y, rot: end.rot + deg }, EASE.firm)
+    .to(backMs, {}, EASE.spring);
+}
+
+/** You ticked one off: one of `MOTION.ticked`'s three nods, drawn. The
+ * nod is from the pose it goes back to — down from there, whatever the
+ * activity holds the head at — and the eyes go back with the head. */
+function tickedVoices(end: FacePose, rand: Rand): Voice[] {
+  const pickVariant = rand();
+  if (pickVariant < 1 / 3) {
+    const m = MOTION.ticked.nod;
+    const down = draw(rand, m.downMs);
+    const body = nodVoice(
+      0,
+      end,
+      draw(rand, m.y),
+      draw(rand, m.deg),
+      down,
+      draw(rand, m.backMs),
+    );
+    return [body, blinkKeys(new Voice(down - 40), rand, end)];
+  }
+  if (pickVariant < 2 / 3) {
+    const m = MOTION.ticked.glance;
+    const eyesMs = draw(rand, m.eyesMs);
+    const down = draw(rand, m.downMs);
+    const back = draw(rand, m.backMs);
+    const body = nodVoice(
+      eyesMs,
+      end,
+      draw(rand, m.y),
+      draw(rand, m.deg),
+      down,
+      back,
+    );
+    const eyes = new Voice()
+      .to(
+        eyesMs,
+        {
+          gx: draw(rand, m.eyes.gx),
+          gy: draw(rand, m.eyes.gy),
+          look: m.eyes.look,
+        },
+        EASE.pop,
+      )
+      .hold(down)
+      .to(back, {}, EASE.firm);
+    return [body, eyes];
+  }
+  const m = MOTION.ticked.soft;
+  const down = draw(rand, m.downMs);
+  const back = draw(rand, m.backMs);
+  const body = nodVoice(0, end, draw(rand, m.y), draw(rand, m.deg), down, back);
+  const lids = new Voice()
+    .to(down, { lid: end.lid * m.lid }, EASE.drift)
+    .to(back, {}, EASE.firm);
+  return [body, lids];
+}
+
 /**
  * A reaction from `from`, ending on `end` (the activity's pose it goes
  * back to; for `listen`, the listening pose it holds).
@@ -1719,6 +1824,8 @@ function reactionVoices(
         .to(180, {}, EASE.spring);
       return [body, eyes, tongue];
     }
+    case "ticked":
+      return tickedVoices(end, rand);
     case "drop": {
       const m = MOTION.drop;
       const body = new Voice()

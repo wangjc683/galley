@@ -1,4 +1,5 @@
 import { isSubtaskReportTurn } from "@/lib/subtasks";
+import type { TodoFlip } from "@/lib/todo-panel";
 import { canonicalToolName } from "@/lib/tool-name";
 import type { Turn } from "@/types/conversation";
 
@@ -55,6 +56,8 @@ export type FaceReaction =
   | "listen"
   /** The pointer came onto it. */
   | "look"
+  /** You ticked off one of your to-dos in this window (`tickedOffHere`). */
+  | "ticked"
   /** A file or an image is dragged in over its conversation. */
   | "drop"
   /** You pressed stop. */
@@ -249,6 +252,33 @@ export function wakeKind(
       : "subtask";
   }
   return null;
+}
+
+// ---- You ticked one off ----------------------------------------------------
+
+/**
+ * Whether you just ticked off one of your to-dos in this window (main
+ * chat ticket 163, PRD ruling 208 point 5): a tick the to-do store did
+ * not hold a moment ago. Only a click does that here — the box of one
+ * of your rows in the panel or of a to-do's card under a reply
+ * (TodoCheck → stores/assistant-todo.ts `toggle`) starts the row's hold
+ * (`flips`: `done`, `settling`) — so it is read at the click, not 1.5
+ * seconds later when Core writes it. Not an untick; not a click that
+ * takes a tick back in its hold (the flip goes: the nod was at the
+ * tick, nothing is added or taken back); not the hold turning into
+ * Core's write (`saving`). An item under a to-do is not a to-do done
+ * (its ticks are `subitemTicks`); Galley's tick, another window's or
+ * the CLI's comes in as a fresh list, never as a flip here; a delete, a
+ * skip, a reminder cancelled are not ticks.
+ */
+export function tickedOffHere(
+  flips: Readonly<Record<string, TodoFlip>>,
+  before: Readonly<Record<string, TodoFlip>>,
+): boolean {
+  if (flips === before) return false;
+  return Object.entries(flips).some(
+    ([id, flip]) => flip.done && flip.phase === "settling" && !before[id],
+  );
 }
 
 // ---- 丙: dozing ------------------------------------------------------------

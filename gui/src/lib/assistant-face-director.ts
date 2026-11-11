@@ -53,6 +53,10 @@ import {
  * drives it without waiting.
  */
 
+/** The activities that strike a pose and hold it: waiting for your
+ * answer, an error. */
+const HELD: ReadonlySet<FaceActivity> = new Set<FaceActivity>(["ask", "error"]);
+
 function drawMs(random: () => number, [a, b]: readonly [number, number]) {
   return Math.round(a + (b - a) * random());
 }
@@ -208,6 +212,10 @@ export class FaceDirector {
     // and a late one would play for something long past. Waking is
     // the exception: the face must open its eyes either way.
     if (!this.active && reaction !== "wake") return;
+    // Your tick is not nodded at while it waits for your answer or holds
+    // after an error (ticket 163): the pose it struck stands. (The other
+    // reactions still cut in there and hand back to it.)
+    if (reaction === "ticked" && HELD.has(this.activity)) return;
     this.freshen();
     if (reaction === "listen") {
       this.listen();

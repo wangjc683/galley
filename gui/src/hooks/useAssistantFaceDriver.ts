@@ -10,6 +10,7 @@ import {
   faceActivity,
   liveToolKind,
   shouldDoze,
+  tickedOffHere,
   wakeKind,
 } from "@/lib/assistant-face";
 import { assistantWriting } from "@/lib/assistant-conversation";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/composer-draft";
 import { endsInSilentReport } from "@/lib/subtasks";
 import { useAssistantFaceStore } from "@/stores/assistant-face";
+import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { useMessagesStore } from "@/stores/messages";
 import { useQueueStore } from "@/stores/queue";
 import { useSubtasksStore } from "@/stores/subtasks";
@@ -83,6 +85,8 @@ interface Live {
  *   a file dragged in               the window's native drag events
  *   the pointer on it               the card's hover
  *                                   (`signalAssistantLook`)
+ *   you ticked off a to-do          the to-do store's hold starting
+ *                                   (`tickedOffHere`)
  *
  * Alive at rest (丙, ruling 119 point 1): it blinks, looks about and
  * dozes when nothing happens.
@@ -299,6 +303,20 @@ export function useAssistantFaceDriver({
         if (!state.signal || state.signal.seq === prev.signal?.seq) return;
         if (state.signal.kind !== "look") return;
         if (!touch(true)) react("look");
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  // You ticked off one of your to-dos in this window: it nods — it saw
+  // you finish one (ticket 163). At the click, whatever conversation the
+  // panel sits beside: the face is in the sidebar. Dozing, the tick
+  // wakes it instead.
+  useEffect(
+    () =>
+      useAssistantTodoStore.subscribe((state, prev) => {
+        if (!tickedOffHere(state.flips, prev.flips)) return;
+        if (!touch(true)) react("ticked");
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],

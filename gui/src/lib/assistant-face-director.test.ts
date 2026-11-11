@@ -282,6 +282,7 @@ describe("a reaction cuts in and hands back to the activity", () => {
     const reactions: FaceReaction[] = [
       "sent",
       "look",
+      "ticked",
       "drop",
       "stop",
       "done",
