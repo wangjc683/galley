@@ -224,6 +224,21 @@
 
 ---
 
+## 待办面板动效的遗留
+
+- **状态**：没裁（2026-11-11 [主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 208 的四张票合入后主会话报给 JC，JC 当天收尾，手感还没看）。
+- **提出**：2026-11-11 做票 160–163 与真窗口量的时候看到的五处，都没动：
+  1. **删除线从左划到右**：JC 批的是划，做出来是淡入（假线与真删除线在 WebKit 里取整方式不同，交接会跳 1 个设备像素，见 [devlog](./2026-11-10-todo-is-the-main-list.md)「做下来与批的不一样的」）。
+  2. **打开、收起一件的高度过渡**：裁决 208 第 7 条没做；过程卡片点开一步也是瞬时的。
+  3. **删掉今天最后一件时胶囊分两段收回**：先收成图标加「1」，5 秒撤销期过了再收成图标。「今天 N」是 Core 的数，Core 删掉之后才变（票 88、106 定的）；以前瞬跳不显眼，有了宽度过渡看得见。
+  4. **顶栏按钮重写类名会冲掉接住卡片的 pop**：N 出现、消失或样子切换时 React 重写 `className`，`todo-catch-pop` 是用 `classList` 加的；飞行的终点在起飞时量，起飞后按钮变形落点会偏。记一件今天到期的事时两样会撞上。
+  5. **「已完成」里标题是按钮的行，悬停时下划线可能顶掉删除线**（`hover:underline` 与 `line-through` 都设 `text-decoration-line`；按 CSS 推断，没在真窗口看）。
+- **启动信号**：1 是 JC 看过淡入后仍想要划；2 是 JC 嫌打开一件时下面的行跳；3 是 JC 删今天最后一件时注意到两段；4 是 JC 记一件今天到期的事时看到卡片飞过去按钮没弹、或落点偏了；5 是 JC 在「已完成」里悬停时看到删除线没了。
+- **方案**：1 用一份透明文字的复本叠上去再裁，能逐像素对上，但 WebKit 里绝对定位的子元素会让随内容宽的卡片少算中西文间距（票 132b），只能先给面板的行、不给卡片；2 照票 161 的做法量前后高度；3 把 `todoWithoutDeleting` 改成也减去等撤销的今天的件数（要改票 88 的测试与 `lib/todo-button.ts` 的注释）；4 pop 改成由状态驱动的类；5 悬停时两条线都画（`text-decoration-line: underline line-through`）。
+- **关联**：主聊天 PRD 裁决 208；票 [160](../../.scratch/main-chat/issues/160-tick-beat.md)、[161](../../.scratch/main-chat/issues/161-row-leave-and-close.md)、[162](../../.scratch/main-chat/issues/162-today-count-tick.md)、[163](../../.scratch/main-chat/issues/163-face-nods-at-a-tick.md) 的 Comments。
+
+---
+
 ## 待办的回执卡
 
 - **状态**：暂缓（2026-10-22 [主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 131 第 6 条，JC：「按建议推进」）。

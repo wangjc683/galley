@@ -422,6 +422,24 @@ sentences). Not walked: a reminder actually going off and being re-armed and
 the new wake note (automated tests only), a 280px panel, the English time
 line, the keyboard focus ring on the date trigger, Windows.
 
+Also merged, GUI only: the to-do panel's rows move, 2026-11-11 (main chat PRD
+ruling 208, tickets 160–163, the same devlog's last section). User-visible:
+a checkbox sinks while held, draws its tick and pops when ticked (the app's
+one checkbox, so the archive and edit-project dialogs' too, in either
+runtime); a to-do's strike fades in after the tick; a row that leaves the
+panel fades where it stood and the rest slide to their places, one that
+comes back fades in, 已完成's count steps; the top bar's today count steps
+and the button's width glides, the capsule's row staying for the way out;
+the assistant's face nods when you tick a to-do off. A re-read that brought
+nothing new no longer redraws the panel and the cards
+(`stores/assistant-todo.ts` `load`). No Core, CLI or manual change. Gates on
+the merged tree: vitest under `TZ=UTC` (276 files, 3,171 tests), typecheck,
+lint, the docs link gate. Measured frame by frame in the dev window by the
+main session (first frames, the slide, the glide, the nod). Not seen by JC
+yet (all four tickets are `needs-dogfood`); not measured: the press itself,
+reduced motion, a narrow header, a row changing place while its date
+popover is open, Windows.
+
 The audit's 28 open findings were ruled on the same day (`.scratch/audit-1110/PRD.md`)
 and a first wave merged (tickets 01, 02, 04, 05, 08; `2898a7d4` … `f864da9a`).
 CLI, all inside schema 3 and recorded as behavior fixes in the Agent API's
