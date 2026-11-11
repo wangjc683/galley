@@ -1,6 +1,6 @@
 # 04 构建管道：Windows 安装前钩子、CI 的 sidecar 脚本、format 脚本
 
-Status: needs-dogfood（2026-11-11 v0.7.8 的发版 CI 一次过：三个平台都用 `.mjs` 备好 sidecar，去掉 Setup Python 之后构建照常；只剩 JC 的 Windows 真机验安装前钩子，W1 这一版没做）
+Status: needs-dogfood（2026-11-11 v0.7.8 的发版 CI 一次过：三个平台都用 `.mjs` 备好 sidecar，去掉 Setup Python 之后构建照常；发布当天 JC 报 Windows 上更新到 0.7.8、更新和使用正常，应用内更新后的重启没有被钩子打断；只剩旧版与 `galley` CLI 都开着时手动运行安装器那一条没有报）
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 A4、C18、C19（JC：「按建议推进」）。
 

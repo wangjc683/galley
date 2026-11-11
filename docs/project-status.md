@@ -312,12 +312,14 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.7.7` → `v0.7.8` (and `v0.7.0` →
-   `v0.7.1` → `v0.7.2` → `v0.7.3` → `v0.7.4` → `v0.7.5` → `v0.7.6` →
-   `v0.7.7` before it) is owed. JC's Mac was installed straight from the
-   draft all eight times, so it needs a machine still on an older build
-   (the Windows one, for instance); the CDN served 0.7.8 without cache-bust
-   at 05:23 UTC, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
+1. App-update dogfood (SOP step 10): an update to `v0.7.8` on Windows was
+   reported the day of the release (JC, 2026-11-11: 「windows 用户更新到
+   0.7.8，更新和使用暂时看一切正常」); which build it came from, and so
+   which migrations ran on that database, was not said. It is the first
+   update through the new NSIS pre-install hook, and it did not break the
+   restart. The macOS hops `v0.7.0` → … → `v0.7.8` stay unobserved: JC's Mac
+   was installed straight from the draft all eight times; the CDN served
+   0.7.8 without cache-bust at 05:23 UTC, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -395,10 +397,14 @@ second and cancelled 50 seconds after. Not seen or not reported:
 - The memo page in the dark theme.
 - From the audit: the rollback when Core refuses a write, the new error
   copy, ⌘K's row by mouse and its blank-text and in-conversation cases.
-- W1, a Windows install: the NSIS pre-install hook closing the app and the
-  CLI (audit ticket 04, the only audit ticket still open; only Windows can
-  show it), the first packaged build to run migrations 053–057 on an older
-  database, and every Windows item below.
+- W1, the Windows checklist: not walked. A Windows update to 0.7.8 and use
+  after it were reported normal the same day (post-release follow-up 1), so
+  the hook does not break an in-app update's restart (the risk audit ticket
+  04 named). Still not reported: the manual upgrade with the old app and a
+  `galley` CLI command running (both closed, no file-lock dialog,
+  `where.exe galley` at the app's version), which keeps audit ticket 04
+  open; whether that database was older than 057; and every Windows item
+  below.
 - The eval's `w-long` case stays record-only, and the `wake` suite has no
   case for a hand-over that asked for a screenshot whose file is missing.
 
