@@ -1,6 +1,6 @@
 # 01 四个渠道撤掉过程入口
 
-Status: needs-dogfood（2026-11-11 合入；JC 当天在 dev 里验过 Telegram（含旧按钮点了消失）、飞书，没有问题；微信没验，Discord 验不验 JC 没说）
+Status: done（2026-11-11 合入；JC 当天在 dev 里验过 Telegram（含旧按钮点了消失）、飞书，没有问题；微信、Discord JC 定免测）
 
 来源：[PRD](../PRD.md) 裁决 1–4、6。先读 `docs/agents/dispatch.md`（执行代理的常设约束）与 `docs/managed-ga-runtime/code-state-and-patches.md`（「How To Modify An Existing Patch」）。
 
@@ -162,4 +162,4 @@ JC：「telegram 和飞书我刚刚真机测试了，都没有问题」。主会
 - Telegram：一个 2 步的任务答完（回答下面有没有按钮只有 JC 看得到，他报没问题）；接着问「过程给我看看」，只有一次模型回复、后面没有工具结果，即没有重跑；渠道重启并接回之后问「刚才怎么查的」，同样一次回复、没有工具调用。
 - 飞书：重启接回后一个 2 步的任务答完，卡片里有没有面板只有 JC 看得到，他报没问题。
 - 日志里看不出来的：点旧消息的「过程」按钮（摘除成功不写日志，也没有摘除失败的那一行）。JC 随后补报：「Telegram 旧按钮我点过，点完就消失了」。
-- 没验：微信的多步回答末尾；Discord 全部。
+- 没验：微信的多步回答末尾；Discord 全部。JC：「这两处免测」。

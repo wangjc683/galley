@@ -1,6 +1,6 @@
 # IM 回答里只有回答：撤掉过程入口
 
-Status: needs-dogfood（2026-11-11 票 01、02 与入口层那一段合入；JC 当天验过 Telegram、飞书，没有问题；微信没验，Discord 验不验没说；记录在 [devlog](../../docs/devlog/2026-11-11-im-answer-only.md)）
+Status: done（2026-11-11 票 01、02 与入口层那一段合入；JC 当天验过 Telegram、飞书，微信、Discord 免测；记录在 [devlog](../../docs/devlog/2026-11-11-im-answer-only.md)；发版后删本目录）
 
 来源：2026-11-11 JC 在 Telegram 点最近一条消息的「过程」，得到「过程已不在了（渠道重启过）」：「我现在考虑是要修复这个问题，还是直接去掉过程，让 Telegram 更有真人 IM 对话的体验，只剩下最终消息回复。」主会话读现状后给了甲（删入口）、乙（持久化）、丙（小补丁）三档，推荐甲；JC 逐条裁了六点。
 
