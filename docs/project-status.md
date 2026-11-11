@@ -10,17 +10,17 @@ not current rules).
 
 ## Current Target
 
-- Package version: `0.7.7`.
-- Git tag / GitHub Release: `v0.7.7` is the current published stable release
-  (tagged at `a5d376b9` on 2026-11-06, published 2026-11-06, GitHub Latest).
+- Package version: `0.7.8`.
+- Git tag / GitHub Release: `v0.7.8` is the current published stable release
+  (tagged at `ec5a3e1d` on 2026-11-11, published 2026-11-11, GitHub Latest).
 - Agent API schema: `schemaVersion: 3` (since the Goal removal on
   2026-10-13, first shipped in `v0.7.0`; `2` first shipped in `v0.5.0`). The
   server keeps answering `1` and `2` for every command that did not change;
   every goal command, v1 and v2, is `unknown_command` under every pin.
-- Release tier: stable patch; default update channel points at `v0.7.7`.
+- Release tier: stable patch; default update channel points at `v0.7.8`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `d66509b` (audited 2026-11-03, shipped in
-  `v0.7.6` … `v0.7.7`; `llmcore.py`'s text protocol split into `legacy_llmcore.py`,
+  `v0.7.6` … `v0.7.8`; `llmcore.py`'s text protocol split into `legacy_llmcore.py`,
   one `0001` hunk so managed memory distillation still reads L0, no Galley
   code change). The previous `a9a36b4` shipped `v0.7.1` … `v0.7.5`,
   `b70079d` `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never
@@ -40,6 +40,43 @@ Release paragraphs (newest first) keep only the latest three releases;
 every older release's narrative lives in its release devlog (the
 [devlog index](./devlog/README.md) lists them). Two older paragraphs stay
 for now, `v0.6.1` and `v0.4.16`: each holds one fact its devlog does not.
+
+`v0.7.8` (2026-11-11) is a patch five days after `v0.7.7`, 146 commits. The
+to-do list becomes the user's main list (main chat rulings 202–208, tickets
+152–163): a to-do can repeat as a rule plus its current period, the next
+made in the same write when one is ticked off or skipped, one left open
+reminded again at each later period's time (migration 057; `todo skip`, the
+repeat flags, `--series` and `--no-repeat`, additive under schema 3); an
+open row's day, reminder and repeat change by hand in a popover; a folded
+row draws no notes; ticking moves (the shared checkbox's beat, rows leaving
+and closing up, the today count, the face's nod). The memo page drops the
+ending full stop and a lone group label (ruling 209). The 2026-11-10 audit's
+fixes ship with it: the new-chat effort pick, ⌘K's Enter, the rollback when
+Core refuses a write, five notices in the UI language, one search-index
+rule, three CLI behavior fixes inside schema 3, three undocumented socket
+commands answering `unknown_command`, the shell plugin gone, the bundled
+engine payload without upstream's demo media (installers 22–23 MB smaller),
+the NSIS hook closing the app and the CLI. Graded patch: the largest piece
+(repeating to-dos) extends the to-do list; nothing removed has a
+user-facing surface. GA baseline unchanged at `d66509b`: upstream `main`
+still at `68d996a`, judged at `v0.7.7`. Pre-flight: the six gate scripts and
+the bundled-runtime gate on `mac-x64` in a `git archive` copy of `0b98e84b`;
+typecheck, lint, vitest in two time zones (276 files, 3,178 tests);
+`check.yml` green on the bump commit `ec5a3e1d` (run 42957710875), all seven
+jobs. No `release.yml` dry-run (JC's ruling of 11-10), so the release run
+was the first real check of the `runner/*.py` resource mapping, the `.mjs`
+sidecar script and the dropped Setup Python: one draft, green (run
+42960094826); the agent checked the Intel DMG read-only (17 runner `.py`
+files and no tests, a 5.0 MB engine payload without the demo media) and the
+`latest.json` candidate. JC did not look at tickets 160–163 in dev before
+the tag (asked to; answered 「继续推进」, and the database showed no to-do
+ticked), so their feel was first seen on the draft. JC's Mac smoke passed:
+the database shows the main chat dispatching subtasks that drove the
+browser and merging their reports, and a repeating to-do noted, ticked in
+the window 18 seconds later with its next period made the same second. W1
+not done. Stable promoted and verified the same session (run 42965351992).
+Full narrative: devlog
+[2026-11-11-v0.7.8-release](./devlog/2026-11-11-v0.7.8-release.md).
 
 `v0.7.7` (2026-11-06) is a patch two days after `v0.7.6`, 22 commits, all
 in `gui/src`. Main chat bubbles sit like an IM thread, 4px within a side and
@@ -106,45 +143,6 @@ promoted and verified the same session (run 41826253185). W1 not done.
 Full narrative: devlog
 [2026-11-04-v0.7.6-release](./devlog/2026-11-04-v0.7.6-release.md).
 
-`v0.7.5` (2026-11-03) is a patch four days after `v0.7.4`, 98 commits. The
-main chat hands work out differently: what you ask it answers itself, an
-errand you hand it goes to a subtask past two or three steps (main chat
-ruling 160, ticket 115); errands that do not depend on each other go out in
-one reply as one subtask each, run at the same time and carry a few-word
-title (rulings 174–175, tickets 126–127); its running and asking subtasks
-hang under its card in the sidebar and leave when they stop, a subtask's
-error no longer counts as needing you, and a failed wake still notifies
-(rulings 176–178, tickets 128–129). The cards under a reply sit in one
-frame, one 24px line each, the subtask's a one-line receipt (rulings
-179–182, tickets 130–133); a run without an answer folds into 「中途停下 ·
-N 步」 and the workbench keeps a stopped run's live window (ruling 159,
-ticket 114; workbench ticket 04); scrolling back no longer runs into blank
-and the main chat shows a floating day (rulings 170–172, tickets 123–124);
-on screen the main chat is just Galley (ruling 173, ticket 125; migration
-055); the memo page groups by time period (ticket 121). Bundled GA: patch
-`0030` cuts a whitespace runaway in tool-call arguments (ticket 118);
-patch `0007` waits at least 30 s for Core's token, and the errors are
-logged (ticket 122). Graded patch: the largest pieces (parallel dispatch,
-the one frame) extend the `v0.7.0` main chat; no system removed, no Agent
-API change. GA baseline unchanged at `a9a36b4`: upstream `main` was 17
-commits past `e4d956f`, among them `llmcore.py`'s split into
-`legacy_llmcore.py`, right where patches `0007` and `0030` sit, so the bump
-gets its own round (target `v0.7.6`). JC chose to ship the same day (the
-main session had recommended tagging the next morning, after half a day of
-dev use). Pre-flight: `check.yml` green on `008dfae0` before the tag (run
-41594453188) and on the bump commit `6e4fc6f0` (run 41596646226), all seven
-jobs; the bundled-runtime gate on `mac-x64` in a `git archive` copy; vitest
-in two time zones. The agent checked the draft's Intel DMG read-only and
-the `latest.json` candidate. JC's smoke: the reply notification read
-「Galley · …」 and the one frame looked right; the first dispatch sentence
-(compare two headphones into a table) was answered in the main chat,
-correctly under ruling 160 (the main session's test sentence was wrong),
-and led to ruling 183 (dispatch everything past a step or two; ticket 134,
-for `v0.7.6`). JC approved publish without the two replacement dispatch
-sentences or W1. Stable promoted and verified the same session (run
-41605673604). Full narrative: devlog
-[2026-11-03-v0.7.5-release](./devlog/2026-11-03-v0.7.5-release.md).
-
 `v0.6.1` (2026-10-07) is a patch two days after `v0.6.0`, 16 commits. It
 ships the GA baseline `f308ee7` and three managed prompt rounds: the runtime
 prompt describes Galley from a feature map and points configuration requests
@@ -192,18 +190,22 @@ day. Full narrative: devlog
 
 ## Current Release State
 
-`v0.7.7` is published and promoted as the live stable release (published
-2026-11-06 09:07 UTC). The default `updates/stable/latest.json` channel points
-at `v0.7.7`, with the legacy `updates/beta/latest.json` alias pointing at the
-same version for older installed builds. The live verifier passed with
-`--cache-bust` for both channels across all three platforms (darwin-aarch64,
-darwin-x86_64, windows-x86_64), in the promote run (42192633408) and again
-locally (channel branch at `106d0f5d`); a plain `curl` read 0.7.7 at 09:08
-UTC, right after promote. One draft cut (release run 42187309646, tag on
-`a5d376b9`); JC smoked the Mac and approved publishing; W1 was skipped by
-JC and is owed under Unreleased On Main. No bundled-runtime gate (no
-managed GA change); `check.yml` was green on `a5d376b9` (run 42184840221),
-all seven jobs.
+`v0.7.8` is published and promoted as the live stable release (published
+2026-11-11 05:22 UTC). The default `updates/stable/latest.json` channel points
+at `v0.7.8`, with the legacy `updates/beta/latest.json` alias pointing at the
+same version for older installed builds. The live verifier passed for both
+channels across all three platforms (darwin-aarch64, darwin-x86_64,
+windows-x86_64), in the promote run (42965351992) and again locally (channel
+branch at `34d88ef5`); a plain `curl` read 0.7.8 at 05:23 UTC, right after
+promote. One draft cut (release run 42960094826, tag on `ec5a3e1d`); JC
+smoked the Mac and approved publishing; W1 was not done and is owed under
+Unreleased On Main. The bundled-runtime gate passed on `mac-x64` (`runner/`
+and `managed-ga/` both changed); `check.yml` was green on `ec5a3e1d` (run
+42957710875), all seven jobs.
+
+`v0.7.7` (2026-11-06): one draft cut (release run 42187309646, tag on
+`a5d376b9`), JC smoked the Mac and approved publishing, W1 skipped by JC;
+promote run 42192633408; no bundled-runtime gate (no managed GA change).
 
 `v0.7.6` (2026-11-04): two drafts cut; the first (release run 41790806641,
 on `559ea1af`) was withdrawn after smoke S3 and its tag deleted; the second
@@ -310,12 +312,12 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.7.6` → `v0.7.7` (and `v0.7.0` →
-   `v0.7.1` → `v0.7.2` → `v0.7.3` → `v0.7.4` → `v0.7.5` → `v0.7.6` before
-   it) is owed. JC's Mac was installed straight from the draft all seven
-   times, so it needs a machine still on an older build (the Windows one,
-   for instance); the CDN served 0.7.7 without cache-bust at 09:08 UTC,
-   right after promote. `v0.6.2` → `v0.7.0` passed on JC's
+1. App-update dogfood (SOP step 10): `v0.7.7` → `v0.7.8` (and `v0.7.0` →
+   `v0.7.1` → `v0.7.2` → `v0.7.3` → `v0.7.4` → `v0.7.5` → `v0.7.6` →
+   `v0.7.7` before it) is owed. JC's Mac was installed straight from the
+   draft all eight times, so it needs a machine still on an older build
+   (the Windows one, for instance); the CDN served 0.7.8 without cache-bust
+   at 05:23 UTC, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -368,158 +370,37 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.7..HEAD`. Merged since `v0.7.7`:
-the release docs; the README's Windows minimum (Windows 10 or later, both
-READMEs); the dispatch workflow (`docs/agents/dispatch.md`,
-`scripts/new-ticket-worktree.sh`, the `AGENTS.md` and docs-index routing,
-ticket `.scratch/dispatch-workflow/issues/01`). None of that changes the app.
+Release-scope truth is `git log v0.7.8..HEAD`. Merged since `v0.7.8`:
+the release docs. None of that changes the app.
 
-Also merged, and it does change the app: the 2026-11-10 whole-project audit's
-confident fixes (22 commits, `24c82a6f` … `9621f326`). User-visible: the
-effort picked on the new-chat screen reaches the conversation it starts; day
-labels and the to-do panel's today group keep rolling over after a 25-hour
-day; three runner-start errors follow the UI language; default filenames for
-a saved reply or image use the local date; a token count just under a
-million no longer reads "1000k". Packaging and security: the unused Tauri
-shell plugin and its Python spawn / stdin / kill grants are gone
-(`core/capabilities/default.json`, `core/Cargo.toml`), so the next release
-needs one launch that shows no capability error. Core and runner: three
-Tauri commands with no caller, four spawn inputs nothing read (`--sop-path`
-among them, removed on both sides, so the IM channels must be seen starting),
-one search-index delete per message write that could never match, the
-safe-rebuild preflight list back at 033, and the runner's copy of the
-ChatGPT `minimal` → `medium` rule (the engine's, patch `0007`, stays).
-Remote groundwork: unpair forgets push devices, the relay bounds its control
-replies, a blank APNs key path counts as not set. Tests: full-schema
-fixtures use the app's own migration list. Docs: about forty stale
-statements in living docs, and the version gate now checks `core/Cargo.lock`.
-No migration, no Agent API change. Gates on the merged branch: `cargo test
---workspace` (47 binaries, 1,346 tests), vitest in three time zones (263
-files, 2,961 tests), pytest (765), the six gate scripts. Nothing was walked
-in the app before the merge.
+**Owed from the `v0.7.8` smoke** (the list is in the release devlog). JC
+smoked the Mac draft and approved publish. What the database and the
+process list show of it: the packaged app up with its browser bridge and
+four IM supervisors and no report of a capability error (the shell plugin's
+removal, `--sop-path`'s removal); the main chat answered through two
+subtasks that drove the browser (the `runner/*.py` mapping and the slimmed
+payload work on a packaged build); a repeating to-do noted by the main chat,
+ticked in the window 18 seconds later, its next period made in the same
+second and cancelled 50 seconds after. Not seen or not reported:
 
-Also merged, managed runtime only (the main chat's to-dos; an external
-runtime sees no change): the to-do list as the user's main list, 2026-11-10
-and 11 (main chat PRD rulings 202–207, tickets 152–159,
-[devlog](./devlog/2026-11-10-todo-is-the-main-list.md)). User-visible: a
-to-do can repeat (daily, weekly, monthly, yearly, every N; the next period
-is made when one is ticked off or skipped, and one left unticked is reminded
-again at each later period's time); the panel's open row changes the due
-day, time, reminder and repeat by hand in a popover, with 「跳过这一次」 and
-「不再重复」 in the row menu; a folded row draws its title and time line only,
-no notes; the time line says a rule and its reminder in fewer words and the
-open row wraps instead of cutting. One migration, `057_todo_series.sql`
-(table `todo_series`, `todos.series_id`, `todos.skipped`). Agent API,
-additive inside schema 3 (`docs/agent-api/todo-commands.md`): the repeat
-flags on `todo add` / `update`, `update --series` and `--no-repeat`, `todo
-skip`, and the repeat fields in to-do JSON. The assistant manual teaches
-repeating to-dos and asks whose step is next before noting one. Gates on the
-merged tree: `cargo test --workspace` (1,425 tests, three time zones for the
-last Rust change), vitest in two time zones (268 files, 3,063 tests), the
-six gate scripts. Walked in the dev app by the main session (the panel with
-real mouse and keyboard, Core through the CLI, the manual through main-chat
-sentences). Not walked: a reminder actually going off and being re-armed and
-the new wake note (automated tests only), a 280px panel, the English time
-line, the keyboard focus ring on the date trigger, Windows.
-
-Also merged, GUI only: the to-do panel's rows move, 2026-11-11 (main chat PRD
-ruling 208, tickets 160–163, the same devlog's last section). User-visible:
-a checkbox sinks while held, draws its tick and pops when ticked (the app's
-one checkbox, so the archive and edit-project dialogs' too, in either
-runtime); a to-do's strike fades in after the tick; a row that leaves the
-panel fades where it stood and the rest slide to their places, one that
-comes back fades in, 已完成's count steps; the top bar's today count steps
-and the button's width glides, the capsule's row staying for the way out;
-the assistant's face nods when you tick a to-do off. A re-read that brought
-nothing new no longer redraws the panel and the cards
-(`stores/assistant-todo.ts` `load`). No Core, CLI or manual change. Gates on
-the merged tree: vitest under `TZ=UTC` (276 files, 3,171 tests), typecheck,
-lint, the docs link gate. Measured frame by frame in the dev window by the
-main session (first frames, the slide, the glide, the nod). Not seen by JC
-yet (all four tickets are `needs-dogfood`); not measured: the press itself,
-reduced motion, a narrow header, a row changing place while its date
-popover is open, Windows.
-
-Also merged, GUI only: the 备忘 page tidied, 2026-11-11 (main chat PRD ruling
-209, [devlog](./devlog/2026-11-11-memo-page-tidy.md); `7ac4a440`). User-visible:
-a memo's ending full stop is not drawn — on the page's rows, the memo cards
-under a reply and the delete's undo toast; the record, `galley memo` and what
-the main chat reads keep it — and with every memo in one time period the page
-draws no group label (two periods or more are labelled as before). No Core,
-CLI or manual change; the external runtime has no memos. Gates: vitest (276
-files, 3,178 tests), typecheck, lint. Seen by JC in the dev window the same
-day. Not looked at on its own: the dark theme, Windows.
-
-The audit's 28 open findings were ruled on the same day (`.scratch/audit-1110/PRD.md`)
-and a first wave merged (tickets 01, 02, 04, 05, 08; `2898a7d4` … `f864da9a`).
-CLI, all inside schema 3 and recorded as behavior fixes in the Agent API's
-stability chapter: `project follow --until-idle` and `project brief`'s
-`runningSessions` read Core's live run state instead of a status column Core
-never writes as running; a watch stream no longer times out after 120 quiet
-seconds (a `ping` proves Core first); payloads and frames echo the `--schema`
-pin. Core and GUI: the search index keeps one rule (non-empty final answers
-and user messages), so a launch no longer rebuilds it, and every existing
-database rebuilds it once after the upgrade; a session or project write Core
-refuses rolls back and says so; the error card is a toast only; ⌘K's
-「Enter 直接发问？」 starts a new chat with what was typed; a runner that
-quits and a browser-bridge error follow the UI language. Build: the NSIS
-pre-install hook closes `galley-core.exe` and the CLI (Windows machine check
-owed, in the Windows checklist), CI prepares the CLI sidecar with the Node
-script and `release.yml` drops its unused host Python (a `release.yml`
-dry-run is owed before the next tag), the two `format` scripts are gone.
-Docs: `docs/galley-native/` archived, `docs/design/conversation.md` split
-into a directory, this file trimmed to the latest three releases, the
-entry-layer eval's raw `results.json` no longer tracked, README text for
-memos. The main session verified the CLI fixes and the index in dev against
-the real database. JC tried the GUI changes in dev the same day: ⌘K's Enter
-started a new chat and sent the text (the engine log shows the run; JC then
-archived and deleted that chat), and archive, delete and rename behaved as
-before. Not walked: the rollback when Core refuses a write, the new error
-copy, the palette row by mouse and its blank-text and in-conversation cases.
-
-A second wave merged the same day (tickets 03, 06, 07, 09; `ca83fb45` …
-`e987acf9`). IPC: the three `tool_call_*` events nothing sent are gone from
-the protocol and its three mirrors (15 events now); `ready.protocolVersion`
-is documented as diagnostic. Socket: `session.checkpoint`,
-`session.shutdown_runner` and the single-session `session.run_state`, Goal-era
-and never in the Agent API docs, answer `unknown_command` (recorded in the
-stability chapter); the bulk `sessions.run_state` stays. Also removed:
-the write side of per-message `visibility` (the column and every read filter
-stay), `core/experiments/` with its feature and `anyhow`, the v0.1
-demo-session sweep at every launch. Bundled engine payload:
-`managed-ga/code` leaves out upstream's demo media and technical-report PDF
-(27.9 MB to 4.8 MB; the list is `scripts/managed-ga-excluded-paths.txt`),
-the app bundles `runner/*.py` without `runner/tests`, and
-`build-managed-ga.sh` reads the baseline commit with `git archive` from a
-source clone that must be named. **Both runner and managed GA changed, so the
-next release needs the bundled-runtime gate, and its CI run is the first real
-check of the new resource mapping** (the gate passed on `mac-x64` in a
-worktree; no `tauri build` was run, and JC chose to skip the `release.yml`
-dry-run). Open-source hygiene: fixture home folders use a neutral
-placeholder, a private repository is named by role, and two real to-dos
-quoted in the assistant manual, tests, fixtures, docs and eval cases are
-fictional now (the manual's examples changed, so the `wake` and `todo` eval
-suites were rerun: 14 of 16 and 56 of 62, the failing cases differing from
-the replaced runs except `w-long`, which failed before too). Devlog entries
-were left as they are, by JC's ruling. The main session verified in dev: the
-removed socket commands, one full round with a tool call, the manual's new
-examples in the binary.
-
-Loose ends closed the same day (tickets 10, 11; `ea7872bc` … `2ed7175f`).
-The main chat memory reset's critical seed list gained `ultraplan_sop.md`
-and a test ties it to the gates' list. **The assistant manual changed**
-(`subtasks.md`, ruling by JC after the `w-long` eval diagnosis): a screenshot
-the assistant cannot read counts as something it could not verify; it does
-not look for a way to read it and does not send the work back to have it
-written out. The `wake` suite was rerun under it: every case with a
-screenshot stopped hunting for OCR (`w-table` 8 tool calls to 3,
-`done-evidence` 5 to 2), `done-no-proof` still sends back, no case let
-through what should go back. `w-long` stays record-only (2 of 3; one run
-pasted the whole text back, three runs cannot tell noise from effect). The
-eval harness itself was corrected for that case (its tool cap, the wake note
-handed over in full as the product does since ticket 147, four flaws in its
-fixture) and no longer drops ticket 147's runs. Narrative: devlog
-[2026-11-10-whole-project-audit](./devlog/2026-11-10-whole-project-audit.md).
+- Repeating to-dos: a reminder actually going off (the period was ticked
+  before any could) and being re-armed for a period left open, and the new
+  wake note, still have automated tests only; a 280px panel, the English
+  time line, the keyboard focus ring on the date trigger.
+- Tickets 160–163 (the panel's rows move): JC ticked one to-do on the
+  packaged build and said nothing against the feel; several ticks in a row
+  and the archive / edit-project dialogs' checkbox were not reported. Not
+  measured: the press itself, reduced motion, a narrow header, a row
+  changing place while its date popover is open.
+- The memo page in the dark theme.
+- From the audit: the rollback when Core refuses a write, the new error
+  copy, ⌘K's row by mouse and its blank-text and in-conversation cases.
+- W1, a Windows install: the NSIS pre-install hook closing the app and the
+  CLI (audit ticket 04, the only audit ticket still open; only Windows can
+  show it), the first packaged build to run migrations 053–057 on an older
+  database, and every Windows item below.
+- The eval's `w-long` case stays record-only, and the `wake` suite has no
+  case for a hand-over that asked for a screenshot whose file is missing.
 
 **Owed from the `v0.7.7` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. The database shows the draft's
@@ -799,7 +680,8 @@ neither of which Galley loads, so not followed; reasoning in the `v0.7.6`
 release devlog), and again in `v0.7.7` with upstream 8 commits past it
 (`68d996a`: those four, the hub frontends' FastAPI lifespan fix and an
 opt-in Claude `show_thinking` key Galley does not set, so not followed;
-reasoning in the `v0.7.7` release devlog).
+reasoning in the `v0.7.7` release devlog), and in `v0.7.8` with upstream
+still at `68d996a`.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -842,13 +724,13 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | CLI / Agent API | `schemaVersion: 3` since v0.7.0 (Goal removed 2026-10-13); `2` (since v0.5.0) and `1` still served for unchanged commands | [agent-api](./agent-api.md) |
 | Agent surface | Settings -> Agent, copy-first SOP, Claude Skill | [Supervisor SOP](./integrations/galley-supervisor-sop.md) |
 | Managed GA runtime | Shipped in v0.2.0; Memory/SOP seed repair shipped in v0.2.6; upstream baseline: see the GA baseline row; GUI / CLI split, Provider / Model config, local encrypted SQLite credentials, and Project Workspace are the current baseline | [managed GA runtime](./managed-ga-runtime/README.md) |
-| Data migration | Migrations run through `056_subtask_background.sql`; v0.2.16 added managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
+| Data migration | Migrations run through `057_todo_series.sql`; v0.2.16 added managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.7.7 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.7.8 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `d66509b` (2026-11-03), shipped in `v0.7.6` … `v0.7.7` (`a9a36b4` shipped `v0.7.1` … `v0.7.5`, `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `d66509b` (2026-11-03), shipped in `v0.7.6` … `v0.7.8` (`a9a36b4` shipped `v0.7.1` … `v0.7.5`, `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -871,7 +753,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.7.7`. For the next release, bump every
+- Current package metadata uses `0.7.8`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.

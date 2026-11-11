@@ -1,6 +1,6 @@
 # 04 构建管道：Windows 安装前钩子、CI 的 sidecar 脚本、format 脚本
 
-Status: needs-dogfood（2026-11-10 合入；推送后 `check.yml` 七个 job 全绿，三个平台的 Core job 都用 `.mjs` 通过；JC 裁定这次不做 `release.yml` 的 dry-run，等下次发版的 CI 与 JC 的 Windows 真机）
+Status: needs-dogfood（2026-11-11 v0.7.8 的发版 CI 一次过：三个平台都用 `.mjs` 备好 sidecar，去掉 Setup Python 之后构建照常；只剩 JC 的 Windows 真机验安装前钩子，W1 这一版没做）
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 A4、C18、C19（JC：「按建议推进」）。
 

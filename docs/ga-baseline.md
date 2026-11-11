@@ -23,7 +23,7 @@ Locked commit: `d66509bf09f6dd356704a257744a1d7ff899f8f9`
 - Tree hash: `009430679a2d3587a4b7ffd51fda89df92fa7bbe`
 - Source: `lsdefine/GenericAgent` upstream `main`
 - Date audited: 2026-11-03
-- Shipped in: `v0.7.6` (2026-11-04; upstream `main` at `38085e0`, 4 commits past `d66509b`, not followed: reflect mode in `agentmain.py` and `frontends/p2p_ws_client.py`, neither of which Galley loads); `v0.7.7` (2026-11-06; upstream `main` at `68d996a`, 8 commits past `d66509b`, not followed: those four, the hub frontends' FastAPI lifespan fix and an opt-in Claude `show_thinking` key Galley does not set)
+- Shipped in: `v0.7.6` (2026-11-04; upstream `main` at `38085e0`, 4 commits past `d66509b`, not followed: reflect mode in `agentmain.py` and `frontends/p2p_ws_client.py`, neither of which Galley loads); `v0.7.7` (2026-11-06; upstream `main` at `68d996a`, 8 commits past `d66509b`, not followed: those four, the hub frontends' FastAPI lifespan fix and an opt-in Claude `show_thinking` key Galley does not set); `v0.7.8` (2026-11-11; upstream `main` still at `68d996a`)
 - Note: "current baseline" = latest **audited** commit. What a released
   build actually **ships** can lag one release behind — see
   [project status](./project-status.md) for the shipped baseline.

@@ -1,6 +1,6 @@
 # 07 内置内核载荷：不带演示媒体与测试，从指定提交取源
 
-Status: needs-dogfood（2026-11-10 合入；打包映射与包体积要等下次发版的 CI 与安装包核对）
+Status: done（2026-11-11 v0.7.8 的发版 CI 一次过；草稿的 Intel DMG 只读核对：`Resources/runner/` 下 17 个 `.py`、没有 `tests/`，`managed-ga/code` 5.0 MB、没有演示媒体与技术报告 PDF；三个安装包比 v0.7.7 各小 22–23 MB）
 
 来源：2026-11-10 全仓审计，[PRD](../PRD.md) 裁决 D22、D23（JC：「按建议推进」）。
 
