@@ -440,6 +440,16 @@ yet (all four tickets are `needs-dogfood`); not measured: the press itself,
 reduced motion, a narrow header, a row changing place while its date
 popover is open, Windows.
 
+Also merged, GUI only: the 备忘 page tidied, 2026-11-11 (main chat PRD ruling
+209, [devlog](./devlog/2026-11-11-memo-page-tidy.md); `7ac4a440`). User-visible:
+a memo's ending full stop is not drawn — on the page's rows, the memo cards
+under a reply and the delete's undo toast; the record, `galley memo` and what
+the main chat reads keep it — and with every memo in one time period the page
+draws no group label (two periods or more are labelled as before). No Core,
+CLI or manual change; the external runtime has no memos. Gates: vitest (276
+files, 3,178 tests), typecheck, lint. Seen by JC in the dev window the same
+day. Not looked at on its own: the dark theme, Windows.
+
 The audit's 28 open findings were ruled on the same day (`.scratch/audit-1110/PRD.md`)
 and a first wave merged (tickets 01, 02, 04, 05, 08; `2898a7d4` … `f864da9a`).
 CLI, all inside schema 3 and recorded as behavior fixes in the Agent API's
