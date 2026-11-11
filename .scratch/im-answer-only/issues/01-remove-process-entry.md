@@ -1,6 +1,6 @@
 # 01 四个渠道撤掉过程入口
 
-Status: needs-dogfood
+Status: needs-dogfood（2026-11-11 合入；主会话重跑门禁、从新克隆的上游重放补丁栈无差异；等 JC 在真渠道上验第 6 节右列）
 
 来源：[PRD](../PRD.md) 裁决 1–4、6。先读 `docs/agents/dispatch.md`（执行代理的常设约束）与 `docs/managed-ga-runtime/code-state-and-patches.md`（「How To Modify An Existing Patch」）。
 
@@ -104,7 +104,7 @@ git diff --check
 
 ## Comments
 
-### 2026-11-11 执行代理（实现提交 6564623a）
+### 2026-11-11 执行代理（实现提交，合入 `main` 后是 `bb360a2b`）
 
 **改了什么**
 
