@@ -62,6 +62,7 @@ import platform
 import re
 import shutil
 import sqlite3
+import statistics
 import struct
 import subprocess
 import sys
@@ -122,16 +123,33 @@ CHANNEL_DIR_NAME = "channel-telegram"  # the channel's state directory, inside t
 # Prompt
 # ----------------------------------------------------------------------
 
-def galley_prompt() -> str:
+VARIANT_ORDER = ("without", "with_line")
+
+
+def entry_layer(spec: dict[str, Any] | None) -> str:
+    """The Telegram entry layer of one variant (cases.json `variants`):
+    as Rust wrote it (None), or with the variant's paragraph inserted as a
+    paragraph of its own right after the line `after` names."""
+    entry = (PROMPT_DIR / "im_entry.telegram.txt").read_text(encoding="utf-8").strip()
+    if entry.count("__SOP_PATH__") != 1 or not entry.startswith("## Galley IM Entry Layer"):
+        fail("galley-prompt/im_entry.telegram.txt: unexpected shape")
+    if spec is None:
+        return entry
+    anchor = spec["after"] + "\n\n"
+    if entry.count(anchor) != 1:
+        fail(f"entry layer: the line a variant follows must occur once, then a blank line ({spec['after'][:50]!r})")
+    return entry.replace(anchor, anchor + spec["text"].strip() + "\n\n", 1)
+
+
+def galley_prompt(spec: dict[str, Any] | None = None) -> str:
     """What runner.managed_runtime.managed_prompt_profile composes for the
     Telegram channel: GALLEY_RUNTIME_PROMPT_TEXT (compose_im_runtime_prompt)
     and GALLEY_IM_SUPERVISOR_PROMPT_TEXT (im_supervisor_prompt), each
     stripped, joined by a blank line. Both files were written by the real
-    Rust code (README.md). The SOP path becomes the run's state root."""
+    Rust code (README.md); a variant changes only the entry layer
+    (entry_layer). The SOP path becomes the run's state root."""
     runtime = (PROMPT_DIR / "im_runtime.txt").read_text(encoding="utf-8").strip()
-    entry = (PROMPT_DIR / "im_entry.telegram.txt").read_text(encoding="utf-8").strip()
-    if entry.count("__SOP_PATH__") != 1 or not entry.startswith("## Galley IM Entry Layer"):
-        fail("galley-prompt/im_entry.telegram.txt: unexpected shape")
+    entry = entry_layer(spec)
     return runtime + "\n\n" + entry.replace("__SOP_PATH__", "__MANUAL_DIR__/galley-supervisor-sop.md")
 
 
@@ -205,29 +223,45 @@ def write_downloads(downloads: Path, spec: list[dict[str, Any]], now: datetime) 
 # Runs
 # ----------------------------------------------------------------------
 
+def run_id(variant: str, cond: str, ask: str, n: int) -> str:
+    """`live-how-1` for the first variant (the 16 runs of the first round
+    keep their ids), `with_line-live-how-1` for the others."""
+    return f"{cond}-{ask}-{n}" if variant == "without" else f"{variant}-{cond}-{ask}-{n}"
+
+
 def make_runs(data: dict[str, Any], asks: list[str], conditions: list[str], repeats: int, first: int,
-              now: datetime, mykeys: dict[str, Any], ga_lang: str, allowed: set[str]) -> list[dict[str, Any]]:
+              now: datetime, mykeys: dict[str, Any], ga_lang: str, allowed: set[str],
+              variants: list[str] = ("without",)) -> list[dict[str, Any]]:
     by_ask = {a["id"]: a for a in data["asks"]}
     runs = []
-    for cond in conditions:
-        for ask in asks:
-            for n in range(first, first + repeats):
-                runs.append({
-                    "id": f"{cond}-{ask}-{n}",
-                    "condition": cond,
-                    "ask": ask,
-                    "scored": bool(by_ask[ask]["scored"]),
-                    "repeat": n,
-                    "now": now.isoformat(timespec="seconds"),
-                    "task_message": data["task"]["message"],
-                    "ask_message": by_ask[ask]["message"],
-                    "downloads": data["downloads"],
-                    "galley_prompt": galley_prompt(),
-                    "mykeys": mykeys,
-                    "ga_lang": ga_lang,
-                    "allowed_hosts": sorted(allowed),
-                })
+    for variant in variants:
+        for cond in conditions:
+            for ask in asks:
+                for n in range(first, first + repeats):
+                    runs.append(make_run(data, by_ask, variant, cond, ask, n, now, mykeys, ga_lang, allowed))
     return runs
+
+
+def make_run(data: dict[str, Any], by_ask: dict[str, Any], variant: str, cond: str, ask: str, n: int,
+             now: datetime, mykeys: dict[str, Any], ga_lang: str, allowed: set[str]) -> dict[str, Any]:
+    if variant not in data["variants"]:
+        fail(f"unknown variant {variant!r} (cases.json `variants`: {', '.join(data['variants'])})")
+    return {
+        "id": run_id(variant, cond, ask, n),
+        "variant": variant,
+        "condition": cond,
+        "ask": ask,
+        "scored": bool(by_ask[ask]["scored"]),
+        "repeat": n,
+        "now": now.isoformat(timespec="seconds"),
+        "task_message": data["task"]["message"],
+        "ask_message": by_ask[ask]["message"],
+        "downloads": data["downloads"],
+        "galley_prompt": galley_prompt(data["variants"][variant]),
+        "mykeys": mykeys,
+        "ga_lang": ga_lang,
+        "allowed_hosts": sorted(allowed),
+    }
 
 
 def work_calls(turn: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -332,7 +366,8 @@ def run_one(run: dict[str, Any], python: str, workdir: Path, attempt: int,
             break
     turns = [m for o in outs for m in o.get("messages") or []]
     r: dict[str, Any] = {
-        "id": run["id"], "condition": run["condition"], "ask": run["ask"], "scored": run["scored"],
+        "id": run["id"], "variant": run["variant"], "condition": run["condition"], "ask": run["ask"],
+        "scored": run["scored"],
         "repeat": run["repeat"], "attempt": attempt, "now": run["now"],
         "task": turns[0] if turns else None,
         "ask_turn": turns[1] if len(turns) > 1 else None,
@@ -682,10 +717,10 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
         "connect_timeout": 10, "timeout": 10}}
     now = datetime.now().astimezone()
     runs = {r["id"]: r for r in make_runs(data, ["how", "steps", "show", "elapsed"], list(CONDITIONS), 1, 1, now,
-                                          mykeys, ga_lang, set())}
-    picked = [runs["live-how-1"], runs["resumed-steps-1"], runs["live-show-1"], runs["resumed-how-1"]]
+                                          mykeys, ga_lang, set(), list(VARIANT_ORDER))}
+    picked = [runs["live-how-1"], runs["with_line-resumed-steps-1"], runs["live-show-1"], runs["resumed-how-1"]]
     dry = {("live-how-1", 1): {"scripts": {0: "iad-live"}},
-           ("resumed-steps-1", 1): {"scripts": {0: "iad-task", 1: "iad-answer"}},
+           ("with_line-resumed-steps-1", 1): {"scripts": {0: "iad-task", 1: "iad-answer"}},
            ("live-show-1", 1): {"scripts": {0: "iad-short"}},
            ("live-show-1", 2): {"scripts": {0: "iad-live-redo"}},
            ("resumed-how-1", 1): {"scripts": {0: "iad-task", 1: "iad-answer"}, "break_mapping": True}}
@@ -700,7 +735,10 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
             problems.append(what)
 
     runtime = (PROMPT_DIR / "im_runtime.txt").read_text(encoding="utf-8").strip()
-    for rid in ("live-how-1", "resumed-steps-1", "live-show-1"):
+    spec = data["variants"]["with_line"]
+    para = spec["text"].strip()
+    systems: dict[str, str] = {}
+    for rid in ("live-how-1", "with_line-resumed-steps-1", "live-show-1"):
         r = by[rid]
         print(rid)
         check(r["status"] == "ok", f"run ok ({r['status']} {r['status_note'][:300]})")
@@ -714,6 +752,15 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
         check(not r["canaries"], f"no canary outside the sandbox ({r['canaries']})")
         req0 = r["task"]["requests"][0]
         system = system_text(req0)
+        systems[rid] = system
+        if r["variant"] == "with_line":
+            check(system.count(para) == 1 and spec["after"] + "\n\n" + para + "\n\nHand a task" in system
+                  and system_text(r["ask_turn"]["requests"][0]).count(para) == 1,
+                  "with_line: the paragraph once, right after the phone-screen list, blank line before and after; "
+                  "the ask's request too")
+        else:
+            check("never your steps" not in system and "do not run it again" not in system,
+                  "without: no trace of the with_line paragraph")
         check(runtime in system and "## Galley IM Entry Layer" in system and "through Telegram" in system
               and "## Main Chat" not in system and "## Next-Step Suggestion" not in system,
               "the system prompt carries the IM runtime prompt and the Telegram entry layer, nothing of the main chat")
@@ -771,6 +818,13 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                   f"backend history restored: every step, its calls and results ({h})")
             check(any(x.startswith("[USER]:") for x in ch1.get("working_memory") or []),
                   f"working memory restored ({(ch1.get('working_memory') or [])[:2]})")
+    def same_shape(s: str) -> str:  # the run's own directories out
+        return re.sub(r"im-answer-02-[^/\s]+/[^/\s]+\.a\d+", "RUN", s)
+
+    if "live-how-1" in systems and "with_line-resumed-steps-1" in systems:
+        check(same_shape(systems["with_line-resumed-steps-1"]).replace(para + "\n\n", "", 1)
+              == same_shape(systems["live-how-1"]),
+              "with_line's system prompt is without's plus the paragraph, nothing else")
     r = by["resumed-how-1"]
     print("resumed-how-1 (log mapping broken before the second process)")
     ch1 = (r["phases"][1]["channel"] if len(r["phases"]) > 1 else None) or {}
@@ -788,6 +842,9 @@ def dry_test(python: str, ga_lang: str, keep_temp: bool) -> int:
                                               "model_source": "dry", "ga_lang": ga_lang}, [])
     text = scrub(render_md(data_out, data))
     check("# 「问一句」评测" in text and "live-how-1" in text and "（未判）" in text, "results.md renders")
+    check("## `without` / `with_line` 对照" in text and "| how | live | without |" in text
+          and "| steps | resumed | with_line |" in text and "do not run it again." in text,
+          "the comparison and the variant's paragraph render")
     leaks = [s for s in (tempfile.gettempdir(), os.path.realpath(tempfile.gettempdir()), str(REPO), str(Path.home()))
              if s in scrub(json.dumps(data_out, ensure_ascii=False))]
     check(not leaks, f"scrub leaves no temp dir, repo or home path ({leaks})")
@@ -856,7 +913,11 @@ def assemble(results: list[dict[str, Any]], superseded: list[dict[str, Any]], me
              notes: list[str]) -> dict[str, Any]:
     order = {(c, a): i for i, (c, a) in enumerate((c, a) for c in CONDITIONS
                                                    for a in ("how", "steps", "show", "elapsed"))}
-    results = sorted(results, key=lambda r: (order.get((r["condition"], r["ask"]), 99), r["repeat"]))
+    for r in results:
+        r.setdefault("variant", "without")  # the first round's runs were recorded before variants existed
+    vorder = {v: i for i, v in enumerate(VARIANT_ORDER)}
+    results = sorted(results, key=lambda r: (vorder.get(r["variant"], 99), order.get((r["condition"], r["ask"]), 99),
+                                             r["repeat"]))
     return {"meta": dict(meta, notes=notes, superseded=[slim_superseded(x) for x in superseded]), "results": results}
 
 
@@ -974,78 +1035,189 @@ def resume_how(r: dict[str, Any]) -> str:
             f"{len(ch.get('working_memory') or [])} 行；之后的轮次续写在同一份日志（`{p1.get('log')}`）。")
 
 
+def variant_of(r: dict[str, Any]) -> str:
+    return r.get("variant") or "without"
+
+
+def conclusion_for(scored: list[dict[str, Any]]) -> str:
+    passed = [r for r in scored if verdict(r)["passed"]]
+    judged = [r for r in scored if verdict(r)["passed"] is not None]
+    failed = [r for r in judged if not verdict(r)["passed"]]
+    if len(judged) < len(scored) or len(scored) != 12:
+        return f"计分运行 {len(scored)} 次，已判 {len(judged)} 次，其中过 {len(passed)} 次；没判完，不下结论。"
+    if not failed:
+        return "**过合格线**：12 次计分运行 1–3 项全过。"
+
+    def how_failed(r: dict[str, Any]) -> str:
+        v = verdict(r)
+        bits = ([f"问后调了 {facts(r)['ask_calls']} 次工具"] if not v["no_redo"] else []) \
+            + (["说的步骤对不上"] if not v["accurate"] else []) + (["推脱"] if not v["no_deflect"] else [])
+        return f"`{r['id']}`（{'，'.join(bits)}）"
+
+    items = {k: sum(1 for r in scored if not verdict(r)[k]) for k in ("no_redo", "accurate", "no_deflect")}
+    return (f"**没过合格线**：12 次计分运行过 {len(passed)} 次；不过的是 " + "、".join(how_failed(r) for r in failed)
+            + f"。按项数：1 没重做不过 {items['no_redo']} 次，2 说得对不过 {items['accurate']} 次，"
+            f"3 没推脱不过 {items['no_deflect']} 次（逐条见下）。")
+
+
+def chars_of(rs: list[dict[str, Any]]) -> list[int]:
+    return [facts(r)["form"]["chars"] for r in rs]
+
+
+def compare_section(results: list[dict[str, Any]], cases: dict[str, Any], variants: list[str]) -> list[str]:
+    """The per-ask, per-condition comparison of the variants, their scored
+    totals, and what got better or worse (counted; the verdicts are in the
+    runs below)."""
+    lines = ["| 问法 | 条件 | 变体 | 1–3 全过 | 问后工具调用（每次） | 回复字数（每次） | 有表格 / 有标题 / 代码块 |",
+             "|---|---|---|---|---|---|---|"]
+    for a in cases["asks"]:
+        for cond in CONDITIONS:
+            for v in variants:
+                rs = [r for r in results if variant_of(r) == v and r["ask"] == a["id"] and r["condition"] == cond]
+                if not rs:
+                    continue
+                vs = [verdict(r)["passed"] for r in rs]
+                ok = (f"{sum(1 for x in vs if x)}/{len(rs)}" + ("（未判完）" if None in vs else "")) if a["scored"] \
+                    else "只记录"
+                forms = [facts(r)["form"] for r in rs]
+                lines.append(f"| {a['id']} | {cond} | {v} | {ok} | {'、'.join(str(facts(r)['ask_calls']) for r in rs)} | "
+                             f"{'、'.join(str(x) for x in chars_of(rs))} | {sum(1 for x in forms if x['table'])} / "
+                             f"{sum(1 for x in forms if x['heading'])} / {sum(x['code_blocks'] for x in forms)} |")
+    lines += ["", "计分的 12 次（`how`、`steps`、`show`）合起来：", "",
+              "| 变体 | 1–3 全过 | 1 没重做 | 2 说得对 | 3 没推脱 | 问后工具调用合计 | 字数中位数 | 字数范围 | 有表格 | 有标题 | 代码块 |",
+              "|---|---|---|---|---|---|---|---|---|---|---|"]
+    stats: dict[str, dict[str, Any]] = {}
+    for v in variants:
+        rs = [r for r in results if variant_of(r) == v and r["scored"]]
+        if not rs:
+            continue
+        vs = [verdict(r) for r in rs]
+        ch = chars_of(rs)
+        forms = [facts(r)["form"] for r in rs]
+        st = stats[v] = {"n": len(rs), "passed": sum(1 for x in vs if x["passed"]),
+                         "judged": all(x["passed"] is not None for x in vs),
+                         "redo": sum(1 for x in vs if x["no_redo"]), "acc": sum(1 for x in vs if x["accurate"]),
+                         "defl": sum(1 for x in vs if x["no_deflect"]),
+                         "calls": sum(facts(r)["ask_calls"] for r in rs), "median": statistics.median(ch),
+                         "min": min(ch), "max": max(ch), "tables": sum(1 for x in forms if x["table"]),
+                         "headings": sum(1 for x in forms if x["heading"]),
+                         "blocks": sum(x["code_blocks"] for x in forms)}
+        med = st["median"]
+        lines.append(f"| {v} | {st['passed']}/{st['n']} | {st['redo']}/{st['n']} | {st['acc']}/{st['n']} | "
+                     f"{st['defl']}/{st['n']} | {st['calls']} | {med:g} | {st['min']}–{st['max']} | {st['tables']} | "
+                     f"{st['headings']} | {st['blocks']} |")
+    lines.append("")
+    if "without" in stats and "with_line" in stats and stats["with_line"]["judged"] and stats["without"]["judged"]:
+        a, b = stats["without"], stats["with_line"]
+        lines.append(f"- `with_line` {'**过**' if b['passed'] == b['n'] == 12 else '**没过**'}合格线（12 次里 1–3 项全过 "
+                     f"{b['passed']} 次；`without` 是 {a['passed']} 次）。")
+        worse = []
+        if b["median"] > a["median"] or b["max"] > a["max"]:
+            worse.append(f"计分回复的字数中位数 {a['median']:g} → {b['median']:g}，最长 {a['max']} → {b['max']}")
+        hs = [r["id"] for r in results if variant_of(r) == "with_line" and r["ask"] in ("how", "steps")
+              and facts(r)["ask_calls"]]
+        if hs:
+            worse.append("`how` / `steps` 问后调了工具：" + "、".join(f"`{x}`" for x in hs))
+        for key, label in (("acc", "2 说得对"), ("defl", "3 没推脱")):
+            if b[key] < a[key]:
+                worse.append(f"{label}过的次数 {a[key]} → {b[key]}")
+        for key, label in (("tables", "有表格的回复"), ("headings", "有标题的回复"), ("blocks", "代码块")):
+            if b[key] > a[key]:
+                worse.append(f"{label} {a[key]} → {b[key]}")
+        lines.append("- 比 `without` 差的地方（脚本数的）：" + ("；".join(worse) + "。" if worse else "没有。")
+                     + f"字数中位数 {a['median']:g} → {b['median']:g}，范围 {a['min']}–{a['max']} → {b['min']}–{b['max']}；"
+                     f"问后工具调用 {a['calls']} → {b['calls']} 次。")
+        el = []
+        for v in variants:
+            rs = [r for r in results if variant_of(r) == v and r["ask"] == "elapsed"]
+            el.append(f"`{v}`：" + "；".join(
+                f"`{r['id']}` {ELAPSED_LABELS.get((r.get('judgment') or {}).get('elapsed'), '（未判）')}"
+                f"（问后 {facts(r)['ask_calls']} 次调用）" for r in rs))
+        lines.append("- `elapsed`（只记录，看它还查不查该查的）：" + "。".join(el) + "。")
+        looked = {v: sum(1 for r in results if variant_of(r) == v and r["ask"] == "elapsed" and facts(r)["ask_calls"])
+                  for v in variants}
+        made_up = sum(1 for r in results if r["ask"] == "elapsed"
+                      and (r.get("judgment") or {}).get("elapsed") == "made_up")
+        n_el = {v: sum(1 for r in results if variant_of(r) == v and r["ask"] == "elapsed") for v in variants}
+        lines.append("- 问用时时自己去查（翻内核日志的时间戳）的次数：" + "，".join(
+            f"`{v}` {looked[v]}/{n_el[v]}" for v in variants) + "；编数 " + str(made_up) + " 次。"
+            + ("各只有 4 次，分不出少查是这句话的作用，还是本来就只是偶尔查。" if looked.get("with_line", 0) < looked.get("without", 0)
+               else ""))
+        lines.append("")
+    return lines
+
+
 def render_md(data: dict[str, Any], cases: dict[str, Any]) -> str:
     meta = data["meta"]
     results = data["results"]
     asks = {a["id"]: a for a in cases["asks"]}
-    scored = [r for r in results if r["scored"]]
-    passed = [r for r in scored if verdict(r)["passed"]]
-    judged = [r for r in scored if verdict(r)["passed"] is not None]
-    failed = [r for r in judged if not verdict(r)["passed"]]
+    variants = [v for v in VARIANT_ORDER if any(variant_of(r) == v for r in results)]
     tasks = [r.get("task") or {} for r in results]
     sparse_told = sum(1 for t in tasks if re.search(r"稀疏|实际分配|实际占", display(t.get("final_reply"))))
     du_tried = sum(1 for t in tasks if any(re.search(r"\bdu\b", json.dumps(c.get("args") or {}, ensure_ascii=False))
                                            for c in tool_calls(t)))
     mem_reads = sum(1 for t in tasks if any("global_mem" in json.dumps(c.get("args") or {}, ensure_ascii=False)
                                             for c in tool_calls(t)))
-    if len(judged) < len(scored) or len(scored) != 12:
-        conclusion = f"计分运行 {len(scored)} 次，已判 {len(judged)} 次，其中过 {len(passed)} 次；没判完，不下结论。"
-    elif not failed:
-        conclusion = "**过**：12 次计分运行 1–3 项全过。"
-    else:
-        def how_failed(r: dict[str, Any]) -> str:
-            v = verdict(r)
-            bits = ([f"问后重跑了 {facts(r)['ask_calls']} 次工具"] if not v["no_redo"] else []) \
-                + (["说的步骤对不上"] if not v["accurate"] else []) + (["推脱"] if not v["no_deflect"] else [])
-            return f"`{r['id']}`（{'，'.join(bits)}）"
-        items = {k: sum(1 for r in scored if not verdict(r)[k]) for k in ("no_redo", "accurate", "no_deflect")}
-        conclusion = (f"**不过**：12 次计分运行过 {len(passed)} 次；不过的是 " + "、".join(how_failed(r) for r in failed)
-                      + f"。按项数：1 没重做不过 {items['no_redo']} 次，2 说得对不过 {items['accurate']} 次，"
-                      f"3 没推脱不过 {items['no_deflect']} 次（逐条见下）。")
+    ran = meta.get("variant_runs") or {"without": {"ran_at": meta["ran_at"]}}
     lines = [
         "# 「问一句」评测（IM 撤掉过程入口，票 02）",
         "",
-        f"跑于 {meta['ran_at']}"
+        "跑于：" + "；".join(f"`{v}` {ran.get(v, {}).get('ran_at', '?')}" for v in variants)
         + (f"（补跑：{'；'.join(x['at'] + ' ' + str(len(x['runs'])) + ' 次' for x in meta['partial_reruns'])}）"
            if meta.get("partial_reruns") else "")
         + f"。模型 {meta['model']['name']}（{meta['model_source']}；推理强度 "
         + f"{meta['model']['options'].get('reasoning_effort')}），平台 Telegram，GA_LANG={meta.get('ga_lang')}；"
         + f"{len(results)} 次运行，每次先做一个任务、再问一句。",
         "",
-        "## 结论",
-        "",
-        conclusion,
+    ]
+    if len(variants) > 1:
+        lines += ["## " + " / ".join(f"`{v}`" for v in variants) + " 对照", ""]
+        lines += compare_section(results, cases, variants)
+    lines += ["## 结论", ""]
+    for v in variants:
+        lines.append(f"- `{v}`：" + conclusion_for([r for r in results if variant_of(r) == v and r["scored"]]))
+    lines += [
         "",
         "合格线：三种计分问法（`how`、`steps`、`show`）× 两个条件 × 2 次 = 12 次，1 没有重做、2 说得对、3 没有推脱全过。"
         "`elapsed` 与第 4 项只记录。",
         "",
+    ]
+    specs = cases.get("variants") or {}
+    if any(specs.get(v) for v in variants):
+        lines += ["## 变体", "", "- `without`：入口层照今天 Rust 写出的样子（`galley-prompt/im_entry.telegram.txt`）。"]
+        for v in variants:
+            if specs.get(v):
+                lines += [f"- `{v}`：同一份提示词，入口层「{specs[v]['after']}」这一行之后另起一段（前后各空一行）插入：", "",
+                          "```text", specs[v]["text"].strip(), "```", ""]
+        lines += ["变体的话只在 `cases.json`，产品提示词没动。", ""]
+    lines += [
         "## 一览",
         "",
-        "| 运行 | 条件 | 问法 | 任务步数 | 问后调用 | 1 没重做 | 2 说得对 | 3 没推脱 | 合格 | 4 像 IM（只记录） |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| 运行 | 变体 | 条件 | 问法 | 任务步数 | 问后调用 | 1 没重做 | 2 说得对 | 3 没推脱 | 合格 | 4 像 IM（只记录） |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         f, v = facts(r), verdict(r)
         lines.append(
-            f"| `{r['id']}` | {r['condition']} | {r['ask']} | {f['task_calls']} | {f['ask_calls']} | "
+            f"| `{r['id']}` | {variant_of(r)} | {r['condition']} | {r['ask']} | {f['task_calls']} | {f['ask_calls']} | "
             f"{yes(v['no_redo'])} | {yes(v['accurate'])} | {yes(v['no_deflect'])} | "
             + (yes(v["passed"]) if r["scored"] else "只记录")
             + f" | {f['form']['chars']} 字" + ("，表格" if f["form"]["table"] else "") + ("，标题" if f["form"]["heading"] else "")
             + (f"，代码块 {f['form']['code_blocks']}" if f["form"]["code_blocks"] else "") + " |")
-    lines += ["", "## `elapsed` 四次（只记录）", ""]
+    lines += ["", "## `elapsed`（只记录）", ""]
     for r in results:
         if r["ask"] != "elapsed":
             continue
         j = r.get("judgment") or {}
         label = ELAPSED_LABELS.get(j.get("elapsed"), "（未判）")
-        lines.append(f"- `{r['id']}`：{label}。{j.get('elapsed_note', '')}".rstrip())
+        lines.append(f"- `{r['id']}`（{variant_of(r)}）：{label}。{j.get('elapsed_note', '')}".rstrip())
     lines += [
         "",
         "## 怎么跑的",
         "",
         "- 提示词：Galley 那段是今天的 Rust 代码写出的 IM 组合（`galley-prompt/`：`compose_im_runtime_prompt` 与 "
         "`im_supervisor_prompt`，平台 Telegram），按 runner 的 `managed_prompt_profile` 拼接；GA 核心提示词与记忆由引擎自己拼。"
-        "没有改任何一句。",
+        "产品提示词没有改任何一句；变体只在评测进程里给入口层加一段（见「变体」）。两个变体的模型、任务、夹具、判法都一样。",
         "- 每次运行是一个 Telegram 聊天：第一条消息是任务（不计分），第二条是问法之一；两条都照 tgapp 的写法发"
         "（`FILE_HINT` 一行加空行加用户的话），经 `put_task` 交给 agent。",
         "- 任务的工具调用真的执行，只在这次运行自己的沙盒里：假 HOME，`~/Downloads` 里的文件名与内容都是虚构的"
@@ -1093,7 +1265,7 @@ def render_md(data: dict[str, Any], cases: dict[str, Any]) -> str:
         f, v = facts(r), verdict(r)
         j = r.get("judgment") or {}
         a = asks[r["ask"]]
-        lines += [f"### `{r['id']}`：{COND_TITLES[r['condition']]}，问「{a['message']}」，第 {r['repeat']} 遍"
+        lines += [f"### `{r['id']}`：{variant_of(r)}，{COND_TITLES[r['condition']]}，问「{a['message']}」，第 {r['repeat']} 遍"
                   + (f"（第 {r['attempt']} 次跑）" if r["attempt"] > 1 else ""), ""]
         if r["status"] not in ("ok",):
             lines += [f"**运行没成**：{r['status']}（{r['status_note']}）", ""]
@@ -1193,6 +1365,7 @@ def main() -> int:
     ap.add_argument("--judge", help="merge the reader's verdicts (JSON by run id) into results.json")
     ap.add_argument("--asks", default="all", help="comma list of ask ids, or all")
     ap.add_argument("--conditions", default="all", help="comma list of live,resumed, or all")
+    ap.add_argument("--variant", default="all", help="comma list of without,with_line, or all")
     ap.add_argument("--repeats", type=int, default=None)
     ap.add_argument("--first-repeat", type=int, default=1, help="number the runs from here")
     ap.add_argument("--galley-db", default=str(base.DEFAULT_GALLEY_DB))
@@ -1222,8 +1395,11 @@ def main() -> int:
     ask_ids = [a["id"] for a in cases["asks"]]
     asks = ask_ids if args.asks == "all" else [x.strip() for x in args.asks.split(",")]
     conditions = list(CONDITIONS) if args.conditions == "all" else [x.strip() for x in args.conditions.split(",")]
+    variants = list(VARIANT_ORDER) if args.variant == "all" else [x.strip() for x in args.variant.split(",")]
     if not asks or any(a not in ask_ids for a in asks) or not conditions or any(c not in CONDITIONS for c in conditions):
         fail(f"--asks: {', '.join(ask_ids)} or all; --conditions: {', '.join(CONDITIONS)} or all")
+    if not variants or any(v not in VARIANT_ORDER or v not in cases["variants"] for v in variants):
+        fail(f"--variant: {', '.join(VARIANT_ORDER)} or all")
     repeats = args.repeats if args.repeats is not None else int(cases["repeats"])
 
     model = base.model_from_galley_db(Path(args.galley_db).expanduser(), args.model_id)
@@ -1241,7 +1417,7 @@ def main() -> int:
             if proxy:
                 allowed.add(proxy)
     now = datetime.now().astimezone()
-    runs = make_runs(cases, asks, conditions, repeats, args.first_repeat, now, mykeys, args.ga_lang, allowed)
+    runs = make_runs(cases, asks, conditions, repeats, args.first_repeat, now, mykeys, args.ga_lang, allowed, variants)
     print(f"{len(runs)} runs, model {base.describe_mykeys(mykeys)['name']}, parallel {args.parallel}")
     results, superseded = run_all(runs, args.python, args.parallel, args.keep_temp)
 
@@ -1256,13 +1432,18 @@ def main() -> int:
         previous = json.loads(RESULTS_JSON.read_text(encoding="utf-8"))
     pm = previous.get("meta") or {}
     fresh = {r["id"] for r in results}
+    before = {r["id"] for r in previous["results"]}
     merged = [r for r in previous["results"] if r["id"] not in fresh] + results
     reruns = list(pm.get("partial_reruns") or [])
-    if pm:
-        reruns.append({"at": now.strftime("%Y-%m-%d %H:%M"), "runs": sorted(fresh)})
+    if fresh & before:  # runs made again; a new variant's first runs are not reruns
+        reruns.append({"at": now.strftime("%Y-%m-%d %H:%M"), "runs": sorted(fresh & before)})
+    variant_runs = dict(pm.get("variant_runs") or ({"without": {"ran_at": pm["ran_at"]}} if pm.get("ran_at") else {}))
+    for v in variants:
+        variant_runs.setdefault(v, {"ran_at": now.strftime("%Y-%m-%d %H:%M")})
     meta = {
         "ran_at": pm.get("ran_at", now.strftime("%Y-%m-%d %H:%M")),
         "partial_reruns": reruns,
+        "variant_runs": variant_runs,
         "suite": "ask-it eval (im-answer-only ticket 02): today's IM prompt, Telegram, a task then an ask, "
                  "live or resumed through the channel's resume",
         "model": base.describe_mykeys(mykeys),

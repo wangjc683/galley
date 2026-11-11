@@ -12,6 +12,14 @@
   ],
   "conditions": ["live", "resumed"],
   "repeats": 2,
+  "_variants_note": "Variants of the IM entry layer (galley-prompt/im_entry.telegram.txt). `without`: the entry layer as Rust writes it today. Every other variant inserts its `text` as a paragraph of its own (blank line before and after) right after the line `after` names, which must occur exactly once. The variant text lives here only; no product prompt is changed.",
+  "variants": {
+    "without": null,
+    "with_line": {
+      "after": "- Keep paragraphs and lists short, and code blocks to a few lines.",
+      "text": "The user sees only your final reply, never your steps. Asked how you did\nsomething, or to see the process (过程), recount it in a few lines from what\nyou already did; do not run it again."
+    }
+  },
   "downloads": [
     {"name": "nimbus-os-3.2-desktop-amd64.iso", "kind": "iso", "size": 6174015488, "days_ago": 41,
      "volume": "NIMBUS_OS_3_2_AMD64"},
