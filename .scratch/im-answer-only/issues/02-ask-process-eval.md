@@ -1,6 +1,6 @@
 # 02 「问一句」的真模型评测
 
-Status: needs-dogfood（2026-11-11 跑完：12 次计分过 9 次，合格线没过，不过的 3 次都是 `show` 问后重跑；待主会话验收、回去找 JC 定裁决 5）
+Status: needs-dogfood（2026-11-11：今天的入口层 12 次计分过 9 次、没过，不过的 3 次都是 `show` 问后重跑；入口层加一段的变体 `with_line` 12 次全过；待主会话验收、回去找 JC 定裁决 5）
 
 来源：[PRD](../PRD.md) 裁决 5。先读 `docs/agents/dispatch.md`（执行代理的常设约束）。
 
@@ -81,7 +81,7 @@ git status --short                            # 只有本票目录与 .gitignore
 
 ### 2026-11-11 执行（分支 `ticket/im-answer-02`）
 
-提交：`1d9015b0`（评测脚本、用例、今天的 IM 提示词、`results.md`、`.gitignore` 一行）。没 push、没合入。没改任何提示词。
+提交：`fd0ee1d5`（rebase 到 `main` 之前是 `1d9015b0`；评测脚本、用例、今天的 IM 提示词、`results.md`、`.gitignore` 一行）。没 push、没合入。没改任何提示词。
 
 **结论：合格线没过。** 12 次计分运行过 9 次。`how`（刚才那个你是怎么查的？）与 `steps`（你刚才都做了哪几步？）两个条件 8 次全过；不过的 3 次都是 `show`（过程给我看看）：`live-show-1`、`live-show-2`、`resumed-show-2` 问后各调了一次 `code_run`，把排序、`file`、看表结构整套重跑了一遍再答，`resumed-show-1` 没重跑、凭接回的历史讲对了。第 2 项（说得对）与第 3 项（没推脱）12 次全过：没有一次编出没做过的步骤，没有一次说看不到过程、让去点按钮或去电脑上看；连任务里 `du` 被拒、改用分配块数这种细节，几次复述都照实说了。不过的原话：
 
@@ -108,3 +108,25 @@ git status --short                            # 只有本票目录与 .gitignore
 **与票面的出入**：票面「要改的文件」只列了四个，另按票面第 2 节的要求把今天 Rust 生成的 IM 提示词放进了本票目录的 `galley-prompt/`（入口层与 IM 打磨评测那份一字不差，运行时提示词在待办一段的措辞与版本号上不同，旧目录没动）。生成时在 `core/src/managed_prompt.rs` 临时加了一个测试，跑完已还原，`core/` 没有留下改动。
 
 **判定方式**：第 1 项（问后工具调用数）脚本数，0 为过；第 2、3 项是读了每次回复与任务实际的调用逐条判的，判词各一句，存在 `results.json` 里，`--render-only` 重出 `results.md` 一字不差（验过）。GA 每次任务开头都先看工作目录、读记忆，复述里没提这一步不算漏了关键一步。`live-elapsed-1` 的两次调用记成第 1 项不过，但它不是重做任务。
+
+### 2026-11-11 第二轮：变体 `with_line`（主会话追加，只量不改）
+
+提交：`35383b09`（变体、对照、16 次新运行）。分支先 rebase 到了 `main`。第一轮的 16 次记为变体 `without`，没有重跑。
+
+**变体**：同一份提示词，只在评测进程里给入口层加一段，插在 `Your replies are read on a phone screen:` 那组条目的最后一条（`Keep paragraphs and lists short…`）之后，前后各空一行：
+
+```text
+The user sees only your final reply, never your steps. Asked how you did
+something, or to see the process (过程), recount it in a few lines from what
+you already did; do not run it again.
+```
+
+原文与插入位置只在 `cases.json` 的 `variants`；`galley-prompt/` 与 `core/src/managed_prompt.rs` 这次都没动。`--dry-test` 核对过：`with_line` 的系统提示词就是 `without` 的加这一段，别的一字不差，位置对，问话那次请求里也有。
+
+**结论：`with_line` 过合格线，12 次计分运行 1–3 项全过（`without` 是 9 次）。** 16 次没有一次在问后调工具，三次 `show`（「过程给我看看」）全部改成直接复述，没有重跑。12 次复述都对得上任务的调用，包括细节：`with_line-live-steps-1` 说了「中间统计脚本有一次括号错误，修正后重新运行成功」（任务里第 4 次调用 SyntaxError、第 5 次重跑），`with_line-resumed-show-2` 照实说看了「表结构和少量样例」（任务里每张表取了 2 行），几次都说了 `du` 被拒、改用文件属性。没有一次说看不到、让去点按钮或去电脑上看。
+
+**比 `without` 差的地方：没找到。** 计分的 12 次回复变短了：字数中位数 379 → 281，范围 288–766 → 234–471；`show` 从 517–766 字降到 413–471 字。表格、标题仍为 0，代码块 5 → 0。`how`、`steps` 没有一次开始重跑。
+
+**`elapsed`（只记录）**：`with_line` 四次都照实说不知道、没调工具，例如「刚才没有记录起止时间，所以没法准确告诉你用了多少秒，不想随便估一个数。」`without` 下四次里有一次（`live-elapsed-1`）自己翻了内核日志的时间戳，答对了 51 秒。所以加这句之后，问用时时去查的次数从 1/4 变成 0/4。各只有 4 次，分不出是这句话让它不查了，还是本来就只是偶尔查；两边都没有编数。这是唯一可能变差的迹象，需要的话得另加用例量。
+
+**搭法与判法照旧**：两个条件、渠道真实的接回路径（8 次 `resumed` 全部经 `continue_inplace(..., restore_wm=True)` 接回成功）、同一个任务与夹具、同一种判法（第 2 项每次一句判词，开头看工作目录、读记忆那一步不算关键步）。16 个任务都做足了 3 步，没有重跑。`results.md` 开头是两个变体的对照表，新运行的逐条记录排在旧的后面。
