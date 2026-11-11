@@ -380,7 +380,7 @@ def one_step(world: World, body: str, seconds: float = 1.0) -> None:
 # ── answers ────────────────────────────────────────────────────────────
 
 
-def test_a_run_posts_one_message_its_closing_step_with_a_last_line(world: World) -> None:
+def test_a_run_posts_one_message_its_closing_step_alone(world: World) -> None:
     t1 = turn_text(
         1,
         "<summary>读取会话列表</summary>我先查一下会话列表",
@@ -396,11 +396,11 @@ def test_a_run_posts_one_message_its_closing_step_with_a_last_line(world: World)
             done([t1, t2, t3], 6.0),
         ]
     )
-    world.clock.now += 30  # queued time does not count
     world.say("看看")
     world.settle()
 
-    assert world.texts() == ["一共有 3 个会话在跑。\n\n3 步 · 用时 10 秒"]
+    # Nothing under the answer: no `N 步 · 用时 X` line, however many steps.
+    assert world.texts() == ["一共有 3 个会话在跑。"]
     assert world.agent.tasks[0][:2] == (HINT + "看看", "wechat")
 
 
@@ -424,12 +424,10 @@ def test_a_step_longer_than_five_minutes_still_answers(world: World) -> None:
     assert world.texts() == []
     world.task().put(*done([t1, t2], 360.0))
     world.settle()
-    assert world.texts() == ["测试全部通过。\n\n2 步 · 用时 6 分 2 秒"]
+    assert world.texts() == ["测试全部通过。"]
 
 
-def test_long_answer_splits_under_the_limit_keeping_its_start_and_last_line(
-    world: World,
-) -> None:
+def test_long_answer_splits_under_the_limit_keeping_its_start_and_end(world: World) -> None:
     paragraphs = [f"第{i:02d}段" + "内容" * 147 for i in range(30)]
     body = "\n\n".join(paragraphs)
     assert len(body) == 8998
@@ -443,8 +441,8 @@ def test_long_answer_splits_under_the_limit_keeping_its_start_and_last_line(
     assert len(parts) == 3
     assert all(len(part) <= im_wechat.TEXT_LIMIT for part in parts)
     assert parts[0].startswith("第00段")
-    assert parts[-1].endswith("第29段" + "内容" * 147 + "\n\n2 步 · 用时 2 秒")
-    assert "\n\n".join(parts) == body + "\n\n2 步 · 用时 2 秒"
+    assert parts[-1].endswith("第29段" + "内容" * 147)
+    assert "\n\n".join(parts) == body
     # Each part is a new message: iLink drops a reused client_id.
     ids = [msg["client_id"] for msg in world.ilink.messages()]
     assert len(set(ids)) == len(ids) == 3
@@ -640,14 +638,40 @@ def test_a_question_is_one_message_and_a_number_picks_a_candidate(world: World) 
         "我需要你确认一下。\n\n用哪个方案？\n1. 方案 A\n2. 方案 B\n\n⏸ 回复序号或文字 · 已完成 2 步"
     ]
 
-    world.clock.now += 60  # waiting for the reply does not count
     t3 = turn_text(1, "<summary>改好了</summary>", "file_patch({})")
     t4 = turn_text(2, "按方案 B 改完了。")
     world.agent.scripts.append([nxt([t3]), nxt([t3, t4], 2.0), done([t3, t4], 1.0)])
     world.say("２")  # fullwidth
     world.settle()
     assert world.prompts()[-1] == HINT + "方案 B"
-    assert world.texts()[-1] == "按方案 B 改完了。\n\n4 步 · 用时 13 秒"
+    assert world.texts()[-1] == "按方案 B 改完了。"
+
+
+def test_a_stop_after_the_reply_counts_steps_and_time_across_the_question(
+    world: World,
+) -> None:
+    """The answer no longer shows the count; the stop receipt still adds up
+    across ask_user, and the wait for the reply does not count."""
+    world.agent.scripts.append(
+        [
+            nxt([ASK_T1]),
+            nxt([ASK_T1, ASK_T2], 4.0),
+            done([ASK_T1, ASK_T2], 6.0, _ask=ask_ctx("用哪个方案？", ["方案 A", "方案 B"])),
+        ]
+    )
+    world.say("改一下")
+    world.settle()
+    world.clock.now += 60  # waiting for the reply does not count
+    world.say("2")
+    t3 = turn_text(1, "<summary>改</summary>", "file_patch({})")
+    world.task().put(*nxt([t3]))
+    world.running()
+    world.clock.now += 3
+    world.say("/stop")
+    assert world.texts()[-1] == "⏹ 已停止 · 3 步 · 用时 13 秒"
+    world.task().put(*done([t3 + "做了一半"]))  # the aborted task's `done`: dropped
+    world.settle()
+    assert world.texts()[-1] == "⏹ 已停止 · 3 步 · 用时 13 秒"
 
 
 def test_questions_without_candidates_or_multi_select_take_the_reply_as_typed(
@@ -678,7 +702,7 @@ def test_questions_without_candidates_or_multi_select_take_the_reply_as_typed(
     world.say("1 3")
     world.settle()
     assert world.prompts()[-1] == HINT + "1 3"
-    assert world.texts()[-1] == "清好了。\n\n2 步 · 用时 2 秒"  # 1 + 1 steps
+    assert world.texts()[-1] == "清好了。"
 
 
 def test_an_out_of_range_number_or_a_picture_does_not_pick(world: World) -> None:
@@ -691,12 +715,14 @@ def test_an_out_of_range_number_or_a_picture_does_not_pick(world: World) -> None
     world.send({"type": 2, "image_item": {"media": {"encrypt_query_param": "q"}}})
     world.settle()
     assert world.prompts()[-1] == HINT + "[用户发送文件: /tmp/p.jpg]"
-    assert world.texts()[-1] == "收到图。"  # no carried steps: the question still waits
+    assert world.texts()[-1] == "收到图。"
+    assert "u1" in world.conv._pending  # the question still waits
     one_step(world, "好。")
     world.say("3")
     world.settle()
     assert world.prompts()[-1] == HINT + "3"
-    assert world.texts()[-1] == "好。\n\n2 步 · 用时 2 秒"
+    assert world.texts()[-1] == "好。"
+    assert "u1" not in world.conv._pending  # answered, as typed
 
 
 def test_a_message_queued_before_the_question_answers_it(world: World) -> None:
@@ -711,8 +737,9 @@ def test_a_message_queued_before_the_question_answers_it(world: World) -> None:
     second.put(*nxt([t3]))
     second.put(*done([t3], 2.0))
     world.settle()
-    assert world.texts()[-1] == "改完了。\n\n3 步 · 用时 12 秒"
+    assert world.texts()[-1] == "改完了。"
     assert world.prompts()[-1] == HINT + "用 B 吧"
+    assert "u1" not in world.conv._pending  # the queued message took the question
 
 
 def test_a_reporter_turn_question_is_never_claimed(world: World) -> None:

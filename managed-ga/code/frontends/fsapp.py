@@ -92,7 +92,6 @@ from galley_im_display import (
     final_step_text,
     fold_label,
     one_line,
-    step_summary,
     stopped_text,
     tables_to_lists,
     visible_text,
@@ -971,29 +970,26 @@ def _make_task_hook(card, task_id, on_final):
 # works, the user's message carries a `Typing` reaction: no push, no change
 # in the chat list, no trace once it is removed (2026-10-20 device probe).
 # The run then posts exactly one new message, a card: its answer (the
-# closing step), with a folded 「过程」 panel from two steps on, or its
-# ask_user question; a stopped run posts the stop receipt instead. The
-# reaction comes off once that message is out. A message sent while a run
-# works queues behind it (one agent, FIFO); only the head run reads its
-# display queue. A run's message replies to its trigger (Feishu's 回复消息,
-# which shows the message it answers) only when something else landed in
-# the chat after the trigger: Telegram's quote rule (.scratch/im-polish/
-# issues/04). The status card above (_TaskCard / _make_task_hook, patches
-# 0009 and 0013) is no longer on the run path.
+# closing step and nothing else; no 「过程」 panel since 2026-11-11,
+# .scratch/im-answer-only/PRD.md), or its ask_user question; a stopped run
+# posts the stop receipt instead. The reaction comes off once that message
+# is out. A message sent while a run works queues behind it (one agent,
+# FIFO); only the head run reads its display queue. A run's message replies
+# to its trigger (Feishu's 回复消息, which shows the message it answers)
+# only when something else landed in the chat after the trigger:
+# Telegram's quote rule (.scratch/im-polish/issues/04). The status card
+# above (_TaskCard / _make_task_hook, patches 0009 and 0013) is no longer
+# on the run path.
 
 _TYPING_EMOJI = "Typing"
 _POLL_SECONDS = 0.5
 _ANSWER_PART_LIMIT = 4000
-# Message create caps a card's request body at 30 KB.
-_CARD_BYTES_LIMIT = 28 * 1024
-_PROCESS_STEP_LINES = 30
 _PREVIEW_LIMIT = 100
 _ASK_USER_HOOK_KEY = "galley_feishu_ask_user"
 _ASK_EVENT_LIMIT = 8
 _ASK_QUESTION_LIMIT = 3000
 _NO_RUNNING_TASK_TEXT = "当前没有在跑的任务"
 _EMPTY_ANSWER_WITH_FILES = "已生成附件"
-_PANEL_ICON = {"tag": "standard_icon", "token": "down-small-ccm_outlined", "color": "grey", "size": "16px 16px"}
 _TURN_MARKER_LINE_RE = re.compile(r"^\*{0,2}LLM Running \(Turn \d+\) \.\.\.\*{0,2}[ \t]*$", re.M)
 _FILE_MARKER_RE = re.compile(r"\[FILE:([^\]]+)\]")
 _FENCE_LINE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
@@ -1120,18 +1116,6 @@ def _preview(text):
     return ""
 
 
-def _process_lines(summaries, steps, seconds, width=0):
-    """What the 「过程」 panel shows: `N 步 · 用时 X`, then one `NN 摘要`
-    line per step (the last 30), each clipped to `width` when given.
-    Platform-neutral: a candidate for galley_im_display."""
-    lines = [f"{n:02d} {summaries.get(n, '')}".rstrip() for n in range(1, steps + 1)]
-    if width:
-        lines = [clip(line, width) for line in lines]
-    if len(lines) > _PROCESS_STEP_LINES:
-        lines = [f"… 前 {len(lines) - _PROCESS_STEP_LINES} 步略"] + lines[-_PROCESS_STEP_LINES:]
-    return [fold_label(steps, seconds), *lines]
-
-
 # ── cards ──
 
 
@@ -1148,30 +1132,11 @@ def _text_line(text, size="normal"):
     return {"tag": "div", "text": {"tag": "plain_text", "content": text, "text_size": size, "text_color": "grey"}}
 
 
-def _process_panel(lines):
-    """The answer's 「过程」 entry: a collapsible panel, folded by default.
-    The client opens and closes it: no callback, nothing kept in memory,
-    and it still opens after a restart."""
-    return {
-        "tag": "collapsible_panel",
-        "expanded": False,
-        "vertical_spacing": "4px",
-        "header": {
-            "title": {"tag": "plain_text", "content": "过程"},
-            "vertical_align": "center",
-            "icon": dict(_PANEL_ICON),
-            "icon_position": "follow_text",
-            "icon_expanded_angle": -180,
-        },
-        "elements": [_text_line(line) for line in lines],
-    }
-
-
-def _answer_card(body, notice="", process=None):
+def _answer_card(body, notice=""):
+    """An answer card: the context-lost notice as a small first line when
+    there is one, then the answer, and nothing else."""
     elements = [_text_line(notice, "notation")] if notice else []
     elements.append({"tag": "markdown", "content": body})
-    if process:
-        elements.append(_process_panel(process))
     return _card_json(elements, _preview(body))
 
 
@@ -1378,9 +1343,8 @@ class _FsRun:
         self.echo = None  # (question, chosen) to mark answered once it is the head
         self.state = "queued"
         self.dq = self.error = None
-        self.base_steps, self.base_elapsed, self.summaries = 0, 0.0, {}
+        self.base_steps, self.base_elapsed = 0, 0.0
         self.task_turn = 0  # highest GA turn seen in this run's task
-        self.turn_texts = {}
         self.started_at = self.ended_at = None
         self.headed = False
         self.lock = threading.Lock()  # the Typing reaction
@@ -1390,7 +1354,6 @@ class _FsRun:
     def adopt(self, carry):
         self.base_steps = int(carry.get("steps") or 0)
         self.base_elapsed = float(carry.get("elapsed") or 0.0)
-        self.summaries = dict(carry.get("summaries") or {})
 
     def total_steps(self):
         return self.base_steps + self.task_turn
@@ -1402,31 +1365,21 @@ class _FsRun:
         return self.base_elapsed + max(0.0, now - self.started_at)
 
     def carry(self, now):
-        return {"steps": self.total_steps(), "elapsed": self.elapsed(now), "summaries": dict(self.summaries)}
+        return {"steps": self.total_steps(), "elapsed": self.elapsed(now)}
 
     def observe(self, item, now):
-        """Fold one display-queue item in (tgapp's _TgRun.observe): step k
-        settles when an item for a later turn arrives, `done` settles the
-        last one. Returns `done`'s per-step texts."""
+        """Fold one display-queue item in: the step count is the highest GA
+        turn seen, `done` counting its per-step texts too (tgapp's
+        _TgRun.observe, without the step summaries: Feishu shows neither a
+        status line nor a process). Returns the item's per-step texts."""
         if self.started_at is None:
             self.state, self.started_at = "running", now
         outputs = item.get("outputs")
         outputs = [str(text or "") for text in outputs] if isinstance(outputs, list) else []
         turn = item.get("turn") if isinstance(item.get("turn"), int) else 0
         if "done" in item:
-            self.turn_texts.update(enumerate(outputs, 1))
-            turn = max(turn, len(outputs), self.task_turn)
-        elif turn > 0 and outputs:
-            self.turn_texts[turn] = outputs[-1]
-            if len(outputs) > 1 and turn > 1:
-                self.turn_texts[turn - 1] = outputs[-2]
-        if turn > self.task_turn:
-            for k in range(max(1, self.task_turn), turn):
-                self.summaries[self.base_steps + k] = step_summary(self.turn_texts.get(k, ""))
-            self.task_turn = turn
-        if "done" in item:
-            for k in range(1, self.task_turn + 1):
-                self.summaries[self.base_steps + k] = step_summary(self.turn_texts.get(k, ""))
+            turn = max(turn, len(outputs))
+        self.task_turn = max(self.task_turn, turn)
         return outputs
 
 
@@ -1648,7 +1601,7 @@ def _advance(run):
         if "done" not in item:
             return
         run.ended_at = now
-        steps, seconds = run.total_steps(), run.elapsed(now)
+        steps = run.total_steps()
         event = _take_ask_event(run.dq)
         pending = None
         if event is None:
@@ -1661,7 +1614,7 @@ def _advance(run):
     try:
         step_text = final_step_text(raw, outputs)
         if pending is None:
-            _post_answer(run, raw, step_text, steps, seconds)
+            _post_answer(run, raw, step_text, steps)
         else:
             _post_ask(run, pending, step_text)
         _send_generated_files(run.rid, raw, run.rtype)
@@ -1676,27 +1629,19 @@ def _has_files(raw):
     return any(os.path.isfile(path.strip()) for path in _extract_files(raw))
 
 
-def _post_answer(run, raw, step_text, steps, seconds):
-    """The run's message: the closing step, with the 「过程」 panel on the
-    last part from two steps on; its first part replies to the trigger
-    when the quote rule says so. Cards that Feishu refuses go as text."""
+def _post_answer(run, raw, step_text, steps):
+    """The run's message: the closing step and nothing else; its first part
+    replies to the trigger when the quote rule says so. Cards that Feishu
+    refuses go as text."""
     body = _answer_from(step_text, raw) or (_EMPTY_ANSWER_WITH_FILES if _has_files(raw) else "")
     parts = split_text(_rewrite_markdown(body), _ANSWER_PART_LIMIT)
     notice = _take_lead_notice()
     quote = _should_quote(run)
     for i, part in enumerate(parts):
         head = notice if i == 0 else ""
-        process = None
-        card = _answer_card(part, head)
-        if i == len(parts) - 1 and steps >= 2:
-            for width in (0, 60, 24):  # long step lines give way before the answer does
-                process = _process_lines(run.summaries, steps, seconds, width)
-                card = _answer_card(part, head, process)
-                if len(card.encode("utf-8")) <= _CARD_BYTES_LIMIT:
-                    break
-        if _out(run, card, "interactive", quote and i == 0) is not None:
+        if _out(run, _answer_card(part, head), "interactive", quote and i == 0) is not None:
             continue
-        plain = "\n\n".join(text for text in (head, part, "\n".join(process or ())) if text)
+        plain = "\n\n".join(text for text in (head, part) if text)
         if _out(run, _text_payload(plain), "text", quote and i == 0) is not None:
             continue
         if head:

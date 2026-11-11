@@ -803,9 +803,9 @@ def test_telegram_answer_leads_with_the_notice_once(tg: TgWorld) -> None:
     env.run(body)
 
 
-def test_telegram_process_expands_under_the_notice_line(tg: TgWorld) -> None:
+def test_telegram_multi_step_answer_is_the_notice_and_the_answer_alone(tg: TgWorld) -> None:
     """The notice goes on top of the answer's text through the
-    _reply_markdown wrapper; the 过程 button's edits keep it there."""
+    _reply_markdown wrapper; nothing goes under it, however many steps."""
     env = tg.env
 
     async def body() -> None:
@@ -816,11 +816,7 @@ def test_telegram_process_expands_under_the_notice_line(tg: TgWorld) -> None:
         await env.settle()
         answer = env.bot.others()[-1]
         assert answer.text == f"_{NOTICE}_\n好的。"
-        show = await env.tap(answer, tgt.SHOW)
-        block = tgt.quote("2 步 · 用时 2 秒", "01 查", "02 答")
-        assert show.text_edits[0][0] == f"_{NOTICE}_\n好的。\n\n{block}"
-        hide = await env.tap(answer, tgt.HIDE)
-        assert hide.text_edits[0][0] == f"_{NOTICE}_\n好的。"
+        assert tgt.buttons(answer) == [] and "reply_markup" not in answer.kwargs
 
     env.run(body)
 

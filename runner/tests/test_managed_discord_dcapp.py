@@ -483,9 +483,7 @@ def reply_to(message: FakeMessage) -> dict[str, Any]:
     return {"reference": ("ref", message.id, False), "mention_author": False}
 
 
-PROCESS_ID = "galley-dc:proc"
-PROCESS_BUTTON = [("过程", PROCESS_ID)]
-GONE = "过程已不在了（渠道重启过）"
+PROCESS_ID = "galley-dc:proc"  # the 过程 button answers carried until 2026-11-11
 
 
 def buttons(message: FakeMessage) -> list[tuple[str | None, str | None]]:
@@ -494,14 +492,11 @@ def buttons(message: FakeMessage) -> list[tuple[str | None, str | None]]:
 
 
 async def tap(env: Env, message: FakeMessage | None, user: str = OWNER) -> FakeInteraction:
-    """A click on an answer's 过程 button."""
+    """A click on the 过程 button an answer sent before 2026-11-11 still
+    carries."""
     click = FakeInteraction(user, PROCESS_ID, message)
     await env.app._handle_interaction(click)
     return click
-
-
-def ephemeral(content: str) -> list[tuple[str, dict[str, Any]]]:
-    return [("send_message", {"content": content, "ephemeral": True})]
 
 
 ASK_T1 = turn_text(1, "<summary>查看现状</summary>", 'code_run({"script": "ls"})')
@@ -586,14 +581,8 @@ def test_multi_step_status_edits_and_answer_is_last_step_only(env: Env) -> None:
         assert status.view is None
         assert status.deleted
         assert answer.content == "一共有 3 个会话在跑。"
-        assert buttons(answer) == PROCESS_BUTTON
-        assert answer.view.timeout is None and answer.view.stopped  # render-only, never stored
+        assert "view" not in answer.kwargs  # nothing under the answer: no 过程 button
         assert "我先查一下" not in answer.content
-        click = await tap(env, answer)
-        assert click.response.calls == ephemeral(
-            "3 步 · 用时 10 秒\n01 读取会话列表\n02 整理结果\n03 回答"
-        )
-        assert answer.edits == []  # the channel's message stays as it is
 
     env.run(body)
 
@@ -852,7 +841,7 @@ def test_old_stop_button_is_stale_while_a_run_goes(env: Env) -> None:
         await task
         assert env.channel.sent[0].deleted
         assert env.channel.sent[-1].content == "完成"
-        assert buttons(env.channel.sent[-1]) == PROCESS_BUTTON
+        assert buttons(env.channel.sent[-1]) == []
         assert CHAT not in env.app.user_tasks
 
     env.run(body)
@@ -974,12 +963,7 @@ def test_ask_row_click_continues_run_with_carried_counts(env: Env) -> None:
         assert status2.content == "02 确认方向\n·· 思考中"
         assert status2.kwargs == reply_to(question)
         assert status2.deleted
-        assert answer.content == "好的，就用方案 B。" and buttons(answer) == PROCESS_BUTTON
-        # Steps and time add up across the pause; the wait (110 -> 200) is not counted.
-        process = await tap(env, answer)
-        assert process.response.calls == ephemeral(
-            "3 步 · 用时 15 秒\n01 查看现状\n02 确认方向\n03 执行"
-        )
+        assert answer.content == "好的，就用方案 B。" and buttons(answer) == []
 
         again = FakeInteraction(OWNER, custom_id, question)  # an answered question
         await env.app._handle_interaction(again)
@@ -1021,11 +1005,7 @@ def test_ask_typed_answer_echoes_without_tick(env: Env) -> None:
         status2, answer = env.channel.sent[-2:]
         assert status2.kwargs == reply_to(trigger)
         assert status2.content == "02 确认方向\n·· 思考中"
-        assert answer.content == "好的，用 A。"
-        process = await tap(env, answer)
-        assert process.response.calls == ephemeral(
-            "3 步 · 用时 12 秒\n01 查看现状\n02 确认方向\n03 好的，用 A。"
-        )
+        assert answer.content == "好的，用 A。" and buttons(answer) == []
         assert CHAT not in env.app._pending_asks
 
     env.run(body)
@@ -1540,7 +1520,7 @@ def test_reporter_busy_tracks_queued_and_running_runs(env: Env, monkeypatch: Any
     env.run(body)
 
 
-# ── IM polish 01: the 过程 button ───────────────────────────────────────
+# ── IM answer only: nothing under the answer ──────────────────────────
 
 
 async def two_step_answer(env: Env, body: str = "好了") -> FakeMessage:
@@ -1551,99 +1531,32 @@ async def two_step_answer(env: Env, body: str = "好了") -> FakeMessage:
     return env.channel.sent[-1]
 
 
-def test_process_click_after_a_restart_says_it_is_gone(env: Env) -> None:
+def test_multi_step_answer_carries_no_view(env: Env) -> None:
     async def body() -> None:
         answer = await two_step_answer(env)
-        assert buttons(answer) == PROCESS_BUTTON
-        env.app._processes.clear()  # what a restarted dcapp starts with
-        click = await tap(env, answer)
-        assert click.response.calls == ephemeral(GONE)
-        assert answer.edits == []  # the answer keeps its button, as on Telegram
-        old = FakeMessage(env.channel, "上个进程的回答", view=object())
-        assert (await tap(env, old)).response.calls == ephemeral(GONE)
-
-    env.run(body)
-
-
-def test_process_click_by_a_non_owner_is_silent(env: Env) -> None:
-    async def body() -> None:
-        answer = await two_step_answer(env)
-        click = await tap(env, answer, user="7")
-        assert click.response.calls == [("defer", {})]
-        assert answer.edits == []
-
-    env.run(body)
-
-
-def test_process_cache_is_bounded(env: Env, monkeypatch: Any) -> None:
-    async def body() -> None:
-        monkeypatch.setattr(env.dcapp, "_PROCESS_CACHE_LIMIT", 1)
-        first = await two_step_answer(env)
-        second = await two_step_answer(env)
-        assert list(env.app._processes) == [second.id]
-        assert (await tap(env, first)).response.calls == ephemeral(GONE)
-        process = ephemeral("2 步 · 用时 2 秒\n01 查\n02 好了")
-        assert (await tap(env, second)).response.calls == process
-
-    env.run(body)
-
-
-def test_split_answer_puts_the_button_on_its_last_part(env: Env) -> None:
-    async def body() -> None:
+        assert answer.content == "好了" and answer.kwargs == {}
         long_body = "\n".join(f"第 {i} 行：" + "内容" * 30 for i in range(60))
         await two_step_answer(env, long_body)
-        status, *parts = env.channel.sent
-        assert status.deleted and len(parts) >= 3
-        assert [buttons(m) for m in parts] == [[]] * (len(parts) - 1) + [PROCESS_BUTTON]
-        assert parts[0].kwargs.get("view") is None
-        click = await tap(env, parts[-1])
-        content = click.response.calls[0][1]["content"]
-        assert content.startswith("2 步 · 用时 2 秒\n01 查\n02 第 0 行：")
+        parts = [m for m in env.channel.sent if not m.deleted][1:]
+        assert len(parts) >= 3
+        assert all("view" not in m.kwargs for m in parts)
+        assert "\n".join(m.content for m in parts).startswith("第 0 行：")
 
     env.run(body)
 
 
-def test_long_process_fits_one_message(env: Env) -> None:
+def test_old_process_button_is_acknowledged_and_stripped(env: Env) -> None:
+    """A 过程 button an earlier version left: answered like the old 停止
+    button, a silent acknowledgement (no ephemeral reply), the button comes
+    off, the text stays, nothing runs. A non-owner's click touches nothing."""
+
     async def body() -> None:
-        texts = [
-            turn_text(k, f"<summary>{'摘' * 118}{k:02d}</summary>", "code_run({})")
-            for k in range(1, 35)
-        ]
-        texts.append(turn_text(35, "完成"))
-        env.agent.scripts.append([nxt(texts[:1]), done(texts, 70.0)])
-        await env.app.run_agent(CHAT, "长", reply_to=env.trigger())
-        answer = env.channel.sent[-1]
-        assert answer.content == "完成"
-        content = (await tap(env, answer)).response.calls[0][1]["content"]
-        lines = content.split("\n")
-        assert lines[0] == "35 步 · 用时 1 分 10 秒"
-        assert lines[1] == "… 前 5 步略"
-        # 31 lines of ~123 characters are over a message: clipped to 60.
-        assert lines[2] == "06 " + "摘" * 56 + "…" and len(lines[2]) == 60
-        assert lines[-1] == "35 完成" and len(lines) == 32
-        assert len(content) <= env.app.split_limit
+        old = FakeMessage(env.channel, "上个版本的回答", view=object())
+        stranger = await tap(env, old, user="7")
+        assert stranger.response.calls == [("defer", {})] and old.edits == []
+        click = await tap(env, old)
+        assert click.response.calls == [("defer", {})]
+        assert old.edits == [{"view": None}] and old.content == "上个版本的回答"
+        assert env.agent.tasks == []
 
     env.run(body)
-
-
-def test_process_helpers_match_the_shared_ones(env: Env, monkeypatch: Any) -> None:
-    """dcapp keeps `_`-prefixed copies of galley_im_display's process
-    helpers (patch order, see that file's docstring): same semantics."""
-    shared = _exec_module(
-        monkeypatch, "galley_im_display", _CODE_ROOT / "frontends" / "galley_im_display.py"
-    )
-    summaries = {k: ("长" * 70 if k % 3 else f"第 {k} 步") for k in range(1, 40)}
-    for steps in (2, 9, 31, 39):
-        for width in (0, 60, 24):
-            assert env.dcapp._process_lines(summaries, steps, width) == shared.process_lines(
-                summaries, steps, width
-            )
-        size = lambda label, lines: len("\n".join([label, *lines]))  # noqa: E731
-        for budget in (100, 1900, 5000):
-            assert env.dcapp._fit_process(summaries, steps, 75, size, budget) == shared.fit_process(
-                summaries, steps, 75, size, budget
-            )
-    dc = env.dcapp
-    assert (dc._PROCESS_MIN_STEPS, dc.PROCESS_BUTTON_TEXT, dc.PROCESS_GONE_TEXT) == (
-        shared.PROCESS_MIN_STEPS, shared.PROCESS_BUTTON_TEXT, shared.PROCESS_GONE_TEXT,
-    )

@@ -568,16 +568,13 @@ def markdowns(card: Any) -> list[str]:
 
 
 def lines(card: Any) -> list[str]:
-    """The card's grey plain-text lines outside the process panel."""
+    """The card's grey plain-text lines."""
     return [e["text"]["content"] for e in elements(card) if e["tag"] == "div"]
 
 
 def panel(card: Any) -> Any:
+    """A 「过程」 panel, which answer cards carried until 2026-11-11."""
     return next((e for e in elements(card) if e["tag"] == "collapsible_panel"), None)
-
-
-def panel_lines(card: Any) -> list[str]:
-    return [e["text"]["content"] for e in panel(card)["elements"]]
 
 
 def preview(card: Any) -> str:
@@ -666,14 +663,14 @@ def test_one_step_answer_is_one_card_with_typing_around_it(fs: Env) -> None:
     assert fs.net.kinds() == [("react+", trigger), ("card", CHAT), ("react-", trigger)]
     (card,) = fs.net.cards()
     assert markdowns(card) == ["你好！有什么要我做的？"]
-    assert panel(card) is None and lines(card) == []  # one step: nothing hangs off it
+    assert panel(card) is None and lines(card) == []  # nothing hangs off it
     assert preview(card) == "你好！有什么要我做的？"
     assert card["schema"] == "2.0"
     assert fs.agent.queries() == [f"{FILE_HINT}\n\n你好"]
     assert fs.agent.tasks[0][1] == "feishu"
 
 
-def test_multi_step_answer_is_the_closing_step_with_a_folded_process_panel(fs: Env) -> None:
+def test_multi_step_answer_is_the_closing_step_and_nothing_else(fs: Env) -> None:
     trigger = fs.say("磁盘还剩多少")
     dq = fs.task(0)
     texts = [
@@ -690,13 +687,10 @@ def test_multi_step_answer_is_the_closing_step_with_a_folded_process_panel(fs: E
     (card,) = fs.net.cards()
     assert markdowns(card) == ["**还剩 120 GB**，够用。"]  # no tool echo, no earlier narration
     assert preview(card) == "还剩 120 GB，够用。"
-    folded = panel(card)
-    assert folded["expanded"] is False
-    assert folded["header"]["title"] == {"tag": "plain_text", "content": "过程"}
-    assert elements(card)[-1] is folded or elements(card)[-1] == folded  # last, under the answer
-    assert panel_lines(card) == [
-        "3 步 · 用时 9 秒", "01 查看磁盘用量", "02 读取挂载点", "03 整理结果",
-    ]
+    # Nothing under the answer: no 「过程」 panel, no step count or time.
+    assert elements(card) == [{"tag": "markdown", "content": "**还剩 120 GB**，够用。"}]
+    shown = json.dumps(card, ensure_ascii=False)
+    assert "collapsible_panel" not in shown and "过程" not in shown and "用时" not in shown
 
 
 def test_message_while_running_queues_and_gets_typing_on_its_turn(fs: Env) -> None:
@@ -815,13 +809,13 @@ def test_question_is_numbered_answered_by_number_and_marked_answered(fs: Env) ->
         turn_text(2, "<summary>完成</summary>已导出 Word。"),
     ]
     dq.put(nxt(finishing[:1]), advance=1)
+    # ask_user does not cut the run: steps add up across the reply.
+    wait_until(lambda: bool(fs.fsapp._RUNS) and fs.fsapp._RUNS[0].total_steps() == 2)
     dq.put(done(finishing), advance=2)
     fs.idle()
     answer = fs.net.cards()[-1]
     assert markdowns(answer) == ["已导出 Word。"]
-    # ask_user does not cut the run: steps add up across the reply.
-    assert panel_lines(answer)[1:] == ["01 问格式", "02 生成文件", "03 完成"]
-    assert panel_lines(answer)[0].startswith("3 步")
+    assert panel(answer) is None and lines(answer) == []
     assert ("react+", reply) in fs.net.kinds()
 
 
@@ -874,7 +868,7 @@ def test_group_message_gets_typing_and_answer_in_the_group(fs: Env) -> None:
     assert fs.net.kinds() == [("react+", trigger), ("card", "oc_group"), ("react-", trigger)]
 
 
-def test_long_answer_splits_and_the_panel_goes_on_the_last_part(fs: Env) -> None:
+def test_long_answer_splits_into_cards_of_the_answer_alone(fs: Env) -> None:
     fs.say("写长文")
     body = "\n".join(f"第 {i} 段：" + "字" * 90 for i in range(100))
     texts = [turn_text(1, "<summary>查资料</summary>先查。", "web_scan(x)"), turn_text(2, body)]
@@ -882,20 +876,18 @@ def test_long_answer_splits_and_the_panel_goes_on_the_last_part(fs: Env) -> None
     fs.idle()
     cards = fs.net.cards()
     assert len(cards) == 3
-    assert [panel(card) is not None for card in cards] == [False, False, True]
+    assert all(len(elements(card)) == 1 and panel(card) is None for card in cards)
     assert all(len(json.dumps(card, ensure_ascii=False).encode()) <= 30 * 1024 for card in cards)
     assert "".join(markdowns(card)[0] for card in cards).replace("\n", "") == body.replace("\n", "")
 
 
-def test_card_refused_goes_out_as_text_with_the_process(fs: Env) -> None:
+def test_card_refused_goes_out_as_text_of_the_answer_alone(fs: Env) -> None:
     fs.net.refuse_cards = 1
     fs.say("hi")
     texts = [turn_text(1, "<summary>查</summary>", "code_run(x)"), turn_text(2, "结果。")]
     fs.task(0).put(done(texts))
     fs.idle()
-    (text,) = fs.net.texts()
-    assert text.splitlines()[0] == "结果。"
-    assert text.splitlines()[-3:] == ["2 步", "01 查", "02 结果。"]
+    assert fs.net.texts() == ["结果。"]
 
 
 def test_markdown_rewrite_tables_and_images(fs: Env) -> None:

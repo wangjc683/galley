@@ -15,9 +15,9 @@ What the chat sees (``.scratch/wechat-ux/PRD.md``): iLink can neither edit
 nor delete a message, a second message reusing a ``client_id`` is dropped,
 and its native tool-progress items do not show (2026-10-10 device probe).
 So a run shows only 「对方正在输入」 and then posts exactly one message: its
-answer (the closing step, plus a ``N 步 · 用时 X`` last line from two steps
-on), its ask_user question, or, on ``/stop``, the stop receipt. Markdown
-goes out as written: WeChat renders all of it.
+answer (the closing step and nothing else, ``.scratch/im-answer-only/PRD.md``),
+its ask_user question, or, on ``/stop``, the stop receipt. Markdown goes out
+as written: WeChat renders all of it.
 
 Threads: ``run_loop`` calls ``on_message`` on its polling thread, which
 parses, answers commands and registers runs; the one wait it has is a media
@@ -32,9 +32,9 @@ Coupling points (``docs/ga-baseline.md``): ``wechatapp.agent``,
 transcription; the agent's ``put_task`` / ``abort`` / ``is_running`` /
 ``_current_queue`` / ``_turn_end_hooks`` / ``list_llms`` / ``next_llm``;
 ``galley_im_display``'s ``answer_body`` / ``visible_text`` /
-``final_step_text`` / ``extract_ask_user_event`` / ``fold_label`` /
-``stopped_text`` / ``one_line``; ``continue_cmd``'s ``reset_conversation``
-and ``handle_frontend_command``.
+``final_step_text`` / ``extract_ask_user_event`` / ``stopped_text`` /
+``one_line``; ``continue_cmd``'s ``reset_conversation`` and
+``handle_frontend_command``.
 """
 
 from __future__ import annotations
@@ -742,7 +742,7 @@ class WechatConversation:
                 )
         raw = str(item.get("done") or "")
         if event is None:
-            self._post_answer(run, raw, outputs, steps, seconds)
+            self._post_answer(run, raw, outputs, steps)
         else:
             self._post_question(run, event, raw, outputs, steps)
         self._send_files(run, raw)
@@ -817,18 +817,13 @@ class WechatConversation:
                 return False
         return True
 
-    def _post_answer(
-        self, run: _Run, raw: str, outputs: list[str], steps: int, seconds: float
-    ) -> None:
-        """The run's answer: its closing step, a blank line, then
-        ``N 步 · 用时 X`` from two steps on (one step is chat, and WeChat has
-        no small print for it)."""
-        display = _display()
-        body = _answer_body(display.final_step_text(raw, outputs), raw)
+    def _post_answer(self, run: _Run, raw: str, outputs: list[str], steps: int) -> None:
+        """The run's answer: its closing step and nothing else (no step
+        count or time under it, for one step or many)."""
+        body = _answer_body(_display().final_step_text(raw, outputs), raw)
         if not body and self._files(run, raw):
             body = EMPTY_ANSWER_WITH_FILES
-        tail = str(display.fold_label(steps, seconds)) if steps >= 2 else ""
-        self._post(run.uid, body or ("" if tail else "..."), tail=tail, lead=True)
+        self._post(run.uid, body or "...", lead=True)
         print(f"[WX run] answered: steps={steps}", flush=True)
 
     def _post_question(

@@ -1799,8 +1799,8 @@ already-generated bundle without rebuilding it. The smoke must verify
   restart / restore behavior.
 - Managed Discord channel (item 15; quit any installed Galley first, or both
   bots answer on the same token): a multi-step request (status message
-  edits in place, then only the answer remains, with a 过程 button that
-  answers with the steps only the clicker sees), an ask_user question
+  edits in place, then only the answer remains, with nothing under it), an
+  ask_user question
   answered by a button, and `/stop` during a long run (the status message
   freezes into `⏹ 已停止 · …`, and no other
   message follows). Then restart Channels (「重启 Channels」) and talk in
@@ -1808,16 +1808,16 @@ already-generated bundle without rebuilding it. The smoke must verify
   notice and picks up what was said before the restart (item 15 (f)).
 - Managed Telegram channel (item 15; same caveat about an installed
   Galley): a multi-step request in the private chat (the silent status
-  message edits in place, then only the answer remains, and its 过程
-  button expands the steps at its end and collapses them back), an
-  ask_user question answered by a button, and `/stop` during a long step
+  message edits in place, then only the answer remains, with no button
+  under it), an ask_user question answered by a button, and `/stop` during
+  a long step
   (the status message freezes into `⏹ 已停止 · …`, and no other
   message follows). Then restart Channels (「重启 Channels」) and ask about
   what was said before: the answer picks it up (item 16).
 - Managed Feishu channel (items 15, 16; same caveat about an installed
   Galley): a multi-step request in the private chat (only a `Typing`
-  reaction on your message while it runs, then one card: the answer with a
-  folded 「过程」 panel, the reaction gone with it), a second message while
+  reaction on your message while it runs, then one card: the answer alone,
+  no 「过程」 panel, the reaction gone with it), a second message while
   it runs (queued, not refused; it gets `Typing` when its turn comes, and
   each answer replies to its own message, the other one having landed in
   between), an
@@ -1827,9 +1827,9 @@ already-generated bundle without rebuilding it. The smoke must verify
   (「重启 Channels」), then ask about it: the answer picks it up.
 - Managed WeChat channel (items 15, 16, 19; same caveat about an installed
   Galley): a multi-step request (only 「对方正在输入」 while it runs, then
-  one message: the answer with a `N 步 · 用时 X` last line, the indicator
-  gone with it), an ask_user question answered with a number, and `/stop`
-  during a long step (one `⏹ 已停止 · …`, no answer after it). Say
+  one message: the answer alone, no `N 步 · 用时 X` last line, the
+  indicator gone with it), an ask_user question answered with a number,
+  and `/stop` during a long step (one `⏹ 已停止 · …`, no answer after it). Say
   something to remember, restart Channels (「重启 Channels」), then ask
   about it: the answer picks it up.
   Then send `/new`: the reply is `🆕 已开启新对话，当前上下文已清空`, the
