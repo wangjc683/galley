@@ -6,7 +6,11 @@ import { useDayStamp } from "@/hooks/useDayStamp";
 import { useTodoButtonMotion } from "@/hooks/useTodoButtonMotion";
 import { useCopy, useLanguage } from "@/lib/i18n";
 import { isMac } from "@/lib/platform";
-import { todoButtonShape, todoCapsule } from "@/lib/todo-button";
+import {
+  todoButtonShape,
+  todoCapsule,
+  type TodoCapsule,
+} from "@/lib/todo-button";
 import { todoWithoutDeleting } from "@/lib/todo-panel";
 import { cn } from "@/lib/utils";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
@@ -47,8 +51,10 @@ import { TopBarIconButton } from "../TopBarIconButton";
  * When N changes after it mounted, the number ticks — 「+N」 on the
  * capsule too — and the button's width, with the number or with its
  * look, glides from the old to the new rather than jumping; a number
- * that goes stays for the glide, fading and cut by the narrowing edge
- * (ticket 162, PRD ruling 208 point 4; hooks/useTodoButtonMotion.ts).
+ * that goes stays for the glide, fading and cut by the narrowing edge,
+ * and so does the capsule's row with its frame when the button stops
+ * being one (`LeavingCapsule`) (ticket 162, PRD ruling 208 point 4;
+ * hooks/useTodoButtonMotion.ts).
  */
 
 /**
@@ -165,7 +171,7 @@ export function TodoToggleButton({
   // PRD ruling 208 point 4; hooks/useTodoButtonMotion.ts): the number
   // keyed by the changes, the one that goes drawn as it was while the
   // button narrows.
-  const { motion, buttonRef } = useTodoButtonMotion(count, shape);
+  const { motion, buttonRef } = useTodoButtonMotion(count, shape, capsule);
   const shown = count ?? motion.leaving?.count ?? null;
   const folded = count !== null ? !!capsule : !!motion.leaving?.folded;
   const tick = motion.ticks > 0 && "todo-count-tick";
@@ -204,7 +210,10 @@ export function TodoToggleButton({
       >
         <ListChecks size={16} weight="thin" className="shrink-0" />
         {shape === "word" && (
-          <span className={cn("text-[13px] leading-none", word.word)}>
+          <span
+            data-todo-word=""
+            className={cn("text-[13px] leading-none", word.word)}
+          >
             {copy.todo}
           </span>
         )}
@@ -263,7 +272,56 @@ export function TodoToggleButton({
             )}
           </span>
         )}
+        {motion.leaving?.capsule && (
+          <LeavingCapsule capsule={motion.leaving.capsule} shown={fit.body} />
+        )}
       </TopBarIconButton>
     </TooltipLabel>
+  );
+}
+
+/**
+ * The capsule's row on its way out (ticket 162, after its acceptance):
+ * when the button stops being a capsule — today's last ticked off, to
+ * the icon or the word — the row stays for the width's glide where it
+ * was (the icon, 4px, then the row: 25px in from the border), at the
+ * width it had (hooks/useTodoButtonMotion.ts sets it), fading and cut
+ * by the narrowing edge, then dropped. Drawn as the body above draws it,
+ * and only where the header is wide enough for one (`shown`).
+ */
+function LeavingCapsule({
+  capsule,
+  shown,
+}: {
+  capsule: TodoCapsule;
+  shown: string;
+}) {
+  return (
+    <span
+      aria-hidden
+      data-todo-capsule-leaving=""
+      className={cn(
+        "absolute top-1/2 left-[25px] min-w-0 -translate-y-1/2 items-baseline text-[12px] leading-none",
+        shown,
+      )}
+    >
+      <span
+        className={cn(
+          "shrink-0 whitespace-nowrap tabular-nums",
+          capsule.tone === "warning"
+            ? "font-medium text-warning"
+            : "text-ink-muted",
+        )}
+      >
+        {capsule.when}
+      </span>
+      <span className="shrink-0 whitespace-pre text-ink-muted">{" · "}</span>
+      <span className="min-w-0 truncate text-ink-soft">{capsule.title}</span>
+      {capsule.more > 0 && (
+        <span className="ml-1 shrink-0 tabular-nums text-ink-muted">
+          +{capsule.more}
+        </span>
+      )}
+    </span>
   );
 }

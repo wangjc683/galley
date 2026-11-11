@@ -82,6 +82,12 @@ let host: HTMLDivElement;
 let root: Root;
 let played: Played[];
 let reduced: boolean;
+/** The header too narrow for the capsule: its row is not drawn. */
+let narrow: boolean;
+
+/** The hairline's colour, `--color-line` as the page resolves it. */
+const LINE = "rgb(1, 2, 3)";
+const NONE = "rgba(0, 0, 0, 0)";
 
 /** The button's made-up width: 28px for the square, 4px and 8px a
  * character more for each thing drawn after the icon — not what is
@@ -99,14 +105,38 @@ function madeUpWidth(button: HTMLElement): number {
   for (const child of Array.from(button.children)) {
     if (!(child instanceof HTMLElement)) continue;
     if (child.style.display === "none") continue;
+    // Placed over the button, out of its flow.
+    if (child.hasAttribute("data-todo-capsule-leaving")) continue;
     width += 4 + 8 * (child.textContent ?? "").length;
   }
   return width;
 }
 
+/** The button's frame as its classes draw it: the capsule's hairline
+ * and round ends, else none and rounded-md; the line where it is set
+ * inline. */
+function madeUpFrame(button: HTMLElement) {
+  const capsule = button.dataset.shape === "capsule";
+  const lined = capsule || button.style.getPropertyValue("border-color") !== "";
+  return {
+    borderTopColor: lined ? LINE : NONE,
+    borderTopLeftRadius: capsule ? "9999px" : "6px",
+    height: "28px",
+  };
+}
+
 beforeEach(() => {
   played = [];
   reduced = false;
+  narrow = false;
+  vi.spyOn(Element.prototype, "getClientRects").mockImplementation(function (
+    this: Element,
+  ) {
+    const hidden =
+      (this instanceof HTMLElement && this.style.display === "none") ||
+      (narrow && this.hasAttribute("data-todo-capsule-leaving"));
+    return (hidden ? [] : [{}]) as unknown as DOMRectList;
+  });
   Element.prototype.animate = function (
     this: Element,
     keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
@@ -155,7 +185,16 @@ beforeEach(() => {
       } as CSSStyleDeclaration;
     }
     if (el instanceof HTMLElement && el.dataset.role === "topbar-todo") {
-      return { width: `${madeUpWidth(el)}px` } as CSSStyleDeclaration;
+      return {
+        width: `${madeUpWidth(el)}px`,
+        ...madeUpFrame(el),
+      } as CSSStyleDeclaration;
+    }
+    // The capsule's row: 8px a character.
+    if (el instanceof HTMLElement && el.hasAttribute("data-capsule-body")) {
+      return {
+        width: `${8 * (el.textContent ?? "").length}px`,
+      } as CSSStyleDeclaration;
     }
     return style;
   });
@@ -338,6 +377,106 @@ describe("the width's glide", () => {
   });
 });
 
+describe("the capsule going and coming (after ticket 162's acceptance)", () => {
+  const capsuleOf = (...items: TodoItem[]) => ({
+    today: items,
+    later: [LATER],
+    anytime: [] as TodoItem[],
+  });
+  const body = () => button().querySelector<HTMLElement>("[data-capsule-body]");
+  const leavingRow = () =>
+    button().querySelector<HTMLElement>("[data-todo-capsule-leaving]");
+
+  it("keeps its row where it was and its frame on the button for the glide as today's last goes, then drops them", async () => {
+    setList(1, capsuleOf(today("a", 15)));
+    mount();
+    const rowText = body()!.textContent ?? "";
+    setList(0, capsuleOf());
+    expect(button().dataset.shape).toBe("icon");
+    // The row it had, at the width it had, fading.
+    const row = leavingRow();
+    expect(row?.textContent).toBe(rowText);
+    expect(row?.getAttribute("aria-hidden")).toBe("true");
+    expect(row?.style.width).toBe(`${8 * rowText.length}px`);
+    expect(played.find((p) => p.el === row)?.keyframes).toEqual({
+      opacity: ["1", "0"],
+    });
+    // The frame on the button, following its width: from the hairline
+    // and the round ends to the icon look's.
+    const [glide] = widthGlides();
+    expect(glide.keyframes.width).toEqual([
+      `${28 + 4 + 8 + 4 + 8 * rowText.length}px`,
+      "28px",
+    ]);
+    expect(glide.keyframes.borderColor).toEqual([LINE, NONE]);
+    expect(glide.keyframes.borderRadius).toEqual(["14px", "6px"]);
+    // Placed against the button while it glides.
+    expect(button().style.position).toBe("relative");
+    await act(async () => {
+      glide.finish();
+      await Promise.resolve();
+    });
+    expect(leavingRow()).toBeNull();
+    expect(button().getAttribute("style") ?? "").toBe("");
+    expect(widthGlides()).toHaveLength(1);
+  });
+
+  it("to the word: the word fades in where the row fades out", () => {
+    setList(1, { today: [today("a", 15)], later: [], anytime: [] });
+    mount();
+    setList(0, { today: [], later: [], anytime: [] });
+    expect(button().dataset.shape).toBe("word");
+    expect(leavingRow()).not.toBeNull();
+    const word = button().querySelector("[data-todo-word]");
+    expect(played.find((p) => p.el === word)?.keyframes).toEqual({
+      opacity: ["0", "1"],
+    });
+  });
+
+  it("keeps no frame where the header was too narrow for the capsule (folded to the icon and N)", () => {
+    narrow = true;
+    setList(1, capsuleOf(today("a", 15)));
+    mount();
+    setList(0, capsuleOf());
+    const [glide] = widthGlides();
+    expect(glide.keyframes.borderColor).toBeUndefined();
+    // The number that was drawn there leaves as before.
+    expect(
+      button().querySelector("[data-todo-count-leaving]")?.textContent,
+    ).toBe("1");
+  });
+
+  it("the other way: the frame is there from the first frame and the row is laid out as it ends up, only cut", async () => {
+    setList(0, capsuleOf());
+    mount();
+    setList(1, capsuleOf(today("a", 15)));
+    // The capsule's classes in this commit: the hairline grows with the
+    // width from the first frame, nothing animates it.
+    expect(button().dataset.shape).toBe("capsule");
+    expect(button().className).toContain("rounded-full");
+    const [glide] = widthGlides();
+    expect(glide.keyframes.borderColor).toBeUndefined();
+    // Its row at the width it ends at: no ellipsis moving on the way.
+    const rowText = body()!.textContent ?? "";
+    expect(body()!.style.width).toBe(`${8 * rowText.length}px`);
+    expect(body()!.style.flexShrink).toBe("0");
+    await act(async () => {
+      glide.finish();
+      await Promise.resolve();
+    });
+    expect(body()!.getAttribute("style") ?? "").toBe("");
+    expect(button().getAttribute("style") ?? "").toBe("");
+  });
+
+  it("a capsule to a capsule draws the next row at once, nothing left behind", () => {
+    setList(2, capsuleOf(today("a", 15), today("b", 18)));
+    mount();
+    setList(1, capsuleOf(today("b", 18)));
+    expect(leavingRow()).toBeNull();
+    expect(body()!.textContent).toContain("事 b");
+  });
+});
+
 describe("reduced motion", () => {
   it("puts the width where it ends up at once and drops the number that goes", () => {
     reduced = true;
@@ -349,6 +488,17 @@ describe("reduced motion", () => {
     setList(0);
     expect(number()).toBeNull();
     expect(button().querySelector("[data-todo-count-leaving]")).toBeNull();
+    expect(widthGlides()).toHaveLength(0);
+    expect(button().getAttribute("style") ?? "").toBe("");
+  });
+
+  it("drops the capsule at once as today's last goes: no row left, no frame kept", () => {
+    reduced = true;
+    setList(1, { today: [today("a", 15)], later: [LATER], anytime: [] });
+    mount();
+    setList(0, { today: [], later: [LATER], anytime: [] });
+    expect(button().dataset.shape).toBe("icon");
+    expect(button().querySelector("[data-todo-capsule-leaving]")).toBeNull();
     expect(widthGlides()).toHaveLength(0);
     expect(button().getAttribute("style") ?? "").toBe("");
   });
