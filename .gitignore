@@ -63,6 +63,7 @@ core/python-bundle/
 # the tracked results.md summaries are the evidence.
 .scratch/main-chat/entry-layer-eval/**/results.json
 .scratch/main-chat/entry-layer-eval/dispatch-results.json
+.scratch/im-answer-only/ask-process-eval/**/results.json
 
 # Design handoff bundle: keep prototype, drop the uploads/ duplicates
 # (those are AGENTS.md / PRD.md / DESIGN.md copies the design agent
