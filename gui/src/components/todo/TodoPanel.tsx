@@ -27,6 +27,7 @@ import { Button, IconButton } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { revealInList, useTodoPanelFlash } from "@/hooks/useTodoPanelFlash";
+import { useTodoRowMotion } from "@/hooks/useTodoRowMotion";
 import {
   todoAutostartHintVisible,
   todoFailureText,
@@ -63,6 +64,7 @@ import {
   yourTodos,
 } from "@/lib/todo-panel";
 import { todoNotesParagraphs } from "@/lib/todo-notes";
+import { todoRowOrder } from "@/lib/todo-row-motion";
 import { syncTruncatedTitle } from "@/lib/truncated-title";
 import { cn } from "@/lib/utils";
 import {
@@ -181,6 +183,10 @@ export interface TodoPanelProps {
  * and the row a card's title points at. A to-do Galley ticks off holds
  * where it stood, ticked, before it goes to 已完成.
  *
+ * Rows move since ticket 161 (PRD ruling 208 point 3, useTodoRowMotion):
+ * when the list drawn changes in front of you, a row that left fades
+ * where it stood, the rest slide to their places, one that came fades in.
+ *
  * Two pages since ticket 97 (PRD ruling 142 point 5, 甲), in the
  * header's title's place: 「待办」 and 「备忘」 (MemoPage: what Galley
  * noted about you), on a SegmentedControl since ticket 99 (ruling 144
@@ -229,6 +235,12 @@ export function TodoPanel({
   const loaded = useAssistantTodoStore((s) => s.loaded);
   const list = useRef<HTMLDivElement>(null);
   const { held, request } = useTodoPanelFlash(list);
+  // Rows leaving, closing up, coming in when the list drawn changes in
+  // front of you (ticket 161, PRD ruling 208 point 3).
+  useTodoRowMotion(
+    list,
+    page === "todo" && loaded ? todoRowOrder(todo, held) : null,
+  );
   // A row a request lights only under 已完成: it unfolds first.
   const revealDone =
     request && todoRowsInDone(todo, request.ids) ? request.nonce : null;
@@ -355,13 +367,14 @@ export function TodoPanel({
           </IconButton>
         }
       />
-      {/* Keyed by its page: each page starts at its top. */}
+      {/* Keyed by its page: each page starts at its top. `relative` for
+          the copies of rows leaving (ticket 161): they scroll with it. */}
       <div
         key={page}
         ref={list}
         id={pageId}
         data-todo-page={page}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2"
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-4 pt-2"
       >
         {page === "memo" ? (
           <MemoPage mainChatId={mainChatId} onGo={go} />
@@ -732,6 +745,7 @@ function RowShell({
         </div>
         {shown.length > 0 && (
           <div
+            data-todo-row-actions=""
             className={cn(
               // Open, the title may run to several lines: the actions
               // stay by its first (28px buttons on its 20px line).

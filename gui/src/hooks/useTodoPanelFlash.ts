@@ -7,6 +7,10 @@ import {
   todoWritesOnTheirWay,
   type TodoHold,
 } from "@/lib/todo-panel";
+import {
+  noteTodoRowsBefore,
+  todoRowShiftNow,
+} from "@/lib/todo-row-motion-play";
 import { useAssistantTodoStore } from "@/stores/assistant-todo";
 import { useUiStore, type TodoRowRequest } from "@/stores/ui";
 
@@ -63,6 +67,9 @@ export function useTodoPanelFlash(list: RefObject<HTMLElement | null>): {
         ]);
         const timer = setTimeout(() => {
           pending.delete(timer);
+          // The rows read where they are seen before this lets them go
+          // to 已完成: they close up from there (ticket 161).
+          noteTodoRowsBefore(list.current);
           setHeld((current) =>
             current.filter((hold) => !change.held.includes(hold)),
           );
@@ -79,7 +86,7 @@ export function useTodoPanelFlash(list: RefObject<HTMLElement | null>): {
       for (const timer of pending) clearTimeout(timer);
       pending.clear();
     };
-  }, []);
+  }, [list]);
 
   useEffect(() => {
     if (!lit) return;
@@ -133,10 +140,14 @@ function flashRows(
 
 /** Scroll `list` just enough to show `row`, only when it is out of
  * view; one taller than the view shows its top. A row lit here, and
- * since main chat ticket 107 a row opened (TodoPanel). */
+ * since main chat ticket 107 a row opened (TodoPanel). Where the row
+ * ends up, not where a slide of ticket 161 is taking it past: a row Galley
+ * moved is lit as it slides to its new place. */
 export function revealInList(list: HTMLElement, row: HTMLElement): void {
   const view = list.getBoundingClientRect();
-  const box = row.getBoundingClientRect();
+  const rect = row.getBoundingClientRect();
+  const lift = todoRowShiftNow(list, row);
+  const box = { top: rect.top - lift, bottom: rect.bottom - lift };
   if (box.top < view.top) {
     list.scrollTop -= view.top - box.top + REVEAL_MARGIN_PX;
   } else if (box.bottom > view.bottom) {

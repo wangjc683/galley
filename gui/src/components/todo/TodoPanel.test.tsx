@@ -371,7 +371,10 @@ describe("the panel's groups", () => {
     expect(folded).toContain('aria-expanded="false"');
     expect(folded).not.toContain('data-todo-row="todo_done"');
     // 1 listed + 2 past the cap; the subtask back counts for none.
-    expect(folded).toMatch(/已完成<\/span><span[^>]*>3<svg/);
+    // The number in its own box, which steps when it changes (ticket 161).
+    expect(folded).toMatch(
+      /已完成<\/span><span[^>]*><span data-role="group-count">3<\/span><svg/,
+    );
     const open = panel(FULL, { doneOpen: true });
     expect(open).toContain('data-todo-row="todo_done"');
     expect(open).toContain("还有 2 件没有列出");
