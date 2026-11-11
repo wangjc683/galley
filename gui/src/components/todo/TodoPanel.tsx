@@ -90,7 +90,11 @@ import {
 } from "./TodoRowMenu";
 import { TodoSubitems } from "./TodoSubitems";
 import { TodoTextEditor } from "./TodoTextEditor";
-import { TODO_META_SEGMENT, todoTitleClass } from "./todo-styles";
+import {
+  TODO_META_SEGMENT,
+  todoTitleClass,
+  useTodoStrikeDrawn,
+} from "./todo-styles";
 
 export interface TodoPanelProps {
   /** The main chat, wherever the panel is (ticket 46): titles jump into
@@ -858,6 +862,8 @@ function YourRow({
   const subitemAdds = useAssistantTodoStore((s) => s.subitemAdds[item.id]);
   const subitemOrder = useAssistantTodoStore((s) => s.subitemOrders[item.id]);
   const checked = held || todoChecked(item, flip);
+  // The strike fades in when the tick comes after mount (ticket 160).
+  const strikeDrawn = useTodoStrikeDrawn(checked);
   // Folded, the repeat glyph without the short words (PRD ruling 207
   // point 8).
   const parts = todoMetaParts(item, checked, todayStartMs, language, copy, {
@@ -1002,7 +1008,7 @@ function YourRow({
         "block max-w-full rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-brand/30",
         open ? "break-words" : "truncate",
         editable && "cursor-text",
-        todoTitleClass(checked),
+        todoTitleClass(checked, false, strikeDrawn),
       )}
     >
       {shownWords("title", todoRowText(item, copy))}
@@ -1130,7 +1136,7 @@ function YourRow({
           saving={held || flip?.phase === "saving"}
         />
       }
-      titleClass={todoTitleClass(checked)}
+      titleClass={todoTitleClass(checked, false, strikeDrawn)}
       title={title}
       line={
         <MetaLine
@@ -1541,6 +1547,10 @@ function DoneRow(props: RowProps) {
   const language = useLanguage();
   const todayStartMs = useDayStamp();
   const { flip, failure } = useTodoWrite(item.id);
+  const checked = todoChecked(item, flip);
+  // Ticked again in its hold after an untick: the strike fades in
+  // (ticket 160); a row landing here is new, already struck, still.
+  const strikeDrawn = useTodoStrikeDrawn(checked);
   const line = (
     <PlainLine
       text={doneRowLine(item, todayStartMs, language, copy)}
@@ -1548,7 +1558,6 @@ function DoneRow(props: RowProps) {
     />
   );
   if (item.kind === "todo") {
-    const checked = todoChecked(item, flip);
     return (
       <RowShell
         {...props}
@@ -1561,7 +1570,7 @@ function DoneRow(props: RowProps) {
             checkedTone="quiet"
           />
         }
-        titleClass={todoTitleClass(checked)}
+        titleClass={todoTitleClass(checked, false, strikeDrawn)}
         line={line}
         failure={failure && todoFailureText(failure, copy)}
       />

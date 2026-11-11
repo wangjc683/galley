@@ -47,7 +47,7 @@ import {
 } from "@/stores/assistant-todo";
 
 import { TodoTextEditor } from "./TodoTextEditor";
-import { todoTitleClass } from "./todo-styles";
+import { todoTitleClass, useTodoStrikeDrawn } from "./todo-styles";
 
 /** An item's words: 13px, as the title, wrapping, never cut. */
 const ITEM_TYPE = "text-[13px] leading-5";
@@ -55,9 +55,10 @@ const ITEM_TYPE = "text-[13px] leading-5";
 /** An item's ink (ticket 112, PRD ruling 158 point 2): not ticked,
  * `ink-soft`, a step under the title, so the title is the open row's one
  * line in full ink (ruling 146: one size, the inks tell the ranks);
- * ticked, a done title's strike in `ink-muted`. */
-function itemInk(done: boolean): string {
-  return cn(todoTitleClass(done), !done && "text-ink-soft");
+ * ticked, a done title's strike in `ink-muted`, fading in when the tick
+ * came after mount (`drawn`, ticket 160). */
+function itemInk(done: boolean, drawn: boolean): string {
+  return cn(todoTitleClass(done, false, drawn), !done && "text-ink-soft");
 }
 
 /** A drag keeps to the list (ticket 112): up and down only, and never
@@ -322,6 +323,7 @@ function SubitemRow({
   const failure = useAssistantTodoStore(
     (s) => s.subitemFailures[item.id] ?? null,
   );
+  const strikeDrawn = useTodoStrikeDrawn(item.done);
   const [edit, setEdit] = useState<SubitemEdit | null>(null);
   if (!editable && edit?.phase === "editing" && !edit.failure) setEdit(null);
   const wordsButton = useRef<HTMLButtonElement>(null);
@@ -462,7 +464,7 @@ function SubitemRow({
               "focus-visible:ring-2 focus-visible:ring-brand/30 disabled:cursor-default",
               editable && "cursor-text",
               ITEM_TYPE,
-              itemInk(item.done),
+              itemInk(item.done, strikeDrawn),
             )}
           >
             {words}

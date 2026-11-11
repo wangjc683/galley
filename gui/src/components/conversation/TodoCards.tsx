@@ -5,7 +5,10 @@ import {
   ReplyCardTitle,
 } from "@/components/conversation/ReplyCards";
 import { TodoCheck } from "@/components/todo/TodoCheck";
-import { todoTitleClass } from "@/components/todo/todo-styles";
+import {
+  todoTitleClass,
+  useTodoStrikeDrawn,
+} from "@/components/todo/todo-styles";
 import { useDayStamp } from "@/hooks/useDayStamp";
 import { todoFailureText, type TodoItem } from "@/lib/assistant-todo";
 import { useCopy, useLanguage } from "@/lib/i18n";
@@ -116,6 +119,9 @@ function TodoCard({ item }: { item: TodoItem }) {
     !checked &&
     !cancelled &&
     "text-ink-soft group-hover/line:text-ink focus-visible:text-ink";
+  // Struck after mount — ticked, or turned 「已删除」 / 「已跳过」 — the
+  // line fades in (ticket 160); a card struck when it mounts is still.
+  const strikeDrawn = useTodoStrikeDrawn(checked || cancelled);
   return (
     <div
       data-role="todo-card"
@@ -146,13 +152,16 @@ function TodoCard({ item }: { item: TodoItem }) {
           <ReplyCardTitle
             text={item.text}
             onClick={() => showTodoRow(item.id, mainChatId)}
-            className={cn(todoTitleClass(checked, cancelled), titleInk)}
+            className={cn(
+              todoTitleClass(checked, cancelled, strikeDrawn),
+              titleInk,
+            )}
           />
         ) : (
           <span
             className={cn(
               "min-w-0 truncate leading-5",
-              todoTitleClass(checked, cancelled),
+              todoTitleClass(checked, cancelled, strikeDrawn),
               titleInk,
             )}
             onPointerEnter={(e) =>

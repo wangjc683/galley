@@ -565,6 +565,27 @@ onboarding hero）。这是 serif register 的签名，sans / mono 不加。
   [layout-and-chrome](./layout-and-chrome.md) §4.2「助手卡片」）。
 - disabled 控件必须静止，不保留 hover lift。
 
+`Checkbox` 的按下与勾上（2026-11-11，[主聊天 PRD](../../.scratch/main-chat/PRD.md) 裁决 208 第 2 条，
+[票 160](../../.scratch/main-chat/issues/160-tick-beat.md)；此前方框没有任何过渡，填色与对勾同一帧出现）。全应用只有这一个方框
+（待办面板与回复下的待办卡片、待办的子项、归档与编辑项目对话框），规则对所有用处生效，不加开关；Markdown 的任务项是
+`MarkdownView` 自己画的只读方框，不用它，也不跟着变。
+
+- **按下**：没禁用的方框，指针按住方框或它的标签时缩到 0.9（16px 的框缩约 1.6px，14px 的约 1.4px），`--motion-press`、
+  `--ease-firm`。照按钮的规矩：过渡只写在 `:active` 上（`group-active:transition-[scale]`，写 `scale` 不写 `transform`），
+  基础态没有过渡，松手一步回到 1。禁用的不缩。
+- **勾上**：只放挂载之后由没勾变成勾上的那一下，不管是谁勾的。填色与描边 `--motion-fast` 走到勾上的颜色（品牌色或
+  `quiet` 的灰）；对勾从左到右露出（`clip-path`，`--motion-base`、`--ease-firm`，图标仍是 Phosphor 的 `Check`）；框弹一下
+  1 → 1.12 → 1（16px 的框最大约 17.9px，每边约 1px；`--motion-slow`，上去与回来各走一段 `--ease-spring`）。三样同时起步，
+  全程不超过 `--motion-slow`。
+- **取消勾**：填色 `--motion-fast` 退回，对勾一步不见，不弹。
+- **挂载时已经勾着的不放**：清单载入、展开「已完成」、回复下的卡片挂载、翻历史都是静止的勾；待办从最上面那一段落进
+  「已完成」时方框是另一个实例（品牌色换成灰），那一下也不放。判断靠记住上一次的 `checked`（`hooks/useFlipBeat.ts`）；
+  这一拍的类放完（约 0.4 秒）就摘掉，元素重新显示或挪位时不会重放。这一拍里悬停描边也跟着过渡，之后照旧瞬时。
+- **减少动态**：按下不缩、不弹、对勾不扫；填色与描边照样过渡（颜色变化可以留，§2.7「只淡不移」）。
+- 静止时（尺寸、颜色、聚焦圈、悬停描边、禁用的 40%）与此前逐像素相同。关键帧与类在 `globals.css` 的
+  `checkbox-tick` / `checkbox-untick`，按下是 `ui/checkbox.tsx` 里的 Tailwind 类。待办标题的删除线随后淡入，见
+  [reply-cards](./conversation/reply-cards.md)「勾掉与取消勾」。
+
 长任务反馈同样克制：读秒就在原状态行里（工作台每步从 0.0 起跳、一分钟内
 带十分位；见 conversation「Thinking Placeholder」；助手的对话在跑时是三点气泡，
 下面一行小字写这一步在做什么与这一轮的整秒用时，2026-10-23 主聊天 PRD 裁决 134、135；此前不读秒，裁决 110），

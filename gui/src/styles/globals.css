@@ -1216,6 +1216,85 @@ code {
   animation: todo-catch-wash 0.6s ease-out;
 }
 
+/* The checkbox's tick and a to-do's strike (main chat ticket 160, PRD
+   ruling 208 point 2; foundations §2.5). ui/checkbox.tsx puts
+   `checkbox-tick` on the box when it is ticked after mount, whoever
+   ticked it, `checkbox-untick` when it is unticked, each for the beat
+   only (hooks/useFlipBeat.ts); a box that mounts ticked has neither.
+   Ticked, all three start together and are done by `--motion-slow`:
+   the fill and edge ease from what they were into the ticked colours
+   (`--motion-fast`); the tick is uncovered from the left
+   (`--motion-base`, `--ease-firm`); the box pops 1 → 1.12 → 1
+   (`--motion-slow`, `--ease-spring` on each half — a 16px box is about
+   17.9px at the peak). Unticked, the colours ease back and the tick goes
+   at once, its colour not being in the list; no pop. The sink while the
+   box is held down is Tailwind's, in ui/checkbox.tsx.
+
+   A to-do's strike (components/todo/todo-styles.ts `todoTitleClass`):
+   when it comes after mount (a tick; a card turned 「已删除」 or
+   「已跳过」) the real line-through fades in from transparent over
+   `--motion-base`, starting `--motion-base` after the tick, as the tick
+   finishes uncovering; the text's colour takes its own `--motion-base`
+   to `ink-muted` meanwhile, so the line lands in the colour it keeps.
+   Not swept: a line drawn by a background (the way to sweep one) is
+   rounded to device pixels twice (its box, then its offset) where
+   WebKit rounds its line-through up once, so at many sub-pixel
+   positions of a title the two sit a device pixel apart and could not
+   hand over without a jump (reply-cards.md 「勾掉与取消勾」 has the
+   numbers; the ticket's fallback). At rest the line is the
+   line-through as before.
+
+   Reduced motion: no pop, no sweep of the tick, no fade of the strike
+   (it comes at once); the box's colours still ease. */
+@keyframes checkbox-tick-pop {
+  0%,
+  100% {
+    scale: 1;
+  }
+  50% {
+    scale: 1.12;
+  }
+}
+@keyframes checkbox-tick-draw {
+  from {
+    clip-path: inset(-1px 100% -1px -1px);
+  }
+  to {
+    clip-path: inset(-1px -1px -1px -1px);
+  }
+}
+.checkbox-tick,
+.checkbox-untick {
+  transition-property: background-color, border-color;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-firm);
+}
+.checkbox-tick {
+  animation: checkbox-tick-pop var(--motion-slow) var(--ease-spring);
+}
+.checkbox-tick > svg {
+  animation: checkbox-tick-draw var(--motion-base) var(--ease-firm);
+}
+@keyframes todo-strike-in {
+  from {
+    text-decoration-color: transparent;
+  }
+  to {
+    text-decoration-color: var(--color-ink-muted);
+  }
+}
+.todo-strike-in {
+  animation: todo-strike-in var(--motion-base) var(--ease-firm)
+    var(--motion-base) backwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .checkbox-tick,
+  .checkbox-tick > svg,
+  .todo-strike-in {
+    animation: none;
+  }
+}
+
 /* Scroll-to-bottom button state signal (MainView). Two states, two
    visual grammars: while the agent is running the button carries a
    looping pulse ring — motion = content is landing below, click

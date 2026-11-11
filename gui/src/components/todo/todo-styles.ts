@@ -1,3 +1,4 @@
+import { useFlipBeat } from "@/hooks/useFlipBeat";
 import { cn } from "@/lib/utils";
 
 /**
@@ -11,14 +12,41 @@ import { cn } from "@/lib/utils";
  * unticked and 「已删除」 beside it tell it from one done. The strike
  * takes the text's colour, full `ink-muted`, on a title button too: the
  * buttons give their 60% decoration colour to the hover underline only
- * (`hover:decoration-ink-muted/60`, ticket 99). The change rides
+ * (`hover:decoration-ink-muted/60`, ticket 99). The colour rides
  * `--motion-base`; none under reduced motion.
+ *
+ * `drawn` (main chat ticket 160, PRD ruling 208 point 2): the strike
+ * came after mount (`useTodoStrikeDrawn`), so the line fades in after
+ * the box's tick (globals.css `todo-strike-in`); at rest it is the same
+ * line-through. A strike taken away goes at once, the colour easing
+ * back.
  */
-export function todoTitleClass(checked: boolean, cancelled = false): string {
+export function todoTitleClass(
+  checked: boolean,
+  cancelled = false,
+  drawn = false,
+): string {
+  const struck = checked || cancelled;
   return cn(
     "transition-colors duration-(--motion-base) motion-reduce:transition-none",
-    checked || cancelled ? "text-ink-muted line-through" : "text-ink",
+    struck ? "text-ink-muted line-through" : "text-ink",
+    struck && drawn && "todo-strike-in",
   );
+}
+
+/**
+ * How long `todo-strike-in` stays on a title: its wait and its fade,
+ * `--motion-base` each (320ms), plus margin — then it comes off, so a
+ * row moved or shown again does not replay it (`useFlipBeat`).
+ */
+const TODO_STRIKE_CLEAR_MS = 500;
+
+/** A title's strike that came after mount — a tick, or a card turned
+ * 「已删除」 / 「已跳过」 — for `todoTitleClass`'s `drawn`; false for one
+ * struck when it mounts (a list loading, 已完成 opening, a card in the
+ * history, a to-do landing in 已完成 as a new row). */
+export function useTodoStrikeDrawn(struck: boolean): boolean {
+  return useFlipBeat(struck, TODO_STRIKE_CLEAR_MS) === "on";
 }
 
 /**
