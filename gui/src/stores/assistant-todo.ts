@@ -397,6 +397,12 @@ function without<T>(record: Record<string, T>, id: string): Record<string, T> {
   return rest;
 }
 
+/** Whether two reads of a list say the same, field for field: Core
+ * serializes them the same way each time, so their JSON is compared. */
+function sameRead(a: unknown, b: unknown): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
+}
+
 /** Read the list (without the daily review) and the noted to-dos,
  * together; null when a later read has already landed or either
  * failed. */
@@ -718,7 +724,22 @@ export const useAssistantTodoStore = create<AssistantTodoState>((set, get) => {
 
     load: async () => {
       const lists = await read();
-      if (lists) set({ ...lists, loaded: true });
+      if (!lists) return;
+      // A read that brought nothing new keeps the lists the store holds
+      // (PRD ruling 208, after ticket 161): Core's event re-reads the
+      // list about 150ms after each write's own read, word for word the
+      // same; as new objects it redrew the panel and every card in the
+      // conversation in the middle of the rows' slide and the button's
+      // glide, holding the page for several frames. What the clock
+      // changes comes in the data (`overdue`, `todayCount`), so a read
+      // at a due time is never the same.
+      const held = get();
+      const todo = sameRead(lists.todo, held.todo) ? held.todo : lists.todo;
+      const noted = sameRead(lists.noted, held.noted)
+        ? held.noted
+        : lists.noted;
+      if (held.loaded && todo === held.todo && noted === held.noted) return;
+      set({ todo, noted, loaded: true });
     },
 
     toggle: (item) => {

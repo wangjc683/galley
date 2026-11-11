@@ -197,6 +197,51 @@ describe("a tick", () => {
 
 // PRD ruling 145: the one place the daily review leaves the panel's
 // list, so every reader of the store's copy goes without it.
+describe("a read that brought nothing new (ruling 208)", () => {
+  it("keeps the lists the store holds, so nothing is drawn again", async () => {
+    const { invoke } = getTauriMocks();
+    // Core answers with fresh objects each time, as over IPC.
+    invoke.mockImplementation(async (command) => {
+      if (command === "list_assistant_todo") return structuredClone(before);
+      if (command === "list_noted_todos") return [structuredClone(OPEN)];
+      return { id: "todo_1" };
+    });
+    await useAssistantTodoStore.getState().load();
+    const first = useAssistantTodoStore.getState();
+    expect(first.loaded).toBe(true);
+    const seen = vi.fn();
+    const off = useAssistantTodoStore.subscribe(seen);
+    await useAssistantTodoStore.getState().load();
+    off();
+    const second = useAssistantTodoStore.getState();
+    expect(second.todo).toBe(first.todo);
+    expect(second.noted).toBe(first.noted);
+    expect(seen).not.toHaveBeenCalled();
+  });
+
+  it("takes the half that changed and keeps the half that did not", async () => {
+    const { invoke } = getTauriMocks();
+    let list = before;
+    invoke.mockImplementation(async (command) => {
+      if (command === "list_assistant_todo") return structuredClone(list);
+      if (command === "list_noted_todos") return [structuredClone(OPEN)];
+      return { id: "todo_1" };
+    });
+    await useAssistantTodoStore.getState().load();
+    const first = useAssistantTodoStore.getState();
+    // The clock made it overdue: the same to-do, read again, differs.
+    list = {
+      ...before,
+      yours: { today: [{ ...OPEN, overdue: true }], later: [], anytime: [] },
+    };
+    await useAssistantTodoStore.getState().load();
+    const second = useAssistantTodoStore.getState();
+    expect(second.todo).not.toBe(first.todo);
+    expect(second.todo.yours.today[0]?.overdue).toBe(true);
+    expect(second.noted).toBe(first.noted);
+  });
+});
+
 describe("the daily review", () => {
   const ROUTINE: TodoItem = {
     kind: "task",
