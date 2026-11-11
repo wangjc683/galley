@@ -388,10 +388,11 @@ the release docs, and one change to the app:
   agent retells it and does not run it again (eval on gpt-6.1-sol: 9 of 12
   without it, 12 of 12 with it). `managed-ga/` (patches `0023`, `0024`,
   `0026`, `0029`), `runner/` and `core/` changed, so the next release runs
-  the bundled-runtime gate. Not yet seen on a real channel: JC's dogfood is
-  open (`.scratch/im-answer-only/`, ticket 01 section 6), stripping an old
-  button was tested on fakes only, and a task with side effects asked
-  「过程给我看看」 was not measured.
+  the bundled-runtime gate. JC ran Telegram and Feishu under dev the same
+  day and reported no problem (the engine logs show 「过程给我看看」 answered
+  without a rerun, and 「刚才怎么查的」 answered after a channel restart).
+  Not seen: WeChat and Discord; an old button being stripped (a success
+  leaves no log line); a task with side effects asked 「过程给我看看」.
 
 **Owed from the `v0.7.8` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. What the database and the
