@@ -391,8 +391,8 @@ the release docs, and one change to the app:
   the bundled-runtime gate. JC ran Telegram and Feishu under dev the same
   day and reported no problem (the engine logs show 「过程给我看看」 answered
   without a rerun, and 「刚才怎么查的」 answered after a channel restart).
-  Not seen: WeChat and Discord; an old button being stripped (a success
-  leaves no log line); a task with side effects asked 「过程给我看看」.
+  JC also tapped an old Telegram 过程 button: it went away. Not seen:
+  WeChat and Discord; a task with side effects asked 「过程给我看看」.
 
 **Owed from the `v0.7.8` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. What the database and the
