@@ -312,12 +312,15 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): an update to `v0.7.8` on Windows was
-   reported the day of the release (JC, 2026-11-11: 「windows 用户更新到
-   0.7.8，更新和使用暂时看一切正常」); which build it came from, and so
-   which migrations ran on that database, was not said. It is the first
-   update through the new NSIS pre-install hook, and it did not break the
-   restart. The macOS hops `v0.7.0` → … → `v0.7.8` stay unobserved: JC's Mac
+1. App-update dogfood (SOP step 10): `v0.7.7` → `v0.7.8` passed on a
+   user's Windows machine the day of the release (JC, 2026-11-11, relaying
+   the user: 「windows 用户更新到 0.7.8，更新和使用暂时看一切正常」; the
+   user takes every version through the updater, was on 0.7.7 before, and
+   has had no problem with any of them). By that user's word the earlier
+   Windows hops passed too and migrations 053–057 each ran on a real older
+   database there, 057 in this update. It is the first update through the
+   new NSIS pre-install hook, and it did not break the restart. This is a
+   user's report passed on, not a walk of the Windows checklist. The macOS hops `v0.7.0` → … → `v0.7.8` stay unobserved: JC's Mac
    was installed straight from the draft all eight times; the CDN served
    0.7.8 without cache-bust at 05:23 UTC, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
@@ -403,8 +406,10 @@ second and cancelled 50 seconds after. Not seen or not reported:
   04 named). Still not reported: the manual upgrade with the old app and a
   `galley` CLI command running (both closed, no file-lock dialog,
   `where.exe galley` at the app's version), which keeps audit ticket 04
-  open; whether that database was older than 057; and every Windows item
-  below.
+  open, and every Windows checklist item below. The migration half of the
+  W1 notes in the older sections below (053–056 on an older Windows
+  database) is answered by the same user's report; JC's own Windows machine
+  has still not run them.
 - The eval's `w-long` case stays record-only, and the `wake` suite has no
   case for a hand-over that asked for a screenshot whose file is missing.
 
