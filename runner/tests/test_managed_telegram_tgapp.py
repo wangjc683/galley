@@ -1306,6 +1306,67 @@ def test_stop_without_a_status_message_posts_the_receipt(env: Env) -> None:
     env.run(body)
 
 
+ACROSS_T3 = turn_text(1, "<summary>改第一处</summary>", "file_patch({})")
+ACROSS_T4 = turn_text(2, "<summary>改第二处</summary>", "file_patch({})")
+
+
+def test_a_stop_after_the_reply_counts_steps_and_time_across_the_question(env: Env) -> None:
+    """Nothing goes under an answer any more; the stop receipt still adds
+    up steps and working time across ask_user, and the wait for the reply
+    does not count."""
+
+    async def body() -> None:
+        question = await ask_two_steps(env)  # 2 steps, 10 s of work
+        menu = env.tg._pending_asks[CHAT_ID].menu_id
+        env.clock.now += 60  # waiting for the reply does not count
+        await env.click(question, f"ask:{menu}:1")
+        await wait_until(lambda: len(env.agent.tasks) == 2)
+        dq = env.agent.tasks[-1][2]
+        dq.put(*nxt([ACROSS_T3]))
+        dq.put(*nxt([ACROSS_T3, ACROSS_T4], 2.0))
+        await wait_until(lambda: bool(env.tg._RUNS) and env.tg._RUNS[0].task_turn == 2)
+        await wait_until(lambda: env.tg._running_run() is not None)
+        env.clock.now += 3
+        await env.command("/stop")
+        assert env.agent.aborted == 1
+        receipt = env.bot.statuses()[-1]  # the continuation's status message, frozen
+        assert receipt.text == "⏹ 已停止 · 4 步 · 用时 15 秒" and not receipt.deleted
+        # The aborted task's `done` is nobody's answer.
+        dq.put(*done([ACROSS_T3, ACROSS_T4, turn_text(3, "半截")]))
+        await env.settle()
+        assert receipt.text == "⏹ 已停止 · 4 步 · 用时 15 秒"
+        assert env.bot.others() == [question]
+
+    env.run(body)
+
+
+def test_an_error_after_the_reply_counts_steps_and_time_across_the_question(
+    env: Env,
+) -> None:
+    async def body() -> None:
+        question = await ask_two_steps(env)  # 2 steps, 10 s of work
+        menu = env.tg._pending_asks[CHAT_ID].menu_id
+        env.clock.now += 60  # waiting for the reply does not count
+
+        def break_next_send() -> None:
+            env.bot.fail_send = RuntimeError("network down")
+            env.bot.fail_sends = 2  # the MarkdownV2 send and its plain retry
+
+        env.agent.scripts.append(
+            [
+                nxt([ACROSS_T3]),
+                nxt([ACROSS_T3, ACROSS_T4], 2.0),
+                done([ACROSS_T3, ACROSS_T4], 1.0, _effect=break_next_send),
+            ]
+        )
+        await env.click(question, f"ask:{menu}:1")
+        await env.settle()
+        error = env.bot.others()[-1]
+        assert error.text == "_4 步 · 用时 13 秒_\n❌ 出错：network down"
+
+    env.run(body)
+
+
 def test_stop_without_running_run(env: Env) -> None:
     async def body() -> None:
         await env.command("/stop")

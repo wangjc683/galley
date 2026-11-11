@@ -803,6 +803,66 @@ def test_stop_command_freezes_status_and_keeps_queue(env: Env) -> None:
     env.run(body)
 
 
+ACROSS_C1 = turn_text(1, "<summary>改第一处</summary>", "file_patch({})")
+ACROSS_C2 = turn_text(2, "<summary>改第二处</summary>", "file_patch({})")
+
+
+def test_a_stop_after_the_reply_counts_steps_and_time_across_the_question(env: Env) -> None:
+    """Nothing goes under an answer any more; the stop receipt still adds
+    up steps and working time across ask_user, and the wait for the reply
+    does not count."""
+
+    async def body() -> None:
+        question = await ask_two_steps(env)  # 2 steps, 10 s of work
+        env.clock.now += 60  # waiting for the reply does not count
+        click = FakeInteraction(OWNER, question.view.children[1].custom_id, question)
+        await env.app._handle_interaction(click)
+        await wait_until(lambda: len(env.agent.tasks) == 2)
+        dq = env.agent.tasks[1][2]
+        dq.put(*nxt([ACROSS_C1])[1:])
+        dq.put(*nxt([ACROSS_C1, ACROSS_C2], 2.0)[1:])
+        await wait_until(lambda: getattr(env.app._running_run(CHAT), "task_turn", 0) == 2)
+        await wait_until(lambda: len(env.channel.sent) == 3)
+        status1, _question, status2 = env.channel.sent  # status2: the continuation's
+        assert status1.deleted
+        env.clock.now += 3
+        await env.app.handle_command(CHAT, "/stop")
+        assert env.agent.aborted == 1
+        assert status2.content == "⏹ 已停止 · 4 步 · 用时 15 秒" and not status2.deleted
+        # The aborted task's `done` is nobody's answer.
+        dq.put(*done([ACROSS_C1, ACROSS_C2, turn_text(3, "半截")])[1:])
+        await drain(env.app)
+        assert len(env.channel.sent) == 3
+        assert status2.content == "⏹ 已停止 · 4 步 · 用时 15 秒"
+
+    env.run(body)
+
+
+def test_an_error_after_the_reply_counts_steps_and_time_across_the_question(
+    env: Env,
+) -> None:
+    async def body() -> None:
+        question = await ask_two_steps(env)  # 2 steps, 10 s of work
+        env.clock.now += 60  # waiting for the reply does not count
+
+        def break_next_send() -> None:
+            env.channel.fail_next_send = RuntimeError("send failed")
+
+        env.agent.scripts.append(
+            [
+                nxt([ACROSS_C1]),
+                nxt([ACROSS_C1, ACROSS_C2], 2.0),
+                done([ACROSS_C1, ACROSS_C2], 1.0, _effect=break_next_send),
+            ]
+        )
+        click = FakeInteraction(OWNER, question.view.children[1].custom_id, question)
+        await env.app._handle_interaction(click)
+        await drain(env.app)
+        assert env.channel.sent[-1].content == "-# 4 步 · 用时 13 秒\n❌ 出错：send failed"
+
+    env.run(body)
+
+
 def test_stop_command_without_running_run(env: Env) -> None:
     async def body() -> None:
         await env.app.handle_command(CHAT, "/stop")

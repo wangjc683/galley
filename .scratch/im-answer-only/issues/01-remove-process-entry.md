@@ -151,3 +151,6 @@ git diff --check
 **门禁**：pytest 754 passed、6 deselected；`mypy runner` 无问题；`ruff check runner` 通过；`check-managed-ga-payload`、`check-ga-baseline-drift` 都 OK；`git diff --check` 干净；`check-docs-links` 只有上面那一处占位断链。
 
 **没验证到的**：四个真渠道都没跑（第 6 节两列都还在）。旧按钮的墓碑只在假对象上测过：Telegram 对很旧的消息 `edit_message_reply_markup` 会不会报错、Discord 对旧消息 defer 后 `edit(view=None)` 能不能成，都靠吞错兜底，没在真平台上看过。
+
+- 2026-11-11 补测（只动测试）：Telegram、Discord 各加两条，提问前 2 步 10 秒，等回复 60 秒，续跑 2 步后 `/stop`，回执是 `⏹ 已停止 · 4 步 · 用时 15 秒`；续跑出错时，错误上面那行是 `4 步 · 用时 13 秒`。等待不计，提问两边的步数与用时相加，现有代码原样通过。
+- 过程中只有一处是测试自身的问题，没碰产品代码：Discord 那条起初还断言续跑状态消息是「02 确认方向」，可检查时第 3 步已经落定，消息正确地显示「03 改第一处」，这条额外断言依赖时序，已删掉。
