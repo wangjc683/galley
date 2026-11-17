@@ -1,0 +1,10 @@
+diff --git a/llmcore.py b/llmcore.py
+--- a/llmcore.py
++++ b/llmcore.py
+@@ -1073,0 +1074,6 @@ class NativeClaudeSession(BaseSession):
++        # Galley (0034): the official API ties each thinking block to the conversation before it, and returns 400
++        # ("bound to a different conversation") once an earlier message changed; compress_history_tags and
++        # trim_messages_history change them. There, send no thinking block back, however it got into history.
++        if not cc_identity:
++            for m in messages:
++                if isinstance(m.get("content"), list): m["content"] = [b for b in m["content"] if not (isinstance(b, dict) and b.get("type") == "thinking")] or [{"type": "text", "text": "..."}]

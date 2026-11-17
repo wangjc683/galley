@@ -1612,6 +1612,29 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     `client_metadata` and `include`); the URL rule (item 18) and the choice
     of auth header; a `user_agent` in a model's config (Settings cannot set
     one). The ChatGPT provider has its own probe (`core/src/chatgpt_siwc/`).
+26. What the engine sends back of a conversation toward the official
+    Anthropic API (2026-11-17, `.scratch/opus-5-5-thinking-history-check/`;
+    managed runtime, Anthropic protocol; managed patch `0034`). The official
+    API ties each thinking block's signature to the conversation before it
+    and answers 400 ("bound to a different conversation") once an earlier
+    message changed. `0034` leaves every `thinking` block out of the
+    `messages` that `NativeClaudeSession.raw_ask` sends to
+    `api.anthropic.com` (`0032`'s `cc_identity` host rule; a message left
+    empty gets a `...` text block), on the list `ask` and `_fix_messages`
+    copied, never on `self.history`. It is inserted right after `0032`'s
+    `cc_identity` lines, after `_fix_messages`, `_drop_unsigned_thinking`
+    and `_ensure_thinking_blocks` and before `beta_parts`. Re-check by hand
+    on upgrade: (a) whether `compress_history_tags` /
+    `trim_messages_history` still rewrite history in place (if upstream
+    makes Anthropic-protocol history append-only, or handles this check
+    itself, `0034` can go; see its removal condition in the patch ledger);
+    (b) whether `frontends/continue_cmd.py`'s `_parse_native_history` still
+    loads the logged thinking blocks back into history; (c) if upstream
+    changes how `raw_ask` builds `messages`, move `0034`'s insertion point
+    with it, so the filter still runs on the list that goes out and never on
+    the history. `runner/tests/test_managed_ga_llmcore.py` (the `0034`
+    group) checks the request on the official host and elsewhere, and that
+    `session.history` keeps the blocks.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.

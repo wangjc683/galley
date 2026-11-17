@@ -1071,6 +1071,12 @@ class NativeClaudeSession(BaseSession):
         from urllib.parse import urlsplit
         try: cc_identity = (urlsplit(self.api_base).hostname or '').lower() != 'api.anthropic.com'
         except ValueError: cc_identity = True
+        # Galley (0034): the official API ties each thinking block to the conversation before it, and returns 400
+        # ("bound to a different conversation") once an earlier message changed; compress_history_tags and
+        # trim_messages_history change them. There, send no thinking block back, however it got into history.
+        if not cc_identity:
+            for m in messages:
+                if isinstance(m.get("content"), list): m["content"] = [b for b in m["content"] if not (isinstance(b, dict) and b.get("type") == "thinking")] or [{"type": "text", "text": "..."}]
         beta_parts = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "redact-thinking-2026-02-12", "thinking-token-count-2026-05-13", "context-management-2025-06-27", "prompt-caching-scope-2026-01-05", "mid-conversation-system-2026-04-07", "effort-2025-11-24", "fallback-credit-2026-06-01"]
         if "[1m]" in model.lower():
             beta_parts.insert(1, "context-1m-2025-08-07"); model = model.replace("[1m]", "").replace("[1M]", "")

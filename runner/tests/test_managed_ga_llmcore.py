@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import importlib
 import json
 import os
@@ -1933,3 +1934,136 @@ def test_the_chatgpt_sign_in_request_is_left_alone(
     assert official["headers"]["User-Agent"] == _GALLEY_UA
     assert "originator" not in official["headers"]
     assert set(official["payload"]["client_metadata"]) == _CODEX_METADATA_KEYS
+
+
+# Patch 0034: toward the official Anthropic API (0032's host rule), a request
+# sends no thinking block back. The API ties each block's signature to the
+# conversation before it and answers 400 ("bound to a different conversation")
+# once an earlier message changed, which the engine's history compression
+# does. Every other host's request is unchanged, and the session's history
+# keeps the blocks.
+
+_SIGNED_THINKING: dict[str, Any] = {
+    "type": "thinking",
+    "thinking": "Read the file before answering.",
+    "signature": "sig-test-0034",
+}
+_TOOL_USE: dict[str, Any] = {
+    "type": "tool_use",
+    "id": "toolu_test_0034",
+    "name": "file_read",
+    "input": {"path": "notes.txt"},
+}
+_REPLY_WITH_TOOL: list[dict[str, Any]] = [
+    _SIGNED_THINKING,
+    {"type": "text", "text": "Reading it."},
+    _TOOL_USE,
+]
+_THINKING_ONLY_REPLY: list[dict[str, Any]] = [_SIGNED_THINKING]
+
+
+def _claude_second_turn(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, reply: list[dict[str, Any]]
+) -> tuple[Any, dict[str, Any]]:
+    """The turn after `reply` through `NativeClaudeSession`: the history holds
+    a user message and `reply`, the new message answers its tool call (or just
+    goes on); returns the session and the request it sent."""
+    net = _install_network(monkeypatch, _CLAUDE_OK)
+    sess = llmcore.NativeClaudeSession(
+        {
+            "name": "t0034",
+            "apikey": "sk-ant-api03-test",
+            "apibase": apibase,
+            "model": "claude-test",
+            "max_retries": 2,
+        }
+    )
+    sess.history = [
+        {"role": "user", "content": [{"type": "text", "text": "What does notes.txt say?"}]},
+        {"role": "assistant", "content": copy.deepcopy(reply)},
+    ]
+    results = [
+        {"type": "tool_result", "tool_use_id": b["id"], "content": "Buy milk."}
+        for b in reply
+        if b["type"] == "tool_use"
+    ]
+    msg = {"role": "user", "content": results or [{"type": "text", "text": "Go on."}]}
+    chunks, _ = _collect(sess.ask(msg))
+    assert chunks == ["ok"]
+    [call] = net.posts
+    return sess, call
+
+
+def _thinking_blocks(call: dict[str, Any]) -> list[Any]:
+    return [
+        b for m in call["payload"]["messages"] for b in m["content"] if b.get("type") == "thinking"
+    ]
+
+
+@pytest.mark.parametrize("apibase", ["https://api.anthropic.com", "https://API.Anthropic.com/v1"])
+def test_official_anthropic_api_sends_no_thinking_block_back(
+    monkeypatch: pytest.MonkeyPatch, apibase: str
+) -> None:
+    _, call = _claude_second_turn(monkeypatch, apibase, _REPLY_WITH_TOOL)
+    # The same session on a relay: the messages as they were before 0034.
+    _, relay = _claude_second_turn(monkeypatch, "https://relay.example.test", _REPLY_WITH_TOOL)
+
+    assert _thinking_blocks(call) == []
+    # The reply's other blocks go out as they were, in order.
+    assert call["payload"]["messages"][1] == {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "Reading it."}, _TOOL_USE],
+    }
+    # Nothing else in the messages changes.
+    assert call["payload"]["messages"] == [
+        {**m, "content": [b for b in m["content"] if b.get("type") != "thinking"]}
+        for m in relay["payload"]["messages"]
+    ]
+
+
+def test_official_anthropic_api_sends_a_thinking_only_reply_as_a_placeholder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, call = _claude_second_turn(monkeypatch, "https://api.anthropic.com", _THINKING_ONLY_REPLY)
+
+    assert call["payload"]["messages"][1] == {
+        "role": "assistant",
+        "content": [{"type": "text", "text": "..."}],
+    }
+
+
+@pytest.mark.parametrize(
+    "reply", [_REPLY_WITH_TOOL, _THINKING_ONLY_REPLY], ids=["with-tool", "thinking-only"]
+)
+@pytest.mark.parametrize(
+    "apibase",
+    [
+        # Every other Anthropic-compatible endpoint.
+        "https://relay.example.test",
+        "https://api.kimi.com/coding",
+        # Hosts that only look like it, and a base with no scheme (no host).
+        "https://api.anthropic.com.example.net",
+        "https://relay.example/api.anthropic.com",
+        "api.anthropic.com",
+    ],
+)
+def test_thinking_blocks_go_back_everywhere_else(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, reply: list[dict[str, Any]]
+) -> None:
+    _, call = _claude_second_turn(monkeypatch, apibase, reply)
+
+    assert call["payload"]["messages"][1] == {"role": "assistant", "content": reply}
+    assert _thinking_blocks(call) == [_SIGNED_THINKING]
+
+
+def test_official_anthropic_api_keeps_thinking_blocks_in_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sess, call = _claude_second_turn(monkeypatch, "https://api.anthropic.com", _REPLY_WITH_TOOL)
+
+    # The request went without the block ...
+    assert _thinking_blocks(call) == []
+    # ... and the history still holds the reply as it came: 0034 filters the
+    # copy `ask` and `_fix_messages` make, never `self.history`.
+    assert sess.history[1] == {"role": "assistant", "content": _REPLY_WITH_TOOL}
+    assert sess.history[-1] == {"role": "assistant", "content": [{"type": "text", "text": "ok"}]}
