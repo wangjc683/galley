@@ -135,8 +135,20 @@ async fn test_model(
             .await?
         }
         ManagedModelProtocol::Openai => {
-            let req = client.post(&endpoint).json(&openai_probe_payload(&model));
-            send_model_test(apply_probe_headers(req, &input, &secret, false, None)).await?
+            let request = |key: TokenCapKey| {
+                let req = client
+                    .post(&endpoint)
+                    .json(&openai_probe_payload(&model, key));
+                apply_probe_headers(req, &input, &secret, false, None)
+            };
+            let key = TokenCapKey::guess(&model);
+            let first = send_model_test(request(key)).await?;
+            // A wrong guess, as the provider names it, goes again once with
+            // the other key; the second answer is the result.
+            match token_cap_key_retry(first.0.as_u16(), &first.1, key) {
+                Some(other) => send_model_test(request(other)).await?,
+                None => first,
+            }
         }
     };
     if !status.is_success() {
@@ -595,17 +607,79 @@ fn anthropic_probe_payload(model: &str, claude_code: Option<&ClaudeCodeIdentity>
     payload
 }
 
-/// The OpenAI "Test model" body.
-fn openai_probe_payload(model: &str) -> Value {
-    let lower_model = model.to_ascii_lowercase();
-    let token_key = if ["gpt-5", "o1", "o2", "o3", "o4"]
-        .iter()
-        .any(|prefix| lower_model.starts_with(prefix))
-    {
-        "max_completion_tokens"
-    } else {
-        "max_tokens"
-    };
+/// The field that caps an OpenAI chat completion's length. Newer OpenAI
+/// models refuse `max_tokens` ("Unsupported parameter: 'max_tokens' is not
+/// supported with this model. Use 'max_completion_tokens' instead."); most
+/// other OpenAI-compatible endpoints only know `max_tokens`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TokenCapKey {
+    MaxTokens,
+    MaxCompletionTokens,
+}
+
+impl TokenCapKey {
+    fn name(self) -> &'static str {
+        match self {
+            Self::MaxTokens => "max_tokens",
+            Self::MaxCompletionTokens => "max_completion_tokens",
+        }
+    }
+
+    fn other(self) -> Self {
+        match self {
+            Self::MaxTokens => Self::MaxCompletionTokens,
+            Self::MaxCompletionTokens => Self::MaxTokens,
+        }
+    }
+
+    /// The first guess, from the model id lowercased: `gpt-<n>…` with
+    /// n ≥ 5, or `o<digit>…`, caps with `max_completion_tokens`; any other
+    /// id, a vendor-prefixed one such as `openai/gpt-5` included, with
+    /// `max_tokens`. The prefix table this replaces (`gpt-5`, `o1`–`o4`,
+    /// the engine's own in `_openai_stream`, which applies only when a
+    /// model sets `max_tokens` and Galley never does) is a special case.
+    fn guess(model: &str) -> Self {
+        let model = model.to_ascii_lowercase();
+        let completion = if let Some(rest) = model.strip_prefix("gpt-") {
+            let end = rest
+                .find(|c: char| !c.is_ascii_digit())
+                .unwrap_or(rest.len());
+            // Too many digits for a u64 is a large generation number too.
+            end > 0 && rest[..end].parse::<u64>().map_or(true, |n| n >= 5)
+        } else if let Some(rest) = model.strip_prefix('o') {
+            rest.starts_with(|c: char| c.is_ascii_digit())
+        } else {
+            false
+        };
+        if completion {
+            Self::MaxCompletionTokens
+        } else {
+            Self::MaxTokens
+        }
+    }
+}
+
+/// Whether a failed OpenAI "Test model" should go again with the other
+/// token cap key: the response is a 400 and its error says the key it sent
+/// is not supported, either by naming it in `error.param`, or with
+/// `error.code` `unsupported_parameter` and the other key in
+/// `error.message`. Works in both directions; the caller retries once.
+fn token_cap_key_retry(status: u16, body: &str, sent: TokenCapKey) -> Option<TokenCapKey> {
+    if status != 400 {
+        return None;
+    }
+    let json: Value = serde_json::from_str(body).ok()?;
+    let error = json.get("error")?;
+    let text = |field: &str| error.get(field).and_then(Value::as_str);
+    let other = sent.other();
+    let names_sent = text("param") == Some(sent.name());
+    let points_to_other = text("code") == Some("unsupported_parameter")
+        && text("message").is_some_and(|message| message.contains(other.name()));
+    (names_sent || points_to_other).then_some(other)
+}
+
+/// The OpenAI "Test model" body, its one-token cap under `token_key`.
+fn openai_probe_payload(model: &str, token_key: TokenCapKey) -> Value {
     let mut payload = serde_json::json!({
         "model": model,
         "messages": [
@@ -629,7 +703,7 @@ fn openai_probe_payload(model: &str) -> Value {
             }
         ]
     });
-    payload[token_key] = serde_json::json!(1);
+    payload[token_key.name()] = serde_json::json!(1);
     payload
 }
 
@@ -905,7 +979,7 @@ mod tests {
         assert!(tool.get("function").is_none());
 
         // OpenAI tools must be {type:function, function:{name, parameters}}.
-        let openai = openai_probe_payload("gpt-4o");
+        let openai = openai_probe_payload("gpt-4o", TokenCapKey::MaxTokens);
         let tool = &openai["tools"][0];
         assert_eq!(tool["type"], "function");
         assert!(tool["function"].get("name").is_some());
@@ -1299,6 +1373,156 @@ mod tests {
                 RELAY_KEY,
             );
             assert_eq!(probe_headers(&input, RELAY_KEY), expected, "{base}");
+        }
+    }
+
+    #[test]
+    fn token_cap_key_first_guess_covers_new_openai_generations() {
+        for model in [
+            "gpt-5",
+            "gpt-5.1",
+            "GPT-5-mini",
+            "gpt-50",
+            "gpt-6",
+            "gpt-6.1-sol",
+            "gpt-10",
+            "gpt-99999999999999999999999",
+            "o1",
+            "o1-mini",
+            "o3-pro",
+            "O4-mini",
+            "o5",
+        ] {
+            assert_eq!(
+                TokenCapKey::guess(model),
+                TokenCapKey::MaxCompletionTokens,
+                "{model}"
+            );
+        }
+        for model in [
+            "gpt-4o",
+            "gpt-4.1",
+            "gpt-3.5-turbo",
+            "gpt-",
+            "gpt-x",
+            "openai/gpt-5",
+            "openai/gpt-6.1-sol",
+            "openrouter/o3",
+            "chatgpt-4o-latest",
+            "omni-moderation-latest",
+            "o",
+            "deepseek-chat",
+            "",
+        ] {
+            assert_eq!(TokenCapKey::guess(model), TokenCapKey::MaxTokens, "{model}");
+        }
+        // The prefix table it replaces is a special case.
+        for prefix in ["gpt-5", "o1", "o2", "o3", "o4"] {
+            assert_eq!(TokenCapKey::guess(prefix), TokenCapKey::MaxCompletionTokens);
+        }
+    }
+
+    #[test]
+    fn openai_probe_payload_caps_under_the_given_key_only() {
+        for key in [TokenCapKey::MaxTokens, TokenCapKey::MaxCompletionTokens] {
+            let payload = openai_probe_payload("gpt-6", key);
+            assert_eq!(payload[key.name()], 1);
+            assert!(payload.get(key.other().name()).is_none());
+        }
+    }
+
+    /// The official API's answer to `max_tokens` on a `gpt-6` model
+    /// (2026-11-17).
+    const MAX_TOKENS_UNSUPPORTED: &str = r#"{
+  "error": {
+    "message": "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+    "type": "invalid_request_error",
+    "param": "max_tokens",
+    "code": "unsupported_parameter"
+  }
+}"#;
+
+    #[test]
+    fn a_wrong_token_cap_key_goes_again_with_the_other_one() {
+        use TokenCapKey::{MaxCompletionTokens, MaxTokens};
+        assert_eq!(
+            token_cap_key_retry(400, MAX_TOKENS_UNSUPPORTED, MaxTokens),
+            Some(MaxCompletionTokens)
+        );
+        // The other direction.
+        let reverse = serde_json::json!({"error": {
+            "message": "Unsupported parameter: 'max_completion_tokens' is not supported with this model. Use 'max_tokens' instead.",
+            "type": "invalid_request_error",
+            "param": "max_completion_tokens",
+            "code": "unsupported_parameter",
+        }})
+        .to_string();
+        assert_eq!(
+            token_cap_key_retry(400, &reverse, MaxCompletionTokens),
+            Some(MaxTokens)
+        );
+        // Either half of the rule is enough.
+        let param_only = serde_json::json!({"error": {"param": "max_tokens"}}).to_string();
+        assert_eq!(
+            token_cap_key_retry(400, &param_only, MaxTokens),
+            Some(MaxCompletionTokens)
+        );
+        let code_and_text = serde_json::json!({"error": {
+            "message": "max_tokens is not supported; use max_completion_tokens",
+            "code": "unsupported_parameter",
+        }})
+        .to_string();
+        assert_eq!(
+            token_cap_key_retry(400, &code_and_text, MaxTokens),
+            Some(MaxCompletionTokens)
+        );
+    }
+
+    #[test]
+    fn other_failures_do_not_retry_the_token_cap_key() {
+        use TokenCapKey::{MaxCompletionTokens, MaxTokens};
+        // Not a 400.
+        for status in [200, 401, 404, 422, 429, 500] {
+            assert_eq!(
+                token_cap_key_retry(status, MAX_TOKENS_UNSUPPORTED, MaxTokens),
+                None
+            );
+        }
+        // It names the key we did not send, and not as unsupported.
+        let not_sent = serde_json::json!({"error": {
+            "message": "max_tokens is too large",
+            "param": "max_tokens",
+            "code": "invalid_value",
+        }})
+        .to_string();
+        assert_eq!(
+            token_cap_key_retry(400, &not_sent, MaxCompletionTokens),
+            None
+        );
+        // Another parameter is the problem.
+        let temperature = serde_json::json!({"error": {
+            "message": "Unsupported parameter: 'temperature' is not supported with this model.",
+            "param": "temperature",
+            "code": "unsupported_parameter",
+        }})
+        .to_string();
+        assert_eq!(token_cap_key_retry(400, &temperature, MaxTokens), None);
+        // The other key in the text, but not as an unsupported parameter.
+        let other_code = serde_json::json!({"error": {
+            "message": "max_completion_tokens must be at least 1",
+            "param": "messages",
+            "code": "invalid_value",
+        }})
+        .to_string();
+        assert_eq!(token_cap_key_retry(400, &other_code, MaxTokens), None);
+        // Bodies without an error object.
+        for body in [
+            "",
+            "Bad Request",
+            r#"{"error": "max_tokens is not supported"}"#,
+            r#"{"message": "x", "param": "max_tokens"}"#,
+        ] {
+            assert_eq!(token_cap_key_retry(400, body, MaxTokens), None, "{body}");
         }
     }
 }
