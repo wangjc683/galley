@@ -1,6 +1,6 @@
 # 「测试模型」发的请求头与内核一致，并修掉 OpenAI 新模型测试必败
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-17 合入 `150b0d62`、`6193e555`，门禁全过；等 JC 用真实 key 验）
 日期：2026-11-17
 来源：票 `.scratch/anthropic-official-identity/issues/01-…` 的两条票外发现，加上 JC 当天实测到的一个 bug。前两部分 JC 已裁（见各节）；第三部分是 bug 修法，JC 未裁，不要可撤。
 
@@ -15,7 +15,7 @@ Status: ready-for-agent
 | Anthropic 协议的其他头 | 无 | `Accept`、`X-Claude-Code-Session-Id`、一组 `X-Stainless-*` |
 | Anthropic 协议请求体的 `metadata` | 无 | Claude Code 格式的 `user_id` |
 | 模型名带 `[1m]` | 待确认（见「怎么改」） | 去掉后缀，beta 列表第二位插入 `context-1m-2025-08-07` |
-| OpenAI 协议 | 只有鉴权头 | 另带 `User-Agent`（`default_ua`）和 `originator: codex_exec` |
+| OpenAI 协议 | 只有鉴权头 | 另带 `User-Agent`（`NativeOAISession.native_ua`，即 `codex_exec/…`）和 `originator: codex_exec` |
 
 2026-11-17 已经证明请求头能决定请求成不成功（带 Claude Code 标识的请求花不了订阅附带的额度）。`docs/ga-baseline.md` 里 2026-10-06 那条「不算基线同步面，只记录」的结论因此作废。
 
@@ -42,7 +42,7 @@ Anthropic 协议，带 Claude Code 标识时（第三方地址）：
 
 Anthropic 协议，不带标识时（官方地址，不看透传开关）：与补丁 `0032` 之后的内核一致，即 beta 列表去掉 `claude-code-20250219`，UA 按第一部分，不发 `x-app`、会话头、`X-Stainless-*`、`metadata`，`Accept` 保留。
 
-OpenAI 协议（不含 ChatGPT 登录的服务商，那条路走 `chatgpt_siwc`，不动）：加上 `User-Agent`（内核的 `default_ua`）和 `originator`，值与内核相同。
+OpenAI 协议（不含 ChatGPT 登录的服务商，那条路走 `chatgpt_siwc`，不动）：加上 `User-Agent`（内核实际发的 `NativeOAISession.native_ua`）和 `originator`，值与内核相同。
 
 「读取模型列表」沿用与「测试模型」相同的请求头（内核没有对应请求，没有可对齐的对象）。
 
@@ -144,3 +144,24 @@ git diff --check
 ### 2026-11-17 真机（JC）
 
 JC 确认：OpenAI 官方地址「测试模型」报 `max_tokens` 不被支持时，填的是 `gpt-6` 系列的模型。
+
+### 2026-11-17 验收（主会话）
+
+合入 `150b0d62`（第一、二部分与改裁）、`6193e555`（第三部分，单独可撤）。主会话重跑：`cargo test --workspace` 49 个套件 1437 通过；pytest 796 通过；mypy、ruff、六个门禁脚本、`git diff --check` 都过；把改过的 `0032` 单独打在 `0032` 之前的 `llmcore.py` 上，结果与提交的载荷逐字节一致。
+
+票面有一处事实写错，已在正文改正：OpenAI 协议下内核发的 UA 不是 `default_ua`（`claude-cli/…`），而是 `NativeOAISession.native_ua`（`codex_exec/…`）。`default_ua` 只是「没配过 UA」的标记值，从不发出去。执行代理按「值与内核相同」用了实际值。JC 裁「两个协议一起对齐」时听到的是错的那个说法，所以这一点要 JC 重新过目：测试请求现在对所有 OpenAI 协议的服务商自称 Codex，对话一直是这样发的。
+
+执行代理回答的三件事：
+
+- `[1m]`：原来测试请求把带 `[1m]` 的模型名原样发出、也不带 `context-1m-2025-08-07`；现在与内核一致。
+- 重放后 `managed-ga/code` 里只有 `llmcore.py` 变了，行数不变，别的补丁不用重新导出。
+- 抓漂移演示：改错一个 `X-Stainless-*` 的值、把 UA 改回旧值，对应的测试各红一条，报错写明该改哪个常量；改回后全过。
+
+没验证、留给真机的风险：
+
+1. 官方 Anthropic 地址上，「测试模型」现在发 8 个 beta（以前 3 个），其中有 `fallback-credit-2026-06-01`。JC 上次第 1 步通过时用的是 3 个。如果其中某个会触发余额不足，测试会和对话一起失败，这正是对齐的本意，但第 1 步要重测。
+2. 第三方 Anthropic 协议的服务商现在收到完整的 Claude Code 头（9 个 beta、会话头、`X-Stainless-*`、请求体的 `metadata`），「读取模型列表」也带。以前只收到 4 个 beta 的服务商如果拒收这些，测试会开始失败；对话那边本来就会失败。
+3. 重发规则比较宽：只要 `error.param` 等于发出的参数名就换参数重发，包括数值超限这类原因，这时用户看到的是第二次的报错。
+4. 没有对齐的细节：请求头的顺序和大小写（HTTP 不区分）；模型配置里自定的 `user_agent`（设置界面设不了）。
+
+票外发现：内置运行时从不发出 `default_ua`。
