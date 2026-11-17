@@ -200,3 +200,12 @@ HTTP 400 … "Function tools with reasoning_effort are not supported for gpt-6.1
 验证命令、提交约束、报告格式同正文。单独一个提交。报告里另外回答：测试请求读到的 `api_mode` 是不是生效值（预设 ⊕ 默认 ⊕ 单独覆盖）。
 
 真机步骤（只有 JC 能验）：OpenAI 官方服务商配 `gpt-6` 系列的模型、API 模式设为 Responses，「测试模型」通过，新开对话能回。
+
+### 2026-11-17 裁决（JC：「按你推荐改」）
+
+1. OpenAI 官方预设的默认 API 模式改成 Responses。只影响以后新添加的模型；已存的模型与第三方 OpenAI 兼容预设不变。主会话已改（`gui/src/lib/managed-model-presets.ts`）。
+2. 测试花费的提示改成「模型测试最多 16 个输出 token」（英文同步）。主会话已改。
+3. 测试请求对 OpenAI 协议的服务商照内核的发（自称 Codex，与对话一致）：保持。
+4. Anthropic 协议输出上限固定 8192：先不改，已记进 `docs/devlog/deferred.md`。
+
+没验证的：官方 OpenAI 用 API key 走 Responses 模式的对话。内核的 Responses 请求体是照 Codex 的样子拼的（带 `client_metadata`、`prompt_cache_key`、`include`），官方接口是否原样接受没有测过；「测试模型」的请求体不带这些，所以测试通过不等于对话通过，要 JC 新开对话验。
