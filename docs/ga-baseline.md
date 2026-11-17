@@ -1559,7 +1559,8 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     payload's own `run()` / `agent_runner_loop` / `plugins.hooks` in a child
     process). If it fails, the note goes upstream's way again (the merge
     round reads the file first), nothing breaks.
-25. What "Test model" sends (2026-11-17, `.scratch/model-test-parity/`;
+25. What "Test model" sends (2026-11-17, devlog
+    `2026-11-17-official-apis-no-impersonation.md`;
     managed runtime, both protocols; managed patches `0032`, `0033` and
     `0007`). Headers alone can decide whether a request succeeds: on
     2026-11-17 the official Anthropic API refused a subscription's API credit

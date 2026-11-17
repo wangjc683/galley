@@ -1515,7 +1515,7 @@
 
 ## 「测试模型」改走内核进程
 
-- **状态**：暂缓（2026-11-17 JC 按推荐：先把测试请求的头对齐成内核的并用测试锁住，这一条等信号；票 [01](../../.scratch/model-test-parity/issues/01-model-test-sends-what-the-engine-sends.md)）。
+- **状态**：暂缓（2026-11-17 JC 按推荐：先把测试请求的头对齐成内核的并用测试锁住，这一条等信号；当时的票已随 v0.7.9 删掉，经过见 [devlog](./2026-11-17-official-apis-no-impersonation.md)）。
 - **提出**：2026-11-17。「测试模型」是 Core 自己拼的一个请求（`core/src/managed_model_probe.rs`），对话是内核发的另一个请求。当天发现两边的请求头不一样，带 Claude Code 标识的请求花不了订阅附带的 API 额度；头对齐之后，请求体仍然不一样。
 - **还剩的差异**（票 01 之后）：
   - 请求体：系统提示词、思考与推理强度、`cache_control`、开着透传时的 Claude Code 系统提示词，测试请求都不带。
