@@ -10,17 +10,17 @@ not current rules).
 
 ## Current Target
 
-- Package version: `0.7.8`.
-- Git tag / GitHub Release: `v0.7.8` is the current published stable release
-  (tagged at `ec5a3e1d` on 2026-11-11, published 2026-11-11, GitHub Latest).
+- Package version: `0.7.9`.
+- Git tag / GitHub Release: `v0.7.9` is the current published stable release
+  (tagged at `bd3f9a79` on 2026-11-17, published 2026-11-17, GitHub Latest).
 - Agent API schema: `schemaVersion: 3` (since the Goal removal on
   2026-10-13, first shipped in `v0.7.0`; `2` first shipped in `v0.5.0`). The
   server keeps answering `1` and `2` for every command that did not change;
   every goal command, v1 and v2, is `unknown_command` under every pin.
-- Release tier: stable patch; default update channel points at `v0.7.8`.
+- Release tier: stable patch; default update channel points at `v0.7.9`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `d66509b` (audited 2026-11-03, shipped in
-  `v0.7.6` … `v0.7.8`; `llmcore.py`'s text protocol split into `legacy_llmcore.py`,
+  `v0.7.6` … `v0.7.9`; `llmcore.py`'s text protocol split into `legacy_llmcore.py`,
   one `0001` hunk so managed memory distillation still reads L0, no Galley
   code change). The previous `a9a36b4` shipped `v0.7.1` … `v0.7.5`,
   `b70079d` `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never
@@ -40,6 +40,48 @@ Release paragraphs (newest first) keep only the latest three releases;
 every older release's narrative lives in its release devlog (the
 [devlog index](./devlog/README.md) lists them). Two older paragraphs stay
 for now, `v0.6.1` and `v0.4.16`: each holds one fact its devlog does not.
+
+`v0.7.9` (2026-11-17) is a patch six days after `v0.7.8`, 47 commits. IM
+answers carry only the answer: the 过程 button on Telegram and Discord, the
+过程 panel on Feishu and WeChat's `N 步 · 用时 X` last line are gone, the IM
+entry layer tells the agent to retell the process when asked and not run it
+again, and a 过程 button already sent removes itself when tapped. Toward
+the official APIs Galley says it is Galley: no Claude Code identity toward
+`api.anthropic.com`, no Codex identity toward `api.openai.com` (the ChatGPT
+sign-in provider excepted), because both vendors refuse a subscription's
+API credit to a request that carries one (managed patches `0032`, `0033`).
+"Test model" sends what a conversation sends (the engine's headers, held
+by a parity test, GA baseline coupling point 25; the Responses endpoint in
+Responses mode; `[1m]` model ids; the token-cap key for new OpenAI models);
+the official OpenAI preset defaults to Responses and the Anthropic preset
+prefills `claude-opus-5-5`. Found and fixed during release prep, before the
+tag: on an enforcing Anthropic account (created on or after 2026-08-31) a
+long tool task on `claude-opus-5-5` hit 400 "Invalid `signature` in
+`thinking` block … bound to a different conversation" once the engine
+shortened old messages in place, and every later message in that
+conversation got the same 400 (reproduced under dev at request 14). Managed
+patch `0034` (coupling point 26) sends a thinking block back to the official
+host only while the request before it fingerprints as it did when the block
+was produced. The fix was ruled three times the same day: not storing
+blocks, then not sending any back (the IM log restore would have brought
+them back), then, after JC's worry about answer quality (78% of his
+requests sit in runs longer than 6 steps), only the invalid ones dropped.
+Graded patch: no schema change, no migration, nothing with the weight of a
+product line. GA baseline unchanged at `d66509b`: upstream `main` still at
+`68d996a`, judged at `v0.7.7`. Pre-flight: typecheck, lint, `cargo check`,
+the six gate scripts; the bundled-runtime gate on `mac-x64` twice (before
+and after `0034`); `check.yml` green on `bd3f9a79` (run 44064738372), all
+seven jobs. One draft (release run 44068410650); the agent checked the
+Intel DMG read-only (its `llmcore.py` byte-identical to the repo payload,
+32 patches, no process-button send path) and the `latest.json` candidate.
+JC handed the Mac to the main session for the smoke: the draft installed
+over 0.7.8; the main chat answered on the ChatGPT sign-in model; a
+26-step chained task on `claude-opus-5-5` ran 39 requests with no error and
+the right answer; "Test model" passed on the official Anthropic and OpenAI
+models and on one third-party provider per protocol. Not done: the preset
+defaults on the packaged build, a Telegram answer on it, W1. Stable promoted
+and verified the same session (run 44084022327). Full narrative: devlog
+[2026-11-17-v0.7.9-release](./devlog/2026-11-17-v0.7.9-release.md).
 
 `v0.7.8` (2026-11-11) is a patch five days after `v0.7.7`, 146 commits. The
 to-do list becomes the user's main list (main chat rulings 202–208, tickets
@@ -106,43 +148,6 @@ Stable promoted and verified the same session (run 42192633408). Full
 narrative: devlog
 [2026-11-06-v0.7.7-release](./devlog/2026-11-06-v0.7.7-release.md).
 
-`v0.7.6` (2026-11-04) is a patch one day after `v0.7.5`, 86 commits (the
-first draft's 77, the retag's 9). The main chat leans on the model with a few judgments
-instead of dispatch rules (main chat ruling 186, ticket 139): it looks
-things up on the web itself and gives sources; a deliverable the user will
-decide on, pass on or keep goes to subtasks, one per part and all at once,
-and comes back merged (ruling 193, ticket 143); the user's memos on how
-they want such work done come first, and work of its own starts with a
-line of how (rulings 194–196, ticket 145). Text sent while it runs is
-interjected and read at its next step (ticket 136; `session send` may
-answer `dispatch: "interjected"`); a `tell_user` tool and words outside
-`<summary>` reach the user mid-run (tickets 137, 142); a subtask starts
-with the main chat's last turns as background (ticket 138, migration 056);
-one reply's batch of subtasks wakes the main chat once, when all are back
-or 5 minutes after the first (ticket 144). A merge round for subtasks the
-user dispatched draws like the user's own round, the to-do panel no longer
-lists subtasks, and the sidebar's 「还有 N 件在办」 unfolds in place (ruling
-197, ticket 146); the managed runner hands the main chat its wake note in
-full instead of upstream's 「Long user prompt saved to …」 file, and a cut
-answer points at `finalAnswer[3000:]` (ruling 198, ticket 147). Bundled
-GA: patch `0031` cuts a model request still streaming at 300 s (ticket
-140); baseline `a9a36b4` -> `d66509b`. Process cards draw `Bash` /
-`PowerShell` as running code and name a lone tool when a step has no
-summary (baseline tickets 02–03). Graded patch: the largest piece (the
-main chat's judgments and interjection) extends the `v0.7.0` main chat;
-`dispatch: "interjected"` is additive under schema 3. The first draft was
-withdrawn: on smoke S3 the merge round ran 100 s with nothing drawn for
-its first ~54 s; JC chose to fix both the drawing and the speed before
-shipping (rulings 197–198). Pre-flight for the retag: `check.yml` green on
-`a6ccf951` (run 41811337897), all seven jobs; the six gate scripts in a
-`git archive` copy of `9254fdbd`; the bundled-runtime gate on `mac-x64`;
-vitest in two time zones. JC's smoke of the second draft: S3 passed, the
-merge round 73 s and 3 steps from the wake, the first step 13 s in, no
-read of the saved prompt file (S1 and S2 passed on the first draft). Stable
-promoted and verified the same session (run 41826253185). W1 not done.
-Full narrative: devlog
-[2026-11-04-v0.7.6-release](./devlog/2026-11-04-v0.7.6-release.md).
-
 `v0.6.1` (2026-10-07) is a patch two days after `v0.6.0`, 16 commits. It
 ships the GA baseline `f308ee7` and three managed prompt rounds: the runtime
 prompt describes Galley from a feature map and points configuration requests
@@ -190,18 +195,23 @@ day. Full narrative: devlog
 
 ## Current Release State
 
-`v0.7.8` is published and promoted as the live stable release (published
-2026-11-11 05:22 UTC). The default `updates/stable/latest.json` channel points
-at `v0.7.8`, with the legacy `updates/beta/latest.json` alias pointing at the
+`v0.7.9` is published and promoted as the live stable release (published
+2026-11-17 12:31 UTC). The default `updates/stable/latest.json` channel points
+at `v0.7.9`, with the legacy `updates/beta/latest.json` alias pointing at the
 same version for older installed builds. The live verifier passed for both
 channels across all three platforms (darwin-aarch64, darwin-x86_64,
-windows-x86_64), in the promote run (42965351992) and again locally (channel
-branch at `34d88ef5`); a plain `curl` read 0.7.8 at 05:23 UTC, right after
-promote. One draft cut (release run 42960094826, tag on `ec5a3e1d`); JC
-smoked the Mac and approved publishing; W1 was not done and is owed under
-Unreleased On Main. The bundled-runtime gate passed on `mac-x64` (`runner/`
-and `managed-ga/` both changed); `check.yml` was green on `ec5a3e1d` (run
-42957710875), all seven jobs.
+windows-x86_64), in the promote run (44084022327) and again locally (channel
+branch at `e6a76919`); a plain `curl` read 0.7.9 at 12:32 UTC, right after
+promote. One draft cut (release run 44068410650, tag on `bd3f9a79`); the
+main session walked the Mac smoke at JC's request and JC approved
+publishing; W1 was not done and is owed under Unreleased On Main. The
+bundled-runtime gate passed on `mac-x64` twice (`managed-ga/`, `runner/` and
+`core/` changed; again after patch `0034`); `check.yml` was green on
+`bd3f9a79` (run 44064738372), all seven jobs.
+
+`v0.7.8` (2026-11-11): one draft cut (release run 42960094826, tag on
+`ec5a3e1d`), JC smoked the Mac and approved publishing, W1 not done;
+promote run 42965351992; the bundled-runtime gate passed on `mac-x64`.
 
 `v0.7.7` (2026-11-06): one draft cut (release run 42187309646, tag on
 `a5d376b9`), JC smoked the Mac and approved publishing, W1 skipped by JC;
@@ -312,7 +322,8 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.7.7` → `v0.7.8` passed on a
+1. App-update dogfood (SOP step 10): `v0.7.8` → `v0.7.9` has not been
+   observed on any machine yet (2026-11-17). `v0.7.7` → `v0.7.8` passed on a
    user's Windows machine the day of the release (JC, 2026-11-11, relaying
    the user: 「windows 用户更新到 0.7.8，更新和使用暂时看一切正常」; the
    user takes every version through the updater, was on 0.7.7 before, and
@@ -320,9 +331,9 @@ Post-release follow-up:
    Windows hops passed too and migrations 053–057 each ran on a real older
    database there, 057 in this update. It is the first update through the
    new NSIS pre-install hook, and it did not break the restart. This is a
-   user's report passed on, not a walk of the Windows checklist. The macOS hops `v0.7.0` → … → `v0.7.8` stay unobserved: JC's Mac
-   was installed straight from the draft all eight times; the CDN served
-   0.7.8 without cache-bust at 05:23 UTC, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
+   user's report passed on, not a walk of the Windows checklist. The macOS hops `v0.7.0` → … → `v0.7.9` stay unobserved: JC's Mac
+   was installed straight from the draft all nine times; the CDN served
+   0.7.9 without cache-bust at 12:32 UTC on 2026-11-17, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -375,51 +386,39 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.8..HEAD`. Merged since `v0.7.8`:
-the release docs, and two changes to the app:
+Release-scope truth is `git log v0.7.9..HEAD`. Merged since `v0.7.9`:
+the release docs. None of that changes the app.
 
-- **IM answers carry only the answer** (2026-11-11,
-  [devlog](./devlog/2026-11-11-im-answer-only.md)): the 过程 button on
-  Telegram and Discord, the 过程 panel on Feishu and WeChat's
-  `N 步 · 用时 X` last line are gone; the live status message, stop
-  receipts, questions and the error line are as they were; a 过程 button
-  already sent loses itself when tapped. The IM entry layer gained a
-  paragraph: the user never sees the steps, and asked for the process the
-  agent retells it and does not run it again (eval on gpt-6.1-sol: 9 of 12
-  without it, 12 of 12 with it). `managed-ga/` (patches `0023`, `0024`,
-  `0026`, `0029`), `runner/` and `core/` changed, so the next release runs
-  the bundled-runtime gate. JC ran Telegram and Feishu under dev the same
-  day and reported no problem (the engine logs show 「过程给我看看」 answered
-  without a rerun, and 「刚才怎么查的」 answered after a channel restart).
-  JC also tapped an old Telegram 过程 button: it went away. WeChat and
-  Discord were waived by JC (automated tests only). Not measured: a task
+**Owed from the `v0.7.9` smoke** (the list is in the release devlog). The
+main session walked the Mac smoke on the installed draft at JC's request.
+What it shows: the packaged app up with its browser bridge and four IM
+supervisors; the main chat answering in one request on the ChatGPT sign-in
+model (patch `0033`'s excepted path); a 26-step chained tool task on the
+official `claude-opus-5-5` running 39 requests, 18 replies with thinking
+blocks, no error, the right answer (patch `0034` on a packaged build);
+"Test model" passing on the official Anthropic and OpenAI models and on one
+third-party provider per protocol. Not seen or not measured:
+
+- Patch `0034`: the effect on answer quality of no longer sending back the
+  reasoning done before the engine shortens old messages (deferred, with
+  start signals); the system prompt or tool set changing mid-conversation
+  and the over-the-limit trim have automated tests only; an IM channel on
+  `claude-opus-5-5` picked back up after a restart (the log restore path)
+  was not walked; an enforcing account reached through a third-party host
+  is not covered (deferred). Seen once and not looked into: after a runner
+  restart, a message to the conversation that had hit the 400 came back as
+  `stop_reason: refusal`, of which the engine keeps only
+  `[Error: Claude refusal]`.
+- The two preset defaults (Responses for the official OpenAI preset,
+  `claude-opus-5-5` prefilled for Anthropic) were not looked at on the
+  packaged build; JC saw them under dev.
+- IM answers without the process entry on the packaged build: the payload
+  was checked read-only (no process-button send path in the Telegram
+  channel code); no message was sent through a channel. WeChat and Discord
+  have automated tests only (waived by JC at dogfood). Not measured: a task
   with side effects asked 「过程给我看看」.
-
-- **Official APIs: Galley says it is Galley; "Test model" sends what a
-  conversation sends** (2026-11-17,
-  [devlog](./devlog/2026-11-17-official-apis-no-impersonation.md)): toward
-  `api.anthropic.com` requests carry no Claude Code identity, and toward
-  `api.openai.com` (the ChatGPT sign-in provider excepted) no Codex
-  identity, because both vendors refuse a subscription's monthly API
-  credit to a request that carries one (managed patches `0032`, `0033`;
-  the Claude Code passthrough option does not bring it back). The
-  connection probe now sends the engine's headers for both protocols,
-  held to the payload by `runner/tests/test_managed_ga_probe_parity.py`
-  (GA baseline coupling point 25), follows the model's API mode (Responses
-  endpoint and body), handles `[1m]` model ids as the engine does, and
-  picks the token-cap key for new OpenAI models (one retry on the
-  provider's say-so). Presets: the official OpenAI preset defaults to
-  Responses, the Anthropic preset prefills `claude-opus-5-5`; the test
-  cost hint says 16 output tokens. `managed-ga/`, `runner/` (tests) and
-  `core/` changed, so the next release runs the bundled-runtime gate. JC
-  under dev the same day: the official Anthropic test and a
-  `claude-opus-5-5` conversation, and the official OpenAI test and a
-  `gpt-6.1-sol` conversation in Responses mode, all pass (the database
-  shows both conversations without errors). Not yet reported: a ChatGPT
-  sign-in model still answers; one third-party provider per protocol
-  still passes the test. Open, unverified: a long tool-heavy conversation
-  on Opus 5.5 may trip the thinking-block history check
-  (`.scratch/opus-5-5-thinking-history-check/`).
+- W1, the Windows checklist: not walked; nothing in this release is
+  Windows-only.
 
 **Owed from the `v0.7.8` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. What the database and the
@@ -734,8 +733,8 @@ neither of which Galley loads, so not followed; reasoning in the `v0.7.6`
 release devlog), and again in `v0.7.7` with upstream 8 commits past it
 (`68d996a`: those four, the hub frontends' FastAPI lifespan fix and an
 opt-in Claude `show_thinking` key Galley does not set, so not followed;
-reasoning in the `v0.7.7` release devlog), and in `v0.7.8` with upstream
-still at `68d996a`.
+reasoning in the `v0.7.7` release devlog), and in `v0.7.8` and `v0.7.9` with
+upstream still at `68d996a`.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -781,10 +780,10 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | Migrations run through `057_todo_series.sql`; v0.2.16 added managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.7.8 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.7.9 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `d66509b` (2026-11-03), shipped in `v0.7.6` … `v0.7.8` (`a9a36b4` shipped `v0.7.1` … `v0.7.5`, `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `d66509b` (2026-11-03), shipped in `v0.7.6` … `v0.7.9` (`a9a36b4` shipped `v0.7.1` … `v0.7.5`, `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -807,7 +806,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.7.8`. For the next release, bump every
+- Current package metadata uses `0.7.9`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.

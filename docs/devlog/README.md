@@ -17,7 +17,7 @@ Galley 开发日志：记录设计与工程决策的"为什么"，以及考虑�
 ## 时间线
 
 ### 2026-11-17
-- [v0.7.9 发布](./2026-11-17-v0.7.9-release.md) — patch：IM 回答里只有回答、官方地址上不冒充、「测试模型」发对话会发的东西；没有迁移，`schemaVersion` 仍是 3；`managed-ga/`、`runner/`、`core/` 都动了，打包门禁跑过；上游仍是 `68d996a`，不跟
+- [v0.7.9 发布](./2026-11-17-v0.7.9-release.md) — patch：IM 回答里只有回答、官方地址上不冒充、「测试模型」发对话会发的东西；打 tag 前复现并修掉 Opus 5.5 长工具对话的思考块签名 400（补丁 `0034`：官方地址上只发回仍然有效的思考块，裁决当天改了三次）；没有迁移，`schemaVersion` 仍是 3；打包门禁跑了两次；上游仍是 `68d996a`，不跟；草稿一次过，主会话受 JC 之托在这台 Mac 上代走冒烟（S1–S3b 过），当天发布并推 stable；预设默认值、Telegram、W1 没走到
 - [官方地址上不冒充：Anthropic 不自称 Claude Code，OpenAI 不自称 Codex；「测试模型」发内核会发的头](./2026-11-17-official-apis-no-impersonation.md) — JC 接订阅附带的 API 额度，连撞五关：带 Claude Code / Codex 标识的请求花不了订阅额度（补丁 `0032`、`0033`，只看官方主机名，不看透传开关）；「测试模型」的头对齐成内核的并用 `test_managed_ga_probe_parity.py` 锁住（推翻 10-06「不算同步面」）、跟着 API 模式走；OpenAI 官方预设默认 Responses，Anthropic 预填 `claude-opus-5-5`；真机 Anthropic 与 `gpt-6.1-sol` 的测试和对话都通过
 
 ### 2026-11-11
