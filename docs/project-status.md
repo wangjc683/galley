@@ -376,7 +376,7 @@ Post-release follow-up:
 ## Unreleased On Main
 
 Release-scope truth is `git log v0.7.8..HEAD`. Merged since `v0.7.8`:
-the release docs, and one change to the app:
+the release docs, and two changes to the app:
 
 - **IM answers carry only the answer** (2026-11-11,
   [devlog](./devlog/2026-11-11-im-answer-only.md)): the 过程 button on
@@ -394,6 +394,32 @@ the release docs, and one change to the app:
   JC also tapped an old Telegram 过程 button: it went away. WeChat and
   Discord were waived by JC (automated tests only). Not measured: a task
   with side effects asked 「过程给我看看」.
+
+- **Official APIs: Galley says it is Galley; "Test model" sends what a
+  conversation sends** (2026-11-17,
+  [devlog](./devlog/2026-11-17-official-apis-no-impersonation.md)): toward
+  `api.anthropic.com` requests carry no Claude Code identity, and toward
+  `api.openai.com` (the ChatGPT sign-in provider excepted) no Codex
+  identity, because both vendors refuse a subscription's monthly API
+  credit to a request that carries one (managed patches `0032`, `0033`;
+  the Claude Code passthrough option does not bring it back). The
+  connection probe now sends the engine's headers for both protocols,
+  held to the payload by `runner/tests/test_managed_ga_probe_parity.py`
+  (GA baseline coupling point 25), follows the model's API mode (Responses
+  endpoint and body), handles `[1m]` model ids as the engine does, and
+  picks the token-cap key for new OpenAI models (one retry on the
+  provider's say-so). Presets: the official OpenAI preset defaults to
+  Responses, the Anthropic preset prefills `claude-opus-5-5`; the test
+  cost hint says 16 output tokens. `managed-ga/`, `runner/` (tests) and
+  `core/` changed, so the next release runs the bundled-runtime gate. JC
+  under dev the same day: the official Anthropic test and a
+  `claude-opus-5-5` conversation, and the official OpenAI test and a
+  `gpt-6.1-sol` conversation in Responses mode, all pass (the database
+  shows both conversations without errors). Not yet reported: a ChatGPT
+  sign-in model still answers; one third-party provider per protocol
+  still passes the test. Open, unverified: a long tool-heavy conversation
+  on Opus 5.5 may trip the thinking-block history check
+  (`.scratch/opus-5-5-thinking-history-check/`).
 
 **Owed from the `v0.7.8` smoke** (the list is in the release devlog). JC
 smoked the Mac draft and approved publish. What the database and the

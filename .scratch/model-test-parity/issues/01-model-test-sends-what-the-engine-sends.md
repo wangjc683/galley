@@ -288,3 +288,9 @@ HTTP 400 … "code": "codex_byok_restricted_by_api_credit_promo", "message": "Th
 1. 拒收是请求头还是 `client_metadata` 里的哪一项触发的，没核实，整组去掉。
 2. 保留的 `prompt_cache_key`、`include`、`instructions` 会不会也触发拒收，没核实。
 3. 以后上游在 `_openai_stream` 里加新的 Codex 标识时，不会与 `0033` 冲突，也不会被去掉；基线升级时要看这个函数发了什么（台账已写明）。
+
+### 2026-11-17 真机（JC）：OpenAI 官方通过
+
+JC：「gpt-6.1-sol 模型测试成功，对话成功」。库里对应一次 `gpt-6.1-sol` 的对话，一条回复，没有报错。Responses 测试请求的输出上限 16 因此可用；第四、第五部分留下的「保留项会不会触发拒收」在这个账号上没有发生。
+
+还没回报的：ChatGPT 登录的模型发一句仍能回；第三方 Anthropic 协议、OpenAI 协议的服务商各一个，「测试模型」仍通过。
