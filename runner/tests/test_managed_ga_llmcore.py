@@ -1646,3 +1646,149 @@ def test_the_whitespace_guard_and_the_deadline_never_both_cut(
     # Either way the arguments are the opening, the whitespace dropped.
     [call] = response.tool_calls
     assert json.loads(call.function.arguments) == {"_raw": _OPENING}
+
+
+# Patch 0032: toward the official Anthropic API (host exactly
+# api.anthropic.com) with Claude Code passthrough off, an Anthropic-protocol
+# request says nothing of Claude Code; every other request is unchanged. With
+# those markers the official API refuses a subscription's API credit
+# ("credit balance is too low", 400).
+
+_CC_BETA = "claude-code-20250219"
+_CC_HEADERS = ("x-app", "X-Claude-Code-Session-Id")
+
+_CLAUDE_OK = _FakeHTTPResponse(
+    200,
+    lines=tuple(
+        _sse(
+            {"type": "message_start", "message": {"usage": {"input_tokens": 10}}},
+            {"type": "content_block_start", "index": 0, "content_block": {"type": "text"}},
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "ok"},
+            },
+            {"type": "content_block_stop", "index": 0},
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 1},
+            },
+            {"type": "message_stop"},
+        )
+    ),
+)
+
+
+def _claude_request(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, **cfg: Any
+) -> tuple[Any, dict[str, Any]]:
+    """One turn through `NativeClaudeSession`; returns the session and the
+    request it sent."""
+    net = _install_network(monkeypatch, _CLAUDE_OK)
+    sess = llmcore.NativeClaudeSession(
+        {
+            "name": "t0032",
+            "apikey": "sk-ant-api03-test",
+            "apibase": apibase,
+            "model": "claude-test",
+            "max_retries": 2,
+            **cfg,
+        }
+    )
+    msg = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+    chunks, _ = _collect(sess.ask(msg))
+    assert chunks == ["ok"]
+    [call] = net.posts
+    return sess, call
+
+
+def _betas(call: dict[str, Any]) -> list[str]:
+    return str(call["headers"]["anthropic-beta"]).split(",")
+
+
+def _identity_free(headers: dict[str, Any]) -> dict[str, Any]:
+    return {
+        k: v
+        for k, v in headers.items()
+        if k not in (*_CC_HEADERS, "user-agent", "anthropic-beta")
+        and not k.startswith("X-Stainless-")
+    }
+
+
+def _assert_claude_code_identity(sess: Any, call: dict[str, Any]) -> None:
+    headers = call["headers"]
+    assert headers["user-agent"] == sess.user_agent == llmcore.NativeClaudeSession.native_ua
+    assert headers["x-app"] == "cli"
+    assert _betas(call)[0] == _CC_BETA
+    assert headers["X-Claude-Code-Session-Id"] == sess._session_id
+    assert headers["X-Stainless-Lang"] == "js"
+    assert headers["Accept"] == "application/json"
+    user_id = json.loads(call["payload"]["metadata"]["user_id"])
+    assert user_id["session_id"] == sess._session_id
+
+
+@pytest.mark.parametrize("model", ["claude-test", "claude-test[1m]"])
+@pytest.mark.parametrize("apibase", ["https://api.anthropic.com", "https://API.Anthropic.com/v1"])
+def test_official_anthropic_api_without_passthrough_sends_no_claude_code_identity(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, model: str
+) -> None:
+    sess, call = _claude_request(monkeypatch, apibase, model=model)
+    # The same session on a relay: the request as it was before 0032.
+    _, relay = _claude_request(monkeypatch, "https://relay.example.test", model=model)
+
+    headers = call["headers"]
+    assert headers["user-agent"] == "Galley"
+    assert not any(k in headers for k in _CC_HEADERS)
+    assert not any(k.startswith("X-Stainless-") for k in headers)
+    assert headers["Accept"] == "application/json"
+    # Its beta goes; every other beta stays, in order.
+    assert _CC_BETA not in _betas(call)
+    assert _betas(call) == [b for b in _betas(relay) if b != _CC_BETA]
+    if model.endswith("[1m]"):
+        assert _betas(call)[0] == "context-1m-2025-08-07"
+    assert "metadata" not in call["payload"]
+    # Nothing else changes: version, the browser-access header, the
+    # x-api-key choice, `?beta=true`, thinking, tools, system prompt,
+    # cache_control.
+    assert _identity_free(headers) == _identity_free(relay["headers"])
+    assert headers["x-api-key"] == sess.api_key
+    assert call["url"].endswith("/v1/messages?beta=true")
+    assert call["payload"] == {k: v for k, v in relay["payload"].items() if k != "metadata"}
+
+
+@pytest.mark.parametrize(
+    ("apibase", "cfg"),
+    [
+        # The user's exit: passthrough on, e.g. a subscription sign-in token.
+        ("https://api.anthropic.com", {"fake_cc_system_prompt": True}),
+        ("https://api.anthropic.com", {"claude_compat": "simple"}),
+        # Every other Anthropic-compatible endpoint, passthrough on or off.
+        ("https://api.kimi.com/coding", {}),
+        ("https://api.kimi.com/coding", {"fake_cc_system_prompt": True}),
+        # Hosts that only look like it, and a base with no scheme (no host).
+        ("https://api.anthropic.com.example.net", {}),
+        ("https://relay.example/api.anthropic.com", {}),
+        ("relay.example/api.anthropic.com", {}),
+        ("api.anthropic.com", {}),
+    ],
+)
+def test_claude_code_identity_stays_everywhere_else(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, cfg: dict[str, Any]
+) -> None:
+    sess, call = _claude_request(monkeypatch, apibase, **cfg)
+
+    _assert_claude_code_identity(sess, call)
+
+
+def test_official_anthropic_api_keeps_a_configured_user_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, call = _claude_request(monkeypatch, "https://api.anthropic.com", user_agent="my-client/1.0")
+
+    headers = call["headers"]
+    assert headers["user-agent"] == "my-client/1.0"
+    # The rest of the rule still applies.
+    assert "x-app" not in headers
+    assert _CC_BETA not in _betas(call)
+    assert "metadata" not in call["payload"]

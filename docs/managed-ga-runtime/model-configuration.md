@@ -189,6 +189,41 @@ The generated config path is an implementation detail. Users should not edit or
 rely on it. Advanced diagnostics may show that a generated config exists, but
 must not display API key values.
 
+### Official Anthropic API: no Claude Code identity
+
+A Claude subscription comes with monthly API credit, spent through API keys of
+the subscriber's Console organization. The official API refuses that credit to
+a request that says it is Claude Code (`user-agent: claude-cli/…`,
+`x-app: cli`, the `claude-code-20250219` beta) with a misleading "credit
+balance is too low" 400, and the engine and the connection probe used to send
+those markers on every Anthropic-protocol request.
+
+Since 2026-11-17 a request carries no Claude Code identity when both hold:
+
+1. the Base URL's host is exactly `api.anthropic.com` (parsed as a URL,
+   compared lowercased; a host that only contains or ends in it does not
+   count, and neither does a Base URL with no scheme, which has no host);
+2. the model's "Claude Code passthrough" (`fake_cc_system_prompt`) is off.
+
+Then the `claude-code-20250219` beta is dropped (the other betas keep their
+order), the user agent is `Galley` (the engine keeps a `user_agent` the config
+sets), and `x-app: cli` is not sent; the engine also leaves out
+`X-Claude-Code-Session-Id`, the `X-Stainless-*` headers and the body's
+`metadata.user_id`. Everything else in the request stays. Every other request
+is byte for byte what it was: passthrough on (the user's way back, for
+example a subscription sign-in token used as the key), every third-party
+Anthropic-compatible endpoint and relay, OpenAI-protocol providers and the
+ChatGPT provider.
+
+The engine applies the rule in `NativeClaudeSession.raw_ask` (managed patch
+`0032`, see the [patch ledger](../../managed-ga/patches/manifest.md)), the
+probe in `core/src/managed_model_probe.rs`, for both "Test model" and the
+model list. "Test model" sends the model's effective options; the model list
+belongs to a provider and sends none, so toward the official API it never
+sends the identity. The rule is the managed (bundled) runtime's only: attach
+mode runs the user's own GenericAgent checkout, which Galley does not patch,
+and its requests are unchanged.
+
 ### ChatGPT (Sign in with ChatGPT)
 
 The ChatGPT provider runs on the user's ChatGPT plan through Galley's own

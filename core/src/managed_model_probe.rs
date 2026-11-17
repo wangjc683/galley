@@ -45,7 +45,7 @@ pub async fn list_models(input: ManagedModelProbeInput) -> Result<ManagedModelLi
             message: format!("building HTTP client: {e}"),
         })?;
     let mut req = client.get(&endpoint);
-    req = apply_auth_headers(req, input.protocol, &secret);
+    req = apply_auth_headers(req, &input, &secret);
     let resp = req.send().await.map_err(|e| GalleyError::RunnerError {
         message: format!("model list request failed: {e}"),
     })?;
@@ -120,7 +120,7 @@ async fn test_model(
         })?;
     let payload = probe_payload(input.protocol, &model);
     let mut req = client.post(&endpoint).json(&payload);
-    req = apply_auth_headers(req, input.protocol, &secret);
+    req = apply_auth_headers(req, &input, &secret);
     let resp = req.send().await.map_err(|e| GalleyError::RunnerError {
         message: format!("model test request failed: {e}"),
     })?;
@@ -198,23 +198,76 @@ async fn resolve_api_key_ref(input: &ManagedModelProbeInput) -> Result<String> {
         })
 }
 
+/// Claude Code's own `anthropic-beta` entry, first in [`ANTHROPIC_PROBE_BETAS`].
+const CLAUDE_CODE_BETA: &str = "claude-code-20250219";
+
+/// The `anthropic-beta` list of every Anthropic-protocol probe, in order.
+const ANTHROPIC_PROBE_BETAS: [&str; 4] = [
+    CLAUDE_CODE_BETA,
+    "interleaved-thinking-2025-05-14",
+    "redact-thinking-2026-02-12",
+    "prompt-caching-scope-2026-01-05",
+];
+
+/// The host of Anthropic's official API.
+const OFFICIAL_ANTHROPIC_HOST: &str = "api.anthropic.com";
+
+/// Whether `api_base`'s host is exactly the official Anthropic API: trimmed
+/// (as saving a provider trims it, so the engine gets it trimmed), parsed
+/// as a URL, compared lowercased. A base with no scheme has no host and is
+/// not; neither is a host that merely contains or ends in it. Same rule as
+/// the managed runtime's `NativeClaudeSession.raw_ask` (managed patch
+/// `0032`), so the probe and the engine agree on one endpoint.
+fn is_official_anthropic_host(api_base: &str) -> bool {
+    reqwest::Url::parse(api_base.trim())
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_ascii_lowercase))
+        .is_some_and(|host| host == OFFICIAL_ANTHROPIC_HOST)
+}
+
+/// Whether an Anthropic-protocol probe says it is Claude Code
+/// (`user-agent: claude-cli/…`, `x-app: cli`, the `claude-code-20250219`
+/// beta). Toward the official API the answer is no unless the model's
+/// "Claude Code passthrough" (`fake_cc_system_prompt`) is on: the official
+/// API refuses a Claude subscription's API credit to a request carrying
+/// those markers, with a misleading "credit balance is too low" 400.
+/// Every other endpoint keeps them. "Test model" sends the model's
+/// effective options; the model list (a provider's, not a model's) sends
+/// none, so toward the official API it never says it is Claude Code.
+fn sends_claude_code_identity(input: &ManagedModelProbeInput) -> bool {
+    let passthrough = input
+        .advanced_options
+        .as_ref()
+        .and_then(|options| options.get("fake_cc_system_prompt"))
+        .and_then(Value::as_bool)
+        == Some(true);
+    passthrough || !is_official_anthropic_host(&input.api_base)
+}
+
 fn apply_auth_headers(
     req: reqwest::RequestBuilder,
-    protocol: ManagedModelProtocol,
+    input: &ManagedModelProbeInput,
     secret: &str,
 ) -> reqwest::RequestBuilder {
-    match protocol {
+    match input.protocol {
         ManagedModelProtocol::Openai => req.bearer_auth(secret),
         ManagedModelProtocol::Anthropic => {
+            let identity = sends_claude_code_identity(input);
+            let betas = ANTHROPIC_PROBE_BETAS
+                .into_iter()
+                .filter(|beta| identity || *beta != CLAUDE_CODE_BETA)
+                .collect::<Vec<_>>()
+                .join(",");
             let req = req
                 .header("anthropic-version", "2023-06-01")
-                .header(
-                    "anthropic-beta",
-                    "claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,prompt-caching-scope-2026-01-05",
-                )
-                .header("anthropic-dangerous-direct-browser-access", "true")
-                .header("user-agent", "claude-cli/2.1.113 (external, cli)")
-                .header("x-app", "cli");
+                .header("anthropic-beta", betas)
+                .header("anthropic-dangerous-direct-browser-access", "true");
+            let req = if identity {
+                req.header("user-agent", "claude-cli/2.1.113 (external, cli)")
+                    .header("x-app", "cli")
+            } else {
+                req.header("user-agent", "Galley")
+            };
             if secret.starts_with("sk-ant-") {
                 req.header("x-api-key", secret)
             } else {
@@ -652,5 +705,200 @@ mod tests {
             "models": [{"name": "claude-sonnet-4-6"}]
         });
         assert_eq!(extract_model_ids(&fallback), vec!["claude-sonnet-4-6"]);
+    }
+
+    const ANTHROPIC_KEY: &str = "sk-ant-api03-test";
+    const RELAY_KEY: &str = "relay-key";
+
+    fn probe_input(
+        protocol: ManagedModelProtocol,
+        api_base: &str,
+        advanced_options: Option<Value>,
+    ) -> ManagedModelProbeInput {
+        ManagedModelProbeInput {
+            id: None,
+            provider_id: None,
+            protocol,
+            auth_kind: None,
+            api_base: api_base.to_string(),
+            api_key: None,
+            model: Some("claude-test".into()),
+            advanced_options,
+        }
+    }
+
+    /// A built request's headers, in the order they go out.
+    fn header_list(req: reqwest::RequestBuilder) -> Vec<(String, String)> {
+        req.build()
+            .expect("probe request builds")
+            .headers()
+            .iter()
+            .map(|(name, value)| {
+                (
+                    name.as_str().to_string(),
+                    value.to_str().expect("ASCII header").to_string(),
+                )
+            })
+            .collect()
+    }
+
+    fn probe_headers(input: &ManagedModelProbeInput, secret: &str) -> Vec<(String, String)> {
+        let req = reqwest::Client::new().post("https://probe.invalid/v1/messages");
+        header_list(apply_auth_headers(req, input, secret))
+    }
+
+    fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
+        headers
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.as_str())
+    }
+
+    /// What every Anthropic-protocol probe sent before managed patch `0032`'s
+    /// rule, written out by hand: the rule must leave it unchanged wherever
+    /// it does not apply.
+    fn claude_code_headers(secret: &str) -> Vec<(String, String)> {
+        let req = reqwest::Client::new()
+            .post("https://probe.invalid/v1/messages")
+            .header("anthropic-version", "2023-06-01")
+            .header(
+                "anthropic-beta",
+                "claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,prompt-caching-scope-2026-01-05",
+            )
+            .header("anthropic-dangerous-direct-browser-access", "true")
+            .header("user-agent", "claude-cli/2.1.113 (external, cli)")
+            .header("x-app", "cli");
+        header_list(if secret.starts_with("sk-ant-") {
+            req.header("x-api-key", secret)
+        } else {
+            req.bearer_auth(secret)
+        })
+    }
+
+    #[test]
+    fn official_anthropic_host_is_an_exact_host_match() {
+        for base in [
+            "https://api.anthropic.com",
+            "https://api.anthropic.com/",
+            "https://api.anthropic.com/v1",
+            "https://API.Anthropic.COM/v1/messages$",
+            "http://api.anthropic.com:443/v1",
+            " https://api.anthropic.com ",
+        ] {
+            assert!(is_official_anthropic_host(base), "{base}");
+        }
+        for base in [
+            "api.anthropic.com",
+            "api.anthropic.com/v1",
+            "https://api.anthropic.com.example.net",
+            "https://relay.example/api.anthropic.com",
+            "relay.example/api.anthropic.com",
+            "https://xapi.anthropic.com",
+            "https://anthropic.com",
+            "https://api.kimi.com/coding",
+            "",
+        ] {
+            assert!(!is_official_anthropic_host(base), "{base}");
+        }
+    }
+
+    #[test]
+    fn official_anthropic_probe_without_passthrough_says_it_is_galley() {
+        for options in [
+            None,
+            Some(serde_json::json!({})),
+            Some(serde_json::json!({"fake_cc_system_prompt": false})),
+            Some(serde_json::json!({"thinking_type": "adaptive", "stream": true})),
+        ] {
+            for base in ["https://api.anthropic.com", "https://API.anthropic.com/v1"] {
+                let input = probe_input(ManagedModelProtocol::Anthropic, base, options.clone());
+                let headers = probe_headers(&input, ANTHROPIC_KEY);
+                let context = format!("{base} {options:?}");
+
+                assert_eq!(header(&headers, "x-app"), None, "{context}");
+                assert_eq!(header(&headers, "user-agent"), Some("Galley"), "{context}");
+                assert_eq!(
+                    header(&headers, "anthropic-beta"),
+                    Some(
+                        "interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,prompt-caching-scope-2026-01-05"
+                    ),
+                    "{context}"
+                );
+                // Everything else is what the probe always sent.
+                let expected: Vec<_> = claude_code_headers(ANTHROPIC_KEY)
+                    .into_iter()
+                    .filter(|(name, _)| {
+                        !matches!(name.as_str(), "x-app" | "user-agent" | "anthropic-beta")
+                    })
+                    .collect();
+                let rest: Vec<_> = headers
+                    .iter()
+                    .filter(|(name, _)| !matches!(name.as_str(), "user-agent" | "anthropic-beta"))
+                    .cloned()
+                    .collect();
+                assert_eq!(rest, expected, "{context}");
+            }
+        }
+        // A relay-style key on the official host still goes as a bearer token.
+        let input = probe_input(
+            ManagedModelProtocol::Anthropic,
+            "https://api.anthropic.com",
+            None,
+        );
+        let headers = probe_headers(&input, RELAY_KEY);
+        assert_eq!(header(&headers, "authorization"), Some("Bearer relay-key"));
+        assert_eq!(header(&headers, "x-app"), None);
+    }
+
+    #[test]
+    fn official_anthropic_probe_with_passthrough_keeps_claude_code_identity() {
+        let input = probe_input(
+            ManagedModelProtocol::Anthropic,
+            "https://api.anthropic.com",
+            Some(serde_json::json!({"fake_cc_system_prompt": true})),
+        );
+        for secret in [ANTHROPIC_KEY, RELAY_KEY] {
+            assert_eq!(probe_headers(&input, secret), claude_code_headers(secret));
+        }
+    }
+
+    #[test]
+    fn other_anthropic_endpoints_keep_claude_code_identity() {
+        for base in [
+            "https://api.kimi.com/coding",
+            "https://api.deepseek.com/anthropic",
+            "https://api.anthropic.com.example.net",
+            "https://relay.example/api.anthropic.com",
+            "relay.example/api.anthropic.com",
+            "api.anthropic.com",
+        ] {
+            for options in [
+                None,
+                Some(serde_json::json!({"fake_cc_system_prompt": false})),
+                Some(serde_json::json!({"fake_cc_system_prompt": true})),
+            ] {
+                let input = probe_input(ManagedModelProtocol::Anthropic, base, options.clone());
+                for secret in [ANTHROPIC_KEY, RELAY_KEY] {
+                    assert_eq!(
+                        probe_headers(&input, secret),
+                        claude_code_headers(secret),
+                        "{base} {options:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn openai_probe_headers_are_unchanged() {
+        for base in ["https://api.anthropic.com", "https://api.openai.com/v1"] {
+            let input = probe_input(ManagedModelProtocol::Openai, base, None);
+            let expected = header_list(
+                reqwest::Client::new()
+                    .post("https://probe.invalid/v1/messages")
+                    .bearer_auth(RELAY_KEY),
+            );
+            assert_eq!(probe_headers(&input, RELAY_KEY), expected, "{base}");
+        }
     }
 }

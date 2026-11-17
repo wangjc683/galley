@@ -1056,13 +1056,19 @@ class NativeClaudeSession(BaseSession):
         messages = _fix_messages(messages)
         if 'claude' in model.lower(): messages = _drop_unsigned_thinking(messages)
         messages = _ensure_thinking_blocks(messages, self.model)
+        # Galley (0032): the official API refuses a subscription's API credit to a request that says it is
+        # Claude Code. There, unless Claude Code passthrough is on, send no Claude Code identity: no
+        # claude-code beta, x-app, session or Stainless headers, metadata.user_id; UA "Galley" unless configured.
+        from urllib.parse import urlsplit
+        try: cc_identity = self.fake_cc_system_prompt or (urlsplit(self.api_base).hostname or '').lower() != 'api.anthropic.com'
+        except ValueError: cc_identity = True
         beta_parts = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "redact-thinking-2026-02-12", "thinking-token-count-2026-05-13", "context-management-2025-06-27", "prompt-caching-scope-2026-01-05", "mid-conversation-system-2026-04-07", "effort-2025-11-24", "fallback-credit-2026-06-01"]
         if "[1m]" in model.lower():
             beta_parts.insert(1, "context-1m-2025-08-07"); model = model.replace("[1m]", "").replace("[1M]", "")
         headers = {"Content-Type": "application/json", "anthropic-version": "2023-06-01",
-            "anthropic-beta": ",".join(beta_parts), "anthropic-dangerous-direct-browser-access": "true",
-            "user-agent": self.user_agent, "x-app": "cli"}
-        headers.update({"Accept": "application/json", "X-Claude-Code-Session-Id": self._session_id, "X-Stainless-Arch": "x64", "X-Stainless-Lang": "js", "X-Stainless-OS": "Windows", "X-Stainless-Package-Version": "0.94.0", "X-Stainless-Retry-Count": "0", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v24.3.0", "X-Stainless-Timeout": "600"})
+            "anthropic-beta": ",".join(b for b in beta_parts if cc_identity or b != "claude-code-20250219"), "anthropic-dangerous-direct-browser-access": "true",
+            "user-agent": self.user_agent if cc_identity or self.user_agent != self.native_ua else "Galley", **({"x-app": "cli"} if cc_identity else {})}
+        headers.update({"Accept": "application/json", "X-Claude-Code-Session-Id": self._session_id, "X-Stainless-Arch": "x64", "X-Stainless-Lang": "js", "X-Stainless-OS": "Windows", "X-Stainless-Package-Version": "0.94.0", "X-Stainless-Retry-Count": "0", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v24.3.0", "X-Stainless-Timeout": "600"} if cc_identity else {"Accept": "application/json"})
         if self.api_key_header == 'x-api-key': headers["x-api-key"] = self.api_key
         elif self.api_key_header == 'bearer': headers["authorization"] = f"Bearer {self.api_key}"
         elif self.api_key.startswith("sk-ant-"): headers["x-api-key"] = self.api_key
@@ -1075,7 +1081,7 @@ class NativeClaudeSession(BaseSession):
         if self.fake_cc_system_prompt:
             if 'thinking' not in payload: payload["thinking"] = {"type": "adaptive"}
             if 'output_config' not in payload: payload["output_config"] = {"effort": "medium"}
-        payload["metadata"] = {"user_id": json.dumps({"device_id": self._device_id, "account_uuid": "", "session_id": self._session_id}, separators=(',', ':'))}
+        if cc_identity: payload["metadata"] = {"user_id": json.dumps({"device_id": self._device_id, "account_uuid": "", "session_id": self._session_id}, separators=(',', ':'))}
         if self.tools:
             claude_tools = openai_tools_to_claude(self.tools)
             tools = [dict(t) for t in claude_tools]; tools[-1]["cache_control"] = {"type": "ephemeral"}

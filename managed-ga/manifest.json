@@ -39,7 +39,8 @@
       "0028-managed-remote-driver-default-tab.patch",
       "0029-managed-feishu-conversation-ux.patch",
       "0030-managed-tool-args-whitespace-runaway.patch",
-      "0031-managed-request-deadline.patch"
+      "0031-managed-request-deadline.patch",
+      "0032-managed-official-anthropic-no-claude-code-identity.patch"
     ]
   },
   "stateSchemaVersion": 1

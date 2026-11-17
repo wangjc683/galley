@@ -1,0 +1,20 @@
+diff --git a/llmcore.py b/llmcore.py
+--- a/llmcore.py
++++ b/llmcore.py
+@@ -1058,0 +1059,6 @@ class NativeClaudeSession(BaseSession):
++        # Galley (0032): the official API refuses a subscription's API credit to a request that says it is
++        # Claude Code. There, unless Claude Code passthrough is on, send no Claude Code identity: no
++        # claude-code beta, x-app, session or Stainless headers, metadata.user_id; UA "Galley" unless configured.
++        from urllib.parse import urlsplit
++        try: cc_identity = self.fake_cc_system_prompt or (urlsplit(self.api_base).hostname or '').lower() != 'api.anthropic.com'
++        except ValueError: cc_identity = True
+@@ -1063,3 +1069,3 @@ class NativeClaudeSession(BaseSession):
+-            "anthropic-beta": ",".join(beta_parts), "anthropic-dangerous-direct-browser-access": "true",
+-            "user-agent": self.user_agent, "x-app": "cli"}
+-        headers.update({"Accept": "application/json", "X-Claude-Code-Session-Id": self._session_id, "X-Stainless-Arch": "x64", "X-Stainless-Lang": "js", "X-Stainless-OS": "Windows", "X-Stainless-Package-Version": "0.94.0", "X-Stainless-Retry-Count": "0", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v24.3.0", "X-Stainless-Timeout": "600"})
++            "anthropic-beta": ",".join(b for b in beta_parts if cc_identity or b != "claude-code-20250219"), "anthropic-dangerous-direct-browser-access": "true",
++            "user-agent": self.user_agent if cc_identity or self.user_agent != self.native_ua else "Galley", **({"x-app": "cli"} if cc_identity else {})}
++        headers.update({"Accept": "application/json", "X-Claude-Code-Session-Id": self._session_id, "X-Stainless-Arch": "x64", "X-Stainless-Lang": "js", "X-Stainless-OS": "Windows", "X-Stainless-Package-Version": "0.94.0", "X-Stainless-Retry-Count": "0", "X-Stainless-Runtime": "node", "X-Stainless-Runtime-Version": "v24.3.0", "X-Stainless-Timeout": "600"} if cc_identity else {"Accept": "application/json"})
+@@ -1078 +1084 @@ class NativeClaudeSession(BaseSession):
+-        payload["metadata"] = {"user_id": json.dumps({"device_id": self._device_id, "account_uuid": "", "session_id": self._session_id}, separators=(',', ':'))}
++        if cc_identity: payload["metadata"] = {"user_id": json.dumps({"device_id": self._device_id, "account_uuid": "", "session_id": self._session_id}, separators=(',', ':'))}
