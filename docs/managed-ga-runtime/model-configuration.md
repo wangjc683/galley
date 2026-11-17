@@ -224,27 +224,35 @@ model list. The rule is the managed (bundled) runtime's only: attach mode
 runs the user's own GenericAgent checkout, which Galley does not patch, and
 its requests are unchanged.
 
-Toward the same host, since 2026-11-17, the engine also sends no thinking block
-back (managed patch `0034`). The official API ties each thinking block's
-signature to everything before it in the conversation (system prompt, tools,
-every earlier message) and answers 400 "Invalid `signature` in `thinking`
-block … bound to a different conversation" once any of it changed; from then
-on every message in that conversation gets the same 400. It is enforced by
-default for accounts created after 2026-08-31. The engine does change earlier
-messages: before each request `trim_messages_history` every so often runs
+Toward the same host, since 2026-11-17, the engine sends a thinking block back
+only while it is still valid (managed patch `0034`). The official API ties each
+thinking block's signature to everything before it in the conversation (system
+prompt, tools, every earlier message) and answers 400 "Invalid `signature` in
+`thinking` block … bound to a different conversation" once any of it changed;
+from then on every message in that conversation gets the same 400. It is
+enforced by default for accounts created after 2026-08-31. The engine does
+change earlier messages: before some requests `trim_messages_history` runs
 `compress_history_tags`, which shortens long tool results and tag text outside
-the last ten messages in place, and over the context limit drops and rewrites
-the oldest ones. History restored from the engine log (after an IM channel
-restarts, and on `/continue N`) brings logged thinking blocks back too. So
-`raw_ask` leaves every `thinking` block out of the request it sends to
-`api.anthropic.com`, however the block got into history (a message left empty
-goes out as a `...` text block); the session's history keeps the blocks. The
-cost accepted: on the official host the model does not see its own reasoning
-from earlier steps and carries on from each step's `<summary>` and its working
-memory; the effect on answer quality has not been measured. Not covered: an
-enforcing account reached through a third-party host that forwards to
-Anthropic still gets the 400, because every other host's request is unchanged.
-"Test model" sends one message and is not affected.
+the last ten messages in place, and over the context limit it drops and
+rewrites the oldest ones. History restored from the engine log (after an IM
+channel restarts, and on `/continue N`) brings logged thinking blocks back too.
+So when a reply arrives, the engine notes for each of its thinking blocks a
+fingerprint of the request before it, and `raw_ask` sends a block to
+`api.anthropic.com` only while that request still fingerprints the same.
+Blocks that are still valid go back as before. At the moment the engine shortens
+old messages, the blocks produced before it stop going back. In a dev run of
+a step-by-step tool task that happened once at request 14 and once at request
+28; when it happens depends on the model's context settings and is not a fixed
+count. A block the session did not produce itself (one restored from the log)
+never goes back, a message left empty goes out as a `...` text block, and if
+the API still answers that 400, the next request carries no thinking block at
+all. The session's history keeps every block. The cost accepted: the model no
+longer sees the reasoning it did before such a shortening, and carries on from
+each step's `<summary>` and its working memory; the effect on answer quality has
+not been measured. Not covered: an enforcing account reached through a
+third-party host that forwards to Anthropic still gets the 400, because every
+other host's request is unchanged. "Test model" sends one message and is not
+affected.
 
 ### Official OpenAI API: no Codex identity
 

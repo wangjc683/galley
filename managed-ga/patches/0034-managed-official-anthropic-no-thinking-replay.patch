@@ -1,10 +1,38 @@
 diff --git a/llmcore.py b/llmcore.py
 --- a/llmcore.py
 +++ b/llmcore.py
-@@ -1073,0 +1074,6 @@ class NativeClaudeSession(BaseSession):
-+        # Galley (0034): the official API ties each thinking block to the conversation before it, and returns 400
-+        # ("bound to a different conversation") once an earlier message changed; compress_history_tags and
-+        # trim_messages_history change them. There, send no thinking block back, however it got into history.
-+        if not cc_identity:
-+            for m in messages:
-+                if isinstance(m.get("content"), list): m["content"] = [b for b in m["content"] if not (isinstance(b, dict) and b.get("type") == "thinking")] or [{"type": "text", "text": "..."}]
+@@ -1061,0 +1062,30 @@ class NativeClaudeSession(BaseSession):
++    # Galley (0034): the official API ties each thinking block to the conversation before it (system, tools, every
++    # earlier message) and returns 400 ("bound to a different conversation") once any of that changed; upstream
++    # shortens old messages in place (compress_history_tags, trim_messages_history) and /continue reloads blocks from
++    # the log. There, a thinking block goes back only while the request before it hashes as it did when the block
++    # was produced; one such 400 forgets every block, so the next request carries none.
++    def _galley_valid_thinking(self, messages):
++        import hashlib
++        D = lambda o: json.dumps(o, sort_keys=True, ensure_ascii=False, default=str).encode()
++        known = self.__dict__.setdefault('_galley_thinking_prefix', {})
++        h = hashlib.sha256(D([self.system, self.claude_compat, self.tools]))
++        for m in messages:
++            h.update(D(m.get("role"))); kept = []
++            for b in (m["content"] if isinstance(m.get("content"), list) else []):
++                if isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking"):
++                    if known.get(b.get("signature") or b.get("data")) == h.hexdigest(): kept.append(b)
++                else: h.update(D(b)); kept.append(b)
++            if not kept: kept = [{"type": "text", "text": "..."}]; h.update(D(kept[0]))
++            m["content"] = kept
++        self._galley_thinking_h = h
++        return messages
++    def _galley_note_thinking(self, blocks):
++        D = lambda o: json.dumps(o, sort_keys=True, ensure_ascii=False, default=str).encode()
++        known = self.__dict__.setdefault('_galley_thinking_prefix', {})
++        h = self.__dict__.pop('_galley_thinking_h', None)
++        if h is None or not blocks: return
++        if len(blocks) == 1 and "bound to a different conversation" in str(blocks[0].get("text", "")): return known.clear()
++        h.update(D("assistant"))
++        for b in blocks:
++            if isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking"): known[b.get("signature") or b.get("data")] = h.hexdigest()
++            else: h.update(D(b))
+@@ -1073,0 +1104 @@ class NativeClaudeSession(BaseSession):
++        if not cc_identity: messages = self._galley_valid_thinking(messages)
+@@ -1119,0 +1151 @@ class NativeClaudeSession(BaseSession):
++        self._galley_note_thinking(content_blocks)

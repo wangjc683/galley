@@ -1059,6 +1059,36 @@ class NativeClaudeSession(BaseSession):
         self.tools = None
         if self.user_agent == self.default_ua: self.user_agent = self.native_ua
         self.api_key_header = str(cfg.get('api_key_header', 'auto')).strip().lower()
+    # Galley (0034): the official API ties each thinking block to the conversation before it (system, tools, every
+    # earlier message) and returns 400 ("bound to a different conversation") once any of that changed; upstream
+    # shortens old messages in place (compress_history_tags, trim_messages_history) and /continue reloads blocks from
+    # the log. There, a thinking block goes back only while the request before it hashes as it did when the block
+    # was produced; one such 400 forgets every block, so the next request carries none.
+    def _galley_valid_thinking(self, messages):
+        import hashlib
+        D = lambda o: json.dumps(o, sort_keys=True, ensure_ascii=False, default=str).encode()
+        known = self.__dict__.setdefault('_galley_thinking_prefix', {})
+        h = hashlib.sha256(D([self.system, self.claude_compat, self.tools]))
+        for m in messages:
+            h.update(D(m.get("role"))); kept = []
+            for b in (m["content"] if isinstance(m.get("content"), list) else []):
+                if isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking"):
+                    if known.get(b.get("signature") or b.get("data")) == h.hexdigest(): kept.append(b)
+                else: h.update(D(b)); kept.append(b)
+            if not kept: kept = [{"type": "text", "text": "..."}]; h.update(D(kept[0]))
+            m["content"] = kept
+        self._galley_thinking_h = h
+        return messages
+    def _galley_note_thinking(self, blocks):
+        D = lambda o: json.dumps(o, sort_keys=True, ensure_ascii=False, default=str).encode()
+        known = self.__dict__.setdefault('_galley_thinking_prefix', {})
+        h = self.__dict__.pop('_galley_thinking_h', None)
+        if h is None or not blocks: return
+        if len(blocks) == 1 and "bound to a different conversation" in str(blocks[0].get("text", "")): return known.clear()
+        h.update(D("assistant"))
+        for b in blocks:
+            if isinstance(b, dict) and b.get("type") in ("thinking", "redacted_thinking"): known[b.get("signature") or b.get("data")] = h.hexdigest()
+            else: h.update(D(b))
     def raw_ask(self, messages):
         if self.max_tokens is None: self.max_tokens = 8192
         model = self.model
@@ -1071,12 +1101,7 @@ class NativeClaudeSession(BaseSession):
         from urllib.parse import urlsplit
         try: cc_identity = (urlsplit(self.api_base).hostname or '').lower() != 'api.anthropic.com'
         except ValueError: cc_identity = True
-        # Galley (0034): the official API ties each thinking block to the conversation before it, and returns 400
-        # ("bound to a different conversation") once an earlier message changed; compress_history_tags and
-        # trim_messages_history change them. There, send no thinking block back, however it got into history.
-        if not cc_identity:
-            for m in messages:
-                if isinstance(m.get("content"), list): m["content"] = [b for b in m["content"] if not (isinstance(b, dict) and b.get("type") == "thinking")] or [{"type": "text", "text": "..."}]
+        if not cc_identity: messages = self._galley_valid_thinking(messages)
         beta_parts = ["claude-code-20250219", "interleaved-thinking-2025-05-14", "redact-thinking-2026-02-12", "thinking-token-count-2026-05-13", "context-management-2025-06-27", "prompt-caching-scope-2026-01-05", "mid-conversation-system-2026-04-07", "effort-2025-11-24", "fallback-credit-2026-06-01"]
         if "[1m]" in model.lower():
             beta_parts.insert(1, "context-1m-2025-08-07"); model = model.replace("[1m]", "").replace("[1M]", "")
@@ -1123,6 +1148,7 @@ class NativeClaudeSession(BaseSession):
             while True: yield next(gen)
         except StopIteration as e: content_blocks = e.value or []
         if content_blocks and (_injected := _ensure_text_block(content_blocks)): yield _injected
+        self._galley_note_thinking(content_blocks)
         if content_blocks and not (len(content_blocks) == 1 and content_blocks[0].get("text", "").startswith("!!!Error:")):
             history_blocks = content_blocks
             if self.omit_thinking: history_blocks = [b for b in content_blocks if b.get("type") != "thinking"]

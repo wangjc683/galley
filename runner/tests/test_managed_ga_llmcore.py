@@ -1936,13 +1936,35 @@ def test_the_chatgpt_sign_in_request_is_left_alone(
     assert set(official["payload"]["client_metadata"]) == _CODEX_METADATA_KEYS
 
 
-# Patch 0034: toward the official Anthropic API (0032's host rule), a request
-# sends no thinking block back. The API ties each block's signature to the
-# conversation before it and answers 400 ("bound to a different conversation")
-# once an earlier message changed, which the engine's history compression
-# does. Every other host's request is unchanged, and the session's history
-# keeps the blocks.
+# Patch 0034: toward the official Anthropic API (0032's host rule), a thinking
+# block goes back only while the request before it (system prompt, tools, every
+# earlier block but thinking) is what it was when the block was produced. The
+# API ties each block's signature to that prefix and answers 400 ("bound to a
+# different conversation") once it changed, which the engine's history
+# compression does. A block this session object never produced does not go
+# back, and after that 400 none does. Every other host's request is unchanged,
+# and the session's history keeps every block.
 
+_OFFICIAL = "https://api.anthropic.com"
+_ELSEWHERE = [
+    # Every other Anthropic-compatible endpoint.
+    "https://relay.example.test",
+    "https://api.kimi.com/coding",
+    # Hosts that only look like it, and a base with no scheme (no host).
+    "https://api.anthropic.com.example.net",
+    "https://relay.example/api.anthropic.com",
+    "api.anthropic.com",
+]
+_TEST_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "file_read",
+            "description": "Read a file.",
+            "parameters": {"type": "object", "properties": {"path": {"type": "string"}}},
+        },
+    }
+]
 _SIGNED_THINKING: dict[str, Any] = {
     "type": "thinking",
     "thinking": "Read the file before answering.",
@@ -1960,13 +1982,115 @@ _REPLY_WITH_TOOL: list[dict[str, Any]] = [
     _TOOL_USE,
 ]
 _THINKING_ONLY_REPLY: list[dict[str, Any]] = [_SIGNED_THINKING]
+_BOUND_400 = _FakeHTTPResponse(
+    400,
+    {
+        "type": "error",
+        "error": {
+            "type": "invalid_request_error",
+            "message": "messages.3.content.0: Invalid `signature` in `thinking` block. "
+            "The block is bound to a different conversation.",
+        },
+    },
+)
+
+
+def _signed_reply(sig: str, *, tool: bool = False) -> _FakeHTTPResponse:
+    """A streamed reply: a thinking block signed `sig`, a text block and, with
+    `tool`, a `file_read` call with id `toolu_<sig>`."""
+    events: list[dict[str, Any]] = [
+        {"type": "message_start", "message": {"usage": {"input_tokens": 10}}},
+        {"type": "content_block_start", "index": 0, "content_block": {"type": "thinking"}},
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "thinking_delta", "thinking": f"Plan {sig}."},
+        },
+        {
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {"type": "signature_delta", "signature": sig},
+        },
+        {"type": "content_block_stop", "index": 0},
+        {"type": "content_block_start", "index": 1, "content_block": {"type": "text"}},
+        {
+            "type": "content_block_delta",
+            "index": 1,
+            "delta": {"type": "text_delta", "text": f"Step {sig}."},
+        },
+        {"type": "content_block_stop", "index": 1},
+    ]
+    if tool:
+        events += [
+            {
+                "type": "content_block_start",
+                "index": 2,
+                "content_block": {"type": "tool_use", "id": f"toolu_{sig}", "name": "file_read"},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 2,
+                "delta": {"type": "input_json_delta", "partial_json": '{"path": "notes.txt"}'},
+            },
+            {"type": "content_block_stop", "index": 2},
+        ]
+    events += [
+        {
+            "type": "message_delta",
+            "delta": {"stop_reason": "tool_use" if tool else "end_turn"},
+            "usage": {"output_tokens": 5},
+        },
+        {"type": "message_stop"},
+    ]
+    return _FakeHTTPResponse(200, lines=tuple(_sse(*events)))
+
+
+def _thinking_session(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, *replies: _FakeHTTPResponse
+) -> tuple[Any, _FakeNetwork]:
+    """A `NativeClaudeSession` with a system prompt and a tool, whose requests
+    get `replies` in order."""
+    net = _install_network(monkeypatch, *replies)
+    sess = llmcore.NativeClaudeSession(
+        {
+            "name": "t0034",
+            "apikey": "sk-ant-api03-test",
+            "apibase": apibase,
+            "model": "claude-test",
+            "max_retries": 2,
+        }
+    )
+    sess.system = "You are a test assistant."
+    sess.tools = copy.deepcopy(_TEST_TOOLS)
+    return sess, net
+
+
+def _send(sess: Any, net: _FakeNetwork, block: dict[str, Any]) -> dict[str, Any]:
+    """One user turn through `ask`; returns the request it sent."""
+    _collect(sess.ask({"role": "user", "content": [block]}))
+    return net.posts[-1]
+
+
+def _text(text: str) -> dict[str, Any]:
+    return {"type": "text", "text": text}
+
+
+def _sent_thinking(call: dict[str, Any]) -> list[Any]:
+    """The signatures of the thinking blocks a request carried, in order."""
+    return [
+        b.get("signature")
+        for m in call["payload"]["messages"]
+        for b in m["content"]
+        if b.get("type") in ("thinking", "redacted_thinking")
+    ]
 
 
 def _claude_second_turn(
     monkeypatch: pytest.MonkeyPatch, apibase: str, reply: list[dict[str, Any]]
 ) -> tuple[Any, dict[str, Any]]:
-    """The turn after `reply` through `NativeClaudeSession`: the history holds
-    a user message and `reply`, the new message answers its tool call (or just
+    """The turn after `reply` through `NativeClaudeSession`, `reply` put in its
+    history the way `/continue` restores one from the log: the history holds a
+    user message and `reply`, the new message answers its tool call (or just
     goes on); returns the session and the request it sent."""
     net = _install_network(monkeypatch, _CLAUDE_OK)
     sess = llmcore.NativeClaudeSession(
@@ -1994,76 +2118,198 @@ def _claude_second_turn(
     return sess, call
 
 
-def _thinking_blocks(call: dict[str, Any]) -> list[Any]:
-    return [
-        b for m in call["payload"]["messages"] for b in m["content"] if b.get("type") == "thinking"
-    ]
-
-
-@pytest.mark.parametrize("apibase", ["https://api.anthropic.com", "https://API.Anthropic.com/v1"])
-def test_official_anthropic_api_sends_no_thinking_block_back(
-    monkeypatch: pytest.MonkeyPatch, apibase: str
+def test_official_anthropic_api_sends_still_valid_thinking_back_in_place(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _, call = _claude_second_turn(monkeypatch, apibase, _REPLY_WITH_TOOL)
-    # The same session on a relay: the messages as they were before 0034.
-    _, relay = _claude_second_turn(monkeypatch, "https://relay.example.test", _REPLY_WITH_TOOL)
+    def run(apibase: str) -> tuple[Any, list[dict[str, Any]]]:
+        sess, net = _thinking_session(
+            monkeypatch,
+            apibase,
+            _signed_reply("sig-a", tool=True),
+            _signed_reply("sig-b", tool=True),
+            _signed_reply("sig-c"),
+        )
+        _send(sess, net, _text("What does notes.txt say?"))
+        _send(sess, net, {"type": "tool_result", "tool_use_id": "toolu_sig-a", "content": "x"})
+        _send(sess, net, {"type": "tool_result", "tool_use_id": "toolu_sig-b", "content": "y"})
+        return sess, net.posts
 
-    assert _thinking_blocks(call) == []
+    sess, posts = run(_OFFICIAL)
+    # The same conversation on a relay: the requests as they were before 0034.
+    _, relay = run("https://relay.example.test")
+
+    assert [_sent_thinking(p) for p in posts] == [[], ["sig-a"], ["sig-a", "sig-b"]]
+    # Each reply goes back as it came: thinking, text, tool call, in order.
+    third = posts[2]["payload"]["messages"]
+    assert third[1] == sess.history[1] and third[3] == sess.history[3]
+    assert [b["type"] for b in third[3]["content"]] == ["thinking", "text", "tool_use"]
+    # Nothing in the messages changes while nothing before them did.
+    assert [p["payload"]["messages"] for p in posts] == [p["payload"]["messages"] for p in relay]
+
+
+def test_official_anthropic_api_drops_thinking_produced_after_a_rewritten_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sess, net = _thinking_session(
+        monkeypatch, _OFFICIAL, *(_signed_reply(f"sig-{c}") for c in "abcde")
+    )
+    _send(sess, net, _text("Step one."))
+    _send(sess, net, _text("Step two."))
+    third = _send(sess, net, _text("Step three."))
+    assert _sent_thinking(third) == ["sig-a", "sig-b"]
+    # The engine shortens an old message in place (compress_history_tags): here
+    # the second user message, which came after A and before B and C.
+    sess.history[2]["content"][0]["text"] = "Step [...]."
+
+    fourth = _send(sess, net, _text("Step four."))
+    fifth = _send(sess, net, _text("Step five."))
+
+    # A came before the rewrite and still goes back; B and C do not, their
+    # replies keep their text.
+    assert _sent_thinking(fourth) == ["sig-a"]
+    assert fourth["payload"]["messages"][3]["content"] == [_text("Step sig-b.")]
+    assert fourth["payload"]["messages"][5]["content"] == [_text("Step sig-c.")]
+    # D was produced after the rewrite, on the request as it now is.
+    assert _sent_thinking(fifth) == ["sig-a", "sig-d"]
+
+
+def test_official_anthropic_api_drops_thinking_restored_from_the_log(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, call = _claude_second_turn(monkeypatch, _OFFICIAL, _REPLY_WITH_TOOL)
+
+    assert _sent_thinking(call) == []
     # The reply's other blocks go out as they were, in order.
     assert call["payload"]["messages"][1] == {
         "role": "assistant",
-        "content": [{"type": "text", "text": "Reading it."}, _TOOL_USE],
+        "content": [_text("Reading it."), _TOOL_USE],
     }
-    # Nothing else in the messages changes.
-    assert call["payload"]["messages"] == [
-        {**m, "content": [b for b in m["content"] if b.get("type") != "thinking"]}
-        for m in relay["payload"]["messages"]
-    ]
 
 
-def test_official_anthropic_api_sends_a_thinking_only_reply_as_a_placeholder(
+def test_official_anthropic_api_drops_thinking_another_session_produced(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _, call = _claude_second_turn(monkeypatch, "https://api.anthropic.com", _THINKING_ONLY_REPLY)
+    other, other_net = _thinking_session(monkeypatch, _OFFICIAL, _signed_reply("sig-a"))
+    _send(other, other_net, _text("Step one."))
+    sess, net = _thinking_session(monkeypatch, _OFFICIAL, _signed_reply("sig-b"))
+    sess.history = copy.deepcopy(other.history)
 
-    assert call["payload"]["messages"][1] == {
-        "role": "assistant",
-        "content": [{"type": "text", "text": "..."}],
-    }
+    call = _send(sess, net, _text("Step two."))
+
+    assert _sent_thinking(call) == []
+    assert call["payload"]["messages"][1]["content"] == [_text("Step sig-a.")]
+
+
+@pytest.mark.parametrize("change", ["system", "tools"])
+def test_official_anthropic_api_drops_all_thinking_once_system_or_tools_change(
+    monkeypatch: pytest.MonkeyPatch, change: str
+) -> None:
+    sess, net = _thinking_session(
+        monkeypatch, _OFFICIAL, *(_signed_reply(f"sig-{c}") for c in "abc")
+    )
+    _send(sess, net, _text("Step one."))
+    second = _send(sess, net, _text("Step two."))
+    assert _sent_thinking(second) == ["sig-a"]
+    if change == "system":
+        sess.system = "You are a test assistant. Answer briefly."
+    else:
+        sess.tools = [*_TEST_TOOLS, {**_TEST_TOOLS[0], "function": {"name": "file_write"}}]
+
+    third = _send(sess, net, _text("Step three."))
+
+    assert _sent_thinking(third) == []
+
+
+def test_official_anthropic_api_sends_an_emptied_reply_as_a_placeholder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sess, net = _thinking_session(
+        monkeypatch, _OFFICIAL, _signed_reply("sig-b"), _signed_reply("sig-c")
+    )
+    # A thinking-only reply this session never produced (restored from the log).
+    sess.history = [
+        {"role": "user", "content": [_text("Step one.")]},
+        {"role": "assistant", "content": copy.deepcopy(_THINKING_ONLY_REPLY)},
+    ]
+
+    second = _send(sess, net, _text("Step two."))
+    third = _send(sess, net, _text("Step three."))
+
+    assert second["payload"]["messages"][1] == {"role": "assistant", "content": [_text("...")]}
+    # The placeholder is part of the request B was produced on: B goes back.
+    assert _sent_thinking(third) == ["sig-b"]
+
+
+def test_official_anthropic_api_forgets_every_block_after_the_bound_400(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sess, net = _thinking_session(
+        monkeypatch,
+        _OFFICIAL,
+        _signed_reply("sig-a"),
+        _signed_reply("sig-b"),
+        _BOUND_400,
+        _signed_reply("sig-d"),
+        _signed_reply("sig-e"),
+    )
+    _send(sess, net, _text("Step one."))
+    _send(sess, net, _text("Step two."))
+    # By the hash A and B are still valid; the API says otherwise.
+    third = _send(sess, net, _text("Step three."))
+    assert _sent_thinking(third) == ["sig-a", "sig-b"]
+
+    fourth = _send(sess, net, _text("Step four."))
+    fifth = _send(sess, net, _text("Step five."))
+
+    assert _sent_thinking(fourth) == []
+    # Blocks produced after it go back as usual.
+    assert _sent_thinking(fifth) == ["sig-d"]
 
 
 @pytest.mark.parametrize(
     "reply", [_REPLY_WITH_TOOL, _THINKING_ONLY_REPLY], ids=["with-tool", "thinking-only"]
 )
-@pytest.mark.parametrize(
-    "apibase",
-    [
-        # Every other Anthropic-compatible endpoint.
-        "https://relay.example.test",
-        "https://api.kimi.com/coding",
-        # Hosts that only look like it, and a base with no scheme (no host).
-        "https://api.anthropic.com.example.net",
-        "https://relay.example/api.anthropic.com",
-        "api.anthropic.com",
-    ],
-)
+@pytest.mark.parametrize("apibase", _ELSEWHERE)
 def test_thinking_blocks_go_back_everywhere_else(
     monkeypatch: pytest.MonkeyPatch, apibase: str, reply: list[dict[str, Any]]
 ) -> None:
     _, call = _claude_second_turn(monkeypatch, apibase, reply)
 
     assert call["payload"]["messages"][1] == {"role": "assistant", "content": reply}
-    assert _thinking_blocks(call) == [_SIGNED_THINKING]
+    assert _sent_thinking(call) == ["sig-test-0034"]
 
 
-def test_official_anthropic_api_keeps_thinking_blocks_in_history(
+@pytest.mark.parametrize("apibase", _ELSEWHERE)
+def test_thinking_blocks_go_back_everywhere_else_after_a_rewrite(
+    monkeypatch: pytest.MonkeyPatch, apibase: str
+) -> None:
+    sess, net = _thinking_session(monkeypatch, apibase, *(_signed_reply(f"sig-{c}") for c in "abc"))
+    _send(sess, net, _text("Step one."))
+    _send(sess, net, _text("Step two."))
+    sess.history[2]["content"][0]["text"] = "Step [...]."
+
+    third = _send(sess, net, _text("Step three."))
+
+    assert _sent_thinking(third) == ["sig-a", "sig-b"]
+
+
+def test_official_anthropic_api_keeps_every_thinking_block_in_history(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sess, call = _claude_second_turn(monkeypatch, "https://api.anthropic.com", _REPLY_WITH_TOOL)
+    sess, net = _thinking_session(
+        monkeypatch, _OFFICIAL, *(_signed_reply(f"sig-{c}") for c in "abc")
+    )
+    _send(sess, net, _text("Step one."))
+    _send(sess, net, _text("Step two."))
+    sess.history[2]["content"][0]["text"] = "Step [...]."
+    before = copy.deepcopy(sess.history)
 
-    # The request went without the block ...
-    assert _thinking_blocks(call) == []
-    # ... and the history still holds the reply as it came: 0034 filters the
-    # copy `ask` and `_fix_messages` make, never `self.history`.
-    assert sess.history[1] == {"role": "assistant", "content": _REPLY_WITH_TOOL}
-    assert sess.history[-1] == {"role": "assistant", "content": [{"type": "text", "text": "ok"}]}
+    _send(sess, net, _text("Step three."))
+
+    # 0034 filters the copy `ask` and `_fix_messages` make, never
+    # `self.history`: what was there is unchanged, B included, and the new
+    # reply came in with its block.
+    assert sess.history[: len(before)] == before
+    assert [
+        b["signature"] for m in sess.history for b in m["content"] if b["type"] == "thinking"
+    ] == ["sig-a", "sig-b", "sig-c"]

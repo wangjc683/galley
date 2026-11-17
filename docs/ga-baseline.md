@@ -1617,24 +1617,39 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     managed runtime, Anthropic protocol; managed patch `0034`). The official
     API ties each thinking block's signature to the conversation before it
     and answers 400 ("bound to a different conversation") once an earlier
-    message changed. `0034` leaves every `thinking` block out of the
-    `messages` that `NativeClaudeSession.raw_ask` sends to
-    `api.anthropic.com` (`0032`'s `cc_identity` host rule; a message left
-    empty gets a `...` text block), on the list `ask` and `_fix_messages`
-    copied, never on `self.history`. It is inserted right after `0032`'s
-    `cc_identity` lines, after `_fix_messages`, `_drop_unsigned_thinking`
-    and `_ensure_thinking_blocks` and before `beta_parts`. Re-check by hand
-    on upgrade: (a) whether `compress_history_tags` /
-    `trim_messages_history` still rewrite history in place (if upstream
-    makes Anthropic-protocol history append-only, or handles this check
-    itself, `0034` can go; see its removal condition in the patch ledger);
-    (b) whether `frontends/continue_cmd.py`'s `_parse_native_history` still
-    loads the logged thinking blocks back into history; (c) if upstream
-    changes how `raw_ask` builds `messages`, move `0034`'s insertion point
-    with it, so the filter still runs on the list that goes out and never on
-    the history. `runner/tests/test_managed_ga_llmcore.py` (the `0034`
-    group) checks the request on the official host and elsewhere, and that
-    `session.history` keeps the blocks.
+    message changed. Toward `api.anthropic.com` (`0032`'s `cc_identity`
+    host rule) `0034` sends a `thinking` / `redacted_thinking` block back
+    only while the request before it is what it was when the block was
+    produced. Two methods on `NativeClaudeSession` do it.
+    `_galley_valid_thinking`, called in `raw_ask` right after `0032`'s
+    `cc_identity` lines (so after `_fix_messages`,
+    `_drop_unsigned_thinking` and `_ensure_thinking_blocks`, and before
+    `beta_parts` and the `cache_control` marks), walks `messages` with a
+    running sha256 seeded with `self.system`, `self.claude_compat` and
+    `self.tools`, keeps a block only when its signature (`data` for a
+    redacted one) maps to the running digest in
+    `_galley_thinking_prefix`, puts a `...` text block in a message left
+    empty, and leaves the running state in `_galley_thinking_h`. It rebinds
+    `content` on the copies `ask` and `_fix_messages` made, never on
+    `self.history`. `_galley_note_thinking`, called in `ask` right after the
+    `_ensure_text_block` line, continues that state over the reply and
+    records each of its thinking blocks against the digest before it; a
+    one-block reply whose text says "bound to a different conversation"
+    clears the record instead. Re-check by hand on upgrade: (a) whether
+    `compress_history_tags` / `trim_messages_history` still rewrite history
+    in place (if upstream makes Anthropic-protocol history append-only, or
+    handles this check itself, `0034` can go; see its removal condition in
+    the patch ledger); (b) whether `frontends/continue_cmd.py`'s
+    `_parse_native_history` still loads the logged thinking blocks back
+    into history; (c) whether the way `raw_ask` builds `messages` (after
+    `_fix_messages`, `_drop_unsigned_thinking` and `_ensure_thinking_blocks`,
+    before `cache_control` is added) or the lines in `ask` that put the
+    reply into history changed: `0034`'s two insertion points have to
+    follow them, and so do the hash inputs (`self.system`,
+    `self.claude_compat`, `self.tools`) if upstream sends the system prompt
+    or the tools from anything else. `runner/tests/test_managed_ga_llmcore.py`
+    (the `0034` group) checks the request on the official host and
+    elsewhere, and that `session.history` keeps the blocks.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.
