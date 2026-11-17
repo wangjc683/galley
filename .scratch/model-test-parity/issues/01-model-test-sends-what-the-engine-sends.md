@@ -1,6 +1,6 @@
 # 「测试模型」发的请求头与内核一致，并修掉 OpenAI 新模型测试必败
 
-Status: ready-for-agent（2026-11-17 真机第 2 步发现新问题，追加第四部分，见 Comments 末尾；前三部分已合入 `150b0d62`、`6193e555`）
+Status: needs-dogfood（2026-11-17 四部分都已合入：`150b0d62`、`6193e555`、`d32c8c50`，门禁全过；等 JC 用真实 key 验）
 日期：2026-11-17
 来源：票 `.scratch/anthropic-official-identity/issues/01-…` 的两条票外发现，加上 JC 当天实测到的一个 bug。前两部分 JC 已裁（见各节）；第三部分是 bug 修法，JC 未裁，不要可撤。
 
@@ -209,3 +209,16 @@ HTTP 400 … "Function tools with reasoning_effort are not supported for gpt-6.1
 4. Anthropic 协议输出上限固定 8192：先不改，已记进 `docs/devlog/deferred.md`。
 
 更正（JC 指出）：Responses 模式是上游内核本来就支持的配置。上游的配置模板以官方地址为例，写着「如果服务商要求 Responses 接口：加 `'api_mode': 'responses'`」；Responses 请求体里的 `client_metadata`、`prompt_cache_key`、`include`、`instructions` 都是上游自己的写法，补丁 `0007` 只加了 ChatGPT 登录的分支。主会话先前把它说成「没有证据能通」是说重了。剩下的只是常规真机验证：「测试模型」的请求体比对话的简单，JC 新开对话问一句确认。
+
+### 2026-11-17 第四部分验收（主会话）
+
+合入 `d32c8c50`。主会话重跑：`cargo test --workspace` 49 个套件 1440 通过；pytest 801 通过；mypy、ruff、六个门禁脚本、`git diff --check` 都过。
+
+执行代理的回答：测试请求读到的 `api_mode` 是生效值。Core 不重算，界面每条「测试模型」路径送来的都是预设 ⊕ 默认 ⊕ 单独覆盖的结果，没保存的修改也算在内。
+
+没验证、留给真机的风险：
+
+1. `max_output_tokens: 16` 没核实。实际下限如果不是 16，测试会报 400，这种情况不会换参数重发。
+2. Responses 请求体的形状只有 Rust 单测守着，防漂移测试不覆盖。基线升级时要人工核对内核是否还按 `api_mode` 选端点、`_to_responses_input` 与 `_prepare_oai_tools` 的输出形状是否没变（耦合点 25 已写明）。
+3. `api_mode` 只认精确的 `responses`。内核还把 `response`、大小写不同、带空格的写法也当成 Responses；Galley 只写两个标准值，目前碰不到。
+4. 测试请求不带 `store: false`，Responses 接口默认会把请求存进用户的 OpenAI 账户。内核的普通对话也不带，两边一致，只是每次测试会存一条。
