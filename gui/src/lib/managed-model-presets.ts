@@ -136,9 +136,9 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     label: "Anthropic",
     protocol: "anthropic",
     apiBase: "https://api.anthropic.com",
-    model: "claude-opus-4-8",
+    model: "claude-opus-5-5",
     displayName: "Anthropic",
-    modelPlaceholder: "claude-opus-4-8",
+    modelPlaceholder: "claude-opus-5-5",
     apiKeyUrl: "https://platform.claude.com/settings/keys",
     // Same first-party-only rule as custom-openai above.
     advancedOptions: {
