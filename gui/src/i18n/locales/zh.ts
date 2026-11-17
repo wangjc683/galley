@@ -1010,7 +1010,7 @@ export const zhCopy = {
       hideApiKey: "隐藏 API Key",
       autoTestingConnection: "正在测试连接…",
       retryConnectionTest: "重新测试",
-      modelTestCostHint: "模型测试最多 1 个输出 token",
+      modelTestCostHint: "模型测试最多 16 个输出 token",
       connectionLatency: (message: string, latencyMs: number) =>
         `${message} · ${latencyMs} ms`,
       errorUnauthorized: "401 未授权：API Key 不正确，或无权访问此模型。",

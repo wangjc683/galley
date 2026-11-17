@@ -975,7 +975,7 @@ export const enCopy: AppCopy = {
       hideApiKey: "Hide API Key",
       autoTestingConnection: "Testing connection…",
       retryConnectionTest: "Retry test",
-      modelTestCostHint: "Model tests use at most 1 output token",
+      modelTestCostHint: "Model tests use at most 16 output tokens",
       connectionLatency: (message, latencyMs) => `${message} · ${latencyMs} ms`,
       errorUnauthorized:
         "401 Unauthorized: the API Key is invalid or cannot access this model.",

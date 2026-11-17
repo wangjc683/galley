@@ -126,8 +126,13 @@ export const MANAGED_MODEL_PROVIDER_PRESETS: ManagedModelProviderPreset[] = [
     // presets stay unset — the field is a first-party API contract and
     // compat layers may reject it; the shared protocol defaults below
     // also serve arbitrary custom endpoints and must not carry it.
+    // Responses, not the protocol's Chat default (2026-11-17, JC): the
+    // official API refuses function tools on /v1/chat/completions for
+    // gpt-6 models, and every Galley request carries tools. Same
+    // first-party-only reasoning: compat endpoints stay on Chat.
     advancedOptions: {
       ...managedModelProtocolAdvancedDefaults("openai"),
+      api_mode: "responses",
       reasoning_effort: "high",
     },
   },

@@ -14,13 +14,20 @@ import {
 import type { ManagedModelProviderRecord } from "@/types/managed-models";
 
 describe("managed model presets", () => {
-  it("official OpenAI / Anthropic presets are protocol defaults plus first-party reasoning_effort", () => {
+  it("official OpenAI / Anthropic presets are protocol defaults plus first-party options", () => {
+    // OpenAI's official API takes function tools only on Responses for
+    // gpt-6 models; compat endpoints keep the protocol's Chat default.
     expect(
       getManagedModelProviderPreset("custom-openai").advancedOptions,
     ).toEqual({
       ...managedModelProtocolAdvancedDefaults("openai"),
+      api_mode: "responses",
       reasoning_effort: "high",
     });
+    expect(managedModelProtocolAdvancedDefaults("openai")).toHaveProperty(
+      "api_mode",
+      "chat_completions",
+    );
     expect(
       getManagedModelProviderPreset("custom-anthropic").advancedOptions,
     ).toEqual({
