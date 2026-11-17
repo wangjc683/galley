@@ -1510,3 +1510,24 @@
 - **实施要点**：`core/src/browser_bridge.rs`、`core/src/browser_control.rs` 的错误构造处；`gui/src/stores/browser-control.ts` 的状态字段要加一项；外置 GA 模式没有内置浏览器桥，不受影响。
 - **待定**：详情默认展开还是折叠；「反馈问题」页的环境信息要不要带上最近一次的原始报错。
 - **关联**：`docs/managed-ga-runtime/browser-control.md`；`.scratch/audit-1110/PRD.md` 裁决 A8。
+
+---
+
+## 「测试模型」改走内核进程
+
+- **状态**：暂缓（2026-11-17 JC 按推荐：先把测试请求的头对齐成内核的并用测试锁住，这一条等信号；票 [01](../../.scratch/model-test-parity/issues/01-model-test-sends-what-the-engine-sends.md)）。
+- **提出**：2026-11-17。「测试模型」是 Core 自己拼的一个请求（`core/src/managed_model_probe.rs`），对话是内核发的另一个请求。当天发现两边的请求头不一样，带 Claude Code 标识的请求花不了订阅附带的 API 额度；头对齐之后，请求体仍然不一样。
+- **还剩的差异**（票 01 之后）：
+  - 请求体：系统提示词、思考与推理强度、`cache_control`、开着透传时的 Claude Code 系统提示词，测试请求都不带。
+  - OpenAI 协议的端点：测试请求固定打 `chat/completions`，内核在 `api_mode` 为 `responses` 时打 `responses`。
+  - OpenAI 协议的 `Accept`：内核流式，测试请求非流式。
+- **启动信号**（任一条）：有人报「测试模型通过，但第一句话因为请求体或端点的原因失败」；或把 API 模式设成 Responses 的用户报测试结果与对话不符；或对齐用的那组常量在一次基线升级里要改三处以上。
+- **方案**：「测试模型」不再自己拼请求，起一个一次性的内核进程，用这个模型的生效配置发一个真实的最小请求。外置 GA 的环境检查已经有同样的做法（`core/src/runner_commands/probe.rs` 的 `run_smoke`）。「读取模型列表」内核没有对应请求，留在 Core。
+- **实施要点**：
+  - 每次测试多一次起进程的时间，而贴入密钥后会自动测一次，首次引导也走这条路，要量过再定。
+  - 现在的报错文案按 HTTP 状态码分（401、403、404、429 各一句），内核给的是一段文字，要重新解析或让内核把状态码带出来。
+  - 测试的花费说明是「最多 1 个输出 token」，走内核后要重新核对上限怎么设。
+  - 做完后删掉 Core 里镜像内核请求头的常量和 `runner/tests/test_managed_ga_probe_parity.py`。
+  - 只动内置内核，外置 GA 零变化。
+- **待定**：自动测试与手动点「测试模型」要不要走同一条路；ChatGPT 登录的服务商（现在有自己的测试请求）要不要一起并过来。
+- **关联**：`docs/ga-baseline.md` 的耦合点清单（票 01 新增的那一条）；`docs/managed-ga-runtime/model-configuration.md`。
