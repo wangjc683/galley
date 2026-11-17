@@ -208,4 +208,4 @@ HTTP 400 … "Function tools with reasoning_effort are not supported for gpt-6.1
 3. 测试请求对 OpenAI 协议的服务商照内核的发（自称 Codex，与对话一致）：保持。
 4. Anthropic 协议输出上限固定 8192：先不改，已记进 `docs/devlog/deferred.md`。
 
-没验证的：官方 OpenAI 用 API key 走 Responses 模式的对话。内核的 Responses 请求体是照 Codex 的样子拼的（带 `client_metadata`、`prompt_cache_key`、`include`），官方接口是否原样接受没有测过；「测试模型」的请求体不带这些，所以测试通过不等于对话通过，要 JC 新开对话验。
+更正（JC 指出）：Responses 模式是上游内核本来就支持的配置。上游的配置模板以官方地址为例，写着「如果服务商要求 Responses 接口：加 `'api_mode': 'responses'`」；Responses 请求体里的 `client_metadata`、`prompt_cache_key`、`include`、`instructions` 都是上游自己的写法，补丁 `0007` 只加了 ChatGPT 登录的分支。主会话先前把它说成「没有证据能通」是说重了。剩下的只是常规真机验证：「测试模型」的请求体比对话的简单，JC 新开对话问一句确认。
