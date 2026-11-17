@@ -1,6 +1,6 @@
 # 发往 Anthropic 官方地址的请求不再自称 Claude Code
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-17 合入 `6571214f`，门禁全过；等 JC 用真实 key 与订阅额度验）
 日期：2026-11-17
 来源：JC 把订阅附带的每月 API 额度接进 Galley 时实测发现；方案三选一，JC 裁定「只对官方地址改」。
 
@@ -141,3 +141,23 @@ git diff --check
 如果第一步仍报余额不足，说明保留项里还有触发拒绝的，那时再逐项排查（本票没有做逐项排查）。
 
 ## Comments
+
+### 2026-11-17 验收（主会话）
+
+合入 `6571214f`。主会话重跑：`cargo test --workspace` 49 个套件 1431 通过；pytest 771 通过；mypy、ruff、六个门禁脚本、`git diff --check` 都过；把 `0032` 单独打在合入前的 `llmcore.py` 上，结果与提交的载荷逐字节一致。
+
+执行代理回答的两件事：
+
+- 「测试模型」送来的 `advanced_options` 是生效值，所以 Core 两条规则都判。「读取模型列表」不带模型级选项，在官方地址上只看主机名。
+- 重放后 `managed-ga/code` 里只有 `llmcore.py` 变了，已有补丁都不用重新导出。
+
+没验证、留给真机的风险：
+
+1. 对话请求比「测试模型」多带 5 个 beta，其中有 `fallback-credit-2026-06-01`。票面规定保留，没有动。「测试模型」通过不代表对话一定通过；对话仍报余额不足时先查这一个。
+2. 在官方地址上开着透传的用户，「读取模型列表」不再带 Claude Code 标识。列表接口如果认这个标识，这一步可能失败；对话和「测试模型」不受影响。
+3. 两边对透传的判法略有差异：Core 要求 `fake_cc_system_prompt` 严格等于 `true`，内核只看真假并兼认 `claude_compat`。Galley 只写布尔值，目前碰不到。
+
+票外发现，都没有改：
+
+- Sign in with ChatGPT 的 UA 是 `Galley (<os>; <arch>)`，这张票按票面用的是纯 `Galley`，两处不一致。
+- 早就存在的漂移：「测试模型」的 UA 版本是 `claude-cli/2.1.113`，内核是 `2.1.280`；beta 也是一边 4 个、一边 9 个。
