@@ -1,6 +1,6 @@
 # 「测试模型」发的请求头与内核一致，并修掉 OpenAI 新模型测试必败
 
-Status: needs-dogfood（2026-11-17 四部分都已合入：`150b0d62`、`6193e555`、`d32c8c50`，门禁全过；等 JC 用真实 key 验）
+Status: ready-for-agent（2026-11-17 真机又发现一处，追加第五部分，见 Comments 末尾；前四部分已合入 `150b0d62`、`6193e555`、`d32c8c50`）
 日期：2026-11-17
 来源：票 `.scratch/anthropic-official-identity/issues/01-…` 的两条票外发现，加上 JC 当天实测到的一个 bug。前两部分 JC 已裁（见各节）；第三部分是 bug 修法，JC 未裁，不要可撤。
 
@@ -222,3 +222,51 @@ HTTP 400 … "Function tools with reasoning_effort are not supported for gpt-6.1
 2. Responses 请求体的形状只有 Rust 单测守着，防漂移测试不覆盖。基线升级时要人工核对内核是否还按 `api_mode` 选端点、`_to_responses_input` 与 `_prepare_oai_tools` 的输出形状是否没变（耦合点 25 已写明）。
 3. `api_mode` 只认精确的 `responses`。内核还把 `response`、大小写不同、带空格的写法也当成 Responses；Galley 只写两个标准值，目前碰不到。
 4. 测试请求不带 `store: false`，Responses 接口默认会把请求存进用户的 OpenAI 账户。内核的普通对话也不带，两边一致，只是每次测试会存一条。
+
+### 2026-11-17 真机（JC）与第五部分
+
+第四部分合入后，JC 用 OpenAI 官方服务商配 `gpt-6` 系列的模型（Responses 模式）点「测试模型」，报：
+
+```text
+HTTP 400 … "code": "codex_byok_restricted_by_api_credit_promo", "message": "This organization cannot be used for Codex usage because it is enrolled in the monthly API Credits benefit with ChatGPT subscriptions. To enable Codex u…"
+```
+
+端点那一关过了。新的原因与当天 Anthropic 那件事是同一类：ChatGPT 订阅附带每月 API 额度的 organization 不能用于 Codex，而 Galley 的请求自称 Codex。第二部分对齐之后，测试请求和对话一样带着 `User-Agent: codex_exec/…` 与 `originator: codex_exec`，所以测试如实失败，对话也会失败。JC 的判断：「估计不能用 Codex 形式」。
+
+#### 第五部分：发往 OpenAI 官方地址的请求不再自称 Codex
+
+规则：OpenAI 协议、`api_base` 的主机名恰好是 `api.openai.com`、且不是 ChatGPT 登录的服务商时，请求不带 Codex 标识。主机名的判法与 Anthropic 那条相同（解析 URL、取主机名、转小写后全等；解析不出主机名的按「不是」）。
+
+「Codex 标识」指：
+
+| 项 | 位置 | 规则生效时 |
+|---|---|---|
+| `originator: codex_exec` | 内核 `_openai_stream`、Core 的测试请求 | 不发 |
+| `User-Agent: codex_exec/…` | 内核、Core | 改为 Galley 自己的 UA（内核 `_chatgpt_plan_user_agent()`，Core `chatgpt_siwc::galley_user_agent()`）。内核里只在 UA 仍是类默认值（`native_ua`）时替换，配置过的 UA 不动 |
+| Responses 请求体的 `client_metadata`（内容只有两个 `x-codex-*` 标识） | 内核 | 不发。Core 的测试请求体本来就不带 |
+
+规则不覆盖、保持现状的：
+
+- ChatGPT 登录的服务商。它的地址也是 `api.openai.com`，但内核里走 `codex_backend` 分支、Core 里走 `chatgpt_siwc` 自己的测试请求，两处都不动（它本来就发 Galley 的 UA、不带 `originator`，`client_metadata` 保留）。
+- 所有其他主机名：第三方 OpenAI 兼容接口、中转站，以及主机名只是包含或以 `api.openai.com` 结尾的地址。
+- 请求里的其余内容：`prompt_cache_key`、`include`、`instructions`、`Accept`、鉴权头、Chat 模式的请求体。
+- Anthropic 协议。外置 GA（attach 模式）。
+
+要改的文件：
+
+1. `core/src/managed_model_probe.rs`：OpenAI 协议的请求头按上面的规则；主机名判断与 Anthropic 那条共用一个函数。
+2. `managed-ga/patches/0033-managed-official-openai-no-codex-identity.patch`（新增，排在栈的最后；只动 `_openai_stream`）；`managed-ga/manifest.json`；`managed-ga/patches/manifest.md`（新行写清原因、动到的上游文件、变基风险含与 `0007` 同动一个函数、移除条件；更新「Last replay verified」）。
+3. `managed-ga/code/llmcore.py`：只能由重放补丁栈生成。
+4. `runner/tests/test_managed_ga_llmcore.py`（内核一侧的规则测试）、`runner/tests/test_managed_ga_probe_parity.py`（如果常量或解析方式变了就同步）。
+5. `docs/managed-ga-runtime/model-configuration.md`、`docs/ga-baseline.md` 耦合点 25：补上这条规则。
+
+测试：
+
+- Rust：官方地址的 OpenAI 协议测试请求（Chat 与 Responses 两种模式）没有 `originator`、UA 是 Galley 的；第三方地址与两个形似主机名的地址，请求头与现在相同；Anthropic 协议不受影响。
+- Python（用 `_FakeNetwork`）：官方地址上 Chat 与 Responses 两种模式的请求没有 `originator`、UA 是 Galley 的、Responses 请求体没有 `client_metadata`，其余字段与第三方地址上的请求相同；第三方地址上三项都还在；`codex_backend` 的请求与改动前相同；官方地址上配置过的 `user_agent` 不被替换。
+
+怎么改、验证命令、不要碰、报告格式同正文与 `docs/agents/dispatch.md`。新补丁排在 `0032` 之后，不应让任何已有补丁需要重新导出；重放后 `managed-ga/code` 只应有 `llmcore.py` 一处变化。单独一个提交。
+
+没有核实的：请求头和 `client_metadata` 里具体哪一项触发拒绝；`prompt_cache_key` 等保留项会不会触发。按 Anthropic 那次的做法，整组去掉自称 Codex 的标识，保留项留给真机。
+
+真机步骤（只有 JC 能验）：OpenAI 官方服务商配 `gpt-6` 系列的模型，「测试模型」通过，新开对话能回；ChatGPT 登录的模型发一句仍能回；一个第三方 OpenAI 协议的服务商「测试模型」仍通过。
