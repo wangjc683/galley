@@ -1,6 +1,6 @@
 # 「测试模型」发的请求头与内核一致，并修掉 OpenAI 新模型测试必败
 
-Status: ready-for-agent（2026-11-17 真机又发现一处，追加第五部分，见 Comments 末尾；前四部分已合入 `150b0d62`、`6193e555`、`d32c8c50`）
+Status: needs-dogfood（2026-11-17 五部分都已合入：`150b0d62`、`6193e555`、`d32c8c50`、`fb7bc1ee`，门禁全过；等 JC 用真实 key 验）
 日期：2026-11-17
 来源：票 `.scratch/anthropic-official-identity/issues/01-…` 的两条票外发现，加上 JC 当天实测到的一个 bug。前两部分 JC 已裁（见各节）；第三部分是 bug 修法，JC 未裁，不要可撤。
 
@@ -270,3 +270,21 @@ HTTP 400 … "code": "codex_byok_restricted_by_api_credit_promo", "message": "Th
 没有核实的：请求头和 `client_metadata` 里具体哪一项触发拒绝；`prompt_cache_key` 等保留项会不会触发。按 Anthropic 那次的做法，整组去掉自称 Codex 的标识，保留项留给真机。
 
 真机步骤（只有 JC 能验）：OpenAI 官方服务商配 `gpt-6` 系列的模型，「测试模型」通过，新开对话能回；ChatGPT 登录的模型发一句仍能回；一个第三方 OpenAI 协议的服务商「测试模型」仍通过。
+
+### 2026-11-17 第五部分验收（主会话）
+
+合入 `fb7bc1ee`（新补丁 `0033`）。主会话重跑：`cargo test --workspace` 49 个套件 1441 通过；pytest 816 通过；mypy、ruff、六个门禁脚本、`git diff --check` 都过；把 `0033` 单独打在合入前的 `llmcore.py` 上，结果与提交的载荷逐字节一致。
+
+执行代理的回答：
+
+- 重放后 `managed-ga/code` 里只有 `llmcore.py` 变了（多 9 行），已有补丁都不用重新导出。
+- ChatGPT 登录的请求不变。测试让同一个 `codex_backend` 会话分别发往官方地址和另一个主机，除 URL 外请求头和请求体完全相同；去掉排除条件时这条测试会红。
+- 发往官方地址的路径上没有剩下无条件发出的 `originator` 或 `codex_exec` UA。
+
+原有测试的一处调整：补丁 `0007` 的一条测试原来拿普通会话打官方地址并断言带 `originator`，这个地址现在归 `0033` 管，所以挪到了一个第三方地址，它要测的东西不变。
+
+没验证、留给真机的风险：
+
+1. 拒收是请求头还是 `client_metadata` 里的哪一项触发的，没核实，整组去掉。
+2. 保留的 `prompt_cache_key`、`include`、`instructions` 会不会也触发拒收，没核实。
+3. 以后上游在 `_openai_stream` 里加新的 Codex 标识时，不会与 `0033` 冲突，也不会被去掉；基线升级时要看这个函数发了什么（台账已写明）。
