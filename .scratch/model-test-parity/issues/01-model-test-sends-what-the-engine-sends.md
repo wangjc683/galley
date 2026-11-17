@@ -1,6 +1,6 @@
 # 「测试模型」发的请求头与内核一致，并修掉 OpenAI 新模型测试必败
 
-Status: needs-dogfood（2026-11-17 合入 `150b0d62`、`6193e555`，门禁全过；等 JC 用真实 key 验）
+Status: ready-for-agent（2026-11-17 真机第 2 步发现新问题，追加第四部分，见 Comments 末尾；前三部分已合入 `150b0d62`、`6193e555`）
 日期：2026-11-17
 来源：票 `.scratch/anthropic-official-identity/issues/01-…` 的两条票外发现，加上 JC 当天实测到的一个 bug。前两部分 JC 已裁（见各节）；第三部分是 bug 修法，JC 未裁，不要可撤。
 
@@ -165,3 +165,38 @@ JC 确认：OpenAI 官方地址「测试模型」报 `max_tokens` 不被支持�
 4. 没有对齐的细节：请求头的顺序和大小写（HTTP 不区分）；模型配置里自定的 `user_agent`（设置界面设不了）。
 
 票外发现：内置运行时从不发出 `default_ua`。
+
+### 2026-11-17 真机（JC）与第四部分
+
+JC 在合入后的 dev 里验：
+
+- Anthropic 官方服务商「测试模型」正常。这次测试请求带的是与对话相同的 8 个 beta（含 `fallback-credit-2026-06-01`），所以上面风险 1 在「测试模型」上已排除。
+- OpenAI 官方服务商配 `gpt-6.1-sol`，「测试模型」报：
+
+```text
+HTTP 400 … "Function tools with reasoning_effort are not supported for gpt-6.1-sol in /v1/chat/completions. To use function tools, use /v1/responses or set reasoning_effort to 'none'." … "type": "invalid_request_error"
+```
+
+参数名那一关已经过了（第三部分生效）。新的原因：这个模型在官方接口上不接受「Chat 端点 + 工具」，而测试请求固定打 `chat/completions`，不看模型的 API 模式。内核在 `api_mode` 为 `responses` 时打的是 `responses`，所以把 API 模式设成 Responses 之后对话能用、测试仍然失败。这正是本票第二部分列为「不覆盖」的那一项，当天就撞上了。
+
+#### 第四部分：OpenAI 协议的测试请求跟着 API 模式走
+
+规则：生效的高级选项里 `api_mode` 为 `responses` 时，「测试模型」打 Responses 端点、用 Responses 的请求体；其余情况（`chat_completions`、没有这一项、别的值）与现在完全相同。
+
+- 端点：`provider_endpoint(api_base, "responses")`，与内核 `auto_make_url(sess.api_base, "responses")` 同一条规则（URL 用例表里已有 `responses` 的用例，缺的补上）。
+- 请求体，最小形状：`model`；`input` 为单条用户消息，形状与内核 `_to_responses_input` 对 `{"role": "user", "content": "ping"}` 的输出相同；`tools` 用 Responses 的函数形状（与内核 `_prepare_oai_tools(tools, "responses")` 的输出相同，即把 `function` 里的字段提到外层）；`stream: false`；`max_output_tokens: 16`。
+- `max_output_tokens` 取 16 是因为 Responses 接口对这一项有下限；这个数值没有在真机上核实过，写成一个常量并在注释里说明。
+- 第三部分的换参数重发只用于 Chat 模式。
+- 请求头两种模式相同（第二部分的规则不变）。
+- 不带 `reasoning`、`instructions`、`prompt_cache_key`、`client_metadata`、`include`：请求体的其余差异仍不在本票。
+- ChatGPT 登录的服务商不动。「读取模型列表」不动。
+
+不覆盖、保持现状的：Anthropic 协议；`api_mode` 不是 `responses` 的 OpenAI 协议请求；推理强度与思考（测试请求仍不带）。
+
+要改的文件：`core/src/managed_model_probe.rs`；`docs/managed-ga-runtime/model-configuration.md` 与 `docs/ga-baseline.md` 耦合点 25 里「不覆盖」清单去掉端点那一项并补一句规则。`gui/`、`docs/devlog/`（含 `deferred.md`）由主会话改，不要碰。
+
+测试（Rust 单测）：`api_mode` 为 `responses` 时端点与请求体符合上面的形状；为 `chat_completions`、缺省、`advanced_options` 为空时，端点与请求体和改动前相同；Anthropic 协议即使选项里带 `api_mode: responses` 也不受影响。
+
+验证命令、提交约束、报告格式同正文。单独一个提交。报告里另外回答：测试请求读到的 `api_mode` 是不是生效值（预设 ⊕ 默认 ⊕ 单独覆盖）。
+
+真机步骤（只有 JC 能验）：OpenAI 官方服务商配 `gpt-6` 系列的模型、API 模式设为 Responses，「测试模型」通过，新开对话能回。
