@@ -198,31 +198,45 @@ a request that says it is Claude Code (`user-agent: claude-cli/…`,
 balance is too low" 400, and the engine and the connection probe used to send
 those markers on every Anthropic-protocol request.
 
-Since 2026-11-17 a request carries no Claude Code identity when both hold:
-
-1. the Base URL's host is exactly `api.anthropic.com` (parsed as a URL,
-   compared lowercased; a host that only contains or ends in it does not
-   count, and neither does a Base URL with no scheme, which has no host);
-2. the model's "Claude Code passthrough" (`fake_cc_system_prompt`) is off.
+Since 2026-11-17 a request carries no Claude Code identity when the Base URL's
+host is exactly `api.anthropic.com` (parsed as a URL, compared lowercased; a
+host that only contains or ends in it does not count, and neither does a Base
+URL with no scheme, which has no host). That one condition decides it: the
+model's "Claude Code passthrough" (`fake_cc_system_prompt` / `claude_compat`)
+does not bring the identity back. Passthrough still controls what else it
+controls (the Claude Code system prompt, the default thinking and effort it
+adds).
 
 Then the `claude-code-20250219` beta is dropped (the other betas keep their
-order), the user agent is `Galley` (the engine keeps a `user_agent` the config
-sets), and `x-app: cli` is not sent; the engine also leaves out
-`X-Claude-Code-Session-Id`, the `X-Stainless-*` headers and the body's
-`metadata.user_id`. Everything else in the request stays. Every other request
-is byte for byte what it was: passthrough on (the user's way back, for
-example a subscription sign-in token used as the key), every third-party
-Anthropic-compatible endpoint and relay, OpenAI-protocol providers and the
-ChatGPT provider.
+order), the user agent is Galley's own, `Galley (<os>; <arch>)`, the one Sign
+in with ChatGPT sends (the engine keeps a `user_agent` the config sets), and
+`x-app: cli`, `X-Claude-Code-Session-Id`, the `X-Stainless-*` headers and the
+body's `metadata.user_id` are not sent. Everything else in the request stays.
+Every other request carries the identity as before: every third-party
+Anthropic-compatible endpoint and relay, passthrough on or off. OpenAI-protocol
+providers and the ChatGPT provider never carried it.
 
 The engine applies the rule in `NativeClaudeSession.raw_ask` (managed patch
 `0032`, see the [patch ledger](../../managed-ga/patches/manifest.md)), the
 probe in `core/src/managed_model_probe.rs`, for both "Test model" and the
-model list. "Test model" sends the model's effective options; the model list
-belongs to a provider and sends none, so toward the official API it never
-sends the identity. The rule is the managed (bundled) runtime's only: attach
-mode runs the user's own GenericAgent checkout, which Galley does not patch,
-and its requests are unchanged.
+model list. The rule is the managed (bundled) runtime's only: attach mode
+runs the user's own GenericAgent checkout, which Galley does not patch, and
+its requests are unchanged.
+
+"Test model" and the model list send the headers a conversation sends, for
+the same provider and model (since 2026-11-17): for the Anthropic protocol
+the engine's user agent, betas (in order, with the engine's `[1m]` handling:
+the suffix stripped from the model id and `context-1m-2025-08-07` inserted),
+`anthropic-version`, `anthropic-dangerous-direct-browser-access` and `Accept`,
+plus, where the request says it is Claude Code, `x-app`, a fresh
+`X-Claude-Code-Session-Id`, the `X-Stainless-*` set and the body's
+`metadata.user_id`; for the OpenAI protocol the engine's `User-Agent` and
+`originator`. Core keeps the engine's values as constants that
+`runner/tests/test_managed_ga_probe_parity.py` holds to the payload (coupling
+point 25 in [the GA baseline](../ga-baseline.md)). Not aligned: OpenAI's
+`Accept: text/event-stream` (the engine streams, the probe does not), the
+rest of the body, and the endpoint when `api_mode` is `responses` (the probe
+always uses `chat/completions`).
 
 ### ChatGPT (Sign in with ChatGPT)
 

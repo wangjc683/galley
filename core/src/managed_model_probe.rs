@@ -13,6 +13,7 @@
 
 use std::time::Duration;
 
+use ring::rand::{SecureRandom, SystemRandom};
 use serde_json::Value;
 
 use crate::api::{
@@ -38,14 +39,18 @@ pub async fn list_models(input: ManagedModelProbeInput) -> Result<ManagedModelLi
     }
     let secret = resolve_secret(&input).await?;
     let endpoint = models_endpoint(&input.api_base)?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(PROBE_TIMEOUT_SECS))
-        .build()
-        .map_err(|e| GalleyError::Internal {
-            message: format!("building HTTP client: {e}"),
-        })?;
-    let mut req = client.get(&endpoint);
-    req = apply_auth_headers(req, &input, &secret);
+    let client = probe_client()?;
+    // The same headers as "Test model" (the engine never lists models, so
+    // there is nothing else to mirror). A list belongs to a provider, not
+    // to a model: no `[1m]` beta.
+    let claude_code = ClaudeCodeIdentity::for_probe(&input)?;
+    let req = apply_probe_headers(
+        client.get(&endpoint),
+        &input,
+        &secret,
+        false,
+        claude_code.as_ref(),
+    );
     let resp = req.send().await.map_err(|e| GalleyError::RunnerError {
         message: format!("model list request failed: {e}"),
     })?;
@@ -112,22 +117,28 @@ async fn test_model(
     }
     let secret = resolve_secret(&input).await?;
     let endpoint = inference_endpoint(&input.api_base, input.protocol)?;
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(PROBE_TIMEOUT_SECS))
-        .build()
-        .map_err(|e| GalleyError::Internal {
-            message: format!("building HTTP client: {e}"),
-        })?;
-    let payload = probe_payload(input.protocol, &model);
-    let mut req = client.post(&endpoint).json(&payload);
-    req = apply_auth_headers(req, &input, &secret);
-    let resp = req.send().await.map_err(|e| GalleyError::RunnerError {
-        message: format!("model test request failed: {e}"),
-    })?;
-    let status = resp.status();
-    let body = resp.text().await.map_err(|e| GalleyError::RunnerError {
-        message: format!("reading model test response failed: {e}"),
-    })?;
+    let client = probe_client()?;
+    let (status, body) = match input.protocol {
+        ManagedModelProtocol::Anthropic => {
+            let claude_code = ClaudeCodeIdentity::for_probe(&input)?;
+            let (model, context_1m) = split_context_1m(&model);
+            let req = client
+                .post(&endpoint)
+                .json(&anthropic_probe_payload(&model, claude_code.as_ref()));
+            send_model_test(apply_probe_headers(
+                req,
+                &input,
+                &secret,
+                context_1m,
+                claude_code.as_ref(),
+            ))
+            .await?
+        }
+        ManagedModelProtocol::Openai => {
+            let req = client.post(&endpoint).json(&openai_probe_payload(&model));
+            send_model_test(apply_probe_headers(req, &input, &secret, false, None)).await?
+        }
+    };
     if !status.is_success() {
         return Err(GalleyError::InvalidArgs {
             message: format!(
@@ -143,6 +154,27 @@ async fn test_model(
         model_found: Some(true),
         message: "模型可用".into(),
     })
+}
+
+fn probe_client() -> Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(PROBE_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| GalleyError::Internal {
+            message: format!("building HTTP client: {e}"),
+        })
+}
+
+/// Sends one "Test model" request: its status and body.
+async fn send_model_test(req: reqwest::RequestBuilder) -> Result<(reqwest::StatusCode, String)> {
+    let resp = req.send().await.map_err(|e| GalleyError::RunnerError {
+        message: format!("model test request failed: {e}"),
+    })?;
+    let status = resp.status();
+    let body = resp.text().await.map_err(|e| GalleyError::RunnerError {
+        message: format!("reading model test response failed: {e}"),
+    })?;
+    Ok((status, body))
 }
 
 async fn resolve_secret(input: &ManagedModelProbeInput) -> Result<String> {
@@ -198,16 +230,85 @@ async fn resolve_api_key_ref(input: &ManagedModelProbeInput) -> Result<String> {
         })
 }
 
-/// Claude Code's own `anthropic-beta` entry, first in [`ANTHROPIC_PROBE_BETAS`].
+// What the managed engine (`managed-ga/code/llmcore.py`) puts on its
+// requests, mirrored in one place. "Test model" passing has to mean a
+// conversation will pass, and a provider can decide on headers alone (on
+// 2026-11-17 the official Anthropic API refused a subscription's API credit
+// to a request that said it was Claude Code), so for the same provider and
+// model the probe sends the headers the engine sends.
+// `runner/tests/test_managed_ga_probe_parity.py` reads these constants back
+// and compares them with the payload's `llmcore.py`: when a baseline upgrade
+// changes the engine's values that test goes red, and the fix is here.
+// Mirrored: the headers below and, on an Anthropic-protocol request that
+// says it is Claude Code, the body's `metadata.user_id`. Not mirrored:
+// OpenAI's `Accept: text/event-stream` (the engine streams, the probe does
+// not), the rest of the body (system prompt, thinking and effort,
+// `cache_control`, passthrough's Claude Code system prompt), the OpenAI
+// `responses` endpoint. Galley's model config never sets the engine's
+// `user_agent`, so the engine sends its class defaults below.
+
+/// `NativeClaudeSession.native_ua`: the user agent of an Anthropic-protocol
+/// engine request that says it is Claude Code.
+const ENGINE_CLAUDE_USER_AGENT: &str = "claude-cli/2.1.280 (native, cli)";
+
+/// `NativeOAISession.native_ua`: the user agent of every OpenAI-protocol
+/// engine request (`_openai_stream` sends the session's `user_agent`, which
+/// `NativeClaudeSession.__init__` sets to the class's `native_ua`).
+const ENGINE_OPENAI_USER_AGENT: &str =
+    "codex_exec/0.139.0 (Windows 10.0.26200; x86_64) unknown (codex_exec; 0.139.0)";
+
+/// `_openai_stream`'s `originator` header.
+const ENGINE_OPENAI_ORIGINATOR: &str = "codex_exec";
+
+/// Claude Code's own `anthropic-beta` entry, first in [`ENGINE_ANTHROPIC_BETAS`].
 const CLAUDE_CODE_BETA: &str = "claude-code-20250219";
 
-/// The `anthropic-beta` list of every Anthropic-protocol probe, in order.
-const ANTHROPIC_PROBE_BETAS: [&str; 4] = [
+/// `NativeClaudeSession.raw_ask`'s `beta_parts`, in order.
+const ENGINE_ANTHROPIC_BETAS: [&str; 9] = [
     CLAUDE_CODE_BETA,
     "interleaved-thinking-2025-05-14",
     "redact-thinking-2026-02-12",
+    "thinking-token-count-2026-05-13",
+    "context-management-2025-06-27",
     "prompt-caching-scope-2026-01-05",
+    "mid-conversation-system-2026-04-07",
+    "effort-2025-11-24",
+    "fallback-credit-2026-06-01",
 ];
+
+/// A model id that contains this, in any case, asks for the 1M-token
+/// context (see [`split_context_1m`]).
+const ENGINE_CONTEXT_1M_MARKER: &str = "[1m]";
+
+/// The beta `raw_ask` inserts for a `[1m]` model, and where.
+const ENGINE_CONTEXT_1M_BETA: &str = "context-1m-2025-08-07";
+const ENGINE_CONTEXT_1M_BETA_AT: usize = 1;
+
+/// The fixed headers of every Anthropic-protocol engine request, whether it
+/// says it is Claude Code or not. (`Content-Type: application/json` comes
+/// from reqwest's `.json()`.)
+const ENGINE_ANTHROPIC_HEADERS: [(&str, &str); 3] = [
+    ("anthropic-version", "2023-06-01"),
+    ("anthropic-dangerous-direct-browser-access", "true"),
+    ("Accept", "application/json"),
+];
+
+/// The fixed headers an Anthropic-protocol engine request adds when it says
+/// it is Claude Code: `x-app` and Claude Code's `X-Stainless-*` set.
+const ENGINE_CLAUDE_CODE_HEADERS: [(&str, &str); 9] = [
+    ("x-app", "cli"),
+    ("X-Stainless-Arch", "x64"),
+    ("X-Stainless-Lang", "js"),
+    ("X-Stainless-OS", "Windows"),
+    ("X-Stainless-Package-Version", "0.94.0"),
+    ("X-Stainless-Retry-Count", "0"),
+    ("X-Stainless-Runtime", "node"),
+    ("X-Stainless-Runtime-Version", "v24.3.0"),
+    ("X-Stainless-Timeout", "600"),
+];
+
+/// The header carrying [`ClaudeCodeIdentity::session_id`].
+const ENGINE_CLAUDE_CODE_SESSION_HEADER: &str = "X-Claude-Code-Session-Id";
 
 /// The host of Anthropic's official API.
 const OFFICIAL_ANTHROPIC_HOST: &str = "api.anthropic.com";
@@ -227,47 +328,158 @@ fn is_official_anthropic_host(api_base: &str) -> bool {
 
 /// Whether an Anthropic-protocol probe says it is Claude Code
 /// (`user-agent: claude-cli/…`, `x-app: cli`, the `claude-code-20250219`
-/// beta). Toward the official API the answer is no unless the model's
-/// "Claude Code passthrough" (`fake_cc_system_prompt`) is on: the official
-/// API refuses a Claude subscription's API credit to a request carrying
-/// those markers, with a misleading "credit balance is too low" 400.
-/// Every other endpoint keeps them. "Test model" sends the model's
-/// effective options; the model list (a provider's, not a model's) sends
-/// none, so toward the official API it never says it is Claude Code.
+/// beta, the session and Stainless headers). Toward the official API the
+/// answer is always no, whether the model's "Claude Code passthrough"
+/// (`fake_cc_system_prompt`) is on or off: the official API refuses a Claude
+/// subscription's API credit to a request carrying those markers, with a
+/// misleading "credit balance is too low" 400. Every other endpoint keeps
+/// them.
 fn sends_claude_code_identity(input: &ManagedModelProbeInput) -> bool {
-    let passthrough = input
-        .advanced_options
-        .as_ref()
-        .and_then(|options| options.get("fake_cc_system_prompt"))
-        .and_then(Value::as_bool)
-        == Some(true);
-    passthrough || !is_official_anthropic_host(&input.api_base)
+    !is_official_anthropic_host(&input.api_base)
 }
 
-fn apply_auth_headers(
+/// The Claude Code session of an Anthropic-protocol probe that says it is
+/// Claude Code, fresh for every probe as the engine's is for every session
+/// (`NativeClaudeSession.__init__`).
+struct ClaudeCodeIdentity {
+    /// `str(uuid.uuid4())`: [`ENGINE_CLAUDE_CODE_SESSION_HEADER`] and the
+    /// user id's `session_id`.
+    session_id: String,
+    /// `uuid.uuid4().hex + uuid.uuid4().hex[:32]`: 64 hex digits.
+    device_id: String,
+}
+
+/// `metadata.user_id`, field for field and in the engine's order.
+#[derive(serde::Serialize)]
+struct ClaudeCodeUserId<'a> {
+    device_id: &'a str,
+    account_uuid: &'a str,
+    session_id: &'a str,
+}
+
+impl ClaudeCodeIdentity {
+    /// `Some` for an Anthropic-protocol probe that says it is Claude Code
+    /// ([`sends_claude_code_identity`]); `None` toward the official API,
+    /// and for OpenAI.
+    fn for_probe(input: &ManagedModelProbeInput) -> Result<Option<Self>> {
+        if input.protocol != ManagedModelProtocol::Anthropic || !sends_claude_code_identity(input) {
+            return Ok(None);
+        }
+        Ok(Some(Self {
+            session_id: uuid_hyphenated(&random_uuid_v4()?),
+            device_id: format!("{}{}", hex(&random_uuid_v4()?), hex(&random_uuid_v4()?)),
+        }))
+    }
+
+    /// The body's `metadata.user_id`: what the engine's
+    /// `json.dumps({...}, separators=(',', ':'))` writes.
+    fn user_id(&self) -> String {
+        serde_json::to_string(&ClaudeCodeUserId {
+            device_id: &self.device_id,
+            account_uuid: "",
+            session_id: &self.session_id,
+        })
+        .unwrap_or_default()
+    }
+}
+
+/// A random (version 4, RFC 4122 variant) UUID, as Python's `uuid.uuid4()`.
+fn random_uuid_v4() -> Result<[u8; 16]> {
+    let mut bytes = [0_u8; 16];
+    SystemRandom::new()
+        .fill(&mut bytes)
+        .map_err(|_| GalleyError::Internal {
+            message: "generating random bytes failed".into(),
+        })?;
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    Ok(bytes)
+}
+
+/// Lowercase hex, as Python's `UUID.hex`.
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// `8-4-4-4-12` lowercase hex, as Python's `str(UUID)`.
+fn uuid_hyphenated(bytes: &[u8; 16]) -> String {
+    let hex = hex(bytes);
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    )
+}
+
+/// The engine's `[1m]` rule (`NativeClaudeSession.raw_ask`): a model id that
+/// contains [`ENGINE_CONTEXT_1M_MARKER`] in any case asks for the 1M-token
+/// context. It goes out without `[1m]` / `[1M]`, and the betas gain
+/// [`ENGINE_CONTEXT_1M_BETA`]. Returns the id to send and whether it asked.
+fn split_context_1m(model: &str) -> (String, bool) {
+    if !model.to_lowercase().contains(ENGINE_CONTEXT_1M_MARKER) {
+        return (model.to_string(), false);
+    }
+    let upper = ENGINE_CONTEXT_1M_MARKER.to_uppercase();
+    let stripped = model
+        .replace(ENGINE_CONTEXT_1M_MARKER, "")
+        .replace(&upper, "");
+    (stripped, true)
+}
+
+/// The `anthropic-beta` header, as `raw_ask` joins it: the engine's list,
+/// the `[1m]` beta inserted where the engine inserts it, then Claude Code's
+/// own beta filtered out when the request does not say it is Claude Code
+/// (managed patch `0032`), the others keeping their order.
+fn anthropic_betas(context_1m: bool, claude_code: bool) -> String {
+    let mut betas = ENGINE_ANTHROPIC_BETAS.to_vec();
+    if context_1m {
+        betas.insert(ENGINE_CONTEXT_1M_BETA_AT, ENGINE_CONTEXT_1M_BETA);
+    }
+    betas.retain(|beta| claude_code || *beta != CLAUDE_CODE_BETA);
+    betas.join(",")
+}
+
+/// A probe's headers: what the engine sends for the same provider and model
+/// (see the constants above), then the auth header. `context_1m` is
+/// [`split_context_1m`]'s answer for the model under test; `claude_code` is
+/// [`ClaudeCodeIdentity::for_probe`]'s. When an Anthropic-protocol request
+/// does not say it is Claude Code (managed patch `0032`), it sends Galley's
+/// own user agent, the one Sign in with ChatGPT sends, and no Claude Code
+/// beta, `x-app`, session or Stainless headers.
+fn apply_probe_headers(
     req: reqwest::RequestBuilder,
     input: &ManagedModelProbeInput,
     secret: &str,
+    context_1m: bool,
+    claude_code: Option<&ClaudeCodeIdentity>,
 ) -> reqwest::RequestBuilder {
     match input.protocol {
-        ManagedModelProtocol::Openai => req.bearer_auth(secret),
+        ManagedModelProtocol::Openai => req
+            .header("user-agent", ENGINE_OPENAI_USER_AGENT)
+            .header("originator", ENGINE_OPENAI_ORIGINATOR)
+            .bearer_auth(secret),
         ManagedModelProtocol::Anthropic => {
-            let identity = sends_claude_code_identity(input);
-            let betas = ANTHROPIC_PROBE_BETAS
-                .into_iter()
-                .filter(|beta| identity || *beta != CLAUDE_CODE_BETA)
-                .collect::<Vec<_>>()
-                .join(",");
-            let req = req
-                .header("anthropic-version", "2023-06-01")
-                .header("anthropic-beta", betas)
-                .header("anthropic-dangerous-direct-browser-access", "true");
-            let req = if identity {
-                req.header("user-agent", "claude-cli/2.1.113 (external, cli)")
-                    .header("x-app", "cli")
-            } else {
-                req.header("user-agent", "Galley")
-            };
+            let mut req = req.header(
+                "anthropic-beta",
+                anthropic_betas(context_1m, claude_code.is_some()),
+            );
+            for (name, value) in ENGINE_ANTHROPIC_HEADERS {
+                req = req.header(name, value);
+            }
+            match claude_code {
+                Some(identity) => {
+                    req = req
+                        .header("user-agent", ENGINE_CLAUDE_USER_AGENT)
+                        .header(ENGINE_CLAUDE_CODE_SESSION_HEADER, &identity.session_id);
+                    for (name, value) in ENGINE_CLAUDE_CODE_HEADERS {
+                        req = req.header(name, value);
+                    }
+                }
+                None => req = req.header("user-agent", chatgpt_siwc::galley_user_agent()),
+            }
             if secret.starts_with("sk-ant-") {
                 req.header("x-api-key", secret)
             } else {
@@ -347,71 +559,78 @@ fn with_beta_query(endpoint: &str) -> String {
     }
 }
 
-fn probe_payload(protocol: ManagedModelProtocol, model: &str) -> Value {
-    match protocol {
-        ManagedModelProtocol::Anthropic => serde_json::json!({
-            "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "ping"
-                        }
-                    ]
+/// The Anthropic "Test model" body. `model` is the id as it goes out
+/// ([`split_context_1m`] already applied); a probe that says it is Claude
+/// Code carries the engine's `metadata.user_id`.
+fn anthropic_probe_payload(model: &str, claude_code: Option<&ClaudeCodeIdentity>) -> Value {
+    let mut payload = serde_json::json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "ping"
+                    }
+                ]
+            }
+        ],
+        "max_tokens": 1,
+        "stream": false,
+        "tools": [
+            {
+                "name": "ping",
+                "description": "Connectivity probe tool. Never invoked.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {}
                 }
-            ],
-            "max_tokens": 1,
-            "stream": false,
-            "tools": [
-                {
+            }
+        ]
+    });
+    if let Some(identity) = claude_code {
+        payload["metadata"] = serde_json::json!({ "user_id": identity.user_id() });
+    }
+    payload
+}
+
+/// The OpenAI "Test model" body.
+fn openai_probe_payload(model: &str) -> Value {
+    let lower_model = model.to_ascii_lowercase();
+    let token_key = if ["gpt-5", "o1", "o2", "o3", "o4"]
+        .iter()
+        .any(|prefix| lower_model.starts_with(prefix))
+    {
+        "max_completion_tokens"
+    } else {
+        "max_tokens"
+    };
+    let mut payload = serde_json::json!({
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": "ping"
+            }
+        ],
+        "stream": false,
+        "tools": [
+            {
+                "type": "function",
+                "function": {
                     "name": "ping",
                     "description": "Connectivity probe tool. Never invoked.",
-                    "input_schema": {
+                    "parameters": {
                         "type": "object",
                         "properties": {}
                     }
                 }
-            ]
-        }),
-        ManagedModelProtocol::Openai => {
-            let lower_model = model.to_ascii_lowercase();
-            let token_key = if ["gpt-5", "o1", "o2", "o3", "o4"]
-                .iter()
-                .any(|prefix| lower_model.starts_with(prefix))
-            {
-                "max_completion_tokens"
-            } else {
-                "max_tokens"
-            };
-            let mut payload = serde_json::json!({
-                "model": model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "ping"
-                    }
-                ],
-                "stream": false,
-                "tools": [
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "ping",
-                            "description": "Connectivity probe tool. Never invoked.",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {}
-                            }
-                        }
-                    }
-                ]
-            });
-            payload[token_key] = serde_json::json!(1);
-            payload
-        }
-    }
+            }
+        ]
+    });
+    payload[token_key] = serde_json::json!(1);
+    payload
 }
 
 fn extract_model_ids(json: &Value) -> Vec<String> {
@@ -679,14 +898,14 @@ mod tests {
         // Anthropic tools must be {name, description, input_schema} — never the
         // OpenAI {type:function, function:{...}} shape, or an Anthropic-compatible
         // gateway fronting an OpenAI upstream rejects the request (issue #10).
-        let anthropic = probe_payload(ManagedModelProtocol::Anthropic, "claude-x");
+        let anthropic = anthropic_probe_payload("claude-x", None);
         let tool = &anthropic["tools"][0];
         assert!(tool.get("name").is_some());
         assert!(tool.get("input_schema").is_some());
         assert!(tool.get("function").is_none());
 
         // OpenAI tools must be {type:function, function:{name, parameters}}.
-        let openai = probe_payload(ManagedModelProtocol::Openai, "gpt-4o");
+        let openai = openai_probe_payload("gpt-4o");
         let tool = &openai["tools"][0];
         assert_eq!(tool["type"], "function");
         assert!(tool["function"].get("name").is_some());
@@ -727,9 +946,11 @@ mod tests {
         }
     }
 
-    /// A built request's headers, in the order they go out.
+    /// A built request's headers, sorted by name (HTTP does not order them;
+    /// a header sent twice shows up twice).
     fn header_list(req: reqwest::RequestBuilder) -> Vec<(String, String)> {
-        req.build()
+        let mut headers: Vec<_> = req
+            .build()
             .expect("probe request builds")
             .headers()
             .iter()
@@ -739,12 +960,33 @@ mod tests {
                     value.to_str().expect("ASCII header").to_string(),
                 )
             })
-            .collect()
+            .collect();
+        headers.sort();
+        headers
+    }
+
+    /// The headers "Test model" sends for `input` and `model`, built the way
+    /// `test_model` builds them, and the Claude Code session they carry.
+    fn probe_request(
+        input: &ManagedModelProbeInput,
+        secret: &str,
+        model: &str,
+    ) -> (Vec<(String, String)>, Option<ClaudeCodeIdentity>) {
+        let claude_code = ClaudeCodeIdentity::for_probe(input).expect("random bytes");
+        let (_, context_1m) = split_context_1m(model);
+        let req = reqwest::Client::new().post("https://probe.invalid/v1/messages");
+        let headers = header_list(apply_probe_headers(
+            req,
+            input,
+            secret,
+            context_1m,
+            claude_code.as_ref(),
+        ));
+        (headers, claude_code)
     }
 
     fn probe_headers(input: &ManagedModelProbeInput, secret: &str) -> Vec<(String, String)> {
-        let req = reqwest::Client::new().post("https://probe.invalid/v1/messages");
-        header_list(apply_auth_headers(req, input, secret))
+        probe_request(input, secret, "claude-test").0
     }
 
     fn header<'a>(headers: &'a [(String, String)], name: &str) -> Option<&'a str> {
@@ -754,25 +996,60 @@ mod tests {
             .map(|(_, value)| value.as_str())
     }
 
-    /// What every Anthropic-protocol probe sent before managed patch `0032`'s
-    /// rule, written out by hand: the rule must leave it unchanged wherever
-    /// it does not apply.
-    fn claude_code_headers(secret: &str) -> Vec<(String, String)> {
-        let req = reqwest::Client::new()
-            .post("https://probe.invalid/v1/messages")
-            .header("anthropic-version", "2023-06-01")
-            .header(
-                "anthropic-beta",
-                "claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,prompt-caching-scope-2026-01-05",
-            )
-            .header("anthropic-dangerous-direct-browser-access", "true")
-            .header("user-agent", "claude-cli/2.1.113 (external, cli)")
-            .header("x-app", "cli");
-        header_list(if secret.starts_with("sk-ant-") {
-            req.header("x-api-key", secret)
+    fn sorted_headers<'a>(
+        headers: impl IntoIterator<Item = (&'a str, String)>,
+        secret: &str,
+    ) -> Vec<(String, String)> {
+        let auth = if secret.starts_with("sk-ant-") {
+            ("x-api-key", secret.to_string())
         } else {
-            req.bearer_auth(secret)
-        })
+            ("authorization", format!("Bearer {secret}"))
+        };
+        let mut headers: Vec<_> = headers
+            .into_iter()
+            .chain([auth])
+            .map(|(name, value)| (name.to_ascii_lowercase(), value))
+            .collect();
+        headers.sort();
+        headers
+    }
+
+    /// What the engine sends on an Anthropic-protocol request that says it
+    /// is Claude Code, from the engine constants
+    /// (`runner/tests/test_managed_ga_probe_parity.py` holds them to the
+    /// payload's `llmcore.py`).
+    fn engine_claude_code_headers(
+        secret: &str,
+        session_id: &str,
+        betas: &str,
+    ) -> Vec<(String, String)> {
+        let fixed = ENGINE_ANTHROPIC_HEADERS
+            .iter()
+            .chain(&ENGINE_CLAUDE_CODE_HEADERS)
+            .map(|(name, value)| (*name, value.to_string()));
+        sorted_headers(
+            fixed.chain([
+                ("anthropic-beta", betas.to_string()),
+                ("user-agent", ENGINE_CLAUDE_USER_AGENT.to_string()),
+                (ENGINE_CLAUDE_CODE_SESSION_HEADER, session_id.to_string()),
+            ]),
+            secret,
+        )
+    }
+
+    /// What the engine sends on an Anthropic-protocol request that does not
+    /// say it is Claude Code (managed patch `0032`).
+    fn engine_galley_headers(secret: &str, betas: &str) -> Vec<(String, String)> {
+        let fixed = ENGINE_ANTHROPIC_HEADERS
+            .iter()
+            .map(|(name, value)| (*name, value.to_string()));
+        sorted_headers(
+            fixed.chain([
+                ("anthropic-beta", betas.to_string()),
+                ("user-agent", chatgpt_siwc::galley_user_agent()),
+            ]),
+            secret,
+        )
     }
 
     #[test]
@@ -803,40 +1080,38 @@ mod tests {
     }
 
     #[test]
-    fn official_anthropic_probe_without_passthrough_says_it_is_galley() {
+    fn official_anthropic_probe_sends_the_engines_galley_headers_passthrough_or_not() {
+        let betas = ENGINE_ANTHROPIC_BETAS[1..].join(",");
         for options in [
             None,
             Some(serde_json::json!({})),
             Some(serde_json::json!({"fake_cc_system_prompt": false})),
+            Some(serde_json::json!({"fake_cc_system_prompt": true})),
             Some(serde_json::json!({"thinking_type": "adaptive", "stream": true})),
         ] {
             for base in ["https://api.anthropic.com", "https://API.anthropic.com/v1"] {
                 let input = probe_input(ManagedModelProtocol::Anthropic, base, options.clone());
-                let headers = probe_headers(&input, ANTHROPIC_KEY);
                 let context = format!("{base} {options:?}");
+                for secret in [ANTHROPIC_KEY, RELAY_KEY] {
+                    let (headers, claude_code) = probe_request(&input, secret, "claude-test");
+                    assert!(claude_code.is_none(), "{context}");
+                    assert_eq!(headers, engine_galley_headers(secret, &betas), "{context}");
+                }
 
+                let headers = probe_headers(&input, ANTHROPIC_KEY);
                 assert_eq!(header(&headers, "x-app"), None, "{context}");
-                assert_eq!(header(&headers, "user-agent"), Some("Galley"), "{context}");
-                assert_eq!(
-                    header(&headers, "anthropic-beta"),
-                    Some(
-                        "interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,prompt-caching-scope-2026-01-05"
-                    ),
-                    "{context}"
-                );
-                // Everything else is what the probe always sent.
-                let expected: Vec<_> = claude_code_headers(ANTHROPIC_KEY)
-                    .into_iter()
-                    .filter(|(name, _)| {
-                        !matches!(name.as_str(), "x-app" | "user-agent" | "anthropic-beta")
-                    })
-                    .collect();
-                let rest: Vec<_> = headers
+                assert_eq!(header(&headers, "x-claude-code-session-id"), None);
+                assert!(!headers
                     .iter()
-                    .filter(|(name, _)| !matches!(name.as_str(), "user-agent" | "anthropic-beta"))
-                    .cloned()
-                    .collect();
-                assert_eq!(rest, expected, "{context}");
+                    .any(|(name, _)| name.starts_with("x-stainless-")));
+                let user_agent = header(&headers, "user-agent").unwrap_or_default();
+                assert!(
+                    user_agent.starts_with("Galley ("),
+                    "{context}: {user_agent}"
+                );
+                let betas = header(&headers, "anthropic-beta").unwrap_or_default();
+                assert!(!betas.contains(CLAUDE_CODE_BETA), "{context}");
+                assert_eq!(header(&headers, "accept"), Some("application/json"));
             }
         }
         // A relay-style key on the official host still goes as a bearer token.
@@ -851,19 +1126,7 @@ mod tests {
     }
 
     #[test]
-    fn official_anthropic_probe_with_passthrough_keeps_claude_code_identity() {
-        let input = probe_input(
-            ManagedModelProtocol::Anthropic,
-            "https://api.anthropic.com",
-            Some(serde_json::json!({"fake_cc_system_prompt": true})),
-        );
-        for secret in [ANTHROPIC_KEY, RELAY_KEY] {
-            assert_eq!(probe_headers(&input, secret), claude_code_headers(secret));
-        }
-    }
-
-    #[test]
-    fn other_anthropic_endpoints_keep_claude_code_identity() {
+    fn other_anthropic_endpoints_send_the_engines_claude_code_headers() {
         for base in [
             "https://api.kimi.com/coding",
             "https://api.deepseek.com/anthropic",
@@ -879,9 +1142,15 @@ mod tests {
             ] {
                 let input = probe_input(ManagedModelProtocol::Anthropic, base, options.clone());
                 for secret in [ANTHROPIC_KEY, RELAY_KEY] {
+                    let (headers, claude_code) = probe_request(&input, secret, "claude-test");
+                    let session_id = claude_code.expect("says it is Claude Code").session_id;
                     assert_eq!(
-                        probe_headers(&input, secret),
-                        claude_code_headers(secret),
+                        headers,
+                        engine_claude_code_headers(
+                            secret,
+                            &session_id,
+                            &ENGINE_ANTHROPIC_BETAS.join(",")
+                        ),
                         "{base} {options:?}"
                     );
                 }
@@ -890,13 +1159,144 @@ mod tests {
     }
 
     #[test]
-    fn openai_probe_headers_are_unchanged() {
+    fn a_1m_model_goes_out_as_the_engine_sends_it() {
+        for (model, sent) in [
+            ("claude-opus-4-8[1m]", "claude-opus-4-8"),
+            ("claude-opus-4-8[1M]", "claude-opus-4-8"),
+            ("Claude-Opus-4-8[1m]", "Claude-Opus-4-8"),
+        ] {
+            assert_eq!(split_context_1m(model), (sent.to_string(), true), "{model}");
+        }
+        for model in ["claude-opus-4-8", "claude-1m", "claude-[1x]"] {
+            assert_eq!(
+                split_context_1m(model),
+                (model.to_string(), false),
+                "{model}"
+            );
+        }
+
+        let mut with_1m = ENGINE_ANTHROPIC_BETAS.to_vec();
+        with_1m.insert(ENGINE_CONTEXT_1M_BETA_AT, ENGINE_CONTEXT_1M_BETA);
+        assert_eq!(with_1m[1], "context-1m-2025-08-07");
+        // Claude Code: the 1M beta second, right after Claude Code's own.
+        let relay = probe_input(
+            ManagedModelProtocol::Anthropic,
+            "https://relay.example",
+            None,
+        );
+        let (headers, _) = probe_request(&relay, RELAY_KEY, "claude-opus-4-8[1m]");
+        assert_eq!(
+            header(&headers, "anthropic-beta"),
+            Some(with_1m.join(",").as_str())
+        );
+        // Not Claude Code (0032 filters after the insert): the 1M beta first.
+        let official = probe_input(
+            ManagedModelProtocol::Anthropic,
+            "https://api.anthropic.com",
+            None,
+        );
+        let (headers, _) = probe_request(&official, ANTHROPIC_KEY, "claude-opus-4-8[1M]");
+        assert_eq!(
+            header(&headers, "anthropic-beta"),
+            Some(with_1m[1..].join(",").as_str())
+        );
+        // A model without the marker: no 1M beta.
+        let (headers, _) = probe_request(&relay, RELAY_KEY, "claude-opus-4-8");
+        assert_eq!(
+            header(&headers, "anthropic-beta"),
+            Some(ENGINE_ANTHROPIC_BETAS.join(",").as_str())
+        );
+    }
+
+    #[test]
+    fn a_claude_code_probe_carries_a_fresh_session_shaped_like_the_engines() {
+        let relay = probe_input(
+            ManagedModelProtocol::Anthropic,
+            "https://relay.example",
+            None,
+        );
+        let first = ClaudeCodeIdentity::for_probe(&relay).unwrap().unwrap();
+        let second = ClaudeCodeIdentity::for_probe(&relay).unwrap().unwrap();
+        assert_ne!(first.session_id, second.session_id);
+        assert_ne!(first.device_id, second.device_id);
+
+        // str(uuid.uuid4()): 8-4-4-4-12 lowercase hex, version 4, RFC 4122 variant.
+        let id = &first.session_id;
+        let groups: Vec<_> = id.split('-').map(str::len).collect();
+        assert_eq!(groups, [8, 4, 4, 4, 12], "{id}");
+        assert!(id
+            .chars()
+            .all(|c| c == '-' || c.is_ascii_digit() || ('a'..='f').contains(&c)));
+        assert_eq!(&id[14..15], "4", "{id}");
+        assert!("89ab".contains(&id[19..20]), "{id}");
+        // uuid4().hex + uuid4().hex[:32]: 64 lowercase hex digits.
+        let device = &first.device_id;
+        assert_eq!(device.len(), 64, "{device}");
+        assert!(device
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+
+        // json.dumps({...}, separators=(',', ':')), the engine's key order.
+        let user_id = format!(
+            r#"{{"device_id":"{}","account_uuid":"","session_id":"{}"}}"#,
+            first.device_id, first.session_id
+        );
+        assert_eq!(first.user_id(), user_id);
+        let body = anthropic_probe_payload("claude-test", Some(&first));
+        assert_eq!(body["metadata"], serde_json::json!({ "user_id": user_id }));
+        // The session header and the body name the same session.
+        let req = reqwest::Client::new().post("https://probe.invalid/v1/messages");
+        let headers = header_list(apply_probe_headers(
+            req,
+            &relay,
+            RELAY_KEY,
+            false,
+            Some(&first),
+        ));
+        assert_eq!(
+            header(&headers, "x-claude-code-session-id"),
+            Some(first.session_id.as_str())
+        );
+    }
+
+    #[test]
+    fn only_a_claude_code_probe_carries_a_session_and_metadata() {
+        let none = [
+            probe_input(
+                ManagedModelProtocol::Anthropic,
+                "https://api.anthropic.com",
+                None,
+            ),
+            probe_input(
+                ManagedModelProtocol::Anthropic,
+                "https://api.anthropic.com",
+                Some(serde_json::json!({"fake_cc_system_prompt": true})),
+            ),
+            probe_input(
+                ManagedModelProtocol::Openai,
+                "https://api.openai.com/v1",
+                None,
+            ),
+            probe_input(ManagedModelProtocol::Openai, "https://relay.example", None),
+        ];
+        for input in &none {
+            assert!(ClaudeCodeIdentity::for_probe(input).unwrap().is_none());
+        }
+        let body = anthropic_probe_payload("claude-test", None);
+        assert!(body.get("metadata").is_none());
+        assert_eq!(body["model"], "claude-test");
+    }
+
+    #[test]
+    fn openai_probe_sends_the_engines_user_agent_and_originator() {
         for base in ["https://api.anthropic.com", "https://api.openai.com/v1"] {
             let input = probe_input(ManagedModelProtocol::Openai, base, None);
-            let expected = header_list(
-                reqwest::Client::new()
-                    .post("https://probe.invalid/v1/messages")
-                    .bearer_auth(RELAY_KEY),
+            let expected = sorted_headers(
+                [
+                    ("user-agent", ENGINE_OPENAI_USER_AGENT.to_string()),
+                    ("originator", ENGINE_OPENAI_ORIGINATOR.to_string()),
+                ],
+                RELAY_KEY,
             );
             assert_eq!(probe_headers(&input, RELAY_KEY), expected, "{base}");
         }

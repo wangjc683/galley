@@ -504,7 +504,7 @@ New in the `1b6442f` -> `f308ee7` range:
   Core's connection probe (`core/src/managed_model_probe.rs`) sends its own
   `claude-cli/2.1.113`, unchanged since 2026-05-25 through three upstream
   version bumps (`2.1.152`, `2.1.251`, `2.1.280`); it is not a baseline
-  sync surface, noted only.
+  sync surface, noted only. Superseded on 2026-11-17 by coupling point 25.
 - `agentmain.py` — reflect mode: a reflect script's module-level `LLM`
   name picks the backend before each trigger (`c913871`). Inside
   `if __name__ == '__main__':`, and Galley starts `--reflect` in neither
@@ -1559,6 +1559,41 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     payload's own `run()` / `agent_runner_loop` / `plugins.hooks` in a child
     process). If it fails, the note goes upstream's way again (the merge
     round reads the file first), nothing breaks.
+25. What "Test model" sends (2026-11-17, `.scratch/model-test-parity/`;
+    managed runtime, both protocols; managed patches `0032` and `0007`).
+    Headers alone can decide whether a request succeeds: on 2026-11-17 the
+    official Anthropic API refused a subscription's API credit to a request
+    that said it was Claude Code. So Core's "Test model" and model-list
+    probe (`core/src/managed_model_probe.rs`), which cannot run the engine,
+    sends the headers the engine sends for the same provider and model, from
+    one block of `ENGINE_*` constants. Anthropic protocol:
+    `NativeClaudeSession.native_ua`; `raw_ask`'s `beta_parts` in order and
+    its `[1m]` handling (the suffix stripped from the model id,
+    `context-1m-2025-08-07` inserted at index 1); the fixed headers
+    (`anthropic-version`, `anthropic-dangerous-direct-browser-access`,
+    `Accept`); and where the request says it is Claude Code (every host but
+    `api.anthropic.com`, `0032`) `x-app`, the `X-Stainless-*` set, a fresh
+    `X-Claude-Code-Session-Id` and the body's `metadata.user_id` in the
+    engine's format. Toward the official host both sides send Galley's own
+    user agent (the engine's `_chatgpt_plan_user_agent()` from `0007`,
+    Core's `chatgpt_siwc::galley_user_agent()`). OpenAI protocol:
+    `NativeOAISession.native_ua` and `_openai_stream`'s `originator`. The
+    engine sends each class's `native_ua` because Galley never sets
+    `user_agent` and `NativeClaudeSession.__init__` swaps `default_ua` for
+    it; `default_ua` itself never goes out.
+    `runner/tests/test_managed_ga_probe_parity.py` reads the Rust constants
+    with regular expressions and the payload's `llmcore.py` with `ast`
+    (without importing it) and compares them item by item. Re-check on
+    upgrade: run that test. When it fails, its message names the Rust
+    constant to update, and updating it is the whole fix; a header upstream
+    adds fails it too, and is then mirrored in `apply_probe_headers`. Not
+    covered, on purpose: OpenAI's `Accept: text/event-stream` (the engine
+    streams, the probe does not); the rest of the request body (system
+    prompt, thinking and effort, `cache_control`, passthrough's Claude Code
+    system prompt); the endpoint when `api_mode` is `responses` (the probe
+    always uses `chat/completions`); the URL rule (item 18) and the choice
+    of auth header; a `user_agent` in a model's config (Settings cannot set
+    one). The ChatGPT provider has its own probe (`core/src/chatgpt_siwc/`).
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.

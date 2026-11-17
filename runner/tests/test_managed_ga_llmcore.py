@@ -1649,7 +1649,7 @@ def test_the_whitespace_guard_and_the_deadline_never_both_cut(
 
 
 # Patch 0032: toward the official Anthropic API (host exactly
-# api.anthropic.com) with Claude Code passthrough off, an Anthropic-protocol
+# api.anthropic.com), Claude Code passthrough on or off, an Anthropic-protocol
 # request says nothing of Claude Code; every other request is unchanged. With
 # those markers the official API refuses a subscription's API credit
 # ("credit balance is too low", 400).
@@ -1728,17 +1728,21 @@ def _assert_claude_code_identity(sess: Any, call: dict[str, Any]) -> None:
     assert user_id["session_id"] == sess._session_id
 
 
+# Passthrough keeps what else it does (the Claude Code system prompt, the
+# default thinking and effort); only the identity no longer depends on it.
+@pytest.mark.parametrize("cfg", [{}, {"fake_cc_system_prompt": True}, {"claude_compat": "simple"}])
 @pytest.mark.parametrize("model", ["claude-test", "claude-test[1m]"])
 @pytest.mark.parametrize("apibase", ["https://api.anthropic.com", "https://API.Anthropic.com/v1"])
-def test_official_anthropic_api_without_passthrough_sends_no_claude_code_identity(
-    monkeypatch: pytest.MonkeyPatch, apibase: str, model: str
+def test_official_anthropic_api_sends_no_claude_code_identity(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, model: str, cfg: dict[str, Any]
 ) -> None:
-    sess, call = _claude_request(monkeypatch, apibase, model=model)
+    sess, call = _claude_request(monkeypatch, apibase, model=model, **cfg)
     # The same session on a relay: the request as it was before 0032.
-    _, relay = _claude_request(monkeypatch, "https://relay.example.test", model=model)
+    _, relay = _claude_request(monkeypatch, "https://relay.example.test", model=model, **cfg)
 
     headers = call["headers"]
-    assert headers["user-agent"] == "Galley"
+    # Galley's own user agent, the one Sign in with ChatGPT sends (0007).
+    assert headers["user-agent"] == f"Galley ({platform.system()}; {platform.machine()})"
     assert not any(k in headers for k in _CC_HEADERS)
     assert not any(k.startswith("X-Stainless-") for k in headers)
     assert headers["Accept"] == "application/json"
@@ -1760,12 +1764,10 @@ def test_official_anthropic_api_without_passthrough_sends_no_claude_code_identit
 @pytest.mark.parametrize(
     ("apibase", "cfg"),
     [
-        # The user's exit: passthrough on, e.g. a subscription sign-in token.
-        ("https://api.anthropic.com", {"fake_cc_system_prompt": True}),
-        ("https://api.anthropic.com", {"claude_compat": "simple"}),
         # Every other Anthropic-compatible endpoint, passthrough on or off.
         ("https://api.kimi.com/coding", {}),
         ("https://api.kimi.com/coding", {"fake_cc_system_prompt": True}),
+        ("https://api.kimi.com/coding", {"claude_compat": "simple"}),
         # Hosts that only look like it, and a base with no scheme (no host).
         ("https://api.anthropic.com.example.net", {}),
         ("https://relay.example/api.anthropic.com", {}),
