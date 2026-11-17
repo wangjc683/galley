@@ -1,6 +1,6 @@
 # 发往 Anthropic 官方地址的请求不再自称 Claude Code
 
-Status: needs-dogfood（2026-11-17 合入 `6571214f`，门禁全过；等 JC 用真实 key 与订阅额度验）
+Status: done（2026-11-17 真机通过；规则后来改成只看主机名，剩下的回归并入 `.scratch/model-test-parity/issues/01-…` 的真机）
 日期：2026-11-17
 来源：JC 把订阅附带的每月 API 额度接进 Galley 时实测发现；方案三选一，JC 裁定「只对官方地址改」。
 
@@ -171,3 +171,7 @@ git diff --check
 规则只剩第 1 条：主机名恰好是 `api.anthropic.com` 就不带 Claude Code 标识，不看透传开关。改动并进票 `.scratch/model-test-parity/issues/01-model-test-sends-what-the-engine-sends.md` 执行。上面「没验证、留给真机的风险」第 2、3 条随之不再存在。
 
 本票正文原先给第 2 条举过一个用途的例子，那不是 Galley 支持的用法，已删。
+
+### 2026-11-17 收尾（主会话）
+
+真机第 2 步有了记录：库里当天有一次 `claude-opus-5-5` 的对话，两条回复，没有报错（在本票合入之后）。第 1 步在头对齐之后 JC 又测过一次，仍通过。第 3 步（第三方服务商回归）还没有回报，和 OpenAI 那一侧的回归一起记在 `.scratch/model-test-parity/issues/01-…` 里，本票关掉。

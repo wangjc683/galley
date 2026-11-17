@@ -176,7 +176,7 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 
 - [ ] Provider list-model action is labeled as reading the model list when no model exists
 - [ ] Existing model rows use an icon-only test action with fast tooltip feedback
-- [ ] Saved model test shows low-weight copy: `模型测试最多 1 个输出 token`
+- [ ] Saved model test shows low-weight copy: `模型测试最多 16 个输出 token`
 - [ ] A provider that cannot list models should not be treated as unusable if a saved model test succeeds
 
 ### Settings -> General / Launch at login (2026-07-17)
