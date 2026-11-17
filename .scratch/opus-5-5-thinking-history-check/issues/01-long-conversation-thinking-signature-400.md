@@ -1,6 +1,6 @@
 # Opus 5.5 长对话可能撞上思考块的历史校验（未验证）
 
-Status: needs-triage（2026-11-17 读代码得出，没有实测；JC 未裁）
+Status: done（2026-11-17 发版前在 dev 里复现；修法见票 02，JC 裁「官方地址不发回思考块」）
 日期：2026-11-17
 来源：把 Anthropic 预设的预填模型改成 `claude-opus-5-5` 时主会话读代码发现，见 [devlog](../../../docs/devlog/2026-11-17-official-apis-no-impersonation.md)。
 
@@ -41,3 +41,16 @@ Invalid `signature` in `thinking` block. The block is bound to a different conve
 三条的代价不一样：前两条要动内核的请求，第三条只改一个默认值。只动内置内核，外置 GA 零变化。
 
 ## Comments
+
+## Comments
+
+**2026-11-17 复现（主会话，dev，官方地址，`claude-opus-5-5`）**
+
+- 第一轮让它读 16 个文件：模型并行读，7 次请求做完，只有第一步带思考块，没有报错。这一轮不算数：没有出现「旧消息被截短之后还有思考块」的情形。
+- 第二轮是逐步推理的链式任务：第 8–13 次回复都带签名的思考块，第 14 次请求返回 400，`Content before this block differs from when it was created, first at messages.2.content.0`。`messages.2` 是第一批工具结果，被 `compress_history_tags` 截短（第 7 次截过一遍，第 14 次又截了一遍）。
+- 再发一句：同一个 400。JC 的 Console 账号在强制范围内。
+- 停掉 runner 再发一句（历史从 Galley 的库恢复，不带思考块）：这一次接口返回的是 `stop_reason: refusal`，内核只留下 `[Error: Claude refusal]`，类别没有记下来。只有这一次，原因没查。
+- 「怎么验」里写的「用 2026-08-31 之后创建的账号」之外，老账号也能强制复现：请求里显式设 `thinking.block_binding.prefix_mismatch_behavior`（beta `thinking-binding-controls-2026-08-01`）。这次没用到。
+
+**三种修法与裁决**见 [v0.7.9 发版 devlog](../../../docs/devlog/2026-11-17-v0.7.9-release.md)。
+
