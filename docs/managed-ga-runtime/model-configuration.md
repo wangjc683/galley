@@ -230,7 +230,7 @@ thinking block's signature to everything before it in the conversation (system
 prompt, tools, every earlier message) and answers 400 "Invalid `signature` in
 `thinking` block … bound to a different conversation" once any of it changed;
 from then on every message in that conversation gets the same 400. It is
-enforced by default for accounts created after 2026-08-31. The engine does
+enforced by default for accounts created on or after 2026-08-31. The engine does
 change earlier messages: before some requests `trim_messages_history` runs
 `compress_history_tags`, which shortens long tool results and tag text outside
 the last ten messages in place, and over the context limit it drops and
