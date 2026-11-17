@@ -234,9 +234,19 @@ plus, where the request says it is Claude Code, `x-app`, a fresh
 `originator`. Core keeps the engine's values as constants that
 `runner/tests/test_managed_ga_probe_parity.py` holds to the payload (coupling
 point 25 in [the GA baseline](../ga-baseline.md)). Not aligned: OpenAI's
-`Accept: text/event-stream` (the engine streams, the probe does not), the
-rest of the body, and the endpoint when `api_mode` is `responses` (the probe
-always uses `chat/completions`).
+`Accept: text/event-stream` (the engine streams, the probe does not) and the
+rest of the body.
+
+For the OpenAI protocol, "Test model" also calls the API a conversation calls
+(since 2026-11-17): when the model's effective `api_mode` is `responses`, it
+posts a minimal Responses request (`model`, one user message as `input`, the
+probe tool in Responses' function shape, `stream: false`,
+`max_output_tokens: 16`) to the `responses` endpoint, which the engine reaches
+by the same URL rule; any other value, or none, keeps the Chat Completions
+request to `chat/completions`. Some models refuse function tools on Chat
+Completions (`gpt-6.1-sol` on the official API asks for `/v1/responses`), so
+a Chat-only test failed for a model whose conversations worked. The model list
+does not change.
 
 ### ChatGPT (Sign in with ChatGPT)
 

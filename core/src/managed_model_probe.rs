@@ -116,10 +116,11 @@ async fn test_model(
             .map_err(Into::into);
     }
     let secret = resolve_secret(&input).await?;
-    let endpoint = inference_endpoint(&input.api_base, input.protocol)?;
+    let api = InferenceApi::of(&input);
+    let endpoint = inference_endpoint(&input.api_base, api)?;
     let client = probe_client()?;
-    let (status, body) = match input.protocol {
-        ManagedModelProtocol::Anthropic => {
+    let (status, body) = match api {
+        InferenceApi::Messages => {
             let claude_code = ClaudeCodeIdentity::for_probe(&input)?;
             let (model, context_1m) = split_context_1m(&model);
             let req = client
@@ -134,7 +135,7 @@ async fn test_model(
             ))
             .await?
         }
-        ManagedModelProtocol::Openai => {
+        InferenceApi::ChatCompletions => {
             let request = |key: TokenCapKey| {
                 let req = client
                     .post(&endpoint)
@@ -149,6 +150,12 @@ async fn test_model(
                 Some(other) => send_model_test(request(other)).await?,
                 None => first,
             }
+        }
+        InferenceApi::Responses => {
+            let req = client
+                .post(&endpoint)
+                .json(&openai_responses_probe_payload(&model));
+            send_model_test(apply_probe_headers(req, &input, &secret, false, None)).await?
         }
     };
     if !status.is_success() {
@@ -255,9 +262,10 @@ async fn resolve_api_key_ref(input: &ManagedModelProbeInput) -> Result<String> {
 // says it is Claude Code, the body's `metadata.user_id`. Not mirrored:
 // OpenAI's `Accept: text/event-stream` (the engine streams, the probe does
 // not), the rest of the body (system prompt, thinking and effort,
-// `cache_control`, passthrough's Claude Code system prompt), the OpenAI
-// `responses` endpoint. Galley's model config never sets the engine's
-// `user_agent`, so the engine sends its class defaults below.
+// `cache_control`, passthrough's Claude Code system prompt; a Responses
+// body carries only the minimum, see `openai_responses_probe_payload`).
+// Galley's model config never sets the engine's `user_agent`, so the engine
+// sends its class defaults below.
 
 /// `NativeClaudeSession.native_ua`: the user agent of an Anthropic-protocol
 /// engine request that says it is Claude Code.
@@ -505,13 +513,47 @@ fn models_endpoint(api_base: &str) -> Result<String> {
     provider_endpoint(api_base, "models")
 }
 
-fn inference_endpoint(api_base: &str, protocol: ManagedModelProtocol) -> Result<String> {
-    match protocol {
-        ManagedModelProtocol::Anthropic => {
+/// The API a model's conversation requests go to, and so the one "Test
+/// model" calls. Anthropic protocol: Messages. OpenAI protocol: Responses
+/// when the model's effective `api_mode` is `"responses"` (the engine's
+/// `_openai_stream` then posts to `responses`), Chat Completions for any
+/// other value or none. The options "Test model" receives are the
+/// effective ones (preset ⊕ defaults ⊕ the model's overrides).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InferenceApi {
+    Messages,
+    ChatCompletions,
+    Responses,
+}
+
+impl InferenceApi {
+    fn of(input: &ManagedModelProbeInput) -> Self {
+        match input.protocol {
+            ManagedModelProtocol::Anthropic => Self::Messages,
+            ManagedModelProtocol::Openai => {
+                let api_mode = input
+                    .advanced_options
+                    .as_ref()
+                    .and_then(|options| options.get("api_mode"))
+                    .and_then(Value::as_str);
+                if api_mode == Some("responses") {
+                    Self::Responses
+                } else {
+                    Self::ChatCompletions
+                }
+            }
+        }
+    }
+}
+
+fn inference_endpoint(api_base: &str, api: InferenceApi) -> Result<String> {
+    match api {
+        InferenceApi::Messages => {
             let endpoint = provider_endpoint(api_base, "messages")?;
             Ok(with_beta_query(&endpoint))
         }
-        ManagedModelProtocol::Openai => provider_endpoint(api_base, "chat/completions"),
+        InferenceApi::ChatCompletions => provider_endpoint(api_base, "chat/completions"),
+        InferenceApi::Responses => provider_endpoint(api_base, "responses"),
     }
 }
 
@@ -678,7 +720,8 @@ fn token_cap_key_retry(status: u16, body: &str, sent: TokenCapKey) -> Option<Tok
     (names_sent || points_to_other).then_some(other)
 }
 
-/// The OpenAI "Test model" body, its one-token cap under `token_key`.
+/// The OpenAI Chat Completions "Test model" body, its one-token cap under
+/// `token_key`.
 fn openai_probe_payload(model: &str, token_key: TokenCapKey) -> Value {
     let mut payload = serde_json::json!({
         "model": model,
@@ -705,6 +748,48 @@ fn openai_probe_payload(model: &str, token_key: TokenCapKey) -> Value {
     });
     payload[token_key.name()] = serde_json::json!(1);
     payload
+}
+
+/// The reply cap of a Responses "Test model". The Responses API refuses a
+/// `max_output_tokens` below a minimum, so the Chat body's 1 will not do;
+/// 16 is taken to be that minimum, which has not been checked against the
+/// live API (2026-11-17).
+const RESPONSES_PROBE_MAX_OUTPUT_TOKENS: u32 = 16;
+
+/// The OpenAI Responses "Test model" body, the minimum the engine's
+/// Responses request has: `input` is what the engine's
+/// `_to_responses_input` makes of one `{"role": "user", "content": "ping"}`,
+/// and the tool is the Chat one as `_prepare_oai_tools(tools, "responses")`
+/// writes it (the `function` fields lifted beside `type`). No `reasoning`,
+/// `instructions`, `prompt_cache_key`, `client_metadata` or `include`.
+fn openai_responses_probe_payload(model: &str) -> Value {
+    serde_json::json!({
+        "model": model,
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": "ping"
+                    }
+                ]
+            }
+        ],
+        "stream": false,
+        "tools": [
+            {
+                "type": "function",
+                "name": "ping",
+                "description": "Connectivity probe tool. Never invoked.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {}
+                }
+            }
+        ],
+        "max_output_tokens": RESPONSES_PROBE_MAX_OUTPUT_TOKENS
+    })
 }
 
 fn extract_model_ids(json: &Value) -> Vec<String> {
@@ -792,29 +877,25 @@ mod tests {
     #[test]
     fn inference_endpoint_matches_managed_runtime_url_rules() {
         assert_eq!(
-            inference_endpoint("https://api.anthropic.com", ManagedModelProtocol::Anthropic)
-                .unwrap(),
+            inference_endpoint("https://api.anthropic.com", InferenceApi::Messages).unwrap(),
             "https://api.anthropic.com/v1/messages?beta=true"
         );
         assert_eq!(
-            inference_endpoint(
-                "https://api.deepseek.com/anthropic",
-                ManagedModelProtocol::Anthropic
-            )
-            .unwrap(),
+            inference_endpoint("https://api.deepseek.com/anthropic", InferenceApi::Messages)
+                .unwrap(),
             "https://api.deepseek.com/anthropic/v1/messages?beta=true"
         );
         assert_eq!(
-            inference_endpoint(
-                "https://relay.example/v1/messages",
-                ManagedModelProtocol::Anthropic
-            )
-            .unwrap(),
+            inference_endpoint("https://relay.example/v1/messages", InferenceApi::Messages)
+                .unwrap(),
             "https://relay.example/v1/messages?beta=true"
         );
         assert_eq!(
-            inference_endpoint("https://openrouter.ai/api/v1", ManagedModelProtocol::Openai)
-                .unwrap(),
+            inference_endpoint(
+                "https://openrouter.ai/api/v1",
+                InferenceApi::ChatCompletions
+            )
+            .unwrap(),
             "https://openrouter.ai/api/v1/chat/completions"
         );
         for gemini in [
@@ -822,10 +903,14 @@ mod tests {
             "https://generativelanguage.googleapis.com/v1beta/openai",
         ] {
             assert_eq!(
-                inference_endpoint(gemini, ManagedModelProtocol::Openai).unwrap(),
+                inference_endpoint(gemini, InferenceApi::ChatCompletions).unwrap(),
                 "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
             );
         }
+        assert_eq!(
+            inference_endpoint("https://api.openai.com/v1", InferenceApi::Responses).unwrap(),
+            "https://api.openai.com/v1/responses"
+        );
     }
 
     /// `(base, path, expected)` for the cases where Core's `provider_endpoint`
@@ -851,6 +936,31 @@ mod tests {
             "https://generativelanguage.googleapis.com/v1beta/openai/",
             "responses",
             "https://generativelanguage.googleapis.com/v1beta/openai/responses",
+        ),
+        (
+            "https://api.openai.com/v1",
+            "responses",
+            "https://api.openai.com/v1/responses",
+        ),
+        (
+            "https://openrouter.ai/api/v1/",
+            "responses",
+            "https://openrouter.ai/api/v1/responses",
+        ),
+        (
+            "https://relay.example",
+            "responses",
+            "https://relay.example/v1/responses",
+        ),
+        (
+            "https://relay.example/v1/responses",
+            "responses",
+            "https://relay.example/v1/responses",
+        ),
+        (
+            "https://relay.example/custom/endpoint/$",
+            "responses",
+            "https://relay.example/custom/endpoint",
         ),
         (
             "https://relay.example/v1beta1",
@@ -1524,5 +1634,137 @@ mod tests {
         ] {
             assert_eq!(token_cap_key_retry(400, body, MaxTokens), None, "{body}");
         }
+    }
+
+    fn openai_input(api_base: &str, advanced_options: Option<Value>) -> ManagedModelProbeInput {
+        probe_input(ManagedModelProtocol::Openai, api_base, advanced_options)
+    }
+
+    #[test]
+    fn the_model_test_api_follows_the_effective_api_mode() {
+        let responses =
+            Some(serde_json::json!({"api_mode": "responses", "reasoning_effort": "high"}));
+        assert_eq!(
+            InferenceApi::of(&openai_input(
+                "https://api.openai.com/v1",
+                responses.clone()
+            )),
+            InferenceApi::Responses
+        );
+        for options in [
+            None,
+            Some(serde_json::json!({})),
+            Some(serde_json::json!({"api_mode": "chat_completions"})),
+            Some(serde_json::json!({"api_mode": "completions"})),
+            Some(serde_json::json!({"api_mode": null})),
+            Some(serde_json::json!({"api_mode": 1})),
+        ] {
+            assert_eq!(
+                InferenceApi::of(&openai_input("https://api.openai.com/v1", options.clone())),
+                InferenceApi::ChatCompletions,
+                "{options:?}"
+            );
+        }
+        // The Anthropic protocol has no API mode: Messages whatever the options say.
+        let anthropic = probe_input(
+            ManagedModelProtocol::Anthropic,
+            "https://api.anthropic.com",
+            responses,
+        );
+        assert_eq!(InferenceApi::of(&anthropic), InferenceApi::Messages);
+        assert_eq!(
+            inference_endpoint(&anthropic.api_base, InferenceApi::of(&anthropic)).unwrap(),
+            "https://api.anthropic.com/v1/messages?beta=true"
+        );
+    }
+
+    #[test]
+    fn a_responses_model_test_posts_the_engines_responses_shape() {
+        let input = openai_input(
+            "https://api.openai.com/v1",
+            Some(serde_json::json!({"api_mode": "responses"})),
+        );
+        let api = InferenceApi::of(&input);
+        assert_eq!(
+            inference_endpoint(&input.api_base, api).unwrap(),
+            "https://api.openai.com/v1/responses"
+        );
+
+        let body = openai_responses_probe_payload("gpt-6.1-sol");
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "model": "gpt-6.1-sol",
+                "input": [{"role": "user", "content": [{"type": "input_text", "text": "ping"}]}],
+                "stream": false,
+                "tools": [{
+                    "type": "function",
+                    "name": "ping",
+                    "description": "Connectivity probe tool. Never invoked.",
+                    "parameters": {"type": "object", "properties": {}}
+                }],
+                "max_output_tokens": 16
+            })
+        );
+        // The tool is the Chat one with its `function` fields lifted, as
+        // the engine's `_prepare_oai_tools(tools, "responses")` does.
+        let chat = openai_probe_payload("gpt-6.1-sol", TokenCapKey::MaxCompletionTokens);
+        let mut lifted = chat["tools"][0]["function"].clone();
+        lifted["type"] = serde_json::json!("function");
+        assert_eq!(body["tools"][0], lifted);
+        // Neither Chat cap, and none of the engine's other Responses fields.
+        for absent in [
+            "messages",
+            "max_tokens",
+            "max_completion_tokens",
+            "reasoning",
+            "instructions",
+            "prompt_cache_key",
+            "client_metadata",
+            "include",
+        ] {
+            assert!(body.get(absent).is_none(), "{absent}");
+        }
+        // Same headers as a Chat model test.
+        let chat_input = openai_input("https://api.openai.com/v1", None);
+        assert_eq!(
+            probe_headers(&input, RELAY_KEY),
+            probe_headers(&chat_input, RELAY_KEY)
+        );
+    }
+
+    #[test]
+    fn a_chat_model_test_is_what_it_was() {
+        for options in [
+            None,
+            Some(serde_json::json!({})),
+            Some(serde_json::json!({"api_mode": "chat_completions"})),
+        ] {
+            let input = openai_input("https://api.openai.com/v1", options.clone());
+            let api = InferenceApi::of(&input);
+            assert_eq!(
+                inference_endpoint(&input.api_base, api).unwrap(),
+                "https://api.openai.com/v1/chat/completions",
+                "{options:?}"
+            );
+        }
+        let body = openai_probe_payload("gpt-4o", TokenCapKey::guess("gpt-4o"));
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "model": "gpt-4o",
+                "messages": [{"role": "user", "content": "ping"}],
+                "stream": false,
+                "tools": [{
+                    "type": "function",
+                    "function": {
+                        "name": "ping",
+                        "description": "Connectivity probe tool. Never invoked.",
+                        "parameters": {"type": "object", "properties": {}}
+                    }
+                }],
+                "max_tokens": 1
+            })
+        );
     }
 }

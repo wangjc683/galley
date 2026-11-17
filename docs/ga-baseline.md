@@ -1586,12 +1586,22 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     (without importing it) and compares them item by item. Re-check on
     upgrade: run that test. When it fails, its message names the Rust
     constant to update, and updating it is the whole fix; a header upstream
-    adds fails it too, and is then mirrored in `apply_probe_headers`. Not
-    covered, on purpose: OpenAI's `Accept: text/event-stream` (the engine
-    streams, the probe does not); the rest of the request body (system
-    prompt, thinking and effort, `cache_control`, passthrough's Claude Code
-    system prompt); the endpoint when `api_mode` is `responses` (the probe
-    always uses `chat/completions`); the URL rule (item 18) and the choice
+    adds fails it too, and is then mirrored in `apply_probe_headers`. The
+    OpenAI protocol's API follows the engine too: when a model's effective
+    `api_mode` is `responses` (the engine's `_openai_stream` then posts to
+    `auto_make_url(api_base, "responses")`), "Test model" posts a minimal
+    Responses body to the `responses` endpoint: `input` as
+    `_to_responses_input` writes one user message, the tool as
+    `_prepare_oai_tools(tools, "responses")` writes it, `stream: false`,
+    `max_output_tokens: 16`; any other value keeps Chat Completions. Rust unit
+    tests hold that shape, not the parity test: on upgrade, check that the
+    engine still picks the endpoint by `api_mode` and that those two
+    functions still write those shapes. Not covered, on purpose: OpenAI's
+    `Accept: text/event-stream` (the engine streams, the probe does not);
+    the rest of the request body (system prompt, thinking and effort,
+    `cache_control`, passthrough's Claude Code system prompt; a Responses
+    body leaves out `reasoning`, `instructions`, `prompt_cache_key`,
+    `client_metadata` and `include`); the URL rule (item 18) and the choice
     of auth header; a `user_agent` in a model's config (Settings cannot set
     one). The ChatGPT provider has its own probe (`core/src/chatgpt_siwc/`).
 
