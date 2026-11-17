@@ -39,7 +39,7 @@ Galley 现在对所有 Anthropic 协议的服务商无条件带这些标识，�
 1. `api_base` 的主机名恰好是 `api.anthropic.com`（解析 URL 取主机名、转小写后全等比较；没有协议头、解析不出主机名的按「不是」处理）。
 2. 「Claude Code 兼容透传」关着（内核里 `self.fake_cc_system_prompt` 为假；Core 里高级选项的 `fake_cc_system_prompt` 不为 `true`）。
 
-第 2 条是留给用户的出口：有人在官方地址上故意开透传（例如拿订阅登录令牌当 key 用），那就照旧完整地扮成 Claude Code。
+（2026-11-17 JC 改裁：第 2 条撤销，官方地址一律不带标识，不看透传开关。见 Comments 末尾。）
 
 规则不覆盖的情况，全部保持现状：
 
@@ -165,3 +165,9 @@ git diff --check
 ### 2026-11-17 真机（JC）
 
 第 1 步通过：Anthropic 官方服务商「测试模型」成功，用的是订阅附带的额度。第 2 步（新开对话）和第 3 步（第三方服务商回归）还没有回报。
+
+### 2026-11-17 改裁（JC）：第 2 条撤销
+
+规则只剩第 1 条：主机名恰好是 `api.anthropic.com` 就不带 Claude Code 标识，不看透传开关。改动并进票 `.scratch/model-test-parity/issues/01-model-test-sends-what-the-engine-sends.md` 执行。上面「没验证、留给真机的风险」第 2、3 条随之不再存在。
+
+本票正文原先给第 2 条举过一个用途的例子，那不是 Galley 支持的用法，已删。

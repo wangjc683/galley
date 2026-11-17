@@ -23,7 +23,7 @@ Status: ready-for-agent
 
 JC 裁定：用 `Galley (<os>; <arch>)`，不带版本号。
 
-- Core：规则生效（官方地址且透传关）时，UA 取 `chatgpt_siwc::galley_user_agent()`，不再写死 `Galley`。
+- Core：规则生效（官方地址）时，UA 取 `chatgpt_siwc::galley_user_agent()`，不再写死 `Galley`。
 - 内核：原地改补丁 `0032`，把 `"Galley"` 换成调用同文件里已有的 `_chatgpt_plan_user_agent()`（补丁 `0007` 加的）。行数不变，别的补丁不用重新导出。台账里给 `0032` 记上「依赖 `0007`」。
 - 不改 `chatgpt_siwc` 的行为，不改函数名，不搬函数。
 
@@ -33,14 +33,14 @@ JC 裁定：两个协议一起做；只对齐请求头（外加 `metadata` 一�
 
 规则：对同一个服务商、同一个模型，「测试模型」发的请求头就是内核会发的请求头。
 
-Anthropic 协议，带 Claude Code 标识时（第三方地址，或官方地址开着透传）：
+Anthropic 协议，带 Claude Code 标识时（第三方地址）：
 
 - `user-agent`、`anthropic-beta`（顺序一致）、`x-app`、`anthropic-version`、`anthropic-dangerous-direct-browser-access`、`Accept`、`X-Stainless-*` 的值与内核逐项相同。
 - `X-Claude-Code-Session-Id` 每次测试新生成一个 UUID。
 - 请求体加 `metadata.user_id`，格式与内核相同（`device_id` 随机生成、`account_uuid` 为空串、`session_id` 与上面的头同值）。
 - 模型名带 `[1m]` 时与内核同样处理。
 
-Anthropic 协议，不带标识时（官方地址且透传关）：与补丁 `0032` 之后的内核一致，即 beta 列表去掉 `claude-code-20250219`，UA 按第一部分，不发 `x-app`、会话头、`X-Stainless-*`、`metadata`，`Accept` 保留。
+Anthropic 协议，不带标识时（官方地址，不看透传开关）：与补丁 `0032` 之后的内核一致，即 beta 列表去掉 `claude-code-20250219`，UA 按第一部分，不发 `x-app`、会话头、`X-Stainless-*`、`metadata`，`Accept` 保留。
 
 OpenAI 协议（不含 ChatGPT 登录的服务商，那条路走 `chatgpt_siwc`，不动）：加上 `User-Agent`（内核的 `default_ua`）和 `originator`，值与内核相同。
 
@@ -132,3 +132,15 @@ git diff --check
 | 把 `0032` 单独打在合入前的载荷上，与提交的载荷逐字节比对 | 回归：第三方 Anthropic 协议服务商一个、第三方 OpenAI 协议服务商一个，「测试模型」仍通过 |
 
 ## Comments
+
+### 2026-11-17 改裁（JC）：去掉「透传开着就照旧」的例外
+
+上一张票的规则有两个条件（官方地址、透传关）。JC 裁定去掉第二个：官方地址一律不带 Claude Code 标识，不看透传开关。透传开关照旧管它原来管的其余部分（Claude Code 系统提示词、它补的默认思考与推理强度）。
+
+理由：说不出这个例外的正当用途；它还带出两处不一致（「读取模型列表」拿不到模型级选项只能看地址、Core 与内核对开关的判法略有差异），去掉例外后两处都不存在了。
+
+这条改裁并进本票执行：`0032` 与 Core 的判断都只看主机名，相关测试与文档同步改。本票正文里涉及这条规则的三处措辞已改。
+
+### 2026-11-17 真机（JC）
+
+JC 确认：OpenAI 官方地址「测试模型」报 `max_tokens` 不被支持时，填的是 `gpt-6` 系列的模型。
