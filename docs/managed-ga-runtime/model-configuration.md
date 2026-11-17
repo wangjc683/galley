@@ -214,7 +214,8 @@ in with ChatGPT sends (the engine keeps a `user_agent` the config sets), and
 body's `metadata.user_id` are not sent. Everything else in the request stays.
 Every other request carries the identity as before: every third-party
 Anthropic-compatible endpoint and relay, passthrough on or off. OpenAI-protocol
-providers and the ChatGPT provider never carried it.
+providers and the ChatGPT provider never carried it (OpenAI's own counterpart,
+Codex identity, is the next section).
 
 The engine applies the rule in `NativeClaudeSession.raw_ask` (managed patch
 `0032`, see the [patch ledger](../../managed-ga/patches/manifest.md)), the
@@ -222,6 +223,36 @@ probe in `core/src/managed_model_probe.rs`, for both "Test model" and the
 model list. The rule is the managed (bundled) runtime's only: attach mode
 runs the user's own GenericAgent checkout, which Galley does not patch, and
 its requests are unchanged.
+
+### Official OpenAI API: no Codex identity
+
+A ChatGPT subscription comes with monthly API credit too, and the official
+OpenAI API refuses an organization enrolled in it to a request that says it is
+Codex: 400 `codex_byok_restricted_by_api_credit_promo`, "This organization
+cannot be used for Codex usage because it is enrolled in the monthly API
+Credits benefit with ChatGPT subscriptions". The engine and the connection
+probe sent Codex's markers (`User-Agent: codex_exec/…`, `originator:
+codex_exec`) on every OpenAI-protocol request.
+
+Since 2026-11-17 an OpenAI-protocol request carries no Codex identity when the
+Base URL's host is exactly `api.openai.com` (the same host test as the
+Anthropic rule above) and the provider is not the ChatGPT one. Then
+`originator` is not sent, the user agent is Galley's own, `Galley (<os>;
+<arch>)` (the engine keeps a `user_agent` the config sets), and a Responses
+request leaves out `client_metadata` (its two `x-codex-*` ids). Everything else
+stays: `prompt_cache_key`, `include`, `instructions`, `Accept`, the auth
+header, the Chat body. Every other request carries the identity as before:
+third-party OpenAI-compatible endpoints and relays, and hosts that only contain
+or end in `api.openai.com`. The ChatGPT provider is left out by name although
+its host is `api.openai.com`: its requests (the engine's `codex_backend` path,
+Core's `chatgpt_siwc` probe) already send Galley's user agent and no
+`originator`, and keep `client_metadata`.
+
+The engine applies the rule in `_openai_stream` (managed patch `0033`, see the
+[patch ledger](../../managed-ga/patches/manifest.md)), the probe in
+`core/src/managed_model_probe.rs` for "Test model" and the model list, both
+modes. Managed runtime only, as above. Which of the three markers the API
+actually objects to was not isolated: the whole set goes.
 
 "Test model" and the model list send the headers a conversation sends, for
 the same provider and model (since 2026-11-17): for the Anthropic protocol
@@ -231,7 +262,7 @@ the suffix stripped from the model id and `context-1m-2025-08-07` inserted),
 plus, where the request says it is Claude Code, `x-app`, a fresh
 `X-Claude-Code-Session-Id`, the `X-Stainless-*` set and the body's
 `metadata.user_id`; for the OpenAI protocol the engine's `User-Agent` and
-`originator`. Core keeps the engine's values as constants that
+`originator`, or toward the official host Galley's user agent alone. Core keeps the engine's values as constants that
 `runner/tests/test_managed_ga_probe_parity.py` holds to the payload (coupling
 point 25 in [the GA baseline](../ga-baseline.md)). Not aligned: OpenAI's
 `Accept: text/event-stream` (the engine streams, the probe does not) and the

@@ -616,11 +616,13 @@ def _jwt_with_account(account_id: str) -> str:
     return f"e30.{body}.sig"
 
 
-def _codex_session(*, codex_backend: bool = True) -> Any:
+def _codex_session(
+    *, codex_backend: bool = True, apibase: str = "https://api.openai.com/v1"
+) -> Any:
     cfg: dict[str, Any] = {
         "name": "chatgpt-test",
         "apikey": _jwt_with_account("acct-123"),
-        "apibase": "https://api.openai.com/v1",
+        "apibase": apibase,
         "model": "gpt-5.6-sol",
         "api_mode": "responses",
         "max_tokens": 4096,
@@ -847,7 +849,8 @@ def test_without_the_codex_backend_ga_headers_are_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     net = _install_network(monkeypatch, _OK_STREAM)
-    sess = _codex_session(codex_backend=False)
+    # Off the official host: there 0033 drops the Codex identity.
+    sess = _codex_session(codex_backend=False, apibase="https://relay.example.test/v1")
 
     _run(sess)
 
@@ -1794,3 +1797,139 @@ def test_official_anthropic_api_keeps_a_configured_user_agent(
     assert "x-app" not in headers
     assert _CC_BETA not in _betas(call)
     assert "metadata" not in call["payload"]
+
+
+# Patch 0033: toward the official OpenAI API (host exactly api.openai.com),
+# a request that is not the ChatGPT sign-in's (`codex_backend`) says nothing of
+# Codex: no `originator`, no Codex `client_metadata`, Galley's own user agent
+# unless one is configured. With those markers the official API refuses an
+# organization enrolled in a ChatGPT subscription's monthly API credit
+# (400 `codex_byok_restricted_by_api_credit_promo`).
+
+_OAI_OK = _FakeHTTPResponse(200, lines=tuple(_oai_stream({"content": "ok"})))
+_GALLEY_UA = f"Galley ({platform.system()}; {platform.machine()})"
+_CODEX_METADATA_KEYS = {"x-codex-window-id", "x-codex-installation-id"}
+
+
+def _oai_request(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, api_mode: str, **cfg: Any
+) -> tuple[Any, dict[str, Any]]:
+    """One request through `NativeOAISession` (what Galley's OpenAI-protocol
+    models run on); returns the session and the request it sent."""
+    net = _install_network(monkeypatch, _OK_STREAM if api_mode == "responses" else _OAI_OK)
+    sess = llmcore.NativeOAISession(
+        {
+            "name": "t0033",
+            "apikey": "sk-test",
+            "apibase": apibase,
+            "model": "gpt-6.1-sol",
+            "api_mode": api_mode,
+            "max_retries": 2,
+            **cfg,
+        }
+    )
+    _run(sess)
+    [call] = net.posts
+    return sess, call
+
+
+def _codex_free(call: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    headers = {k: v for k, v in call["headers"].items() if k not in ("originator", "User-Agent")}
+    payload = {k: v for k, v in call["payload"].items() if k != "client_metadata"}
+    return headers, payload
+
+
+@pytest.mark.parametrize("api_mode", ["chat_completions", "responses"])
+@pytest.mark.parametrize("apibase", ["https://api.openai.com/v1", "https://API.OpenAI.com/v1"])
+def test_official_openai_api_sends_no_codex_identity(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, api_mode: str
+) -> None:
+    _, call = _oai_request(monkeypatch, apibase, api_mode)
+    # The same session on a relay: the request as it was before 0033.
+    _, relay = _oai_request(monkeypatch, "https://relay.example.test/v1", api_mode)
+
+    headers = call["headers"]
+    assert "originator" not in headers
+    assert headers["User-Agent"] == _GALLEY_UA
+    assert "client_metadata" not in call["payload"]
+    if api_mode == "responses":
+        assert set(relay["payload"]["client_metadata"]) == _CODEX_METADATA_KEYS
+    # Nothing else changes: the auth header, Accept, prompt_cache_key,
+    # include, instructions, the Chat body.
+    assert _codex_free(call) == _codex_free(relay)
+    path = "responses" if api_mode == "responses" else "chat/completions"
+    assert call["url"] == f"{apibase}/{path}"
+
+
+@pytest.mark.parametrize("api_mode", ["chat_completions", "responses"])
+@pytest.mark.parametrize(
+    "apibase",
+    [
+        "https://relay.example.test/v1",
+        # Hosts that only look like it, and a base with no scheme (no host).
+        "https://api.openai.com.example.net/v1",
+        "https://relay.example/api.openai.com/v1",
+        "api.openai.com/v1",
+    ],
+)
+def test_codex_identity_stays_everywhere_else(
+    monkeypatch: pytest.MonkeyPatch, apibase: str, api_mode: str
+) -> None:
+    sess, call = _oai_request(monkeypatch, apibase, api_mode)
+
+    assert call["headers"]["originator"] == "codex_exec"
+    assert call["headers"]["User-Agent"] == sess.user_agent == llmcore.NativeOAISession.native_ua
+    if api_mode == "responses":
+        assert set(call["payload"]["client_metadata"]) == _CODEX_METADATA_KEYS
+
+
+def test_official_openai_api_keeps_a_configured_user_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, call = _oai_request(
+        monkeypatch, "https://api.openai.com/v1", "responses", user_agent="my-client/1.0"
+    )
+
+    assert call["headers"]["User-Agent"] == "my-client/1.0"
+    # The rest of the rule still applies.
+    assert "originator" not in call["headers"]
+    assert "client_metadata" not in call["payload"]
+
+
+@pytest.mark.parametrize("session_class", ["NativeOAISession", "LLMSession"])
+def test_the_chatgpt_sign_in_request_is_left_alone(
+    monkeypatch: pytest.MonkeyPatch, session_class: str
+) -> None:
+    """The ChatGPT sign-in provider talks to api.openai.com too, and 0033
+    leaves it out by name: its request there is, URL aside, the one it sends
+    to any other host, where 0033 cannot apply, Codex `client_metadata`
+    included. Taking it out of the exclusion would drop that metadata here."""
+
+    def request(apibase: str) -> dict[str, Any]:
+        net = _install_network(monkeypatch, _OK_STREAM)
+        sess = getattr(llmcore, session_class)(
+            {
+                "name": "chatgpt-test",
+                "apikey": _jwt_with_account("acct-123"),
+                "apibase": apibase,
+                "model": "gpt-5.6-sol",
+                "api_mode": "responses",
+                "codex_backend": True,
+                "max_retries": 2,
+            }
+        )
+        chunks, _ = _run(sess)
+        assert chunks == ["ok"]
+        [call] = net.posts
+        return call
+
+    official = request("https://api.openai.com/v1")
+    elsewhere = request("https://relay.example.test/v1")
+
+    assert official["url"] == "https://api.openai.com/v1/responses"
+    assert official["headers"] == elsewhere["headers"]
+    assert official["payload"] == elsewhere["payload"]
+    # What 0007 sends, as before: Galley's UA, no originator, Codex metadata.
+    assert official["headers"]["User-Agent"] == _GALLEY_UA
+    assert "originator" not in official["headers"]
+    assert set(official["payload"]["client_metadata"]) == _CODEX_METADATA_KEYS

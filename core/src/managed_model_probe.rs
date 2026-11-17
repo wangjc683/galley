@@ -271,13 +271,15 @@ async fn resolve_api_key_ref(input: &ManagedModelProbeInput) -> Result<String> {
 /// engine request that says it is Claude Code.
 const ENGINE_CLAUDE_USER_AGENT: &str = "claude-cli/2.1.280 (native, cli)";
 
-/// `NativeOAISession.native_ua`: the user agent of every OpenAI-protocol
-/// engine request (`_openai_stream` sends the session's `user_agent`, which
-/// `NativeClaudeSession.__init__` sets to the class's `native_ua`).
+/// `NativeOAISession.native_ua`: the user agent of an OpenAI-protocol engine
+/// request that says it is Codex (`_openai_stream` sends the session's
+/// `user_agent`, which `NativeClaudeSession.__init__` sets to the class's
+/// `native_ua`).
 const ENGINE_OPENAI_USER_AGENT: &str =
     "codex_exec/0.139.0 (Windows 10.0.26200; x86_64) unknown (codex_exec; 0.139.0)";
 
-/// `_openai_stream`'s `originator` header.
+/// `_openai_stream`'s `originator` header, sent when the request says it is
+/// Codex.
 const ENGINE_OPENAI_ORIGINATOR: &str = "codex_exec";
 
 /// Claude Code's own `anthropic-beta` entry, first in [`ENGINE_ANTHROPIC_BETAS`].
@@ -333,17 +335,21 @@ const ENGINE_CLAUDE_CODE_SESSION_HEADER: &str = "X-Claude-Code-Session-Id";
 /// The host of Anthropic's official API.
 const OFFICIAL_ANTHROPIC_HOST: &str = "api.anthropic.com";
 
-/// Whether `api_base`'s host is exactly the official Anthropic API: trimmed
-/// (as saving a provider trims it, so the engine gets it trimmed), parsed
-/// as a URL, compared lowercased. A base with no scheme has no host and is
-/// not; neither is a host that merely contains or ends in it. Same rule as
-/// the managed runtime's `NativeClaudeSession.raw_ask` (managed patch
-/// `0032`), so the probe and the engine agree on one endpoint.
-fn is_official_anthropic_host(api_base: &str) -> bool {
+/// The host of OpenAI's official API.
+const OFFICIAL_OPENAI_HOST: &str = "api.openai.com";
+
+/// Whether `api_base`'s host is exactly `host`, one of the official hosts
+/// above: trimmed (as saving a provider trims it, so the engine gets it
+/// trimmed), parsed as a URL, compared lowercased. A base with no scheme has
+/// no host and is not; neither is a host that merely contains or ends in it.
+/// Same rule as the managed runtime's `NativeClaudeSession.raw_ask` (managed
+/// patch `0032`) and `_openai_stream` (`0033`), so the probe and the engine
+/// agree on one endpoint.
+fn is_official_host(api_base: &str, host: &str) -> bool {
     reqwest::Url::parse(api_base.trim())
         .ok()
         .and_then(|url| url.host_str().map(str::to_ascii_lowercase))
-        .is_some_and(|host| host == OFFICIAL_ANTHROPIC_HOST)
+        .is_some_and(|found| found == host)
 }
 
 /// Whether an Anthropic-protocol probe says it is Claude Code
@@ -355,7 +361,19 @@ fn is_official_anthropic_host(api_base: &str) -> bool {
 /// misleading "credit balance is too low" 400. Every other endpoint keeps
 /// them.
 fn sends_claude_code_identity(input: &ManagedModelProbeInput) -> bool {
-    !is_official_anthropic_host(&input.api_base)
+    !is_official_host(&input.api_base, OFFICIAL_ANTHROPIC_HOST)
+}
+
+/// Whether an OpenAI-protocol probe says it is Codex (`User-Agent:
+/// codex_exec/…`, `originator: codex_exec`). Toward the official API the
+/// answer is no: it refuses an organization enrolled in a ChatGPT
+/// subscription's monthly API credit to a request that says it is Codex
+/// (400 `codex_byok_restricted_by_api_credit_promo`). Every other endpoint
+/// keeps them. The ChatGPT sign-in provider, also on the official host,
+/// never gets here: "Test model" and the model list hand it to
+/// `chatgpt_siwc`, which sends Galley's own headers.
+fn sends_codex_identity(input: &ManagedModelProbeInput) -> bool {
+    !is_official_host(&input.api_base, OFFICIAL_OPENAI_HOST)
 }
 
 /// The Claude Code session of an Anthropic-protocol probe that says it is
@@ -468,7 +486,9 @@ fn anthropic_betas(context_1m: bool, claude_code: bool) -> String {
 /// [`ClaudeCodeIdentity::for_probe`]'s. When an Anthropic-protocol request
 /// does not say it is Claude Code (managed patch `0032`), it sends Galley's
 /// own user agent, the one Sign in with ChatGPT sends, and no Claude Code
-/// beta, `x-app`, session or Stainless headers.
+/// beta, `x-app`, session or Stainless headers. When an OpenAI-protocol
+/// request does not say it is Codex ([`sends_codex_identity`], managed patch
+/// `0033`), it sends Galley's own user agent and no `originator`.
 fn apply_probe_headers(
     req: reqwest::RequestBuilder,
     input: &ManagedModelProbeInput,
@@ -477,9 +497,13 @@ fn apply_probe_headers(
     claude_code: Option<&ClaudeCodeIdentity>,
 ) -> reqwest::RequestBuilder {
     match input.protocol {
-        ManagedModelProtocol::Openai => req
+        ManagedModelProtocol::Openai if sends_codex_identity(input) => req
             .header("user-agent", ENGINE_OPENAI_USER_AGENT)
             .header("originator", ENGINE_OPENAI_ORIGINATOR)
+            .bearer_auth(secret),
+        // Managed patch `0033`.
+        ManagedModelProtocol::Openai => req
+            .header("user-agent", chatgpt_siwc::galley_user_agent())
             .bearer_auth(secret),
         ManagedModelProtocol::Anthropic => {
             let mut req = req.header(
@@ -1237,29 +1261,59 @@ mod tests {
     }
 
     #[test]
-    fn official_anthropic_host_is_an_exact_host_match() {
-        for base in [
-            "https://api.anthropic.com",
-            "https://api.anthropic.com/",
-            "https://api.anthropic.com/v1",
-            "https://API.Anthropic.COM/v1/messages$",
-            "http://api.anthropic.com:443/v1",
-            " https://api.anthropic.com ",
+    fn official_host_is_an_exact_host_match() {
+        for (host, official, look_alikes) in [
+            (
+                OFFICIAL_ANTHROPIC_HOST,
+                [
+                    "https://api.anthropic.com",
+                    "https://api.anthropic.com/",
+                    "https://api.anthropic.com/v1",
+                    "https://API.Anthropic.COM/v1/messages$",
+                    "http://api.anthropic.com:443/v1",
+                    " https://api.anthropic.com ",
+                ],
+                [
+                    "api.anthropic.com",
+                    "api.anthropic.com/v1",
+                    "https://api.anthropic.com.example.net",
+                    "https://relay.example/api.anthropic.com",
+                    "relay.example/api.anthropic.com",
+                    "https://xapi.anthropic.com",
+                    "https://anthropic.com",
+                    "https://api.kimi.com/coding",
+                    "",
+                ],
+            ),
+            (
+                OFFICIAL_OPENAI_HOST,
+                [
+                    "https://api.openai.com",
+                    "https://api.openai.com/",
+                    "https://api.openai.com/v1",
+                    "https://API.OpenAI.COM/v1/responses$",
+                    "http://api.openai.com:443/v1",
+                    " https://api.openai.com/v1 ",
+                ],
+                [
+                    "api.openai.com",
+                    "api.openai.com/v1",
+                    "https://api.openai.com.example.net/v1",
+                    "https://relay.example/api.openai.com/v1",
+                    "relay.example/api.openai.com",
+                    "https://xapi.openai.com",
+                    "https://openai.com",
+                    "https://api.anthropic.com",
+                    "",
+                ],
+            ),
         ] {
-            assert!(is_official_anthropic_host(base), "{base}");
-        }
-        for base in [
-            "api.anthropic.com",
-            "api.anthropic.com/v1",
-            "https://api.anthropic.com.example.net",
-            "https://relay.example/api.anthropic.com",
-            "relay.example/api.anthropic.com",
-            "https://xapi.anthropic.com",
-            "https://anthropic.com",
-            "https://api.kimi.com/coding",
-            "",
-        ] {
-            assert!(!is_official_anthropic_host(base), "{base}");
+            for base in official {
+                assert!(is_official_host(base, host), "{host}: {base}");
+            }
+            for base in look_alikes {
+                assert!(!is_official_host(base, host), "{host}: {base}");
+            }
         }
     }
 
@@ -1312,6 +1366,8 @@ mod tests {
     #[test]
     fn other_anthropic_endpoints_send_the_engines_claude_code_headers() {
         for base in [
+            // The OpenAI rule (0033) does not touch the Anthropic protocol.
+            "https://api.openai.com/v1",
             "https://api.kimi.com/coding",
             "https://api.deepseek.com/anthropic",
             "https://api.anthropic.com.example.net",
@@ -1472,17 +1528,57 @@ mod tests {
     }
 
     #[test]
-    fn openai_probe_sends_the_engines_user_agent_and_originator() {
-        for base in ["https://api.anthropic.com", "https://api.openai.com/v1"] {
-            let input = probe_input(ManagedModelProtocol::Openai, base, None);
-            let expected = sorted_headers(
-                [
-                    ("user-agent", ENGINE_OPENAI_USER_AGENT.to_string()),
-                    ("originator", ENGINE_OPENAI_ORIGINATOR.to_string()),
-                ],
-                RELAY_KEY,
-            );
-            assert_eq!(probe_headers(&input, RELAY_KEY), expected, "{base}");
+    fn openai_probe_off_the_official_host_sends_the_engines_codex_headers() {
+        let expected = sorted_headers(
+            [
+                ("user-agent", ENGINE_OPENAI_USER_AGENT.to_string()),
+                ("originator", ENGINE_OPENAI_ORIGINATOR.to_string()),
+            ],
+            RELAY_KEY,
+        );
+        for base in [
+            "https://api.anthropic.com",
+            "https://openrouter.ai/api/v1",
+            // Hosts that only look like it, and a base with no scheme (no host).
+            "https://api.openai.com.example.net/v1",
+            "https://relay.example/api.openai.com/v1",
+            "api.openai.com/v1",
+        ] {
+            for options in [None, Some(serde_json::json!({"api_mode": "responses"}))] {
+                let input = probe_input(ManagedModelProtocol::Openai, base, options.clone());
+                assert_eq!(
+                    probe_headers(&input, RELAY_KEY),
+                    expected,
+                    "{base} {options:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn openai_probe_toward_the_official_api_says_it_is_galley_not_codex() {
+        let expected = sorted_headers(
+            [("user-agent", chatgpt_siwc::galley_user_agent())],
+            RELAY_KEY,
+        );
+        for base in ["https://api.openai.com/v1", "https://API.OpenAI.com/v1/"] {
+            // Chat and Responses send the same headers.
+            for options in [
+                None,
+                Some(serde_json::json!({"api_mode": "chat_completions"})),
+                Some(serde_json::json!({"api_mode": "responses"})),
+            ] {
+                let input = probe_input(ManagedModelProtocol::Openai, base, options.clone());
+                let headers = probe_headers(&input, RELAY_KEY);
+                let context = format!("{base} {options:?}");
+                assert_eq!(headers, expected, "{context}");
+                assert_eq!(header(&headers, "originator"), None, "{context}");
+                let user_agent = header(&headers, "user-agent").unwrap_or_default();
+                assert!(
+                    user_agent.starts_with("Galley ("),
+                    "{context}: {user_agent}"
+                );
+            }
         }
     }
 

@@ -801,6 +801,15 @@ def _openai_stream(sess, messages):
         if temperature != 1: payload["temperature"] = temperature
         if sess.max_tokens: payload["max_completion_tokens" if ml.startswith(("gpt-5", "o1", "o2", "o3", "o4")) else "max_tokens"] = sess.max_tokens
         if sess.reasoning_effort: payload["reasoning_effort"] = sess.reasoning_effort
+    # Galley (0033): the official API refuses a ChatGPT subscription's monthly API credit to a request that says it is
+    # Codex. There, except on the ChatGPT sign-in path (codex_backend, 0007), send no originator and no Codex
+    # client_metadata, and Galley's own UA (0007) unless one is configured.
+    from urllib.parse import urlsplit
+    try: no_codex = not getattr(sess, 'codex_backend', False) and (urlsplit(sess.api_base).hostname or '').lower() == 'api.openai.com'
+    except ValueError: no_codex = False
+    if no_codex:
+        headers.pop('originator', None); payload.pop('client_metadata', None)
+        if sess.user_agent == getattr(sess, 'native_ua', None): headers["User-Agent"] = _chatgpt_plan_user_agent()
     tools = getattr(sess, 'tools', None)
     if tools: payload["tools"] = _prepare_oai_tools(tools, api_mode)
     if sess.service_tier: payload["service_tier"] = sess.service_tier

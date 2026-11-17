@@ -1560,10 +1560,12 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     process). If it fails, the note goes upstream's way again (the merge
     round reads the file first), nothing breaks.
 25. What "Test model" sends (2026-11-17, `.scratch/model-test-parity/`;
-    managed runtime, both protocols; managed patches `0032` and `0007`).
-    Headers alone can decide whether a request succeeds: on 2026-11-17 the
-    official Anthropic API refused a subscription's API credit to a request
-    that said it was Claude Code. So Core's "Test model" and model-list
+    managed runtime, both protocols; managed patches `0032`, `0033` and
+    `0007`). Headers alone can decide whether a request succeeds: on
+    2026-11-17 the official Anthropic API refused a subscription's API credit
+    to a request that said it was Claude Code, and the official OpenAI API
+    refused an organization enrolled in a ChatGPT subscription's API credit
+    to a request that said it was Codex. So Core's "Test model" and model-list
     probe (`core/src/managed_model_probe.rs`), which cannot run the engine,
     sends the headers the engine sends for the same provider and model, from
     one block of `ENGINE_*` constants. Anthropic protocol:
@@ -1577,7 +1579,13 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     engine's format. Toward the official host both sides send Galley's own
     user agent (the engine's `_chatgpt_plan_user_agent()` from `0007`,
     Core's `chatgpt_siwc::galley_user_agent()`). OpenAI protocol:
-    `NativeOAISession.native_ua` and `_openai_stream`'s `originator`. The
+    `NativeOAISession.native_ua` and `_openai_stream`'s `originator`, except
+    toward `api.openai.com` for a provider other than the ChatGPT one
+    (`0033`): there both sides send Galley's own user agent and no
+    `originator`, and the engine's Responses body drops `client_metadata`
+    (the probe's never had it). The host test is the Anthropic rule's, shared
+    in Core (`is_official_host`); the ChatGPT provider (the engine's
+    `codex_backend`, Core's `chatgpt_siwc`) is left out by name. The
     engine sends each class's `native_ua` because Galley never sets
     `user_agent` and `NativeClaudeSession.__init__` swaps `default_ua` for
     it; `default_ua` itself never goes out.
