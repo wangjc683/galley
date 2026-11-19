@@ -63,6 +63,7 @@ GUI：
    `download_app_update` 的下载错误在开启时要带上实际下载地址，格式在现有
    `update_error: phase=download; …` 上**加一个字段** `url=<地址>`，其余字段与顺序不变；关闭时错误字符串
    与现在相同。
+   2026-11-19 当日改：下载也回退直连，原因见 devlog（`docs/devlog/2026-11-19-update-proxy.md`「下载也回退直连」）。
 4. 两次检查都设超时 20 秒（`UpdaterBuilder::timeout`）。现在检查没有超时，加速地址挂住时会一直等不到
    回退。这个超时只作用于检查：插件构造 `Update` 时把 `timeout` 置空，下载不受影响——动手前在插件源码里
    确认这一点（`tauri-plugin-updater` 2.10.1 `src/updater.rs` 构造 `Update` 处），与此不符就停下写进报告。

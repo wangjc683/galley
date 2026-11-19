@@ -35,20 +35,28 @@
 //! 2026-11-19-update-proxy): Settings → General may hold a prefix in pref
 //! `update_proxy_prefix` for users who cannot reach GitHub. When it is set,
 //! the manifest URL and the package URL both become
-//! `<prefix><original URL>`, and two rules apply:
+//! `<prefix><original URL>`, and one rule applies to both steps:
 //!
-//! - **Checking falls back.** The proxied manifest URL is checked first;
-//!   if that fails, the original URL is checked once more, and if that
-//!   fails too the proxied attempt's error is returned. Two separate
-//!   checks, not one `endpoints` list: the plugin returns at once when an
-//!   endpoint answers 200 with a body that is not JSON, without trying the
-//!   next one.
-//! - **Downloading does not.** Whichever URL the manifest came from, the
-//!   package downloads through the prefix only; a failure is reported with
-//!   that URL (`url=` in the error), not retried directly, so a user who
-//!   cannot reach GitHub does not wait out a second timeout. The signature
-//!   check is unchanged: the prefix can withhold an update but cannot
-//!   swap the package.
+//! - **The proxied URL first, then the original once.** Checking and
+//!   downloading each try the proxied URL; if that fails for any reason (a
+//!   request error, a bad status, a body that is not a manifest, a package
+//!   whose signature does not match), they try the original URL once; if
+//!   that fails too, the proxied attempt's error is returned (a download's
+//!   with `url=<proxied URL>`). The check makes two separate checks, not
+//!   one `endpoints` list: the plugin returns at once when an endpoint
+//!   answers 200 with a body that is not JSON, without trying the next one.
+//! - **Why the download falls back too** (reversed the same day it was
+//!   first ruled "no fallback"): the startup check is silent and
+//!   downloads on its own, a failed download ends in the `error` status,
+//!   and the TopBar indicator is hidden for `error`. With a prefix that has
+//!   died and GitHub reachable, the check would succeed through its direct
+//!   fallback and the proxied download fail on every launch: the user
+//!   would never learn there is a new version, where before the prefix
+//!   existed they updated fine.
+//!
+//! The signature check is unchanged: the prefix can withhold an update but
+//! cannot swap the package; a package it alters fails verification and
+//! the original URL is tried.
 //!
 //! With no prefix, or one that is not valid (an `https` URL with a host,
 //! no query and no fragment), nothing changes except that every check
@@ -250,20 +258,55 @@ pub async fn download_app_update<R: Runtime>(
     app: AppHandle<R>,
     prepared: State<'_, PreparedAppUpdate>,
 ) -> Result<AppUpdateVersions, String> {
-    let Some(AvailableUpdate { update, proxied }) = check_available_update(&app).await? else {
+    let Some(AvailableUpdate {
+        update,
+        direct_download_url,
+    }) = check_available_update(&app).await?
+    else {
         // The channel no longer offers an update (e.g. a pulled release):
         // a package parked earlier must not be installed anymore.
         prepared.0.clear();
         return Err("no_update_available".to_string());
     };
     let result = AppUpdateVersions::of(&update);
-    // Through the prefix, the error names the URL that failed.
-    let proxied_download_url = proxied.then(|| update.download_url.to_string());
+
+    // The parked package is whichever attempt succeeded.
+    let (update, bytes) = match direct_download_url {
+        None => download_package(&app, &update, update.download_url.clone(), false).await?,
+        Some(direct) => {
+            let (app, update) = (&app, &update);
+            proxied_then_direct(
+                "download",
+                update.download_url.clone(),
+                direct,
+                move |url| download_package(app, update, url, true),
+            )
+            .await?
+        }
+    };
+
+    prepared.0.put(PreparedPackage { update, bytes });
+    Ok(result)
+}
+
+/// One download (with signature check) of `update`'s package from `url`:
+/// the bytes, and a copy of `update` pointing at the URL they came from.
+/// Progress starts from zero on every attempt. `name_url`: the error
+/// carries `url=` (the update proxy prefix is on).
+async fn download_package<R: Runtime>(
+    app: &AppHandle<R>,
+    update: &Update,
+    url: Url,
+    name_url: bool,
+) -> Result<(Update, Vec<u8>), String> {
+    let mut attempt = update.clone();
+    attempt.download_url = url;
+    let error_url = name_url.then(|| attempt.download_url.to_string());
 
     let mut downloaded: u64 = 0;
     let mut throttle = ProgressThrottle::new();
     let progress_app = app.clone();
-    let bytes = update
+    let bytes = attempt
         .download(
             move |chunk, total| {
                 downloaded += chunk as u64;
@@ -278,10 +321,8 @@ pub async fn download_app_update<R: Runtime>(
             || {},
         )
         .await
-        .map_err(|e| format_download_error(proxied_download_url.as_deref(), e))?;
-
-    prepared.0.put(PreparedPackage { update, bytes });
-    Ok(result)
+        .map_err(|e| format_download_error(error_url.as_deref(), e))?;
+    Ok((attempt, bytes))
 }
 
 /// User-initiated step ("Restart and Update"): stop Galley's child
@@ -328,11 +369,13 @@ async fn stop_galley_child_processes<R: Runtime>(app: &AppHandle<R>) {
     manager.shutdown_all(Duration::from_secs(5)).await;
 }
 
-/// An update the channel offers. `proxied`: the update proxy prefix is on,
-/// and `update.download_url` already goes through it.
+/// An update the channel offers. With the update proxy prefix on,
+/// `update.download_url` already goes through it and
+/// `direct_download_url` is the manifest's original URL, the download's
+/// fallback; `None` when the prefix is off.
 struct AvailableUpdate {
     update: Update,
-    proxied: bool,
+    direct_download_url: Option<Url>,
 }
 
 /// Checks the channel, through the update proxy prefix when one is set
@@ -348,12 +391,13 @@ async fn check_available_update<R: Runtime>(
         let update = check_endpoint(app, pubkey, endpoint_raw).await?;
         return Ok(update.map(|update| AvailableUpdate {
             update,
-            proxied: false,
+            direct_download_url: None,
         }));
     };
 
     let proxied_endpoint = proxied_url(&prefix, endpoint_raw);
-    let update = check_proxied_then_direct(
+    let update = proxied_then_direct(
+        "check",
         proxied_endpoint.clone(),
         endpoint_raw.to_string(),
         |endpoint| async move { check_endpoint(app, pubkey, &endpoint).await },
@@ -362,12 +406,13 @@ async fn check_available_update<R: Runtime>(
     let Some(mut update) = update else {
         return Ok(None);
     };
-    update.download_url = proxied_url(&prefix, update.download_url.as_str())
+    let direct_download_url = update.download_url.clone();
+    update.download_url = proxied_url(&prefix, direct_download_url.as_str())
         .parse::<Url>()
         .map_err(|e| format_update_error_with_endpoint("check", &proxied_endpoint, e))?;
     Ok(Some(AvailableUpdate {
         update,
-        proxied: true,
+        direct_download_url: Some(direct_download_url),
     }))
 }
 
@@ -395,25 +440,27 @@ async fn check_endpoint<R: Runtime>(
         .map_err(|e| format_update_error_with_endpoint("check", endpoint_raw, e))
 }
 
-/// The check rule with the prefix on: `check(proxied)` first; on failure
-/// `check(direct)` once more; when both fail, the first error. A success
-/// either way (an update, or none) is the result.
-async fn check_proxied_then_direct<T, F, Fut>(
-    proxied: String,
-    direct: String,
-    mut check: F,
+/// The rule for both steps with the prefix on: `attempt(proxied)` first;
+/// on any failure `attempt(direct)` once more; when both fail, the first
+/// error. A success either way is the result. `step` names the step in
+/// the log line.
+async fn proxied_then_direct<A, T, F, Fut>(
+    step: &str,
+    proxied: A,
+    direct: A,
+    mut attempt: F,
 ) -> Result<T, String>
 where
-    F: FnMut(String) -> Fut,
+    F: FnMut(A) -> Fut,
     Fut: Future<Output = Result<T, String>>,
 {
-    match check(proxied).await {
+    match attempt(proxied).await {
         Ok(found) => Ok(found),
         Err(proxied_error) => {
             eprintln!(
-                "[app-update] check through the update proxy prefix failed, checking directly: {proxied_error}"
+                "[app-update] {step} through the update proxy prefix failed, trying the original URL: {proxied_error}"
             );
-            check(direct).await.map_err(|_| proxied_error)
+            attempt(direct).await.map_err(|_| proxied_error)
         }
     }
 }
@@ -664,14 +711,15 @@ mod tests {
         );
     }
 
-    /// Runs `check_proxied_then_direct` against canned answers, returning
-    /// its result and the URLs it checked, in order.
+    /// Runs `proxied_then_direct` for the check against canned answers,
+    /// returning its result and the URLs it checked, in order.
     async fn fallback_with(
         proxied: Result<&'static str, &'static str>,
         direct: Result<&'static str, &'static str>,
     ) -> (Result<&'static str, String>, Vec<String>) {
         let calls = std::cell::RefCell::new(Vec::new());
-        let result = check_proxied_then_direct(
+        let result = proxied_then_direct(
+            "check",
             "https://example.com/https://u/latest.json".to_string(),
             "https://u/latest.json".to_string(),
             |endpoint: String| {
@@ -713,6 +761,74 @@ mod tests {
         let (result, calls) = fallback_with(Err("proxied failed"), Err("direct failed")).await;
         assert_eq!(result, Err("proxied failed".to_string()));
         assert_eq!(calls.len(), 2);
+    }
+
+    const PACKAGE: &str = "https://github.com/o/r/releases/download/v1/a.exe";
+    const PROXIED_PACKAGE: &str =
+        "https://example.com/https://github.com/o/r/releases/download/v1/a.exe";
+
+    /// Runs `proxied_then_direct` for the download against canned answers
+    /// (`true` = that URL's download succeeds), the way
+    /// `download_app_update` drives it: `Url`s, and each failure worded by
+    /// `format_download_error` with its URL. Any failure counts the same
+    /// (request error, bad status, signature mismatch). Returns the result
+    /// (the URL that succeeded) and the URLs tried, in order.
+    async fn download_fallback_with(
+        proxied_ok: bool,
+        direct_ok: bool,
+    ) -> (Result<String, String>, Vec<String>) {
+        let calls = std::cell::RefCell::new(Vec::new());
+        let result = proxied_then_direct(
+            "download",
+            PROXIED_PACKAGE.parse::<Url>().unwrap(),
+            PACKAGE.parse::<Url>().unwrap(),
+            |url: Url| {
+                calls.borrow_mut().push(url.to_string());
+                let ok = if url.as_str() == PROXIED_PACKAGE {
+                    proxied_ok
+                } else {
+                    direct_ok
+                };
+                async move {
+                    if ok {
+                        Ok(url.to_string())
+                    } else {
+                        Err(format_download_error(
+                            Some(url.as_str()),
+                            "signature verification failed",
+                        ))
+                    }
+                }
+            },
+        )
+        .await;
+        (result, calls.into_inner())
+    }
+
+    #[tokio::test]
+    async fn a_proxied_download_that_succeeds_is_the_package() {
+        let (result, calls) = download_fallback_with(true, true).await;
+        assert_eq!(result.as_deref(), Ok(PROXIED_PACKAGE));
+        assert_eq!(calls, [PROXIED_PACKAGE]);
+    }
+
+    #[tokio::test]
+    async fn a_failed_proxied_download_falls_back_to_the_original_url_once() {
+        let (result, calls) = download_fallback_with(false, true).await;
+        assert_eq!(result.as_deref(), Ok(PACKAGE));
+        assert_eq!(calls, [PROXIED_PACKAGE, PACKAGE]);
+    }
+
+    #[tokio::test]
+    async fn when_both_downloads_fail_the_proxied_error_names_the_proxied_url() {
+        let (result, calls) = download_fallback_with(false, false).await;
+        assert_eq!(
+            result,
+            Err(format!(
+                "update_error: phase=download; url={PROXIED_PACKAGE}; detail=signature verification failed"
+            ))
+        );
+        assert_eq!(calls, [PROXIED_PACKAGE, PACKAGE]);
     }
 
     #[test]
