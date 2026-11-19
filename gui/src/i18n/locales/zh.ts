@@ -845,7 +845,7 @@ export const zhCopy = {
       updateProxyPrefixTitle: "更新加速地址",
       updateProxyPrefixDescription:
         "连不上 GitHub 时填一个加速前缀，检查和下载更新都经它转发；留空则直连。",
-      updateProxyPrefixInvalid: "地址要以 https:// 开头。",
+      updateProxyPrefixInvalid: "地址要以 https:// 开头，且不带 ? 或 #。",
     },
     runtime: {
       subtitle: "选择用哪个内核运行，排查运行问题",

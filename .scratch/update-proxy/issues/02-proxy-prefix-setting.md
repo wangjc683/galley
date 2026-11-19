@@ -68,6 +68,7 @@ GUI：
    回退。这个超时只作用于检查：插件构造 `Update` 时把 `timeout` 置空，下载不受影响——动手前在插件源码里
    确认这一点（`tauri-plugin-updater` 2.10.1 `src/updater.rs` 构造 `Update` 处），与此不符就停下写进报告。
 5. `install_app_update` 不动。模块头注释补一段说明加速地址的两条规则（检查回退、下载不回退）。
+   （2026-11-19 当日改：下载也回退直连，两步同一条规则，原因见 devlog。）
 
 ### 2.2 GUI：pref 与校验
 
@@ -108,7 +109,7 @@ GUI：
 |---|---|---|
 | 通用页 `updateProxyPrefixTitle` | `更新加速地址` | `Update proxy prefix` |
 | 通用页 `updateProxyPrefixDescription` | `连不上 GitHub 时填一个加速前缀，检查和下载更新都经它转发；留空则直连。` | `If GitHub is unreachable, enter a proxy prefix; update checks and downloads go through it. Leave empty to connect directly.` |
-| 通用页 `updateProxyPrefixInvalid` | `地址要以 https:// 开头。` | `The address must start with https://.` |
+| 通用页 `updateProxyPrefixInvalid` | `地址要以 https:// 开头，且不带 ? 或 #。` | `The address must start with https:// and contain no ? or #.` |
 | 输入框占位（不进 i18n 也可） | `https://example.com/` | `https://example.com/` |
 | `updates.setProxyPrefix` | `设置加速地址` | `Set a proxy prefix` |
 

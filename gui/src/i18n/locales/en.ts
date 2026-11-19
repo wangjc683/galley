@@ -803,7 +803,7 @@ export const enCopy: AppCopy = {
       updateProxyPrefixTitle: "Update proxy prefix",
       updateProxyPrefixDescription:
         "If GitHub is unreachable, enter a proxy prefix; update checks and downloads go through it. Leave empty to connect directly.",
-      updateProxyPrefixInvalid: "The address must start with https://.",
+      updateProxyPrefixInvalid: "The address must start with https:// and contain no ? or #.",
     },
     runtime: {
       subtitle: "Choose the engine that runs Galley, and troubleshoot it",
