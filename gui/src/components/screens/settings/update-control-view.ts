@@ -36,12 +36,15 @@ export interface UpdateControlNote {
   message: string;
 }
 
-/** The block under the row: the worded cause, 手动下载 after it, and the
- * raw text below for a bug report. */
+/** The block under the row: the worded cause, 手动下载 after it (and
+ * 设置加速地址 for a network-type cause), and the raw text below for a
+ * bug report. */
 export interface UpdateControlError {
   title: string;
   detail: string;
   manualDownloadUrl: string;
+  /** Show the in-app link to Settings → General's update proxy prefix. */
+  suggestProxyPrefix: boolean;
 }
 
 export interface UpdateControlView {
@@ -142,6 +145,7 @@ export function updateControlView(
           title: status.message,
           detail: status.detail,
           manualDownloadUrl: status.manualDownloadUrl,
+          suggestProxyPrefix: status.suggestProxyPrefix,
         },
       };
   }

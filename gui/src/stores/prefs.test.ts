@@ -98,6 +98,31 @@ describe("prefsStore", () => {
     });
   });
 
+  it("defaults the update proxy prefix to off and keeps it off when missing", async () => {
+    expect(usePrefsStore.getState().updateProxyPrefix).toBe("");
+
+    mockPrefs({});
+    await usePrefsStore.getState().hydratePrefs();
+
+    expect(usePrefsStore.getState().updateProxyPrefix).toBe("");
+  });
+
+  it("hydrates and persists the update proxy prefix", async () => {
+    mockPrefs({ update_proxy_prefix: "https://example.com/" });
+    await usePrefsStore.getState().hydratePrefs();
+    expect(usePrefsStore.getState().updateProxyPrefix).toBe(
+      "https://example.com/",
+    );
+
+    await usePrefsStore.getState().setUpdateProxyPrefix("");
+
+    expect(usePrefsStore.getState().updateProxyPrefix).toBe("");
+    expect(tauriMocks.invoke).toHaveBeenCalledWith("set_pref_json", {
+      key: "update_proxy_prefix",
+      value: "",
+    });
+  });
+
   it("persists keepInBackgroundOnClose and pushes it into core", async () => {
     await usePrefsStore.getState().setKeepInBackgroundOnClose(false);
 

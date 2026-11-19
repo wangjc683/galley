@@ -800,6 +800,10 @@ export const enCopy: AppCopy = {
       autoDownloadUpdatesTitle: "Download updates automatically",
       autoDownloadUpdatesDescription:
         "New versions download in the background when found. Turn off to be notified only — nothing downloads until you ask.",
+      updateProxyPrefixTitle: "Update proxy prefix",
+      updateProxyPrefixDescription:
+        "If GitHub is unreachable, enter a proxy prefix; update checks and downloads go through it. Leave empty to connect directly.",
+      updateProxyPrefixInvalid: "The address must start with https://.",
     },
     runtime: {
       subtitle: "Choose the engine that runs Galley, and troubleshoot it",
@@ -2273,6 +2277,7 @@ export const enCopy: AppCopy = {
     download: "Download update",
     retry: "Retry",
     manualDownload: "Manual download",
+    setProxyPrefix: "Set a proxy prefix",
     checking: "Checking",
     devNoChannel: "Dev build is not connected to an update channel",
     upToDate: "Up to date",

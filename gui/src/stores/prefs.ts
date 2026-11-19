@@ -181,6 +181,15 @@ interface PrefsState {
    * are never gated. Persisted to pref `auto_download_updates`.
    */
   autoDownloadUpdates: boolean;
+
+  /**
+   * Update proxy prefix for users who cannot reach GitHub: Core puts it
+   * in front of the update manifest and package URLs. `""` = off (direct).
+   * Only "" or a value normalized by `parseUpdateProxyPrefix` is ever
+   * stored. Persisted to pref `update_proxy_prefix`; Core reads it at
+   * every check.
+   */
+  updateProxyPrefix: string;
 }
 
 interface PrefsActions {
@@ -210,6 +219,9 @@ interface PrefsActions {
    */
   setKeepInBackgroundOnClose: (enabled: boolean) => Promise<void>;
   setAutoDownloadUpdates: (enabled: boolean) => Promise<void>;
+  /** `value`: "" (off) or a prefix already normalized by
+   * `parseUpdateProxyPrefix`; the caller validates. */
+  setUpdateProxyPrefix: (value: string) => Promise<void>;
 
   // ---- GA config ----
   /**
@@ -264,6 +276,7 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
   notifySound: true,
   keepInBackgroundOnClose: true,
   autoDownloadUpdates: true,
+  updateProxyPrefix: "",
 
   // ---- Conversation width ----
   setConversationWidth: async (mode) => {
@@ -373,6 +386,15 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
         "[prefs] setAutoDownloadUpdates: pref persistence failed.",
         e,
       );
+    }
+  },
+
+  setUpdateProxyPrefix: async (value) => {
+    set({ updateProxyPrefix: value });
+    try {
+      await setPref("update_proxy_prefix", value);
+    } catch (e) {
+      console.warn("[prefs] setUpdateProxyPrefix: pref persistence failed.", e);
     }
   },
 
@@ -564,6 +586,17 @@ export const usePrefsStore = create<PrefsStore>((set, get) => ({
     } catch (e) {
       console.warn(
         "[prefs] hydratePrefs: auto_download_updates pref load failed.",
+        e,
+      );
+    }
+    try {
+      const proxyPrefix = await getPref<string>("update_proxy_prefix");
+      if (typeof proxyPrefix === "string") {
+        set({ updateProxyPrefix: proxyPrefix });
+      }
+    } catch (e) {
+      console.warn(
+        "[prefs] hydratePrefs: update_proxy_prefix pref load failed.",
         e,
       );
     }

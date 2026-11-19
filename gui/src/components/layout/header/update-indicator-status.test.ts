@@ -35,6 +35,7 @@ describe("updateIndicatorVisible", () => {
         message: "m",
         detail: "d",
         manualDownloadUrl: "https://example.test",
+        suggestProxyPrefix: false,
       },
     ];
     for (const status of hidden) {

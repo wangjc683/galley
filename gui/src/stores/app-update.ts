@@ -49,6 +49,10 @@ export type AppUpdateStatus =
       message: string;
       detail: string;
       manualDownloadUrl: string;
+      /** A network-type cause (channel unavailable, network unavailable,
+       * download failed): Settings → About offers the link to the update
+       * proxy prefix setting next to 手动下载. */
+      suggestProxyPrefix: boolean;
     };
 
 interface CheckOptions {
@@ -225,7 +229,7 @@ export const useAppUpdateStore = create<AppUpdateStore>((set, get) => ({
 //   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0", phase: "downloading", progress: { downloaded: 42_000_000, total: 100_000_000 } } })
 //   __appUpdateStore.setState({ status: { kind: "ready", currentVersion: "0.3.1", version: "0.4.0" } })
 //   __appUpdateStore.setState({ status: { kind: "downloading", version: "0.4.0", phase: "installing" } })
-//   __appUpdateStore.setState({ status: { kind: "error", message: "下载更新失败，请稍后重试。", detail: "download request failed: connection reset", manualDownloadUrl: "https://github.com/wangjc683/galley/releases/latest" } })
+//   __appUpdateStore.setState({ status: { kind: "error", message: "下载更新失败，请稍后重试。", detail: "download request failed: connection reset", manualDownloadUrl: "https://github.com/wangjc683/galley/releases/latest", suggestProxyPrefix: true } })
 //
 // The download / restart buttons call Core for real; in dev they end in
 // an error (no channel, nothing downloaded).
@@ -361,10 +365,21 @@ function updateCopy() {
 
 type UpdateErrorPhase = "check" | "download" | "install";
 
+/**
+ * Classifies an update error by substring. Core's error strings carry
+ * the URLs it tried (`endpoint=` on a check, and `url=` on a download
+ * through the update proxy prefix), so a user-entered prefix appears in
+ * the matched text too.
+ */
 function readableUpdateError(
   error: unknown,
   phase: UpdateErrorPhase,
-): { message: string; detail: string; manualDownloadUrl: string } {
+): {
+  message: string;
+  detail: string;
+  manualDownloadUrl: string;
+  suggestProxyPrefix: boolean;
+} {
   const copy = updateCopy();
   const raw =
     typeof error === "string"
@@ -374,10 +389,13 @@ function readableUpdateError(
         : (JSON.stringify(error) ?? String(error ?? ""));
 
   const normalized = raw.toLowerCase();
-  const makeError = (message: string) => ({
+  // `suggestProxyPrefix` is true for the three network-type causes only:
+  // channelUnavailable, networkUnavailable, downloadFailed.
+  const makeError = (message: string, suggestProxyPrefix = false) => ({
     message,
     detail: formatUpdateDiagnostic(raw),
     manualDownloadUrl: APP_UPDATE_MANUAL_DOWNLOAD_URL,
+    suggestProxyPrefix,
   });
 
   if (normalized.includes("no_prepared_update"))
@@ -399,7 +417,7 @@ function readableUpdateError(
     return makeError(copy.updates.devNoChannel);
   }
   if (normalized.includes("could not fetch a valid release json")) {
-    return makeError(copy.updates.channelUnavailable);
+    return makeError(copy.updates.channelUnavailable, true);
   }
   if (
     normalized.includes("platform") &&
@@ -440,6 +458,7 @@ function readableUpdateError(
       phase === "check"
         ? copy.updates.networkUnavailable
         : copy.updates.downloadFailed,
+      true,
     );
   }
   if (
@@ -452,7 +471,7 @@ function readableUpdateError(
     return makeError(copy.updates.installFailed);
   }
   if (phase === "download") {
-    return makeError(copy.updates.downloadFailed);
+    return makeError(copy.updates.downloadFailed, true);
   }
   if (phase === "install") {
     return makeError(copy.updates.installFailed);

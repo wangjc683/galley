@@ -234,6 +234,136 @@ describe("app-update store check", () => {
   });
 });
 
+describe("app-update store errors and the update proxy prefix link", () => {
+  // Core's error strings, as `core/src/app_update.rs` formats them.
+  const UNREACHABLE_CHANNEL =
+    "Could not fetch a valid release JSON from the remote";
+  const checkError = (endpoint: string, detail: string) =>
+    `update_error: phase=check; endpoint=${endpoint}; detail=${detail}`;
+  const downloadError = (detail: string, url?: string) =>
+    url === undefined
+      ? `update_error: phase=download; detail=${detail}`
+      : `update_error: phase=download; url=${url}; detail=${detail}`;
+  const MANIFEST =
+    "https://raw.example.com/o/r/main/updates/stable/latest.json";
+  const PACKAGE = "https://github.com/o/r/releases/download/v1/a.exe";
+  const PREFIX = "https://example.com/";
+
+  async function checkFailsWith(error: string) {
+    getTauriMocks().invoke.mockImplementation((command) =>
+      command === "check_app_update"
+        ? Promise.reject(error)
+        : Promise.resolve(undefined),
+    );
+    await useAppUpdateStore.getState().check({ silent: false });
+    return useAppUpdateStore.getState().status;
+  }
+
+  async function downloadFailsWith(error: string) {
+    useAppUpdateStore.setState({ status: AVAILABLE });
+    getTauriMocks().invoke.mockImplementation((command) =>
+      command === "download_app_update"
+        ? Promise.reject(error)
+        : Promise.resolve(undefined),
+    );
+    await useAppUpdateStore.getState().download();
+    return useAppUpdateStore.getState().status;
+  }
+
+  async function installFailsWith(error: string) {
+    useAppUpdateStore.setState({ status: READY });
+    getTauriMocks().invoke.mockImplementation((command) =>
+      command === "install_app_update"
+        ? Promise.reject(error)
+        : Promise.resolve(undefined),
+    );
+    await useAppUpdateStore.getState().restart();
+    return useAppUpdateStore.getState().status;
+  }
+
+  it("offers the link for the three network-type causes", async () => {
+    expect(
+      await checkFailsWith(checkError(MANIFEST, UNREACHABLE_CHANNEL)),
+    ).toMatchObject({
+      kind: "error",
+      message: enCopy.updates.channelUnavailable,
+      suggestProxyPrefix: true,
+    });
+    expect(
+      await checkFailsWith(checkError(MANIFEST, "operation timed out")),
+    ).toMatchObject({
+      kind: "error",
+      message: enCopy.updates.networkUnavailable,
+      suggestProxyPrefix: true,
+    });
+    expect(
+      await downloadFailsWith(downloadError("connection reset")),
+    ).toMatchObject({
+      kind: "error",
+      message: enCopy.updates.downloadFailed,
+      suggestProxyPrefix: true,
+    });
+  });
+
+  it("does not offer it for other causes", async () => {
+    expect(
+      await downloadFailsWith(
+        downloadError("signature verification failed: minisign"),
+      ),
+    ).toMatchObject({
+      kind: "error",
+      message: enCopy.updates.signatureInvalid,
+      suggestProxyPrefix: false,
+    });
+    expect(
+      await checkFailsWith(checkError(MANIFEST, "missing field `version`")),
+    ).toMatchObject({
+      kind: "error",
+      message: enCopy.updates.invalidManifest,
+      suggestProxyPrefix: false,
+    });
+    expect(await installFailsWith("no_prepared_update")).toMatchObject({
+      kind: "error",
+      message: enCopy.updates.preparedUpdateMissing,
+      suggestProxyPrefix: false,
+    });
+    expect(
+      await installFailsWith("failed to install: disk full"),
+    ).toMatchObject({
+      kind: "error",
+      message: enCopy.updates.installFailed,
+      suggestProxyPrefix: false,
+    });
+  });
+
+  it("classifies errors that carry the prefixed address the same way", async () => {
+    for (const detail of [UNREACHABLE_CHANNEL, "operation timed out", "odd"]) {
+      const direct = await checkFailsWith(checkError(MANIFEST, detail));
+      const proxied = await checkFailsWith(
+        checkError(`${PREFIX}${MANIFEST}`, detail),
+      );
+      expect(proxied.kind).toBe("error");
+      if (direct.kind !== "error" || proxied.kind !== "error") continue;
+      expect(proxied.message).toBe(direct.message);
+      expect(proxied.suggestProxyPrefix).toBe(direct.suggestProxyPrefix);
+    }
+    for (const detail of [
+      "Download request failed with status: 404 Not Found",
+      "signature verification failed: minisign",
+      "odd",
+    ]) {
+      const direct = await downloadFailsWith(downloadError(detail));
+      const proxied = await downloadFailsWith(
+        downloadError(detail, `${PREFIX}${PACKAGE}`),
+      );
+      expect(proxied.kind).toBe("error");
+      if (direct.kind !== "error" || proxied.kind !== "error") continue;
+      expect(proxied.message).toBe(direct.message);
+      expect(proxied.suggestProxyPrefix).toBe(direct.suggestProxyPrefix);
+    }
+  });
+});
+
 describe("app-update store restart", () => {
   beforeEach(() => {
     useAppUpdateStore.setState({ status: READY });

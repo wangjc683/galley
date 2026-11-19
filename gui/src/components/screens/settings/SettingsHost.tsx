@@ -65,6 +65,8 @@ export function SettingsHost({
   const setAutoDownloadUpdates = usePrefsStore(
     (s) => s.setAutoDownloadUpdates,
   );
+  const updateProxyPrefix = usePrefsStore((s) => s.updateProxyPrefix);
+  const setUpdateProxyPrefix = usePrefsStore((s) => s.setUpdateProxyPrefix);
   const setGAConfig = usePrefsStore((s) => s.setGAConfig);
   const gaConfig = usePrefsStore((s) => s.gaConfig);
   const activeRuntimeKind = usePrefsStore((s) => s.activeRuntimeKind);
@@ -163,6 +165,10 @@ export function SettingsHost({
       autoDownloadUpdates={autoDownloadUpdates}
       onChangeAutoDownloadUpdates={(enabled) => {
         void setAutoDownloadUpdates(enabled);
+      }}
+      updateProxyPrefix={updateProxyPrefix}
+      onChangeUpdateProxyPrefix={(value) => {
+        void setUpdateProxyPrefix(value);
       }}
     />
   );

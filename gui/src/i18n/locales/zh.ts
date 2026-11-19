@@ -842,6 +842,10 @@ export const zhCopy = {
       autoDownloadUpdatesTitle: "自动下载更新",
       autoDownloadUpdatesDescription:
         "发现新版本时在后台自动下载；关闭后仅提示，不主动下载。",
+      updateProxyPrefixTitle: "更新加速地址",
+      updateProxyPrefixDescription:
+        "连不上 GitHub 时填一个加速前缀，检查和下载更新都经它转发；留空则直连。",
+      updateProxyPrefixInvalid: "地址要以 https:// 开头。",
     },
     runtime: {
       subtitle: "选择用哪个内核运行，排查运行问题",
@@ -2336,6 +2340,7 @@ export const zhCopy = {
     download: "下载更新",
     retry: "重试",
     manualDownload: "手动下载",
+    setProxyPrefix: "设置加速地址",
     checking: "正在检查",
     devNoChannel: "开发版未连接更新通道",
     upToDate: "已是最新版本",

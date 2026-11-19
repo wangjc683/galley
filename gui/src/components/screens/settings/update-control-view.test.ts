@@ -160,6 +160,7 @@ describe("updateControlView", () => {
         message: "下载更新失败，请稍后重试。",
         detail: "download request failed: connection reset",
         manualDownloadUrl: "https://example.test/releases/latest",
+        suggestProxyPrefix: true,
       }),
     ).toEqual({
       action: {
@@ -173,8 +174,36 @@ describe("updateControlView", () => {
         title: "下载更新失败，请稍后重试。",
         detail: "download request failed: connection reset",
         manualDownloadUrl: "https://example.test/releases/latest",
+        suggestProxyPrefix: true,
       },
     });
+  });
+
+  it("passes the proxy prefix link through for the network-type causes only", () => {
+    const errorView = (message: string, suggestProxyPrefix: boolean) =>
+      view({
+        kind: "error",
+        message,
+        detail: "d",
+        manualDownloadUrl: "https://example.test/releases/latest",
+        suggestProxyPrefix,
+      }).error;
+    for (const message of [
+      copy.channelUnavailable,
+      copy.networkUnavailable,
+      copy.downloadFailed,
+    ]) {
+      expect(errorView(message, true)).toMatchObject({
+        title: message,
+        suggestProxyPrefix: true,
+      });
+    }
+    for (const message of [copy.signatureInvalid, copy.installFailed]) {
+      expect(errorView(message, false)).toMatchObject({
+        title: message,
+        suggestProxyPrefix: false,
+      });
+    }
   });
 
   it("words the same states in English", () => {

@@ -17,6 +17,9 @@ interface SettingsAboutProps {
   gaBaseline: string;
   managedRuntime?: ManagedRuntimeDiagnostics;
   hasRunningSessions: boolean;
+  /** Switches Settings to General (the update error block's
+   * 设置加速地址 link). */
+  onOpenGeneral: () => void;
 }
 
 /**
@@ -50,6 +53,7 @@ export function SettingsAbout({
   gaBaseline,
   managedRuntime,
   hasRunningSessions,
+  onOpenGeneral,
 }: SettingsAboutProps) {
   const copy = useCopy();
   const language = useLanguage();
@@ -86,6 +90,7 @@ export function SettingsAbout({
         <div className="mt-2 text-ui-secondary">
           <SettingsUpdateControl
             hasRunningSessions={hasRunningSessions}
+            onOpenProxyPrefix={onOpenGeneral}
             leading={
               <>
                 <span className="font-mono text-ink">v{workbenchVersion}</span>

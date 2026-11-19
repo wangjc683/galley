@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
 
@@ -10,12 +17,15 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import type { ConversationFontSize } from "@/lib/conversation-font-size";
 import { useCopy } from "@/lib/i18n";
+import { isImeCompositionKeydown } from "@/lib/ime";
 import {
   ensureNotificationPermission,
   queryNotificationPermission,
 } from "@/lib/notify";
 import type { LanguagePreference, ResolvedLanguage } from "@/lib/language";
 import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
+import { parseUpdateProxyPrefix } from "@/lib/update-proxy-prefix";
+import { cn } from "@/lib/utils";
 
 import { ErrorLine, InfoLine } from "./models/ModelPrimitives";
 
@@ -67,6 +77,8 @@ export function SettingsGeneral({
   onChangeKeepInBackgroundOnClose,
   autoDownloadUpdates,
   onChangeAutoDownloadUpdates,
+  updateProxyPrefix,
+  onChangeUpdateProxyPrefix,
 }: {
   languagePreference: LanguagePreference;
   resolvedLanguage: ResolvedLanguage;
@@ -86,6 +98,8 @@ export function SettingsGeneral({
   onChangeKeepInBackgroundOnClose: (enabled: boolean) => void;
   autoDownloadUpdates: boolean;
   onChangeAutoDownloadUpdates: (enabled: boolean) => void;
+  updateProxyPrefix: string;
+  onChangeUpdateProxyPrefix: (value: string) => void;
 }) {
   const copy = useCopy();
   const generalCopy = copy.settings.general;
@@ -413,28 +427,163 @@ export function SettingsGeneral({
               ariaLabel={generalCopy.autoDownloadUpdatesTitle}
             />
           </PreferenceRow>
+          <UpdateProxyPrefixRow
+            value={updateProxyPrefix}
+            onCommit={onChangeUpdateProxyPrefix}
+          />
         </div>
       </div>
     </div>
   );
 }
 
+/**
+ * 更新加速地址 (2026-11-19, issue #33): one text field, empty = off, no
+ * switch, no presets, no test button. Commits on blur / Enter (and on a
+ * press outside the field, which Galley's Buttons keep from blurring it —
+ * the dialog's close button among them): empty saves "", a valid prefix
+ * saves its normalized form and the field shows it, an invalid one is
+ * not saved — the description turns into the warning and the field keeps
+ * what the user typed until it is fixed or cleared. Esc restores the
+ * saved value. Same field rules as the GA path field in Runtime.
+ */
+function UpdateProxyPrefixRow({
+  value,
+  onCommit,
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+}) {
+  const generalCopy = useCopy().settings.general;
+  const [draft, setDraft] = useState(value);
+  const [invalid, setInvalid] = useState(false);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  // Esc's own blur must not commit the draft it is reverting.
+  const revertingRef = useRef(false);
+
+  // Re-sync when the saved value changes (hydration, a commit that
+  // normalized the draft): adjust state on prop change during render.
+  const [lastSyncedValue, setLastSyncedValue] = useState(value);
+  if (lastSyncedValue !== value) {
+    setLastSyncedValue(value);
+    setDraft(value);
+    setInvalid(false);
+  }
+
+  const commit = () => {
+    const parsed = parseUpdateProxyPrefix(draft);
+    if (parsed.kind === "invalid") {
+      setInvalid(true);
+      return;
+    }
+    const next = parsed.kind === "valid" ? parsed.normalized : "";
+    setDraft(next);
+    setInvalid(false);
+    if (next !== value) onCommit(next);
+  };
+
+  const commitBeforeOutsidePress = useEffectEvent(commit);
+  const dirty = draft !== value;
+  useEffect(() => {
+    if (!dirty) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        fieldRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      commitBeforeOutsidePress();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [dirty]);
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const next = event.target.value;
+    setDraft(next);
+    // The warning stays until the text is valid or cleared.
+    if (invalid && parseUpdateProxyPrefix(next).kind !== "invalid") {
+      setInvalid(false);
+    }
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (isImeCompositionKeydown(event)) return;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commit();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      setDraft(value);
+      setInvalid(false);
+      revertingRef.current = true;
+      event.currentTarget.blur();
+      revertingRef.current = false;
+    }
+  };
+
+  const handleBlur = () => {
+    if (revertingRef.current) return;
+    commit();
+  };
+
+  return (
+    <PreferenceRow
+      title={generalCopy.updateProxyPrefixTitle}
+      description={
+        invalid
+          ? generalCopy.updateProxyPrefixInvalid
+          : generalCopy.updateProxyPrefixDescription
+      }
+      descriptionTone={invalid ? "warning" : "muted"}
+    >
+      <div ref={fieldRef}>
+        <input
+          type="text"
+          value={draft}
+          placeholder="https://example.com/"
+          onChange={handleChange}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          aria-label={generalCopy.updateProxyPrefixTitle}
+          aria-invalid={invalid}
+          className="w-[260px] rounded-sm border border-line bg-surface px-3 py-2 font-mono text-ui-secondary text-ink outline-none transition-colors duration-(--motion-fast) ease-firm placeholder:text-ink-muted/70 focus:border-brand focus:ring-[3px] focus:ring-brand/20"
+        />
+      </div>
+    </PreferenceRow>
+  );
+}
+
 /** Shared row grammar for this tab: title + one-line description on
- * the left, the control on the right. */
+ * the left, the control on the right. A description in the warning tone
+ * says what is wrong with the control's value. */
 function PreferenceRow({
   title,
   description,
+  descriptionTone = "muted",
   children,
 }: {
   title: string;
   description: string;
+  descriptionTone?: "muted" | "warning";
   children: ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 px-3 py-2.5">
       <div className="min-w-0">
         <div className="text-ui-compact font-medium text-ink">{title}</div>
-        <div className="mt-0.5 max-w-[600px] text-ui-meta leading-snug text-ink-muted">
+        <div
+          className={cn(
+            "mt-0.5 max-w-[600px] text-ui-meta leading-snug",
+            descriptionTone === "warning" ? "text-warning" : "text-ink-muted",
+          )}
+        >
           {description}
         </div>
       </div>

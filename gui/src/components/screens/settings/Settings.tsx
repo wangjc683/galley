@@ -70,6 +70,8 @@ export interface SettingsProps {
   onChangeKeepInBackgroundOnClose: (enabled: boolean) => void;
   autoDownloadUpdates: boolean;
   onChangeAutoDownloadUpdates: (enabled: boolean) => void;
+  updateProxyPrefix: string;
+  onChangeUpdateProxyPrefix: (value: string) => void;
 }
 
 /**
@@ -131,6 +133,8 @@ export function Settings({
   onChangeKeepInBackgroundOnClose,
   autoDownloadUpdates,
   onChangeAutoDownloadUpdates,
+  updateProxyPrefix,
+  onChangeUpdateProxyPrefix,
   tab: controlledTab,
   onTabChange,
 }: SettingsProps) {
@@ -241,6 +245,8 @@ export function Settings({
                   }
                   autoDownloadUpdates={autoDownloadUpdates}
                   onChangeAutoDownloadUpdates={onChangeAutoDownloadUpdates}
+                  updateProxyPrefix={updateProxyPrefix}
+                  onChangeUpdateProxyPrefix={onChangeUpdateProxyPrefix}
                 />
               )}
               {tab === "runtime" && (
@@ -302,6 +308,7 @@ export function Settings({
                   gaBaseline={runtimeInfo.gaBaseline}
                   managedRuntime={runtimeInfo.managedRuntime}
                   hasRunningSessions={hasRunningSessions}
+                  onOpenGeneral={() => setTab("general")}
                 />
               )}
               </div>

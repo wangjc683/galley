@@ -26,6 +26,8 @@ import {
 
 interface SettingsUpdateControlProps {
   hasRunningSessions: boolean;
+  /** Opens Settings → General, where the update proxy prefix lives. */
+  onOpenProxyPrefix: () => void;
   leading?: ReactNode;
   className?: string;
 }
@@ -37,6 +39,7 @@ interface SettingsUpdateControlProps {
  */
 export function SettingsUpdateControl({
   hasRunningSessions,
+  onOpenProxyPrefix,
   leading,
   className,
 }: SettingsUpdateControlProps) {
@@ -72,6 +75,8 @@ export function SettingsUpdateControl({
         <UpdateErrorBlock
           error={view.error}
           manualDownloadLabel={copy.updates.manualDownload}
+          setProxyPrefixLabel={copy.updates.setProxyPrefix}
+          onOpenProxyPrefix={onOpenProxyPrefix}
         />
       )}
     </div>
@@ -162,13 +167,22 @@ function UpdateNoteIcon({ tone }: { tone: UpdateControlNote["tone"] }) {
  * Same shape as the Channels error block (icon column, title, raw text
  * below, selectable and monospace), in the warning tone: a failed
  * update leaves the installed Galley working.
+ *
+ * For a network-type cause the title line carries a second link,
+ * 设置加速地址, after 手动下载. It stays inside the app (switches Settings
+ * to General), so it has no external-link glyph; otherwise it looks like
+ * 手动下载's text.
  */
 function UpdateErrorBlock({
   error,
   manualDownloadLabel,
+  setProxyPrefixLabel,
+  onOpenProxyPrefix,
 }: {
   error: UpdateControlError;
   manualDownloadLabel: string;
+  setProxyPrefixLabel: string;
+  onOpenProxyPrefix: () => void;
 }) {
   return (
     <div className="mt-2 flex items-start gap-2 rounded-sm border border-warning/25 bg-warning/[var(--opacity-subtle)] px-3 py-2 text-ui-meta leading-notice">
@@ -183,6 +197,15 @@ function UpdateErrorBlock({
           <ExternalTextLink href={error.manualDownloadUrl} className="shrink-0">
             {manualDownloadLabel}
           </ExternalTextLink>
+          {error.suggestProxyPrefix && (
+            <button
+              type="button"
+              onClick={onOpenProxyPrefix}
+              className="shrink-0 cursor-pointer rounded-sm text-brand-strong underline decoration-brand-strong/35 underline-offset-[3px] hover:decoration-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
+            >
+              {setProxyPrefixLabel}
+            </button>
+          )}
         </div>
         <div className="mt-1 select-text whitespace-pre-wrap break-words font-mono text-ui-tertiary leading-notice text-warning/80">
           {error.detail}
