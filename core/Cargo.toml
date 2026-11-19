@@ -111,7 +111,18 @@ ring = "0.17"
 
 # Managed model setup probes provider endpoints from Rust so saved secrets do
 # not need to round-trip through GUI state.
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+#
+# `system-proxy` (= `hyper-util/client-proxy-system`) makes every client read
+# the OS proxy settings (macOS system configuration, the Windows registry),
+# not only `HTTPS_PROXY` and friends, which an app started from the Dock or
+# the Start menu does not have. The updater gets this feature only through
+# the shared `hyper-util`: `tauri-plugin-updater` depends on reqwest 0.13
+# with default features off, and both reqwest versions resolve to the one
+# `hyper-util` in `Cargo.lock`, so Cargo's feature unification turns it on
+# for the updater too. After upgrading `tauri-plugin-updater` or reqwest,
+# re-run this check (every target must still list `client-proxy-system`):
+#   cargo tree --manifest-path core/Cargo.toml -e features -i hyper-util --target all | grep client-proxy-system
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "system-proxy"] }
 
 # Decode OAuth JWT claims locally for expiry and ChatGPT account-id routing.
 base64 = "0.22"
