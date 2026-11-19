@@ -10,7 +10,7 @@ describe("parseUpdateProxyPrefix", () => {
     expect(parseUpdateProxyPrefix("   ")).toEqual({ kind: "empty" });
   });
 
-  it("rejects anything but an https URL with a host", () => {
+  it("rejects anything but an https URL with a host and no query or fragment", () => {
     for (const raw of [
       "http://",
       "http://example.com",
@@ -19,6 +19,10 @@ describe("parseUpdateProxyPrefix", () => {
       "example.com/gh/",
       "https://",
       "ftp://example.com/",
+      "https://example.com/?x=",
+      "https://example.com/?x=1",
+      "https://example.com/#a",
+      "https://example.com/gh?",
     ]) {
       expect(parseUpdateProxyPrefix(raw), raw).toEqual({ kind: "invalid" });
     }

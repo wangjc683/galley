@@ -10,7 +10,7 @@ Status: ready-for-agent
 ## 接口约定（Core 与 GUI 共用，逐字照此）
 
 - pref 键：`update_proxy_prefix`，值是 JSON 字符串。缺失、空串、只有空白，都表示关闭（直连）。
-- 合法值：去掉首尾空白后能解析成 URL，scheme 是 `https`，有主机名。其余一律不合法。
+- 合法值：去掉首尾空白后能解析成 URL，scheme 是 `https`，有主机名，且不带 query、不带 fragment（原文里出现 `?` 或 `#` 就算带，单独一个结尾的 `?` / `#` 也算；2026-11-19 验收时补）。其余一律不合法。
 - 规范化：合法值去掉末尾所有 `/` 再补一个 `/`。
 - 拼接：`<规范化前缀><原地址全文>`，原地址不做任何转义。例：前缀 `https://example.com`，
   原地址 `https://github.com/o/r/releases/download/v1/a.exe`，结果

@@ -7,9 +7,10 @@
 //
 // The rule, word for word on both sides:
 // - empty or blank: off (saved as "");
-// - valid: trimmed, it parses as a URL whose scheme is `https` and that
-//   has a host; saved with every trailing `/` removed and exactly one
-//   added back;
+// - valid: trimmed, it parses as a URL whose scheme is `https`, that has
+//   a host, and that has no query and no fragment (a bare `?` or `#` in
+//   the text counts as one); saved with every trailing `/` removed and
+//   exactly one added back;
 // - anything else is invalid and is not saved.
 
 export type UpdateProxyPrefixInput =
@@ -20,6 +21,9 @@ export type UpdateProxyPrefixInput =
 export function parseUpdateProxyPrefix(raw: string): UpdateProxyPrefixInput {
   const trimmed = raw.trim();
   if (trimmed === "") return { kind: "empty" };
+  // The raw text, not only `search` / `hash` (which drop a bare `?` / `#`):
+  // the original URL would land in the query or the fragment.
+  if (/[?#]/.test(trimmed)) return { kind: "invalid" };
   let url: URL;
   try {
     url = new URL(trimmed);

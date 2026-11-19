@@ -50,9 +50,9 @@
 //!   check is unchanged: the prefix can withhold an update but cannot
 //!   swap the package.
 //!
-//! With no prefix, or one that is not a valid `https://` URL, nothing
-//! changes except that every check now times out after
-//! [`CHECK_TIMEOUT`] (the download keeps no timeout).
+//! With no prefix, or one that is not valid (an `https` URL with a host,
+//! no query and no fragment), nothing changes except that every check
+//! now times out after [`CHECK_TIMEOUT`] (the download keeps no timeout).
 
 use serde::Serialize;
 use std::future::Future;
@@ -431,12 +431,17 @@ async fn read_update_proxy_prefix<R: Runtime>(app: &AppHandle<R>) -> Option<Stri
 }
 
 /// `raw` (the pref as stored) as a usable prefix: trimmed, it must parse
-/// as a URL whose scheme is `https` and that has a host; then every
-/// trailing `/` goes and exactly one comes back. Anything else is `None`
-/// (off). The GUI applies the same rule before saving
-/// (`gui/src/lib/update-proxy-prefix.ts`).
+/// as a URL whose scheme is `https`, that has a host, and that has no
+/// query and no fragment; then every trailing `/` goes and exactly one
+/// comes back. Anything else is `None` (off). The GUI applies the same
+/// rule before saving (`gui/src/lib/update-proxy-prefix.ts`).
 fn normalize_proxy_prefix(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
+    // The raw text, not only `query()` / `fragment()`: a bare trailing
+    // `?` or `#` counts too (the original URL would land in it).
+    if trimmed.contains(['?', '#']) {
+        return None;
+    }
     let url = Url::parse(trimmed).ok()?;
     if url.scheme() != "https" || url.host_str().is_none_or(str::is_empty) {
         return None;
@@ -594,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn proxy_prefix_is_off_unless_an_https_url_with_a_host() {
+    fn proxy_prefix_is_off_unless_an_https_url_with_a_host_and_no_query_or_fragment() {
         for raw in [
             "",
             "   ",
@@ -605,6 +610,10 @@ mod tests {
             "example.com/gh/",
             "https://",
             "ftp://example.com/",
+            "https://example.com/?x=",
+            "https://example.com/?x=1",
+            "https://example.com/#a",
+            "https://example.com/gh?",
         ] {
             assert_eq!(normalize_proxy_prefix(raw), None, "{raw:?}");
         }
