@@ -54,9 +54,14 @@
 //!   would never learn there is a new version, where before the prefix
 //!   existed they updated fine.
 //!
-//! The signature check is unchanged: the prefix can withhold an update but
-//! cannot swap the package; a package it alters fails verification and
-//! the original URL is tried.
+//! The signature check is unchanged, and it proves less than "this is the
+//! new version": the prefix serves the manifest too, and the manifest is not
+//! signed. A package the prefix alters fails verification and the original
+//! URL is tried, so it cannot install anything Galley did not sign; but it
+//! can name any version in the manifest and point at an older signed
+//! package with that package's real signature, which verifies. Nothing here
+//! compares the package's own version with the running one yet
+//! (`.scratch/update-proxy/issues/03-downgrade-through-the-prefix.md`).
 //!
 //! With no prefix, or one that is not valid (an `https` URL with a host,
 //! no query and no fragment), nothing changes except that every check

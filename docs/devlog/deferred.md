@@ -1575,6 +1575,6 @@
   - 自建镜像：清单与安装包同步到一个自己的地址，作为它们的第二个来源；和 GitHub、加速地址怎么排先后，到时再定。
   - 系统代理缺口：更新器的 `UpdaterBuilder::proxy` 能显式指定代理，Core 可以先向系统问出这个地址该走的代理再交给它；SOCKS 要另开 reqwest 的 `socks` 特性。两条都没试过。
 - **实施要点**：
-  - 自建镜像：推送更新通道的工作流（`.github/workflows/promote-update-channel.yml`）要把清单和安装包一起同步过去；安装包每个 37–70 MB；这是一项长期的运维成本。验签不变，镜像同样换不了包。
+  - 自建镜像：推送更新通道的工作流（`.github/workflows/promote-update-channel.yml`）要把清单和安装包一起同步过去；安装包每个 37–70 MB；这是一项长期的运维成本。验签不变，镜像装不进 Galley 没签过的包；但清单没有签名，镜像被人改了同样能把旧版的真包当新版推过来（`.scratch/update-proxy/issues/03-downgrade-through-the-prefix.md`），做镜像前先处理这一条。
   - 系统代理缺口：改动在 Core 与更新器之间，引擎进程零变化；Core 自己的请求（测试模型、对话图片、ChatGPT 登录）要不要一起跟，到时再定。
 - **关联**：[更新连得上：跟系统代理 + 加速地址](./2026-11-19-update-proxy.md)；`.scratch/update-proxy/PRD.md`。

@@ -97,7 +97,9 @@ cargo tree --manifest-path core/Cargo.toml -e features -i hyper-util --target al
 
 ### 安全
 
-验签不变：安装包仍用编译进应用的 minisign 公钥验签（`Update::download` 里）。反代能看到用户的 IP 与正在检查的版本号，能不给更新（报错，或给一份旧清单），不能换包。
+验签不变：安装包仍用编译进应用的 minisign 公钥验签（`Update::download` 里）。反代能看到用户的 IP 与正在检查的版本号，能不给更新（报错，或给一份旧清单），不能装进 Galley 没签过的包。
+
+**当日更正（发版之后，旁路代理指出）：原文写的是「不能换包」，说满了。** 签名只盖在安装包上，清单没有签名，而填了前缀之后清单也是前缀给的。它可以把清单里的版本号写成任意新版本、下载地址指向某个旧版的真包、签名用那个旧包的真签名，校验照样通过，用户被装回旧版。这是读插件源码得出的（`tauri-plugin-updater` 2.10.1：`verify_signature` 只拿清单给的签名验下载到的字节，版本号取自清单，没有任何一处比对包自己的版本），没有实测。没填前缀时清单来自 GitHub，这条路不存在。v0.7.10 带着这个口子发出；修法与裁决见票 [03](../../.scratch/update-proxy/issues/03-downgrade-through-the-prefix.md)。
 
 ### 检查连不上归为网络类（JC 未裁，不要可撤）
 

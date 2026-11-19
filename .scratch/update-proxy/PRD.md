@@ -33,8 +33,9 @@
 
 - 拼接格式对 issue 点名的两家公共反代都成立（2026-11-19 实测）：清单经反代取回与直连逐字节相同；
   Windows 安装包经其中一家整包下载，大小与 SHA-256 和直连一致。
-- 反代换不了包：安装包用编译进应用的 minisign 公钥验签（`Update::download` 里校验）。反代能看到
-  IP 与版本号，能不给更新，不能给假包。
+- 反代装不进 Galley 没签过的包：安装包用编译进应用的 minisign 公钥验签（`Update::download` 里校验）。反代能看到
+  IP 与版本号，能不给更新。**2026-11-19 更正：原文「换不了包」「不能给假包」说满了，它能把旧版的真包当新版推过来，
+  见票 [03](./issues/03-downgrade-through-the-prefix.md)。**
 - 更新器的端点列表遇到「返回 200 但不是 JSON」会直接报错、不试下一个端点（`updater.rs` 里
   `res.json().await?`），所以票 02 的回退由 Galley 自己做两次检查，不靠端点列表。
 - `hyper-util` 0.1.20 读系统代理时，macOS 不读例外列表，Windows 的 `ProxyOverride` 里 `<local>`
@@ -53,6 +54,7 @@
 |---|---|
 | [01](./issues/01-system-proxy.md) | 更新器与 Core 的请求跟系统代理；测试模型对回环地址直连 |
 | [02](./issues/02-proxy-prefix-setting.md) | 「更新加速地址」设置：Core 拼地址与回退，通用页输入框，关于页错误块链接 |
+| [03](./issues/03-downgrade-through-the-prefix.md) | 加速地址能把旧版的真包当新版推过来：装之前核对包不比当前版本旧（JC 未裁） |
 
 ## 状态（2026-11-19）
 
