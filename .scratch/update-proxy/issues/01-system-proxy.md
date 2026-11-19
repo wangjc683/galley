@@ -1,6 +1,6 @@
 # 01 更新器与 Core 的请求跟系统代理
 
-Status: ready-for-agent
+Status: needs-dogfood
 日期：2026-11-19
 背景：[PRD](../PRD.md)「问题」第 1 类与「已核实的事实」末条
 

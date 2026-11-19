@@ -1,6 +1,6 @@
 # 02 「更新加速地址」设置
 
-Status: ready-for-agent
+Status: needs-dogfood
 日期：2026-11-19
 背景：[PRD](../PRD.md) 裁决 2–5
 顺序：在票 [01](./01-system-proxy.md) 之后做，同一个 worktree、同一个分支，接着往同一篇 devlog 里写
