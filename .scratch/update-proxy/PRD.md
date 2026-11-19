@@ -54,7 +54,7 @@
 |---|---|
 | [01](./issues/01-system-proxy.md) | 更新器与 Core 的请求跟系统代理；测试模型对回环地址直连 |
 | [02](./issues/02-proxy-prefix-setting.md) | 「更新加速地址」设置：Core 拼地址与回退，通用页输入框，关于页错误块链接 |
-| [03](./issues/03-downgrade-through-the-prefix.md) | 加速地址能把旧版的真包当新版推过来：装之前核对包不比当前版本旧（JC 未裁） |
+| [03](./issues/03-downgrade-through-the-prefix.md) | 加速地址能把旧版的真包当新版推过来：装之前核对包不比当前版本旧（暂缓，2026-11-19 JC 裁决） |
 
 ## 状态（2026-11-19）
 
