@@ -1,14 +1,14 @@
 # 更新连得上：跟系统代理 + 加速地址
 
 日期：2026-11-19
-关联：GitHub issue #33；`.scratch/update-proxy/`（PRD 与两张票，发版后删）；`core/Cargo.toml`（reqwest 那一行的注释）；`core/src/managed_model_probe.rs`
+关联：GitHub issue #33；`.scratch/update-proxy/`（PRD 与两张票，发版后删）；`core/Cargo.toml`（reqwest 那一行的注释）；`core/src/managed_model_probe.rs`；`core/src/app_update.rs`（模块注释）；`gui/src/lib/update-proxy-prefix.ts`；[设置页设计](../design/overlays-and-settings.md)「应用行为」与 About「更新控件」
 
 ## 起因
 
 issue #33 请求给应用内更新加 GitHub 反代加速。应用内更新要连两个 GitHub 域名：更新清单在 `raw.githubusercontent.com`，安装包在 `github.com/.../releases/download/`。连不上 GitHub 的用户分两类，各缺一条路：
 
 1. **有代理，但更新器用不上。** 代理软件开「系统代理」模式时，浏览器能上 GitHub，Galley 的「检查更新」仍然连不上；只有 TUN 模式下更新器才通。票 01 修这一类。
-2. **没有代理。** 只能靠一个转发 GitHub 的地址。
+2. **没有代理。** 只能靠一个转发 GitHub 的地址。票 02 给这一类加「更新加速地址」设置。
 
 内置与外置运行时相同，引擎进程零变化；CLI 契约不动，没有新 IPC 命令，没有迁移。
 
@@ -53,3 +53,42 @@ cargo tree --manifest-path core/Cargo.toml -e features -i hyper-util --target al
 ### 没验证到的
 
 正式包上把系统代理指向一个不通的端口（如 `127.0.0.1:9`），「检查更新」应当报连接失败，证明更新器读到了系统代理；改回后恢复。macOS 与 Windows 各一次，随下一版草稿冒烟走。
+
+## 票 02：「更新加速地址」设置
+
+### 裁决（JC，2026-11-19）
+
+1. **两类都做**：票 01 让更新器跟系统代理，票 02 加「更新加速地址」。
+2. **用户自己填，不带预设，默认留空即关闭。** 没选：带一两个公共反代做预设。公共反代域名常换，预设会烂在已发出的版本里，也等于替第三方设施背书。
+3. **放「通用 → 应用行为」，在 `自动下载更新` 下面，存 pref。** 没选：放在「关于」页（关于页是版权页，不放输入框）。折中：「关于」页更新出错时，错误块在「手动下载」后面加一个「设置加速地址」链接，跳到通用页。
+4. **一个输入框，留空即关闭。** 没选：开关加输入框。填的是前缀，Galley 把它拼在原地址前面，清单与安装包两处都拼；只收 `https://`。
+5. **检查先走加速地址，失败再直连；下载只走加速地址**，失败就报错并写明地址。没选：下载失败也回退直连（连不上 GitHub 的用户要多等一轮超时才看到错误）。
+6. **自建镜像（第二个更新端点）不做。** 启动信号：有用户在系统代理确实生效、或填了加速地址之后，更新仍然失败。
+
+### 接口约定
+
+- pref 键 `update_proxy_prefix`，值是 JSON 字符串。缺失、空串、只有空白，都表示关闭（直连）。
+- 合法值：去掉首尾空白后能解析成 URL，scheme 是 `https`，有主机名；其余一律不合法。
+- 规范化：合法值去掉末尾所有 `/` 再补一个 `/`。
+- 拼接：`<规范化前缀><原地址全文>`，原地址不做任何转义。例：前缀 `https://example.com`，原地址 `https://github.com/o/r/releases/download/v1/a.exe`，结果 `https://example.com/https://github.com/o/r/releases/download/v1/a.exe`。
+- GUI 只把合法值或空串写进 pref；Core 读到不合法的值按关闭处理，不报错。校验两边各一份（`gui/src/lib/update-proxy-prefix.ts` 与 `core/src/app_update.rs` 的 `normalize_proxy_prefix`），单测用同一组用例。
+
+### 做了什么
+
+- **Core**（`app_update.rs`）：每次检查读一次 pref。开启时做两次检查：先用拼接后的清单地址，失败再用原地址；两次都失败，返回第一次的错误（`endpoint=` 是拼接后的地址）。没有把两个地址塞进同一个 `endpoints` 列表：插件遇到「返回 200 但不是 JSON」会直接报错、不试下一个。检查拿到的 `Update` 在返回前把公开字段 `download_url` 换成拼接后的地址，所以不管清单从哪条路拿到，下载都走加速地址；下载失败的错误多一个字段：`update_error: phase=download; url=<地址>; detail=…`。关闭时与改动前相同（检查超时除外，见下），单测 `error_strings_without_the_prefix_are_what_they_were` 锁住三种错误串的原样；回退规则在 `check_proxied_then_direct` 里，有单测。
+- **GUI**：pref 与校验纯函数；通用页一行（输入框沿用运行环境页 GA 路径框的样式，失焦或 Enter 提交，不合法时描述行换成琥珀字提示）；「关于」页错误块的第二个链接，只在三种网络类原因（更新通道暂时不可用、暂时无法连接更新通道、下载更新失败）时出现，`readableUpdateError` 的返回值与错误状态多一个 `suggestProxyPrefix`。TopBar 更新弹层从 2026-07-15 起不展示错误，本票不动。
+- 错误分类是对整串做子串匹配，开启时错误串里带着用户填的地址。补了单测：地址为 `https://example.com/` 的检查错误与下载错误，分类结果与不带地址时相同。
+
+### 对直连用户的一处行为变化
+
+检查现在有 20 秒超时（`UpdaterBuilder::timeout`），加速地址关闭时也一样。此前检查没有超时，网络挂住时「正在检查」会一直转；现在 20 秒后报错。加这个超时是因为加速地址挂住时，没有超时就永远等不到回退。超时只作用于检查：插件构造 `Update` 时把 `timeout` 置空（`tauri-plugin-updater` 2.10.1 `Updater::check`），下载仍然不限时。
+
+### 安全
+
+验签不变：安装包仍用编译进应用的 minisign 公钥验签（`Update::download` 里）。反代能看到用户的 IP 与正在检查的版本号，能不给更新（报错，或给一份旧清单），不能换包。
+
+### 已知缺口与没验证到的
+
+- 检查连不上时，插件的错误是 reqwest 的 `error sending request for url (…)`，现有分类不认它，落到「更新检查失败。」，不是三种网络类原因之一，所以「设置加速地址」链接不会出现。下载失败不受影响（下载阶段认不出的错误都归「下载更新失败」）。要不要把它归进网络类，未裁。
+- 真实走一遍「填了加速地址 → 检查 → 下载 → 验签」没法在合入前做：开发版不连更新通道，已发出的版本又没有这项设置，第一次真实验证要等带这项设置的版本升级到它的下一版。合入前的依据：拼接格式已用 issue 点名的两家公共反代实测（清单经反代取回与直连逐字节相同；Windows 安装包经其中一家整包下载，大小与 SHA-256 和直连一致）；拼接与回退逻辑有单测。
+- 通用页这一行的样子（输入框宽度、不合法时描述换色）与「关于」页错误块两个链接并排的样子，等 JC 真窗口看。
