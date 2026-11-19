@@ -39,7 +39,7 @@ pub async fn list_models(input: ManagedModelProbeInput) -> Result<ManagedModelLi
     }
     let secret = resolve_secret(&input).await?;
     let endpoint = models_endpoint(&input.api_base)?;
-    let client = probe_client()?;
+    let client = probe_client(&endpoint)?;
     // The same headers as "Test model" (the engine never lists models, so
     // there is nothing else to mirror). A list belongs to a provider, not
     // to a model: no `[1m]` beta.
@@ -118,7 +118,7 @@ async fn test_model(
     let secret = resolve_secret(&input).await?;
     let api = InferenceApi::of(&input);
     let endpoint = inference_endpoint(&input.api_base, api)?;
-    let client = probe_client()?;
+    let client = probe_client(&endpoint)?;
     let (status, body) = match api {
         InferenceApi::Messages => {
             let claude_code = ClaudeCodeIdentity::for_probe(&input)?;
@@ -175,13 +175,47 @@ async fn test_model(
     })
 }
 
-fn probe_client() -> Result<reqwest::Client> {
-    reqwest::Client::builder()
-        .timeout(Duration::from_secs(PROBE_TIMEOUT_SECS))
-        .build()
-        .map_err(|e| GalleyError::Internal {
-            message: format!("building HTTP client: {e}"),
-        })
+/// The client for one probe toward `endpoint`. A loopback endpoint (a model
+/// server on this machine) goes direct, never through a proxy. Core's
+/// reqwest reads the OS proxy settings (the `system-proxy` feature), but
+/// `hyper-util` has no loopback bypass there: on macOS it does not read the
+/// exception list, and on Windows `<local>` / `127.*` in `ProxyOverride` do
+/// not match. A remote proxy cannot reach the user's machine, so the probe
+/// would fail while the engine's Python `requests`, which honours the OS
+/// exceptions, connects direct.
+fn probe_client(endpoint: &str) -> Result<reqwest::Client> {
+    let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(PROBE_TIMEOUT_SECS));
+    if is_loopback_endpoint(endpoint) {
+        builder = builder.no_proxy();
+    }
+    builder.build().map_err(|e| GalleyError::Internal {
+        message: format!("building HTTP client: {e}"),
+    })
+}
+
+/// Whether `endpoint`'s host is a loopback address: `localhost` (any case,
+/// with or without a trailing dot), `127.0.0.0/8`, or `::1`. A host that
+/// only starts with `localhost` (`localhost.example.com`) is not, and
+/// neither is anything that does not parse as a URL.
+fn is_loopback_endpoint(endpoint: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(endpoint.trim()) else {
+        return false;
+    };
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    // An IPv6 host comes back in brackets (`[::1]`).
+    let host = host
+        .strip_prefix('[')
+        .and_then(|inner| inner.strip_suffix(']'))
+        .unwrap_or(host);
+    match host.parse::<std::net::IpAddr>() {
+        Ok(ip) => ip.is_loopback(),
+        Err(_) => host
+            .strip_suffix('.')
+            .unwrap_or(host)
+            .eq_ignore_ascii_case("localhost"),
+    }
 }
 
 /// Sends one "Test model" request: its status and body.
@@ -1314,6 +1348,32 @@ mod tests {
             for base in look_alikes {
                 assert!(!is_official_host(base, host), "{host}: {base}");
             }
+        }
+    }
+
+    #[test]
+    fn only_a_loopback_endpoint_bypasses_the_proxy() {
+        for endpoint in [
+            "http://localhost:11434/v1",
+            "http://LocalHost:11434/v1",
+            "http://localhost.:11434/v1",
+            "http://127.0.0.1:8000",
+            "http://127.8.9.1/",
+            "http://[::1]:1234/",
+            " http://localhost:11434/v1 ",
+        ] {
+            assert!(is_loopback_endpoint(endpoint), "{endpoint}");
+        }
+        for endpoint in [
+            "https://api.example.com/v1",
+            "http://localhost.example.com/",
+            "http://mylocalhost/",
+            "http://128.0.0.1/",
+            "http://[::2]/",
+            "localhost:11434/v1",
+            "",
+        ] {
+            assert!(!is_loopback_endpoint(endpoint), "{endpoint}");
         }
     }
 

@@ -32,6 +32,14 @@ issue #33 请求给应用内更新加 GitHub 反代加速。应用内更新要�
 
 `hyper-util` 0.1.20 读系统代理有两处缺口（`src/client/proxy/matcher.rs`）：macOS 只读 HTTP / HTTPS 代理的主机与端口，不读例外列表；Windows 读 `ProxyOverride`，但只是去掉 `*.`、把分号换成逗号当作 `NO_PROXY`，`<local>` 与 `127.*` 这类写法匹配不上。两边都没有回环地址的自动绕行。
 
+### 回环地址直连（JC 未裁，不要可撤）
+
+打开特性后，本地模型地址（如 `http://localhost:11434`）的「测试模型」与「读取模型列表」会被送进系统代理。远端代理到不了用户本机，测试会失败；引擎一侧的 `requests` 却按系统例外列表直连，两边结果不一致。
+
+补法：`probe_client` 改为带目标地址，主机是回环（`localhost`，大小写不敏感，带尾点也算；`127.0.0.0/8`；`::1`）时用 `.no_proxy()` 建客户端，其余不变。判断是纯函数 `is_loopback_endpoint`，单测覆盖 `localhost`、`127.*`、`[::1]` 与 `localhost.example.com` 这类形似的主机。只改「测试模型」这一处，对话图片与 ChatGPT 登录不绕行。
+
+这一条 JC 没有裁，单独一个提交，要撤就整条回退。
+
 ### 升级时重核
 
 更新器的系统代理是借共用的 `hyper-util` 拿到的，不是插件自己开的。升级 `tauri-plugin-updater` 或任一版 reqwest 之后（比如锁文件里出现两份 `hyper-util`），更新器可能悄悄失去它。重核命令（`core/Cargo.toml` 里 reqwest 那一行上方的注释也写着）：
