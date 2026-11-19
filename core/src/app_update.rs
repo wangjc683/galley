@@ -30,16 +30,54 @@
 //!
 //! Stopping children and installing only when the user asks for the
 //! restart keeps the 06-03 file-lock fix and removes both side effects.
+//!
+//! Update proxy prefix (2026-11-19, issue #33; devlog
+//! 2026-11-19-update-proxy): Settings → General may hold a prefix in pref
+//! `update_proxy_prefix` for users who cannot reach GitHub. When it is set,
+//! the manifest URL and the package URL both become
+//! `<prefix><original URL>`, and two rules apply:
+//!
+//! - **Checking falls back.** The proxied manifest URL is checked first;
+//!   if that fails, the original URL is checked once more, and if that
+//!   fails too the proxied attempt's error is returned. Two separate
+//!   checks, not one `endpoints` list: the plugin returns at once when an
+//!   endpoint answers 200 with a body that is not JSON, without trying the
+//!   next one.
+//! - **Downloading does not.** Whichever URL the manifest came from, the
+//!   package downloads through the prefix only; a failure is reported with
+//!   that URL (`url=` in the error), not retried directly, so a user who
+//!   cannot reach GitHub does not wait out a second timeout. The signature
+//!   check is unchanged: the prefix can withhold an update but cannot
+//!   swap the package.
+//!
+//! With no prefix, or one that is not a valid `https://` URL, nothing
+//! changes except that every check now times out after
+//! [`CHECK_TIMEOUT`] (the download keeps no timeout).
 
 use serde::Serialize;
+use std::future::Future;
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State, Url};
 use tauri_plugin_updater::{Update, UpdaterExt};
+
+use crate::api::GalleyApi;
+use crate::db::SqliteGalley;
 
 /// Broadcast event carrying updater download/install progress to the GUI.
 /// Same emit-and-forget pattern as `im_supervisor::EVENT_NAME`.
 const PROGRESS_EVENT: &str = "app-update-progress";
+
+/// Pref holding the update proxy prefix (Settings → General), a JSON
+/// string. Missing, empty, blank or invalid all mean off.
+const UPDATE_PROXY_PREFIX_PREF: &str = "update_proxy_prefix";
+
+/// Timeout of one update check. Without one, a proxied check that hangs
+/// would never reach the direct fallback. It covers only the check: the
+/// plugin builds the `Update` it returns with `timeout: None`
+/// (tauri-plugin-updater 2.10.1 `Updater::check`), so the download stays
+/// unbounded.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Error returned by `install_app_update` when nothing has been
 /// downloaded yet (or the parked package was dropped). Stable string:
@@ -189,7 +227,7 @@ pub async fn check_app_update<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<AppUpdateCheckResult, String> {
     let current_version = app_version(&app);
-    let Some(update) = check_available_update(&app).await? else {
+    let Some(AvailableUpdate { update, .. }) = check_available_update(&app).await? else {
         if updater_configured() {
             return Ok(AppUpdateCheckResult::UpToDate { current_version });
         }
@@ -212,13 +250,15 @@ pub async fn download_app_update<R: Runtime>(
     app: AppHandle<R>,
     prepared: State<'_, PreparedAppUpdate>,
 ) -> Result<AppUpdateVersions, String> {
-    let Some(update) = check_available_update(&app).await? else {
+    let Some(AvailableUpdate { update, proxied }) = check_available_update(&app).await? else {
         // The channel no longer offers an update (e.g. a pulled release):
         // a package parked earlier must not be installed anymore.
         prepared.0.clear();
         return Err("no_update_available".to_string());
     };
     let result = AppUpdateVersions::of(&update);
+    // Through the prefix, the error names the URL that failed.
+    let proxied_download_url = proxied.then(|| update.download_url.to_string());
 
     let mut downloaded: u64 = 0;
     let mut throttle = ProgressThrottle::new();
@@ -238,7 +278,7 @@ pub async fn download_app_update<R: Runtime>(
             || {},
         )
         .await
-        .map_err(|e| format_update_error_for_phase("download", e))?;
+        .map_err(|e| format_download_error(proxied_download_url.as_deref(), e))?;
 
     prepared.0.put(PreparedPackage { update, bytes });
     Ok(result)
@@ -288,17 +328,62 @@ async fn stop_galley_child_processes<R: Runtime>(app: &AppHandle<R>) {
     manager.shutdown_all(Duration::from_secs(5)).await;
 }
 
-async fn check_available_update<R: Runtime>(app: &AppHandle<R>) -> Result<Option<Update>, String> {
+/// An update the channel offers. `proxied`: the update proxy prefix is on,
+/// and `update.download_url` already goes through it.
+struct AvailableUpdate {
+    update: Update,
+    proxied: bool,
+}
+
+/// Checks the channel, through the update proxy prefix when one is set
+/// (see the module docs for the fallback rule).
+async fn check_available_update<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Option<AvailableUpdate>, String> {
     let Some((pubkey, endpoint_raw)) = updater_inputs() else {
         return Ok(None);
     };
 
+    let Some(prefix) = read_update_proxy_prefix(app).await else {
+        let update = check_endpoint(app, pubkey, endpoint_raw).await?;
+        return Ok(update.map(|update| AvailableUpdate {
+            update,
+            proxied: false,
+        }));
+    };
+
+    let proxied_endpoint = proxied_url(&prefix, endpoint_raw);
+    let update = check_proxied_then_direct(
+        proxied_endpoint.clone(),
+        endpoint_raw.to_string(),
+        |endpoint| async move { check_endpoint(app, pubkey, &endpoint).await },
+    )
+    .await?;
+    let Some(mut update) = update else {
+        return Ok(None);
+    };
+    update.download_url = proxied_url(&prefix, update.download_url.as_str())
+        .parse::<Url>()
+        .map_err(|e| format_update_error_with_endpoint("check", &proxied_endpoint, e))?;
+    Ok(Some(AvailableUpdate {
+        update,
+        proxied: true,
+    }))
+}
+
+/// One check against one manifest URL.
+async fn check_endpoint<R: Runtime>(
+    app: &AppHandle<R>,
+    pubkey: &str,
+    endpoint_raw: &str,
+) -> Result<Option<Update>, String> {
     let endpoint = endpoint_raw
         .parse()
         .map_err(|e| format_invalid_update_endpoint(endpoint_raw, e))?;
     let updater = app
         .updater_builder()
         .pubkey(pubkey)
+        .timeout(CHECK_TIMEOUT)
         .endpoints(vec![endpoint])
         .map_err(|e| format_update_error_with_endpoint("check", endpoint_raw, e))?
         .build()
@@ -308,6 +393,60 @@ async fn check_available_update<R: Runtime>(app: &AppHandle<R>) -> Result<Option
         .check()
         .await
         .map_err(|e| format_update_error_with_endpoint("check", endpoint_raw, e))
+}
+
+/// The check rule with the prefix on: `check(proxied)` first; on failure
+/// `check(direct)` once more; when both fail, the first error. A success
+/// either way (an update, or none) is the result.
+async fn check_proxied_then_direct<T, F, Fut>(
+    proxied: String,
+    direct: String,
+    mut check: F,
+) -> Result<T, String>
+where
+    F: FnMut(String) -> Fut,
+    Fut: Future<Output = Result<T, String>>,
+{
+    match check(proxied).await {
+        Ok(found) => Ok(found),
+        Err(proxied_error) => {
+            eprintln!(
+                "[app-update] check through the update proxy prefix failed, checking directly: {proxied_error}"
+            );
+            check(direct).await.map_err(|_| proxied_error)
+        }
+    }
+}
+
+/// The normalized prefix in pref `update_proxy_prefix`, or `None` (off)
+/// when it is missing, unreadable or invalid.
+async fn read_update_proxy_prefix<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+    let galley = app.try_state::<SqliteGalley>()?.inner().clone();
+    let value = galley
+        .get_pref_json(UPDATE_PROXY_PREFIX_PREF)
+        .await
+        .ok()
+        .flatten()?;
+    normalize_proxy_prefix(value.as_str()?)
+}
+
+/// `raw` (the pref as stored) as a usable prefix: trimmed, it must parse
+/// as a URL whose scheme is `https` and that has a host; then every
+/// trailing `/` goes and exactly one comes back. Anything else is `None`
+/// (off). The GUI applies the same rule before saving
+/// (`gui/src/lib/update-proxy-prefix.ts`).
+fn normalize_proxy_prefix(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let url = Url::parse(trimmed).ok()?;
+    if url.scheme() != "https" || url.host_str().is_none_or(str::is_empty) {
+        return None;
+    }
+    Some(format!("{}/", trimmed.trim_end_matches('/')))
+}
+
+/// `<prefix><original>`, the original URL in full and unescaped.
+fn proxied_url(prefix: &str, original: &str) -> String {
+    format!("{prefix}{original}")
 }
 
 fn updater_configured() -> bool {
@@ -330,6 +469,16 @@ fn app_version<R: Runtime>(app: &AppHandle<R>) -> String {
 
 fn format_update_error_for_phase(phase: &str, error: impl std::fmt::Display) -> String {
     format!("update_error: phase={phase}; detail={error}")
+}
+
+/// A failed download. Through the update proxy prefix (`prefixed_url`
+/// given) the error also names the URL: one extra `url=` field after
+/// `phase`. Without it the string is exactly what it always was.
+fn format_download_error(prefixed_url: Option<&str>, error: impl std::fmt::Display) -> String {
+    match prefixed_url {
+        Some(url) => format!("update_error: phase=download; url={url}; detail={error}"),
+        None => format_update_error_for_phase("download", error),
+    }
 }
 
 fn format_update_error_with_endpoint(
@@ -441,6 +590,148 @@ mod tests {
         assert_eq!(
             serde_json::to_value(versions).unwrap(),
             serde_json::json!({ "currentVersion": "0.5.6", "version": "0.5.7" })
+        );
+    }
+
+    #[test]
+    fn proxy_prefix_is_off_unless_an_https_url_with_a_host() {
+        for raw in [
+            "",
+            "   ",
+            "http://",
+            "http://example.com",
+            "http://example.com/",
+            "example.com",
+            "example.com/gh/",
+            "https://",
+            "ftp://example.com/",
+        ] {
+            assert_eq!(normalize_proxy_prefix(raw), None, "{raw:?}");
+        }
+    }
+
+    #[test]
+    fn proxy_prefix_ends_in_exactly_one_slash() {
+        for (raw, normalized) in [
+            ("https://example.com", "https://example.com/"),
+            ("https://example.com/", "https://example.com/"),
+            ("https://example.com///", "https://example.com/"),
+            ("  https://example.com  ", "https://example.com/"),
+            ("https://example.com/gh/", "https://example.com/gh/"),
+            ("https://example.com/gh", "https://example.com/gh/"),
+        ] {
+            assert_eq!(
+                normalize_proxy_prefix(raw).as_deref(),
+                Some(normalized),
+                "{raw:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn proxied_url_puts_the_original_after_the_prefix_unescaped() {
+        let prefix = normalize_proxy_prefix("https://example.com").unwrap();
+        assert_eq!(
+            proxied_url(&prefix, "https://github.com/o/r/releases/download/v1/a.exe"),
+            "https://example.com/https://github.com/o/r/releases/download/v1/a.exe"
+        );
+        let prefix = normalize_proxy_prefix("https://example.com/gh/").unwrap();
+        assert_eq!(
+            proxied_url(&prefix, "https://github.com/o/r/a b?x=1"),
+            "https://example.com/gh/https://github.com/o/r/a b?x=1"
+        );
+        // The updater gets it as a `Url`: the original survives intact in
+        // the path.
+        let url: Url = proxied_url(
+            "https://example.com/",
+            "https://github.com/o/r/releases/download/v1/a.exe",
+        )
+        .parse()
+        .unwrap();
+        assert_eq!(url.host_str(), Some("example.com"));
+        assert_eq!(
+            url.path(),
+            "/https://github.com/o/r/releases/download/v1/a.exe"
+        );
+    }
+
+    /// Runs `check_proxied_then_direct` against canned answers, returning
+    /// its result and the URLs it checked, in order.
+    async fn fallback_with(
+        proxied: Result<&'static str, &'static str>,
+        direct: Result<&'static str, &'static str>,
+    ) -> (Result<&'static str, String>, Vec<String>) {
+        let calls = std::cell::RefCell::new(Vec::new());
+        let result = check_proxied_then_direct(
+            "https://example.com/https://u/latest.json".to_string(),
+            "https://u/latest.json".to_string(),
+            |endpoint: String| {
+                calls.borrow_mut().push(endpoint.clone());
+                let answer = if endpoint.starts_with("https://example.com/") {
+                    proxied
+                } else {
+                    direct
+                };
+                async move { answer.map_err(str::to_string) }
+            },
+        )
+        .await;
+        (result, calls.into_inner())
+    }
+
+    #[tokio::test]
+    async fn a_proxied_check_that_succeeds_is_the_result() {
+        let (result, calls) = fallback_with(Ok("proxied"), Ok("direct")).await;
+        assert_eq!(result, Ok("proxied"));
+        assert_eq!(calls, ["https://example.com/https://u/latest.json"]);
+    }
+
+    #[tokio::test]
+    async fn a_failed_proxied_check_falls_back_to_the_original_url_once() {
+        let (result, calls) = fallback_with(Err("proxied failed"), Ok("direct")).await;
+        assert_eq!(result, Ok("direct"));
+        assert_eq!(
+            calls,
+            [
+                "https://example.com/https://u/latest.json",
+                "https://u/latest.json"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn when_both_checks_fail_the_proxied_error_is_returned() {
+        let (result, calls) = fallback_with(Err("proxied failed"), Err("direct failed")).await;
+        assert_eq!(result, Err("proxied failed".to_string()));
+        assert_eq!(calls.len(), 2);
+    }
+
+    #[test]
+    fn error_strings_without_the_prefix_are_what_they_were() {
+        // The exact strings shipped before the update proxy prefix; the
+        // GUI classifies them by substring.
+        assert_eq!(
+            format_download_error(None, "connection reset"),
+            "update_error: phase=download; detail=connection reset"
+        );
+        assert_eq!(
+            format_update_error_with_endpoint("check", "https://u/latest.json", "timed out"),
+            "update_error: phase=check; endpoint=https://u/latest.json; detail=timed out"
+        );
+        assert_eq!(
+            format_invalid_update_endpoint("nope", "relative URL without a base"),
+            "invalid_updater_endpoint: phase=check; endpoint=nope; detail=relative URL without a base"
+        );
+    }
+
+    #[test]
+    fn a_download_through_the_prefix_names_its_url() {
+        assert_eq!(
+            format_download_error(
+                Some("https://example.com/https://github.com/o/r/a.exe"),
+                "connection reset"
+            ),
+            "update_error: phase=download; url=https://example.com/https://github.com/o/r/a.exe; detail=connection reset"
         );
     }
 
