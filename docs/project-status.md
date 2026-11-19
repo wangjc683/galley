@@ -328,9 +328,12 @@ Tracker: `.scratch/win-composer-focus/`; chronicle: devlog
 
 Post-release follow-up:
 
-1. App-update dogfood (SOP step 10): `v0.7.9` → `v0.7.10` has not been
-   observed on any machine yet (2026-11-19), and neither has `v0.7.8` →
-   `v0.7.9`. The first update that can go through the update proxy prefix
+1. App-update dogfood (SOP step 10): JC reported an upgrade to `v0.7.10`
+   succeeding on another Mac of his the day of the release (2026-11-19:
+   「我在另一台 Mac 上，升级 Galley 成功」). Which version that Mac was on
+   and whether it went through the in-app updater was not said, so this is
+   a report passed on, not a walk of step 10; `v0.7.8` → `v0.7.9` was never
+   observed. The first update that can go through the update proxy prefix
    is `v0.7.10` → its successor. `v0.7.7` → `v0.7.8` passed on a
    user's Windows machine the day of the release (JC, 2026-11-11, relaying
    the user: 「windows 用户更新到 0.7.8，更新和使用暂时看一切正常」; the
@@ -339,8 +342,9 @@ Post-release follow-up:
    Windows hops passed too and migrations 053–057 each ran on a real older
    database there, 057 in this update. It is the first update through the
    new NSIS pre-install hook, and it did not break the restart. This is a
-   user's report passed on, not a walk of the Windows checklist. The macOS hops `v0.7.0` → … → `v0.7.10` stay unobserved: JC's Mac
-   was installed straight from the draft all ten times; the CDN served
+   user's report passed on, not a walk of the Windows checklist. The macOS hops `v0.7.0` → … → `v0.7.9` stay unobserved, and so does every
+   hop on JC's main Mac: it was installed straight from the draft all ten
+   times; the CDN served
    0.7.10 without cache-bust at 09:16 UTC on 2026-11-19, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
