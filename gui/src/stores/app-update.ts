@@ -446,6 +446,9 @@ function readableUpdateError(
   }
   if (
     normalized.includes("download request failed") ||
+    // reqwest's own words for a request that never got an answer
+    // (refused, reset, timed out): the plugin passes them through.
+    normalized.includes("error sending request") ||
     normalized.includes("network") ||
     normalized.includes("reqwest") ||
     normalized.includes("request failed") ||

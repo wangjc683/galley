@@ -305,6 +305,20 @@ describe("app-update store errors and the update proxy prefix link", () => {
     });
   });
 
+  it("words a check that never got an answer as the network, prefixed or not", async () => {
+    const detail = "error sending request for url (https://u/latest.json)";
+    for (const endpoint of [
+      "https://u/latest.json",
+      "https://example.com/https://u/latest.json",
+    ]) {
+      expect(await checkFailsWith(checkError(endpoint, detail))).toMatchObject({
+        kind: "error",
+        message: enCopy.updates.networkUnavailable,
+        suggestProxyPrefix: true,
+      });
+    }
+  });
+
   it("does not offer it for other causes", async () => {
     expect(
       await downloadFailsWith(
