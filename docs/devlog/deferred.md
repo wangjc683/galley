@@ -1561,3 +1561,20 @@
 - **实施要点**：只动内置内核，外置 GA 零变化；第三方地址那一条要先定「怎么认出对面是 Claude」的确定规则（模型名、主机名、还是用户显式开关），不靠试错重发。
 - **待定**：质量要不要先做一次评测再决定；老账号可用显式开关强制这项校验，评测不必等新账号。
 - **关联**：`.scratch/opus-5-5-thinking-history-check/`、[v0.7.9 发版](./2026-11-17-v0.7.9-release.md)、`docs/managed-ga-runtime/model-configuration.md`「Official Anthropic API」。
+
+## 更新连不上：自建镜像与 PAC
+
+- **状态**：暂缓。自建镜像是 2026-11-19 的裁决 6（不做，等信号）；系统代理读取的缺口是同日票 01 验收时记下的，同样等信号。
+- **提出**：2026-11-19，issue #33。应用内更新要连 GitHub 的两个域名（清单在 `raw.githubusercontent.com`，安装包在 `github.com/.../releases/download/`）。票 01 让更新器跟系统代理，票 02 加了「更新加速地址」，之后还剩两件没做：
+  - **自建镜像**：给清单与安装包加一个自己的来源，作为第二个更新端点。
+  - **系统代理读取的缺口**：更新器读系统代理靠 `hyper-util` 0.1.20（`src/client/proxy/matcher.rs`）。macOS 只读 HTTP / HTTPS 代理的主机与端口，不读 PAC（自动代理配置），也不读 SOCKS；Windows 只读 `ProxyEnable`、`ProxyServer`、`ProxyOverride`，不读 `AutoConfigURL`，`ProxyServer` 按协议分开的写法（`http=…;https=…`）能不能用没验证。代理软件只开 PAC、或只给 SOCKS 的用户，更新器仍然拿不到代理。
+- **启动信号**：
+  - 自建镜像：系统代理确实生效、或填了更新加速地址的用户，仍然更新不了。
+  - 系统代理缺口：只用 PAC 或只用 SOCKS 的用户报告更新仍然失败。
+- **方案**（都没核实到能直接动手）：
+  - 自建镜像：清单与安装包同步到一个自己的地址，作为它们的第二个来源；和 GitHub、加速地址怎么排先后，到时再定。
+  - 系统代理缺口：更新器的 `UpdaterBuilder::proxy` 能显式指定代理，Core 可以先向系统问出这个地址该走的代理再交给它；SOCKS 要另开 reqwest 的 `socks` 特性。两条都没试过。
+- **实施要点**：
+  - 自建镜像：推送更新通道的工作流（`.github/workflows/promote-update-channel.yml`）要把清单和安装包一起同步过去；安装包每个 37–70 MB；这是一项长期的运维成本。验签不变，镜像同样换不了包。
+  - 系统代理缺口：改动在 Core 与更新器之间，引擎进程零变化；Core 自己的请求（测试模型、对话图片、ChatGPT 登录）要不要一起跟，到时再定。
+- **关联**：[更新连得上：跟系统代理 + 加速地址](./2026-11-19-update-proxy.md)；`.scratch/update-proxy/PRD.md`。
