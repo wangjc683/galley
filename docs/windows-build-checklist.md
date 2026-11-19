@@ -171,6 +171,8 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] Clicking 重启并更新 stops Galley's child processes, the installer takes over, and Galley relaunches on the new version — no `_bz2.pyd` file-lock dialog
 - [ ] Manual upgrade: with an older build installed and running (and a `galley` CLI command running from the install dir, e.g. `galley session wait`), run the new `*-setup.exe`. The installer's pre-install hook closes both the app (`galley-core.exe`) and the CLI (`galley.exe`) under the install dir, with no file-lock dialog; afterwards `where.exe galley` points at the install dir and `galley version` reports the same version as Settings → About (before 2026-11-10 the hook matched only `galley.exe`, so the app kept running)
 - [ ] Tray 「Report an Issue…」opens Settings → 报告问题 (not the GitHub chooser)
+- [ ] OS proxy (v0.7.10, 2026-11-19; not yet seen on any Windows machine): with the Windows proxy (Settings → Network & Internet → Proxy → manual setup) pointing at a dead port such as `127.0.0.1:9`, Settings → About → 检查更新 fails with a connection error, which shows the updater reads the registry's proxy; with the proxy switched back, the check works again
+- [ ] Settings → General → 更新加速地址 (v0.7.10): empty by default; a prefix without `https://` shows 「地址要以 https:// 开头，且不带 ? 或 #。」 and is not saved; with a working prefix saved, 检查更新 still answers
 
 ### Settings -> Models
 
