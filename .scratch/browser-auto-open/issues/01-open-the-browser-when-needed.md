@@ -1,6 +1,6 @@
 # 01 浏览器没连上时，Galley 打开扩展所在的浏览器
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-20 合入 main，0565566f / 414b7bcf / 6a7d819a）
 日期：2026-11-20
 背景：[PRD](../PRD.md)（问题、两项探针的结果、边界）。JC 裁决：开票；默认开、不加开关。
 
