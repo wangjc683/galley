@@ -192,9 +192,12 @@ connection: it re-arms only after the bridge stops seeing the extension.
 ### Opening The Browser When A Tool Needs It
 
 Decision 2026-11-20 (`.scratch/browser-auto-open/PRD.md`, JC: default on, no
-switch): in managed mode, when `web_scan` / `web_execute_js` find no tab and the
-extension is not connected, Galley opens the browser the extension lives in,
-waits for it, and the call carries on; the model never sees the step.
+switch): in managed mode, when `web_scan` / `web_execute_js` find no tab,
+Galley opens its test page in the browser the extension lives in, waits for
+it, and the call carries on; the model never sees the step. Both cases count:
+the extension is not connected (the browser is closed, or its extension worker
+asleep), or it is connected but lists no http(s) tab (for example a browser
+just opened on its New Tab page; ticket 02, JC 2026-11-20: 「这个也做，解决掉」).
 
 - **Recognising the browser.** On every new extension connection to the
   bridge's own master, the bridge takes the connection's peer port
@@ -215,34 +218,40 @@ waits for it, and the call carries on; the model never sees the step.
   only the Chrome / Edge that the setup page opens. With two browsers carrying
   the extension, only one can hold the connection: the last one to connect
   wins.
-- **Asking.** A web tool that finds no tab first checks the extension: still
-  connected, it answers 「浏览器插件已连接，但没有可用网页……」 at once and opens
-  nothing. Otherwise it sends `{"cmd": "galley_browser_wanted"}` to the master
-  over GA's existing `127.0.0.1:18766/link` (managed patch `0035`). The
-  bridge's hook answers `{"r": {"opening": true}}` only while it is the master,
-  the extension is not connected, and it knows the browser; then it moves
-  `browserWantedAt` and writes a status line at once (with
-  `extensionConnected: false`). Requests within 30 s of that still answer
-  `true` without moving it, so the browser is opened once; a new extension
-  connection ends the window. Past the window with no connection since, the
-  hook answers `false`: Galley opens the browser at most once per
-  disconnection, re-armed by the extension connecting again or by Galley
-  restarting (a new bridge process), so a disabled extension or a stored
-  path that no longer opens does not add a tab and a 20 s wait to every web
-  call. Kept by JC on 2026-11-20 (the main session's amendment at
-  acceptance). Every other master answers `false` (a GA
-  session's own master, which has no hook) or `ok`, which is not JSON (an
-  upstream or external master): the tool returns 「浏览器当前没有连接……」 at
-  once. So does a bridge in the `remote` role, and a bridge that never saw the
-  extension: no guessing, no waiting.
+- **Asking.** A web tool that finds no tab sends
+  `{"cmd": "galley_browser_wanted"}` to the master over GA's existing
+  `127.0.0.1:18766/link` (managed patch `0035`). The bridge's hook answers
+  `{"r": {"opening": true}}` only while it is the master, the extension is not
+  connected or the master lists no tab (`get_all_sessions()` empty; a count
+  that cannot be read counts as a tab), and it knows the browser; then it
+  moves `browserWantedAt` and writes a status line at once with what the
+  master holds right then, before the status loop polls: no extension,
+  `extensionConnected: false`; an extension without a tab,
+  `extensionConnected: true, tabCount: 0`. Requests within 30 s of that still
+  answer `true` without moving it, so the page is opened once; a new
+  extension connection, or a status poll that lists a tab, ends the window.
+  Past the window with neither since, the hook answers `false`: Galley opens
+  the page at most once per stretch without a tab, re-armed by the extension
+  connecting again, by a tab being listed (so closing the test page later and
+  asking again opens it again), or by Galley restarting (a new bridge
+  process), so a disabled extension or a stored path that no longer opens
+  does not add a tab and a 20 s wait to every web call. Kept by JC on
+  2026-11-20 (the main session's amendment at acceptance). Every other master
+  answers `false` (a GA session's own master, which has no hook) or `ok`,
+  which is not JSON (an upstream or external master). So does a bridge in the
+  `remote` role, and a bridge that never saw the extension: no guessing, no
+  waiting. On a no the tool returns, at once, the message for the state:
+  「浏览器插件已连接，但没有可用网页……」 while the extension is connected,
+  「浏览器当前没有连接……」 otherwise.
 - **Waiting.** With `opening: true` the tool checks the tab list every 0.5 s for
   up to 20 s, then runs the call as usual, or, with still no tab, returns the
-  same message as before (「浏览器插件已连接……」 if the extension came back
-  without an operable tab). On macOS the extension reconnected 1.86 s after
+  same message as before, chosen by the state then (「浏览器插件已连接……」
+  while the extension is connected without an operable tab). On macOS the extension reconnected 1.86 s after
   `open -a` (no address) in the 2026-11-20 probe; Windows has not been
   measured.
 - **Opening (Core).** When `browserWantedAt` moves on a running line that says
-  `extensionConnected: false`, Core opens that browser at the setup test page
+  `extensionConnected: false` or `tabCount: 0`, Core opens that browser at the
+  setup test page
   (`BROWSER_CONTROL_TEST_PAGE_URL`, `https://example.com`): macOS
   `open -a <app> https://example.com`, Windows `<exe> https://example.com`.
   It does so whether or not the browser is already running; there is no

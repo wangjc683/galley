@@ -24,8 +24,9 @@
 //! Browser auto-open (ticket browser-auto-open 01): the bridge reports the
 //! browser program the extension last connected from (`browserApp`), which
 //! Core keeps in a pref and hands back as `--known-browser-app`. When a GA
-//! session's web tool finds no tab and no extension, the bridge moves
-//! `browserWantedAt`; Core then opens that browser at the setup test page
+//! session's web tool finds no tab (the extension gone, or connected with no
+//! web page: ticket 02), the bridge moves `browserWantedAt`; Core then opens
+//! that browser at the setup test page
 //! (`browser_control::open_browser_app`), whether or not it is already
 //! running: the page gives the extension an http(s) tab to drive and wakes
 //! an extension worker that is asleep. Opening at an address and dropping
@@ -142,7 +143,7 @@ struct BridgeLine {
     /// The program the extension connected from in this bridge run.
     #[serde(default)]
     browser_app: Option<String>,
-    /// Moves when a GA web tool asked for the browser (at most every 30 s).
+    /// Moves when a GA web tool asked for a page (at most every 30 s).
     #[serde(default)]
     browser_wanted_at: Option<String>,
 }
@@ -177,7 +178,10 @@ fn browser_line_effects(memory: &mut BrowserMemory, line: &BridgeLine) -> Browse
     if let Some(wanted_at) = line.browser_wanted_at.as_deref() {
         if memory.wanted_at.as_deref() != Some(wanted_at) {
             memory.wanted_at = Some(wanted_at.to_owned());
-            if line.state == BrowserBridgeState::Running && !line.extension_connected {
+            // No extension, or an extension with no web page to drive.
+            if line.state == BrowserBridgeState::Running
+                && (!line.extension_connected || line.tab_count == 0)
+            {
                 effects.open_app = memory.app.clone();
             }
         }
@@ -779,13 +783,23 @@ mod tests {
 
     const VIVALDI: &str = "/Applications/Vivaldi.app";
 
+    /// A running line; a connected extension lists one tab.
     fn running(connected: bool, app: Option<&str>, wanted_at: Option<&str>) -> BridgeLine {
+        running_tabs(connected, u32::from(connected), app, wanted_at)
+    }
+
+    fn running_tabs(
+        connected: bool,
+        tabs: u32,
+        app: Option<&str>,
+        wanted_at: Option<&str>,
+    ) -> BridgeLine {
         line(
             &serde_json::json!({
                 "state": "running",
                 "role": "master",
                 "extensionConnected": connected,
-                "tabCount": 0,
+                "tabCount": tabs,
                 "browserApp": app,
                 "browserWantedAt": wanted_at,
             })
@@ -868,6 +882,23 @@ mod tests {
         let third = "2026-11-20T08:01:20.000Z";
         let effects = browser_line_effects(&mut memory, &running(false, None, Some(third)));
         assert_eq!(effects.open_app.as_deref(), Some(VIVALDI));
+    }
+
+    #[test]
+    fn a_moved_browser_wanted_at_opens_when_connected_without_a_tab() {
+        let mut memory = BrowserMemory {
+            app: Some(VIVALDI.into()),
+            wanted_at: None,
+        };
+        let first = "2026-11-20T09:00:00.000Z";
+        let effects = browser_line_effects(&mut memory, &running_tabs(true, 0, None, Some(first)));
+        assert_eq!(effects.open_app.as_deref(), Some(VIVALDI));
+
+        // Connected with a tab: noted, not opened.
+        let second = "2026-11-20T09:00:40.000Z";
+        let effects = browser_line_effects(&mut memory, &running_tabs(true, 2, None, Some(second)));
+        assert_eq!(effects.open_app, None);
+        assert_eq!(memory.wanted_at.as_deref(), Some(second));
     }
 
     #[test]

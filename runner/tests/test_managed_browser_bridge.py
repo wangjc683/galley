@@ -50,6 +50,10 @@ class FakeDriver:
             raise self.error
         return dict(self.status)
 
+    def get_all_sessions(self) -> list[dict[str, Any]]:
+        # The master's live tabs, as many as the status lists.
+        return [{"id": str(n)} for n in range(int(self.status.get("tab_count") or 0))]
+
 
 class Harness:
     def __init__(
@@ -407,13 +411,78 @@ def test_remote_role_does_not_look_up_or_answer() -> None:
     assert h.lines == [_running("remote", False, 0)]
 
 
-def test_hook_says_no_while_the_extension_is_connected() -> None:
+def test_hook_says_no_while_the_extension_lists_a_tab() -> None:
     master = FakeDriver(is_remote=False)
     h = Harness(master, known_browser_app=VIVALDI)
-    master.connect_extension(52427)
+    master.connect_extension(52427, tabs=1)
     h.loop.step()
     assert master.ask_browser_wanted() is False
     assert h.loop.browser_wanted_at is None
+
+
+def test_hook_opens_a_page_when_connected_without_tabs() -> None:
+    master = FakeDriver(is_remote=False)
+    h = Harness(master, known_browser_app=VIVALDI, browsers={52427: VIVALDI})
+    master.connect_extension(52427, tabs=0)
+    h.loop.step()
+    assert h.lines[-1] == _running("master", True, 0, app=VIVALDI)
+
+    assert master.ask_browser_wanted() is True
+    stamp = h.loop.browser_wanted_at
+    assert stamp is not None
+    # Written as it is: connected, no tab (not forced to "disconnected").
+    assert h.lines[-1] == _running("master", True, 0, app=VIVALDI, wanted_at=stamp)
+
+
+def test_hook_line_reads_the_tab_count_before_the_loop_polls() -> None:
+    master = FakeDriver(is_remote=False)
+    h = Harness(master, known_browser_app=VIVALDI, browsers={52427: VIVALDI})
+    master.connect_extension(52427, tabs=2)
+    h.loop.step()
+    # The user closes the last web page; a session asks before the next poll.
+    master.status = {"extension_connected": True, "tab_count": 0}
+    assert master.ask_browser_wanted() is True
+    assert h.lines[-1]["extensionConnected"] is True
+    assert h.lines[-1]["tabCount"] == 0
+
+
+def test_hook_says_no_when_the_tab_count_cannot_be_read() -> None:
+    master = FakeDriver(is_remote=False)
+    h = Harness(master, known_browser_app=VIVALDI)
+    master.connect_extension(52427, tabs=0)
+    h.loop.step()
+
+    def racing() -> list[dict[str, Any]]:
+        raise RuntimeError("dictionary changed size during iteration")
+
+    master.get_all_sessions = racing  # type: ignore[method-assign]
+    assert master.ask_browser_wanted() is False
+    assert h.loop.browser_wanted_at is None
+
+
+def test_a_listed_tab_re_arms_after_giving_up() -> None:
+    master = FakeDriver(is_remote=False)
+    h = Harness(master, known_browser_app=VIVALDI, browsers={52427: VIVALDI})
+    master.connect_extension(52427, tabs=0)
+    h.loop.step()
+    assert master.ask_browser_wanted() is True
+    first = h.loop.browser_wanted_at
+
+    # No page showed up within the window: give up, same connection.
+    h.now += bridge.BROWSER_WANTED_REPEAT_SEC
+    h.loop.step()
+    assert master.ask_browser_wanted() is False
+    assert h.loop.browser_wanted_at == first
+
+    # A tab is listed (the user opened a page), then closed again: the next
+    # request in the same connection opens the test page once more.
+    master.status = {"extension_connected": True, "tab_count": 1}
+    h.loop.step()
+    master.status = {"extension_connected": True, "tab_count": 0}
+    h.loop.step()
+    assert h.lookups == [52427]
+    assert master.ask_browser_wanted() is True
+    assert h.loop.browser_wanted_at != first
 
 
 def test_hook_says_no_when_the_browser_is_unknown() -> None:

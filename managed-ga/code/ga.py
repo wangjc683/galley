@@ -134,13 +134,9 @@ def galley_browser_wanted():
 
 def galley_wait_for_browser():
     # Galley: no tab is listed. None once one is (the call goes on as usual),
-    # else the message for the model. Galley opens the browser only while the
-    # extension is not connected and it knows which browser that is.
-    try:
-        if driver.get_status().get('extension_connected'): return NO_BROWSER_TABS_MSG
-    except Exception:
-        pass
-    if not galley_browser_wanted(): return NO_BROWSER_CONNECTION_MSG
+    # else the message for the model. Galley opens its test page in the browser
+    # the extension lives in, whether the extension is gone or has no web page.
+    if not galley_browser_wanted(): return browser_control_empty_msg()
     deadline = time.time() + 20
     while time.time() < deadline:
         time.sleep(0.5)

@@ -1,12 +1,13 @@
 """Managed-GA patch 0035: a web tool asks Galley to open the browser.
 
-When ``web_scan`` / ``web_execute_js`` find no tab and the extension is not
-connected, they send ``galley_browser_wanted`` to the TMWebDriver master.
-Galley's resident browser bridge answers ``opening: true`` while it knows
-which browser the extension lives in (Core then opens it); the tool waits up
-to 20 s for a tab and carries on. Any other answer returns the old message
-at once. A remote client no longer waits 12 s in ``first_init_driver``; a
-master this process just started still does.
+When ``web_scan`` / ``web_execute_js`` find no tab (the extension gone, or
+connected with no web page; ticket 02), they send ``galley_browser_wanted``
+to the TMWebDriver master. Galley's resident browser bridge answers
+``opening: true`` while it knows which browser the extension lives in (Core
+then opens its test page there); the tool waits up to 20 s for a tab and
+carries on. Any other answer returns the old message for the state at once.
+A remote client no longer waits 12 s in ``first_init_driver``; a master this
+process just started still does.
 
 ga.py is loaded from the shipped payload with fakes for the driver and the
 clock; TMWebDriver's method is loaded from source without importing it (it
@@ -163,15 +164,43 @@ def test_anything_but_opening_true_is_no(
     assert clock.sleeps == []
 
 
-def test_connected_without_tabs_answers_at_once_and_asks_nothing(
+def test_connected_without_tabs_and_no_opening_answers_the_tabs_message(
+    monkeypatch: pytest.MonkeyPatch, clock: FakeTime
+) -> None:
+    driver = FakeDriver(reply={"r": {"opening": False}}, connected=True)
+    _use(monkeypatch, driver)
+    result = ga.web_scan(tabs_only=True)
+    assert result == {"status": "error", "msg": ga.NO_BROWSER_TABS_MSG}
+    assert driver.commands == [{"cmd": "galley_browser_wanted"}]
+    assert clock.sleeps == []
+
+
+def test_connected_without_tabs_waits_for_the_opened_page(
+    monkeypatch: pytest.MonkeyPatch, clock: FakeTime
+) -> None:
+    driver = FakeDriver(reply=OPENING, connected=True, tabs_after=3)
+    _use(monkeypatch, driver)
+    ran: list[Any] = []
+
+    def execute_js_rich(script: str, drv: Any, no_monitor: bool = False) -> dict[str, Any]:
+        ran.append((script, drv.default_session_id))
+        return {"status": "success", "js_return": 1}
+
+    monkeypatch.setattr(ga.simphtml, "execute_js_rich", execute_js_rich)
+    assert ga.web_execute_js("return 1") == {"status": "success", "js_return": 1}
+    assert driver.commands == [{"cmd": "galley_browser_wanted"}]
+    assert ran == [("return 1", "7")]
+    assert clock.sleeps == [0.5, 0.5, 0.5]
+
+
+def test_connected_without_tabs_times_out_with_the_tabs_message(
     monkeypatch: pytest.MonkeyPatch, clock: FakeTime
 ) -> None:
     driver = FakeDriver(reply=OPENING, connected=True)
     _use(monkeypatch, driver)
     result = ga.web_scan(tabs_only=True)
     assert result == {"status": "error", "msg": ga.NO_BROWSER_TABS_MSG}
-    assert driver.commands == []
-    assert clock.sleeps == []
+    assert sum(clock.sleeps) == pytest.approx(20.0)
 
 
 def test_waits_for_the_tab_then_runs_the_call(

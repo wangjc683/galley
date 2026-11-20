@@ -16,9 +16,10 @@ Ground rules (docs/managed-ga-runtime/browser-control.md):
   GA sessions' own calls. Never write GA files or state.
 - Browser auto-open: when the extension connects to our master, look up
   the program on the other end of that connection (``browserApp``). When a
-  GA session's web tool finds no tab and no extension, it asks the master
-  (``galley_browser_wanted``); the hook answers yes while we know the
-  browser and moves ``browserWantedAt``, and Core opens that browser.
+  GA session's web tool finds no tab (the extension gone, or connected with
+  no web page), it asks the master (``galley_browser_wanted``); the hook
+  answers yes while we know the browser and moves ``browserWantedAt``, and
+  Core opens the test page in that browser.
 - Do not fight over the ports. If another process already serves 18766
   (a GA session that started a master first, a second Galley, an external
   upstream GA), report role ``remote``, read the status through it, and try
@@ -66,13 +67,13 @@ RETRY_MAX_SEC = 30.0
 # the old process a moment to release the ports, without the full backoff.
 MASTER_GONE_RETRY_SEC = 0.3
 HTTP_READY_TIMEOUT_SEC = 3.0
-# A web tool asks again on every call while the browser is still coming up:
+# A web tool asks again on every call while the page is still coming up:
 # inside this window the hook keeps answering yes without moving
-# browserWantedAt, so Core opens the browser once. Past it, with no extension
-# connection noticed since, the hook answers no: one open per disconnection
-# (a disabled extension or a path that no longer opens must not add a tab and
-# a 20 s wait to every web call). A new connection, or a new bridge process,
-# re-arms it.
+# browserWantedAt, so Core opens the page once. Past it, with neither a new
+# extension connection nor a listed tab since, the hook answers no: one open
+# per stretch without a tab (a disabled extension or a path that no longer
+# opens must not add a tab and a 20 s wait to every web call). A new
+# connection, a listed tab, or a new bridge process re-arms it.
 BROWSER_WANTED_REPEAT_SEC = 30.0
 BROWSER_LOOKUP_TIMEOUT_SEC = 5.0
 
@@ -394,7 +395,7 @@ class BridgeLoop:
             return
         self._seen_extension = key
         with self._lock:
-            # The browser came back: a later request may open it again.
+            # The browser came back: a later request may open a page again.
             self._wanted_clock = None
         if not isinstance(address, tuple) or len(address) < 2:
             return
@@ -410,16 +411,41 @@ class BridgeLoop:
             with self._lock:
                 self.browser_app = app
 
+    def _notice_tabs(self, status: Mapping[str, Any]) -> None:
+        """A listed tab re-arms the hook: after the user closes the test
+        page, a later request in the same connection may open it again."""
+        try:
+            tabs = int(status.get("tab_count") or 0)
+        except (TypeError, ValueError):
+            return
+        if tabs > 0:
+            with self._lock:
+                self._wanted_clock = None
+
+    @staticmethod
+    def _master_tab_count(driver: Any) -> int | None:
+        # Read on the HTTP thread while the WebSocket thread may register a
+        # tab; one retry covers a "dict changed size" race.
+        for _ in range(2):
+            try:
+                return len(driver.get_all_sessions())
+            except Exception:
+                continue
+        return None
+
     def on_browser_wanted(self) -> bool:
         """TMWebDriver's ``galley_browser_wanted`` hook, on the master's
-        HTTP thread: a GA web tool found no tab and no extension. Yes while
-        we are the master, the extension is gone and we know the browser,
-        at most once per disconnection (see ``BROWSER_WANTED_REPEAT_SEC``)."""
+        HTTP thread: a GA web tool found no tab. Yes while we are the master,
+        the extension is gone or lists no tab, and we know the browser; at
+        most once per stretch without a tab (see ``BROWSER_WANTED_REPEAT_SEC``)."""
         with self._lock:
             driver = self.driver
             if self.role != ROLE_MASTER or driver is None:
                 return False
-            if getattr(driver, "extension_client", None) is not None:
+            connected = getattr(driver, "extension_client", None) is not None
+            tab_count = self._master_tab_count(driver)
+            if connected and tab_count != 0:
+                # A tab is there (or the count is unknown): nothing to open.
                 return False
             if not (self.browser_app or self._known_browser_app):
                 return False
@@ -432,11 +458,12 @@ class BridgeLoop:
             self.browser_wanted_at = self._now_iso()
             self._log("browser wanted")
             if self._running is not None:
-                # The extension is gone even if the loop has not polled yet:
-                # Core opens only on a line that says so.
-                self._report(
-                    {**self._running, "extensionConnected": False, **self._browser_fields()}
-                )
+                # What the master holds now, even if the loop has not polled
+                # yet: Core opens only on a line with no extension or no tab.
+                line = {**self._running, "extensionConnected": connected}
+                if tab_count is not None:
+                    line["tabCount"] = tab_count
+                self._report({**line, **self._browser_fields()})
             return True
 
     def _backoff(self) -> float:
@@ -525,6 +552,7 @@ class BridgeLoop:
         self._quick_retry_used = False
         if self.role == ROLE_MASTER:
             self._notice_extension(self.driver)
+            self._notice_tabs(status)
         self._report_status(self.role or ROLE_MASTER, status)
         return POLL_INTERVAL_SEC
 

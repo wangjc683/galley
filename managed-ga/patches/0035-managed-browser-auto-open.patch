@@ -15,7 +15,7 @@ diff --git a/TMWebDriver.py b/TMWebDriver.py
 diff --git a/ga.py b/ga.py
 --- a/ga.py
 +++ b/ga.py
-@@ -124,0 +125,25 @@ def browser_control_empty_msg():
+@@ -124,0 +125,21 @@ def browser_control_empty_msg():
 +def galley_browser_wanted():
 +    # Galley: ask the master whether Galley is opening the browser the extension
 +    # lives in. A master that does not know the command (upstream, external)
@@ -28,29 +28,25 @@ diff --git a/ga.py b/ga.py
 +
 +def galley_wait_for_browser():
 +    # Galley: no tab is listed. None once one is (the call goes on as usual),
-+    # else the message for the model. Galley opens the browser only while the
-+    # extension is not connected and it knows which browser that is.
-+    try:
-+        if driver.get_status().get('extension_connected'): return NO_BROWSER_TABS_MSG
-+    except Exception:
-+        pass
-+    if not galley_browser_wanted(): return NO_BROWSER_CONNECTION_MSG
++    # else the message for the model. Galley opens its test page in the browser
++    # the extension lives in, whether the extension is gone or has no web page.
++    if not galley_browser_wanted(): return browser_control_empty_msg()
 +    deadline = time.time() + 20
 +    while time.time() < deadline:
 +        time.sleep(0.5)
 +        if len(driver.get_all_sessions()) > 0: return None
 +    return browser_control_empty_msg()
 +
-@@ -128,0 +154,4 @@ def first_init_driver():
+@@ -128,0 +150,4 @@ def first_init_driver():
 +    # Galley: only a master this process just started waits here, for the
 +    # extension to find it. A remote client's master has been serving: the web
 +    # tools ask it to open the browser and wait (galley_wait_for_browser).
 +    if driver.is_remote: return
-@@ -148,2 +177,2 @@ def web_scan(tabs_only=False, switch_tab_id=None, text_only=False, maxlen=35000)
+@@ -148,2 +173,2 @@ def web_scan(tabs_only=False, switch_tab_id=None, text_only=False, maxlen=35000)
 -        if len(driver.get_all_sessions()) == 0:
 -            return {"status": "error", "msg": browser_control_empty_msg()}
 +        if len(driver.get_all_sessions()) == 0 and (msg := galley_wait_for_browser()):
 +            return {"status": "error", "msg": msg}
-@@ -195 +224 @@ def web_execute_js(script, switch_tab_id=None, no_monitor=False):
+@@ -195 +220 @@ def web_execute_js(script, switch_tab_id=None, no_monitor=False):
 -        if len(driver.get_all_sessions()) == 0: return {"status": "error", "msg": browser_control_empty_msg()}
 +        if len(driver.get_all_sessions()) == 0 and (msg := galley_wait_for_browser()): return {"status": "error", "msg": msg}
