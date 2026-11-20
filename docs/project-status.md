@@ -330,8 +330,11 @@ Post-release follow-up:
    「我在另一台 Mac 上，升级 Galley 成功」). Which version that Mac was on
    and whether it went through the in-app updater was not said, so this is
    a report passed on, not a walk of step 10; `v0.7.8` → `v0.7.9` was never
-   observed. The first update that can go through the update proxy prefix
-   is `v0.7.10` → `v0.7.11`, not yet reported. `v0.7.7` → `v0.7.8` passed on a
+   observed. `v0.7.10` → `v0.7.11` passed on JC's
+   Windows machine through the in-app updater (2026-11-20, JC: 「是通过应用内更新从
+   0.7.10 升上来的」, and browser auto-open worked on it); whether the update
+   went through the update proxy prefix was not said, so a download through
+   the prefix stays unobserved. `v0.7.7` → `v0.7.8` passed on a
    user's Windows machine the day of the release (JC, 2026-11-11, relaying
    the user: 「windows 用户更新到 0.7.8，更新和使用暂时看一切正常」; the
    user takes every version through the updater, was on 0.7.7 before, and
@@ -423,8 +426,9 @@ seen or not measured:
   loaded.
 - An IM channel's GA process triggering the open (it is a remote client of
   the same bridge; read from the code).
-- The update from `v0.7.10` through the in-app updater, which is also the
-  first download that can go through the update proxy prefix.
+- The update from `v0.7.10` through the in-app updater on macOS (Windows
+  passed, post-release follow-up 1), and a download through the update
+  proxy prefix on either system.
 
 **Owed from the `v0.7.10` smoke** (the list is in the release devlog). The
 main session walked the Mac smoke on the installed draft at JC's request.
