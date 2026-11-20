@@ -1,6 +1,6 @@
 # PRD：浏览器没连上时自动打开它
 
-Status: needs-triage（探针 1 已过，探针 2 未跑；跑完再定开不开票）
+Status: needs-triage（两项探针在 macOS 上都过，Windows 都没验；等 JC 定开不开票）
 Date: 2026-11-20
 来源：issue #33 回复（2026-11-20）：「浏览器插件……现在在 edge 浏览器上安装了插件，但是必须打开浏览器才能调用，但 edge 我不常用，
 对话时经常忘了开」。JC 同日裁：火狐不做（见 deferred「火狐浏览器扩展」），先做这一半的探针。
@@ -31,14 +31,16 @@ Date: 2026-11-20
 - 主进程手里有扩展的连接对象（补丁 `0006` 的 `_register_extension_client`），对端端口从这里拿。
 - **Windows 没验**：按端口反查进程要用 `GetExtendedTcpTable` 取所属进程号、再取程序路径（`msedge.exe`）。只是按接口推的。
 
-### 2. 从打开到连上要几秒 —— 未跑
+### 2. 从打开到连上要几秒 —— 过（macOS，一次）
 
 - 代码上是浏览器一启动就连：`chrome.runtime.onStartup` 里直接 `connectWS()`（`background.js:459`），不等 30 秒级的 alarm。
-- 没实测秒数。跑法：先退出装了扩展的浏览器，从 Core 打开它，记下打开时刻和常驻桥报 `extensionConnected: true` 的时刻；
-  macOS（Vivaldi）与 Windows（Edge）各一次，冷启动、热启动各一次。要退出 JC 正在用的浏览器，先问。
-- 现有的等待窗口：`first_init_driver` 等连接 12 秒（`managed-ga/code/ga.py:125–129`），文档记过 Windows 上扩展唤醒慢
-  （[浏览器控制](../../docs/managed-ga-runtime/browser-control.md)「probes must tolerate Chromium MV3 service-worker wake-up」）。
-  秒数决定这个窗口要不要放宽。
+- 2026-11-20 macOS 实测（JC 同意退出 Vivaldi 一分钟）：`osascript` 正常退出 Vivaldi，扩展断开后 `open -a` 打开它；
+  0.03 秒进程起来，**1.86 秒**常驻桥报扩展连上，13 个标签页全部恢复。读的是主进程的 `get_status`（`127.0.0.1:18766/link`）。
+- 只量到一次：第二轮在刚打开十几秒内发的退出没生效（Vivaldi 没退、状态完好），没再试。
+- 不是真冷启动：系统刚开过它，磁盘缓存是热的，开机后第一次打开会更慢。Windows（Edge）没量。
+- 现有的等待窗口：`first_init_driver` 等连接 12 秒（`managed-ga/code/ga.py:125–129`）。Mac 上 1.86 秒落在窗口里，不用放宽；
+  文档记过 Windows 上扩展唤醒慢（[浏览器控制](../../docs/managed-ga-runtime/browser-control.md)「probes must tolerate Chromium
+  MV3 service-worker wake-up」），Windows 的秒数开票后在真机上量。
 
 ## 边界
 
