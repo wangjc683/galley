@@ -25,8 +25,13 @@
 //! browser program the extension last connected from (`browserApp`), which
 //! Core keeps in a pref and hands back as `--known-browser-app`. When a GA
 //! session's web tool finds no tab and no extension, the bridge moves
-//! `browserWantedAt`; Core then opens that browser unless it is already
-//! running. Managed runtime only, like the bridge itself.
+//! `browserWantedAt`; Core then opens that browser at the setup test page
+//! (`browser_control::open_browser_app`), whether or not it is already
+//! running: the page gives the extension an http(s) tab to drive and wakes
+//! an extension worker that is asleep. Opening at an address and dropping
+//! the "already running" check are the main session's amendment of
+//! 2026-11-20, not yet ruled by JC (JC 未裁). Managed runtime only, like the
+//! bridge itself.
 //! See docs/managed-ga-runtime/browser-control.md.
 
 use std::io;
@@ -157,7 +162,7 @@ struct BrowserMemory {
 struct BrowserLineEffects {
     /// A program that differs from the stored one: write the pref.
     store_app: Option<String>,
-    /// Open this program, unless it is already running.
+    /// Open this program at the setup test page.
     open_app: Option<String>,
 }
 
@@ -180,10 +185,9 @@ fn browser_line_effects(memory: &mut BrowserMemory, line: &BridgeLine) -> Browse
     effects
 }
 
-/// Process check and launch, replaceable in tests.
+/// The launch, replaceable in tests.
 #[async_trait::async_trait]
 trait BrowserOpener: Send + Sync {
-    async fn is_running(&self, app: &str) -> io::Result<bool>;
     async fn open(&self, app: &str) -> io::Result<()>;
 }
 
@@ -191,34 +195,8 @@ struct SystemBrowserOpener;
 
 #[async_trait::async_trait]
 impl BrowserOpener for SystemBrowserOpener {
-    async fn is_running(&self, app: &str) -> io::Result<bool> {
-        browser_control::browser_app_running(app).await
-    }
-
     async fn open(&self, app: &str) -> io::Result<()> {
         browser_control::open_browser_app(app).await
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum BrowserOpenOutcome {
-    Opened,
-    /// Opening a running browser is no use: on Windows it adds a window,
-    /// on macOS it only takes the foreground. The extension reconnects
-    /// on its own alarm.
-    AlreadyRunning,
-    Failed(String),
-}
-
-async fn open_browser_unless_running(opener: &dyn BrowserOpener, app: &str) -> BrowserOpenOutcome {
-    match opener.is_running(app).await {
-        Ok(true) => BrowserOpenOutcome::AlreadyRunning,
-        Ok(false) => match opener.open(app).await {
-            Ok(()) => BrowserOpenOutcome::Opened,
-            Err(e) => BrowserOpenOutcome::Failed(format!("opening it failed: {e}")),
-        },
-        // Unknown is not "not running": a second start would add a window.
-        Err(e) => BrowserOpenOutcome::Failed(format!("checking whether it runs failed: {e}")),
     }
 }
 
@@ -491,7 +469,8 @@ impl BrowserBridgeManager {
             }
             if let Some(browser_app) = effects.open_app {
                 tauri::async_runtime::spawn(async move {
-                    open_wanted_browser(&SystemBrowserOpener, &browser_app).await;
+                    // Already logged; nothing else changes on a failure.
+                    let _ = open_wanted_browser(&SystemBrowserOpener, &browser_app).await;
                 });
             }
             if changed {
@@ -566,22 +545,17 @@ impl BrowserBridgeManager {
 }
 
 /// A GA web tool is waiting for the browser (the bridge moved
-/// `browserWantedAt` while the extension was gone). Failures only log.
-async fn open_wanted_browser(opener: &dyn BrowserOpener, browser_app: &str) {
+/// `browserWantedAt` while the extension was gone): open it at the setup
+/// test page, running or not (a running Chromium browser takes the address
+/// as a new tab). Failures only log.
+async fn open_wanted_browser(opener: &dyn BrowserOpener, browser_app: &str) -> io::Result<()> {
     let label = browser_app_label(browser_app);
-    match open_browser_unless_running(opener, browser_app).await {
-        BrowserOpenOutcome::Opened => {
-            eprintln!("[browser-bridge] browser wanted: opened {label}");
-        }
-        BrowserOpenOutcome::AlreadyRunning => {
-            eprintln!(
-                "[browser-bridge] browser wanted: {label} is already running, not opening it"
-            );
-        }
-        BrowserOpenOutcome::Failed(message) => {
-            eprintln!("[browser-bridge] browser wanted: {label}: {message}");
-        }
+    let result = opener.open(browser_app).await;
+    match &result {
+        Ok(()) => eprintln!("[browser-bridge] browser wanted: opened {label}"),
+        Err(e) => eprintln!("[browser-bridge] browser wanted: opening {label} failed: {e}"),
     }
+    result
 }
 
 async fn read_last_browser_app(app: &AppHandle) -> Option<String> {
@@ -920,23 +894,12 @@ mod tests {
 
     #[derive(Default)]
     struct FakeOpener {
-        running: bool,
-        check_fails: bool,
         open_fails: bool,
-        checked: std::sync::Mutex<Vec<String>>,
         opened: std::sync::Mutex<Vec<String>>,
     }
 
     #[async_trait::async_trait]
     impl BrowserOpener for FakeOpener {
-        async fn is_running(&self, app: &str) -> io::Result<bool> {
-            self.checked.lock().unwrap().push(app.to_owned());
-            if self.check_fails {
-                return Err(io::Error::other("ps failed"));
-            }
-            Ok(self.running)
-        }
-
         async fn open(&self, app: &str) -> io::Result<()> {
             self.opened.lock().unwrap().push(app.to_owned());
             if self.open_fails {
@@ -947,51 +910,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_browser_that_is_not_running_is_opened() {
+    async fn a_wanted_browser_is_opened_and_a_failure_is_only_reported() {
         let opener = FakeOpener::default();
-        assert_eq!(
-            open_browser_unless_running(&opener, VIVALDI).await,
-            BrowserOpenOutcome::Opened
-        );
-        assert_eq!(*opener.checked.lock().unwrap(), vec![VIVALDI.to_owned()]);
+        open_wanted_browser(&opener, VIVALDI).await.expect("opened");
         assert_eq!(*opener.opened.lock().unwrap(), vec![VIVALDI.to_owned()]);
-    }
-
-    #[tokio::test]
-    async fn a_running_browser_is_not_opened_again() {
-        let opener = FakeOpener {
-            running: true,
-            ..FakeOpener::default()
-        };
-        assert_eq!(
-            open_browser_unless_running(&opener, VIVALDI).await,
-            BrowserOpenOutcome::AlreadyRunning
-        );
-        assert!(opener.opened.lock().unwrap().is_empty());
-    }
-
-    #[tokio::test]
-    async fn a_failed_check_does_not_open_and_a_failed_open_is_reported() {
-        let opener = FakeOpener {
-            check_fails: true,
-            ..FakeOpener::default()
-        };
-        assert!(matches!(
-            open_browser_unless_running(&opener, VIVALDI).await,
-            BrowserOpenOutcome::Failed(_)
-        ));
-        assert!(opener.opened.lock().unwrap().is_empty());
 
         let opener = FakeOpener {
             open_fails: true,
             ..FakeOpener::default()
         };
-        let BrowserOpenOutcome::Failed(message) =
-            open_browser_unless_running(&opener, VIVALDI).await
-        else {
-            panic!("expected a failure");
-        };
-        assert!(message.contains("open failed"));
+        let error = open_wanted_browser(&opener, VIVALDI)
+            .await
+            .expect_err("failed");
+        assert!(error.to_string().contains("open failed"));
+        assert_eq!(*opener.opened.lock().unwrap(), vec![VIVALDI.to_owned()]);
     }
 
     #[tokio::test]

@@ -233,19 +233,32 @@ waits for it, and the call carries on; the model never sees the step.
   up to 20 s, then runs the call as usual, or, with still no tab, returns the
   same message as before (「浏览器插件已连接……」 if the extension came back
   without an operable tab). On macOS the extension reconnected 1.86 s after
-  `open -a` in the 2026-11-20 probe; Windows has not been measured.
+  `open -a` (no address) in the 2026-11-20 probe; Windows has not been
+  measured.
 - **Opening (Core).** When `browserWantedAt` moves on a running line that says
-  `extensionConnected: false`, Core checks whether that browser already runs
-  (macOS: a process whose executable is in `<app>/Contents/MacOS/`, from
-  `ps -axo comm=`; Windows: its image name in `tasklist`). Running: Core does
-  not open it, since starting it again opens a second window on Windows and
-  only takes the foreground on macOS; the extension's own alarm reconnects it
-  within about 30 s, and the tool waits its 20 s. Not running: macOS
-  `open -a <app>`, Windows the `.exe` with no arguments, so the browser
-  restores the user's tabs by its own settings. No address is passed. A
-  failure, or a failed check, is only logged (`[browser-bridge] browser
-  wanted: …`); the status and the GUI do not change. Opening takes the
-  foreground; that is the step the user would otherwise take by hand.
+  `extensionConnected: false`, Core opens that browser at the setup test page
+  (`BROWSER_CONTROL_TEST_PAGE_URL`, `https://example.com`): macOS
+  `open -a <app> https://example.com`, Windows `<exe> https://example.com`.
+  It does so whether or not the browser is already running; there is no
+  running check. A failure is only logged (`[browser-bridge] browser wanted:
+  …`); the status and the GUI do not change. Opening takes the foreground;
+  that is the step the user would otherwise take by hand. **JC 未裁**
+  (2026-11-20, the main session's amendment of the ticket, which had said
+  "no address" and "do not open a running browser"; revertible as one
+  commit):
+  - Why an address: the extension lists only http(s) tabs (`isScriptable`,
+    `background.js`), and Chrome and Edge start on their New Tab page by
+    default, so a launch with no address gives a connected extension with
+    nothing to drive, and the tool waits its 20 s and fails.
+  - Why no running check: a page also wakes the extension. Every http(s)
+    page's `content.js` sends `cmd: 'wake'`, which wakes a sleeping worker
+    and reconnects it (`background.js` `handleExtMessage`), so the address
+    helps a running browser whose extension is asleep, and Edge kept in the
+    background by startup boost with no window. Chromium hands an address
+    given to a running instance to that instance as a new tab, not a new
+    window.
+  - Known cost: a browser that restores the previous session opens one extra
+    tab, the test page, every time Galley opens it.
 - **Scope.** Managed runtime only: the bridge runs only there, so attach /
   external GA is unchanged. IM channels' GA processes run the managed payload
   and become remote clients of the same master, so a browser task asked over

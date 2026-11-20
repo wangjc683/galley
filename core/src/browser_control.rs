@@ -493,80 +493,30 @@ async fn open_test_page_for_platform(browser: BrowserControlBrowser) -> io::Resu
         .unwrap_or_else(|| io::Error::new(io::ErrorKind::NotFound, "browser command not found")))
 }
 
-/// Whether the browser program `app` is running. `app` is the resident
-/// bridge's `browserApp`: the outermost `.app` on macOS, the `.exe` on
-/// Windows (ticket browser-auto-open 01).
-pub async fn browser_app_running(app: &str) -> io::Result<bool> {
-    browser_app_running_for_platform(app).await
-}
-
-/// Start the browser program `app` with no address, so it restores the
-/// user's tabs by its own settings.
+/// Open the browser program `app` (the resident bridge's `browserApp`:
+/// the outermost `.app` on macOS, the `.exe` on Windows) at the setup test
+/// page (ticket browser-auto-open 01). The address matters: the extension
+/// only lists http(s) tabs, so a browser that starts on its New Tab page
+/// would connect with nothing to drive, and the page's content script wakes
+/// an extension worker that is asleep in a browser that is already running.
+/// A running Chromium browser takes the address as a new tab.
 pub async fn open_browser_app(app: &str) -> io::Result<()> {
     open_browser_app_for_platform(app).await
 }
 
-/// macOS: a process whose executable sits right in `<app>/Contents/MacOS/`
-/// is the browser itself; its helpers live under `Contents/Frameworks/`.
 #[cfg(any(target_os = "macos", test))]
-fn process_list_has_app(listing: &str, app: &str) -> bool {
-    let prefix = format!("{}/Contents/MacOS/", app.trim_end_matches('/'));
-    listing
-        .lines()
-        .any(|line| line.trim_start().starts_with(&prefix))
-}
-
-/// The `.exe` file name of a Windows program path, either separator.
-#[cfg(any(target_os = "windows", test))]
-fn windows_image_name(app: &str) -> Option<&str> {
-    app.rsplit(['\\', '/'])
-        .next()
-        .filter(|name| !name.is_empty())
-}
-
-/// `tasklist /FO CSV /NH` rows start with the quoted image name; the
-/// "no tasks" notice (localized) does not.
-#[cfg(any(target_os = "windows", test))]
-fn tasklist_has_image(listing: &str, image: &str) -> bool {
-    listing.lines().any(|line| {
-        line.trim_start()
-            .strip_prefix('"')
-            .and_then(|rest| rest.split('"').next())
-            .is_some_and(|name| name.eq_ignore_ascii_case(image))
-    })
-}
-
-#[cfg(target_os = "macos")]
-async fn browser_app_running_for_platform(app: &str) -> io::Result<bool> {
-    let listing = command_stdout("ps", &["-axo", "comm="]).await?;
-    Ok(process_list_has_app(&listing, app))
+fn macos_open_browser_app_args(app: &str) -> [&str; 3] {
+    ["-a", app, BROWSER_CONTROL_TEST_PAGE_URL]
 }
 
 #[cfg(target_os = "macos")]
 async fn open_browser_app_for_platform(app: &str) -> io::Result<()> {
-    run_command("open", &["-a", app]).await
-}
-
-#[cfg(target_os = "windows")]
-async fn browser_app_running_for_platform(app: &str) -> io::Result<bool> {
-    let image = windows_image_name(app)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no program file name"))?;
-    let filter = format!("IMAGENAME eq {image}");
-    let listing = command_stdout("tasklist", &["/FI", &filter, "/FO", "CSV", "/NH"]).await?;
-    Ok(tasklist_has_image(&listing, image))
+    run_command("open", &macos_open_browser_app_args(app)).await
 }
 
 #[cfg(target_os = "windows")]
 async fn open_browser_app_for_platform(app: &str) -> io::Result<()> {
-    spawn_command(app, &[])
-}
-
-#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
-async fn browser_app_running_for_platform(_app: &str) -> io::Result<bool> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "the bridge recognises no browser on this platform",
-    ))
+    spawn_command(app, &[BROWSER_CONTROL_TEST_PAGE_URL])
 }
 
 #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
@@ -575,26 +525,6 @@ async fn open_browser_app_for_platform(_app: &str) -> io::Result<()> {
         io::ErrorKind::Unsupported,
         "the bridge recognises no browser on this platform",
     ))
-}
-
-#[cfg(any(target_os = "macos", target_os = "windows"))]
-async fn command_stdout(program: &str, args: &[&str]) -> io::Result<String> {
-    let mut cmd = Command::new(program);
-    process_command::configure_background(&mut cmd);
-    let output = cmd
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output()
-        .await?;
-    if !output.status.success() {
-        return Err(io::Error::other(format!(
-            "{program} exited with {}",
-            output.status
-        )));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 async fn run_command(program: &str, args: &[&str]) -> io::Result<()> {
@@ -1046,42 +976,12 @@ mod tests {
     }
 
     #[test]
-    fn process_list_finds_the_browser_but_not_only_its_helpers() {
-        let listing = "\
-/sbin/launchd
-/Applications/Vivaldi.app/Contents/MacOS/Vivaldi
-/Applications/Vivaldi.app/Contents/Frameworks/Vivaldi Framework.framework/Versions/8.3/Helpers/Vivaldi Helper.app/Contents/MacOS/Vivaldi Helper
-";
-        assert!(process_list_has_app(listing, "/Applications/Vivaldi.app"));
-        assert!(process_list_has_app(listing, "/Applications/Vivaldi.app/"));
-        assert!(!process_list_has_app(
-            listing,
-            "/Applications/Google Chrome.app"
-        ));
-        // A helper left behind is not the browser.
-        let helpers_only = "/Applications/Vivaldi.app/Contents/Frameworks/Vivaldi Framework.framework/Versions/8.3/Helpers/Vivaldi Helper.app/Contents/MacOS/Vivaldi Helper\n";
-        assert!(!process_list_has_app(
-            helpers_only,
-            "/Applications/Vivaldi.app"
-        ));
-        // A prefix of another app's name does not match.
-        assert!(!process_list_has_app(listing, "/Applications/Viv"));
-    }
-
-    #[test]
-    fn windows_program_is_matched_by_image_name() {
-        let app = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
-        assert_eq!(windows_image_name(app), Some("msedge.exe"));
-        assert_eq!(windows_image_name("C:/x/chrome.exe"), Some("chrome.exe"));
-        assert_eq!(windows_image_name(r"C:\x\"), None);
-
-        let running = "\r\n\"msedge.exe\",\"4120\",\"Console\",\"1\",\"212,344 K\"\r\n\"msedge.exe\",\"4200\",\"Console\",\"1\",\"8,100 K\"\r\n";
-        assert!(tasklist_has_image(running, "msedge.exe"));
-        assert!(tasklist_has_image(running, "MSEdge.exe"));
-        assert!(!tasklist_has_image(running, "chrome.exe"));
-        let none = "INFO: No tasks are running which match the specified criteria.\r\n";
-        assert!(!tasklist_has_image(none, "msedge.exe"));
-        assert!(!tasklist_has_image("", "msedge.exe"));
+    fn the_browser_opens_at_the_setup_test_page() {
+        assert_eq!(
+            macos_open_browser_app_args("/Applications/Vivaldi.app"),
+            ["-a", "/Applications/Vivaldi.app", "https://example.com"]
+        );
+        assert_eq!(BROWSER_CONTROL_TEST_PAGE_URL, "https://example.com");
     }
 
     #[test]
