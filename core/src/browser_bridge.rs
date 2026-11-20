@@ -20,8 +20,16 @@
 //! and on quit / update install, restarted with backoff when it exits on
 //! its own. Process generations gate every late stdout line and exit
 //! notice, so a killed process can never overwrite its successor's status.
+//!
+//! Browser auto-open (ticket browser-auto-open 01): the bridge reports the
+//! browser program the extension last connected from (`browserApp`), which
+//! Core keeps in a pref and hands back as `--known-browser-app`. When a GA
+//! session's web tool finds no tab and no extension, the bridge moves
+//! `browserWantedAt`; Core then opens that browser unless it is already
+//! running. Managed runtime only, like the bridge itself.
 //! See docs/managed-ga-runtime/browser-control.md.
 
+use std::io;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -34,7 +42,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-use crate::api::RuntimeKind;
+use crate::api::{GalleyApi, RuntimeKind};
 use crate::db::SqliteGalley;
 use crate::{browser_control, managed_runtime, process_command};
 
@@ -42,6 +50,9 @@ pub const EVENT_NAME: &str = "browser-bridge-updated";
 /// The pref the GUI writes when the user switches runtime; `set_pref_json`
 /// reconciles the bridge when it changes.
 pub const ACTIVE_RUNTIME_KIND_PREF: &str = "active_runtime_kind";
+/// The browser program the extension was last seen in (the bridge's
+/// `browserApp`, a JSON string): passed back as `--known-browser-app`.
+pub const LAST_BROWSER_APP_PREF: &str = "browser_control_last_browser_app";
 const GALLEY_CORE_PID_ENV: &str = "GALLEY_CORE_PID";
 /// A process that lived at least this long counts as healthy: its exit
 /// restarts quickly and resets the backoff.
@@ -123,6 +134,100 @@ struct BridgeLine {
     error_kind: Option<String>,
     error: Option<String>,
     updated_at: Option<String>,
+    /// The program the extension connected from in this bridge run.
+    #[serde(default)]
+    browser_app: Option<String>,
+    /// Moves when a GA web tool asked for the browser (at most every 30 s).
+    #[serde(default)]
+    browser_wanted_at: Option<String>,
+}
+
+/// The browser fields Core tracks for the current bridge process. Kept
+/// out of [`BrowserBridgeStatus`], which the GUI reads unchanged.
+#[derive(Debug, Default)]
+struct BrowserMemory {
+    /// The stored pref, then whatever the bridge recognises.
+    app: Option<String>,
+    /// The last `browserWantedAt` of this process generation.
+    wanted_at: Option<String>,
+}
+
+/// What one status line asks of Core about the browser.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct BrowserLineEffects {
+    /// A program that differs from the stored one: write the pref.
+    store_app: Option<String>,
+    /// Open this program, unless it is already running.
+    open_app: Option<String>,
+}
+
+fn browser_line_effects(memory: &mut BrowserMemory, line: &BridgeLine) -> BrowserLineEffects {
+    let mut effects = BrowserLineEffects::default();
+    if let Some(app) = line.browser_app.as_deref().filter(|app| !app.is_empty()) {
+        if memory.app.as_deref() != Some(app) {
+            memory.app = Some(app.to_owned());
+            effects.store_app = Some(app.to_owned());
+        }
+    }
+    if let Some(wanted_at) = line.browser_wanted_at.as_deref() {
+        if memory.wanted_at.as_deref() != Some(wanted_at) {
+            memory.wanted_at = Some(wanted_at.to_owned());
+            if line.state == BrowserBridgeState::Running && !line.extension_connected {
+                effects.open_app = memory.app.clone();
+            }
+        }
+    }
+    effects
+}
+
+/// Process check and launch, replaceable in tests.
+#[async_trait::async_trait]
+trait BrowserOpener: Send + Sync {
+    async fn is_running(&self, app: &str) -> io::Result<bool>;
+    async fn open(&self, app: &str) -> io::Result<()>;
+}
+
+struct SystemBrowserOpener;
+
+#[async_trait::async_trait]
+impl BrowserOpener for SystemBrowserOpener {
+    async fn is_running(&self, app: &str) -> io::Result<bool> {
+        browser_control::browser_app_running(app).await
+    }
+
+    async fn open(&self, app: &str) -> io::Result<()> {
+        browser_control::open_browser_app(app).await
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum BrowserOpenOutcome {
+    Opened,
+    /// Opening a running browser is no use: on Windows it adds a window,
+    /// on macOS it only takes the foreground. The extension reconnects
+    /// on its own alarm.
+    AlreadyRunning,
+    Failed(String),
+}
+
+async fn open_browser_unless_running(opener: &dyn BrowserOpener, app: &str) -> BrowserOpenOutcome {
+    match opener.is_running(app).await {
+        Ok(true) => BrowserOpenOutcome::AlreadyRunning,
+        Ok(false) => match opener.open(app).await {
+            Ok(()) => BrowserOpenOutcome::Opened,
+            Err(e) => BrowserOpenOutcome::Failed(format!("opening it failed: {e}")),
+        },
+        // Unknown is not "not running": a second start would add a window.
+        Err(e) => BrowserOpenOutcome::Failed(format!("checking whether it runs failed: {e}")),
+    }
+}
+
+/// The program's file name, for logs.
+fn browser_app_label(app: &str) -> &str {
+    app.trim_end_matches(['/', '\\'])
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(app)
 }
 
 fn status_from_line(line: BridgeLine, pid: Option<u32>) -> BrowserBridgeStatus {
@@ -186,6 +291,7 @@ struct Inner {
     failures: u32,
     stderr_tail: Option<String>,
     status: BrowserBridgeStatus,
+    browser: BrowserMemory,
 }
 
 impl Default for Inner {
@@ -198,6 +304,7 @@ impl Default for Inner {
             failures: 0,
             stderr_tail: None,
             status: BrowserBridgeStatus::with_state(BrowserBridgeState::Stopped),
+            browser: BrowserMemory::default(),
         }
     }
 }
@@ -272,12 +379,16 @@ impl BrowserBridgeManager {
 
     /// Caller holds the lifecycle lock.
     async fn spawn_locked(self: &Arc<Self>, app: &AppHandle) {
-        let generation = {
+        let (generation, known_app) = {
             let mut inner = self.inner.lock().await;
             inner.generation += 1;
-            inner.generation
+            (inner.generation, inner.browser.app.clone())
         };
-        let mut child = match spawn_bridge_process(app) {
+        let known_app = match known_app {
+            Some(known) => Some(known),
+            None => read_last_browser_app(app).await,
+        };
+        let mut child = match spawn_bridge_process(app, known_app.as_deref()) {
             Ok(child) => child,
             Err(message) => {
                 eprintln!("[browser-bridge] start failed: {message}");
@@ -301,6 +412,10 @@ impl BrowserBridgeManager {
             inner.child = Some(child.clone());
             inner.started_at = Some(Instant::now());
             inner.stderr_tail = None;
+            inner.browser = BrowserMemory {
+                app: known_app,
+                wanted_at: None,
+            };
             // Keep the last error visible while a fast-failing bridge
             // retries; any other state becomes `starting`.
             if inner.status.state != BrowserBridgeState::Error {
@@ -360,14 +475,28 @@ impl BrowserBridgeManager {
             let Ok(parsed) = serde_json::from_str::<BridgeLine>(&line) else {
                 continue;
             };
-            let next = status_from_line(parsed, pid);
             let mut inner = self.inner.lock().await;
-            if inner.generation != generation || inner.status == next {
+            if inner.generation != generation {
                 continue;
             }
-            inner.status = next.clone();
+            let effects = browser_line_effects(&mut inner.browser, &parsed);
+            let next = status_from_line(parsed, pid);
+            let changed = inner.status != next;
+            if changed {
+                inner.status = next.clone();
+            }
             drop(inner);
-            let _ = app.emit(EVENT_NAME, next);
+            if let Some(browser_app) = effects.store_app {
+                store_last_browser_app(&app, browser_app).await;
+            }
+            if let Some(browser_app) = effects.open_app {
+                tauri::async_runtime::spawn(async move {
+                    open_wanted_browser(&SystemBrowserOpener, &browser_app).await;
+                });
+            }
+            if changed {
+                let _ = app.emit(EVENT_NAME, next);
+            }
         }
     }
 
@@ -436,7 +565,68 @@ impl BrowserBridgeManager {
     }
 }
 
-fn spawn_bridge_process(app: &AppHandle) -> Result<Child, String> {
+/// A GA web tool is waiting for the browser (the bridge moved
+/// `browserWantedAt` while the extension was gone). Failures only log.
+async fn open_wanted_browser(opener: &dyn BrowserOpener, browser_app: &str) {
+    let label = browser_app_label(browser_app);
+    match open_browser_unless_running(opener, browser_app).await {
+        BrowserOpenOutcome::Opened => {
+            eprintln!("[browser-bridge] browser wanted: opened {label}");
+        }
+        BrowserOpenOutcome::AlreadyRunning => {
+            eprintln!(
+                "[browser-bridge] browser wanted: {label} is already running, not opening it"
+            );
+        }
+        BrowserOpenOutcome::Failed(message) => {
+            eprintln!("[browser-bridge] browser wanted: {label}: {message}");
+        }
+    }
+}
+
+async fn read_last_browser_app(app: &AppHandle) -> Option<String> {
+    let galley = app.try_state::<SqliteGalley>()?.inner().clone();
+    last_browser_app(&galley).await
+}
+
+async fn store_last_browser_app(app: &AppHandle, browser_app: String) {
+    let Some(galley) = app
+        .try_state::<SqliteGalley>()
+        .map(|state| state.inner().clone())
+    else {
+        return;
+    };
+    if let Err(e) = set_last_browser_app(&galley, browser_app).await {
+        eprintln!("[browser-bridge] storing the browser failed: {e:?}");
+    }
+}
+
+/// The stored program, when the pref holds a non-empty string.
+async fn last_browser_app(galley: &SqliteGalley) -> Option<String> {
+    let value = galley
+        .get_pref_json(LAST_BROWSER_APP_PREF)
+        .await
+        .ok()
+        .flatten()?;
+    value
+        .as_str()
+        .filter(|path| !path.is_empty())
+        .map(str::to_owned)
+}
+
+async fn set_last_browser_app(
+    galley: &SqliteGalley,
+    browser_app: String,
+) -> crate::error::Result<()> {
+    galley
+        .set_pref_json(
+            LAST_BROWSER_APP_PREF,
+            serde_json::Value::String(browser_app),
+        )
+        .await
+}
+
+fn spawn_bridge_process(app: &AppHandle, known_browser_app: Option<&str>) -> Result<Child, String> {
     let diagnostics = managed_runtime::ensure_for_app(app)
         .map_err(|e| format!("浏览器控制服务无法启动：内置内核目录不可用（{e}）"))?;
     let code_root = diagnostics.paths.code_root;
@@ -456,6 +646,9 @@ fn spawn_bridge_process(app: &AppHandle) -> Result<Child, String> {
         &code_root,
         "--exit-on-stdin-eof",
     ]);
+    if let Some(known) = known_browser_app {
+        cmd.args(["--known-browser-app", known]);
+    }
     process_command::configure_python(&mut cmd);
     // stdin stays piped and unused: Core holds the write end for the
     // process lifetime, so the bridge sees EOF the moment Core goes away
@@ -608,6 +801,245 @@ mod tests {
         assert_eq!(next.error_kind.as_deref(), Some("http_failed"));
         assert_eq!(next.error, previous.error);
         assert_eq!(next.pid, None);
+    }
+
+    const VIVALDI: &str = "/Applications/Vivaldi.app";
+
+    fn running(connected: bool, app: Option<&str>, wanted_at: Option<&str>) -> BridgeLine {
+        line(
+            &serde_json::json!({
+                "state": "running",
+                "role": "master",
+                "extensionConnected": connected,
+                "tabCount": 0,
+                "browserApp": app,
+                "browserWantedAt": wanted_at,
+            })
+            .to_string(),
+        )
+    }
+
+    #[test]
+    fn browser_fields_parse_and_stay_out_of_the_gui_status() {
+        let parsed = line(
+            r#"{"state":"running","role":"master","extensionConnected":false,"tabCount":0,"browserApp":"/Applications/Vivaldi.app","browserWantedAt":"2026-11-20T08:00:00.000Z"}"#,
+        );
+        assert_eq!(parsed.browser_app.as_deref(), Some(VIVALDI));
+        assert_eq!(
+            parsed.browser_wanted_at.as_deref(),
+            Some("2026-11-20T08:00:00.000Z")
+        );
+        let value = serde_json::to_value(status_from_line(parsed, None)).expect("serialize");
+        assert!(value.get("browserApp").is_none());
+        assert!(value.get("browserWantedAt").is_none());
+
+        // An older bridge sends neither field.
+        let old =
+            line(r#"{"state":"running","role":"master","extensionConnected":true,"tabCount":1}"#);
+        assert_eq!(old.browser_app, None);
+        assert_eq!(old.browser_wanted_at, None);
+    }
+
+    #[test]
+    fn a_new_browser_app_is_stored_once() {
+        let mut memory = BrowserMemory::default();
+        let effects = browser_line_effects(&mut memory, &running(true, Some(VIVALDI), None));
+        assert_eq!(effects.store_app.as_deref(), Some(VIVALDI));
+        assert_eq!(effects.open_app, None);
+        assert_eq!(memory.app.as_deref(), Some(VIVALDI));
+
+        // Same program again, or none: nothing to store.
+        let again = browser_line_effects(&mut memory, &running(true, Some(VIVALDI), None));
+        assert_eq!(again, BrowserLineEffects::default());
+        let none = browser_line_effects(&mut memory, &running(false, None, None));
+        assert_eq!(none, BrowserLineEffects::default());
+        assert_eq!(memory.app.as_deref(), Some(VIVALDI));
+        let empty = browser_line_effects(&mut memory, &running(false, Some(""), None));
+        assert_eq!(empty, BrowserLineEffects::default());
+
+        // The stored pref seeds the memory: equal means no write.
+        let mut seeded = BrowserMemory {
+            app: Some(VIVALDI.into()),
+            wanted_at: None,
+        };
+        let effects = browser_line_effects(&mut seeded, &running(true, Some(VIVALDI), None));
+        assert_eq!(effects.store_app, None);
+        let edge = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe";
+        let effects = browser_line_effects(&mut seeded, &running(true, Some(edge), None));
+        assert_eq!(effects.store_app.as_deref(), Some(edge));
+    }
+
+    #[test]
+    fn a_moved_browser_wanted_at_opens_only_while_disconnected() {
+        let mut memory = BrowserMemory {
+            app: Some(VIVALDI.into()),
+            wanted_at: None,
+        };
+        let first = "2026-11-20T08:00:00.000Z";
+        let effects = browser_line_effects(&mut memory, &running(false, None, Some(first)));
+        assert_eq!(effects.open_app.as_deref(), Some(VIVALDI));
+
+        // The same stamp on later lines does not open again.
+        let effects = browser_line_effects(&mut memory, &running(false, None, Some(first)));
+        assert_eq!(effects.open_app, None);
+        let effects = browser_line_effects(&mut memory, &running(true, None, Some(first)));
+        assert_eq!(effects.open_app, None);
+
+        // Moved while the extension is connected: noted, not opened.
+        let second = "2026-11-20T08:00:40.000Z";
+        let effects = browser_line_effects(&mut memory, &running(true, None, Some(second)));
+        assert_eq!(effects.open_app, None);
+        assert_eq!(memory.wanted_at.as_deref(), Some(second));
+
+        let third = "2026-11-20T08:01:20.000Z";
+        let effects = browser_line_effects(&mut memory, &running(false, None, Some(third)));
+        assert_eq!(effects.open_app.as_deref(), Some(VIVALDI));
+    }
+
+    #[test]
+    fn browser_wanted_without_a_known_browser_opens_nothing() {
+        let mut memory = BrowserMemory::default();
+        let effects = browser_line_effects(
+            &mut memory,
+            &running(false, None, Some("2026-11-20T08:00:00.000Z")),
+        );
+        assert_eq!(effects.open_app, None);
+    }
+
+    #[test]
+    fn browser_wanted_on_an_error_line_opens_nothing() {
+        let mut memory = BrowserMemory {
+            app: Some(VIVALDI.into()),
+            wanted_at: None,
+        };
+        let error = line(
+            r#"{"state":"error","role":"master","errorKind":"status_failed","error":"x","browserWantedAt":"2026-11-20T08:00:00.000Z"}"#,
+        );
+        assert_eq!(browser_line_effects(&mut memory, &error).open_app, None);
+    }
+
+    #[derive(Default)]
+    struct FakeOpener {
+        running: bool,
+        check_fails: bool,
+        open_fails: bool,
+        checked: std::sync::Mutex<Vec<String>>,
+        opened: std::sync::Mutex<Vec<String>>,
+    }
+
+    #[async_trait::async_trait]
+    impl BrowserOpener for FakeOpener {
+        async fn is_running(&self, app: &str) -> io::Result<bool> {
+            self.checked.lock().unwrap().push(app.to_owned());
+            if self.check_fails {
+                return Err(io::Error::other("ps failed"));
+            }
+            Ok(self.running)
+        }
+
+        async fn open(&self, app: &str) -> io::Result<()> {
+            self.opened.lock().unwrap().push(app.to_owned());
+            if self.open_fails {
+                return Err(io::Error::other("open failed"));
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn a_browser_that_is_not_running_is_opened() {
+        let opener = FakeOpener::default();
+        assert_eq!(
+            open_browser_unless_running(&opener, VIVALDI).await,
+            BrowserOpenOutcome::Opened
+        );
+        assert_eq!(*opener.checked.lock().unwrap(), vec![VIVALDI.to_owned()]);
+        assert_eq!(*opener.opened.lock().unwrap(), vec![VIVALDI.to_owned()]);
+    }
+
+    #[tokio::test]
+    async fn a_running_browser_is_not_opened_again() {
+        let opener = FakeOpener {
+            running: true,
+            ..FakeOpener::default()
+        };
+        assert_eq!(
+            open_browser_unless_running(&opener, VIVALDI).await,
+            BrowserOpenOutcome::AlreadyRunning
+        );
+        assert!(opener.opened.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_failed_check_does_not_open_and_a_failed_open_is_reported() {
+        let opener = FakeOpener {
+            check_fails: true,
+            ..FakeOpener::default()
+        };
+        assert!(matches!(
+            open_browser_unless_running(&opener, VIVALDI).await,
+            BrowserOpenOutcome::Failed(_)
+        ));
+        assert!(opener.opened.lock().unwrap().is_empty());
+
+        let opener = FakeOpener {
+            open_fails: true,
+            ..FakeOpener::default()
+        };
+        let BrowserOpenOutcome::Failed(message) =
+            open_browser_unless_running(&opener, VIVALDI).await
+        else {
+            panic!("expected a failure");
+        };
+        assert!(message.contains("open failed"));
+    }
+
+    #[tokio::test]
+    async fn the_browser_app_pref_round_trips() {
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("open in-memory sqlite");
+        crate::apply_all_migrations_for_tests(&pool)
+            .await
+            .expect("migrate");
+        let galley = SqliteGalley::from_pool(pool);
+        assert_eq!(last_browser_app(&galley).await, None);
+
+        set_last_browser_app(&galley, VIVALDI.into())
+            .await
+            .expect("store");
+        assert_eq!(last_browser_app(&galley).await.as_deref(), Some(VIVALDI));
+        let stored = galley
+            .get_pref_json(LAST_BROWSER_APP_PREF)
+            .await
+            .expect("read");
+        assert_eq!(stored, Some(serde_json::json!(VIVALDI)));
+
+        // Anything but a non-empty string counts as unknown.
+        for odd in [
+            serde_json::json!(""),
+            serde_json::json!(3),
+            serde_json::json!(null),
+        ] {
+            galley
+                .set_pref_json(LAST_BROWSER_APP_PREF, odd)
+                .await
+                .expect("store");
+            assert_eq!(last_browser_app(&galley).await, None);
+        }
+    }
+
+    #[test]
+    fn browser_app_label_is_the_file_name() {
+        assert_eq!(browser_app_label(VIVALDI), "Vivaldi.app");
+        assert_eq!(
+            browser_app_label("/Applications/Vivaldi.app/"),
+            "Vivaldi.app"
+        );
+        assert_eq!(
+            browser_app_label(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
+            "chrome.exe"
+        );
     }
 
     #[test]

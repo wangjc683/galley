@@ -94,6 +94,7 @@ class TMWebDriver:
         def link():
             data = request.json
             if data.get('cmd') == 'get_status': return json.dumps({'r': self.get_status()}, ensure_ascii=False)
+            if data.get('cmd') == 'galley_browser_wanted': return json.dumps({'r': self._galley_browser_wanted()}, ensure_ascii=False)
             if data.get('cmd') == 'get_all_sessions': return json.dumps({'r': self.get_all_sessions()}, ensure_ascii=False)
             if data.get('cmd') == 'find_session':
                 url_pattern = data.get('url_pattern', '')
@@ -285,6 +286,14 @@ class TMWebDriver:
             'extension_connected_at': self.extension_connected_at,
             'tab_count': len(sessions)
         }
+
+    def _galley_browser_wanted(self):
+        # Galley: a web tool found no tab and no extension connection. Galley's
+        # resident browser bridge sets this hook on its own master and has Core
+        # open the browser the extension lives in; every other master says no.
+        hook = getattr(self, '_galley_on_browser_wanted', None)
+        try: return {'opening': bool(hook()) if hook else False}
+        except Exception: return {'opening': False}
 
     def get_session_dict(self):
         return {session['id']: session['url'] for session in self.get_all_sessions()}

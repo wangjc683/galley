@@ -122,10 +122,39 @@ def browser_control_empty_msg():
         pass
     return NO_BROWSER_CONNECTION_MSG
 
+def galley_browser_wanted():
+    # Galley: ask the master whether Galley is opening the browser the extension
+    # lives in. A master that does not know the command (upstream, external)
+    # answers 'ok', which is not JSON: that, an error, or anything but true is no.
+    try:
+        reply = driver._remote_cmd({"cmd": "galley_browser_wanted"}) if driver.is_remote else {'r': driver._galley_browser_wanted()}
+        return isinstance(reply, dict) and isinstance(reply.get('r'), dict) and reply['r'].get('opening') is True
+    except Exception:
+        return False
+
+def galley_wait_for_browser():
+    # Galley: no tab is listed. None once one is (the call goes on as usual),
+    # else the message for the model. Galley opens the browser only while the
+    # extension is not connected and it knows which browser that is.
+    try:
+        if driver.get_status().get('extension_connected'): return NO_BROWSER_TABS_MSG
+    except Exception:
+        pass
+    if not galley_browser_wanted(): return NO_BROWSER_CONNECTION_MSG
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        time.sleep(0.5)
+        if len(driver.get_all_sessions()) > 0: return None
+    return browser_control_empty_msg()
+
 def first_init_driver():
     global driver
     from TMWebDriver import TMWebDriver
     driver = TMWebDriver()
+    # Galley: only a master this process just started waits here, for the
+    # extension to find it. A remote client's master has been serving: the web
+    # tools ask it to open the browser and wait (galley_wait_for_browser).
+    if driver.is_remote: return
     deadline = time.time() + 12
     sess = []
     while time.time() < deadline:
@@ -145,8 +174,8 @@ def web_scan(tabs_only=False, switch_tab_id=None, text_only=False, maxlen=35000)
     global driver
     try:
         if driver is None: first_init_driver()
-        if len(driver.get_all_sessions()) == 0:
-            return {"status": "error", "msg": browser_control_empty_msg()}
+        if len(driver.get_all_sessions()) == 0 and (msg := galley_wait_for_browser()):
+            return {"status": "error", "msg": msg}
         tabs = []
         for sess in driver.get_all_sessions():
             sess.pop('connected_at', None)
@@ -192,7 +221,7 @@ def web_execute_js(script, switch_tab_id=None, no_monitor=False):
     global driver
     try:
         if driver is None: first_init_driver()
-        if len(driver.get_all_sessions()) == 0: return {"status": "error", "msg": browser_control_empty_msg()}
+        if len(driver.get_all_sessions()) == 0 and (msg := galley_wait_for_browser()): return {"status": "error", "msg": msg}
         if switch_tab_id: driver.default_session_id = str(switch_tab_id)
         result = simphtml.execute_js_rich(script, driver, no_monitor=no_monitor)
         return result

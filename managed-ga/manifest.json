@@ -42,7 +42,8 @@
       "0031-managed-request-deadline.patch",
       "0032-managed-official-anthropic-no-claude-code-identity.patch",
       "0033-managed-official-openai-no-codex-identity.patch",
-      "0034-managed-official-anthropic-no-thinking-replay.patch"
+      "0034-managed-official-anthropic-no-thinking-replay.patch",
+      "0035-managed-browser-auto-open.patch"
     ]
   },
   "stateSchemaVersion": 1

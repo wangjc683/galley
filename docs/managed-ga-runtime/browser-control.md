@@ -133,8 +133,12 @@ with upstream's `Origin`-header rejection on the HTTP side. Managed sessions
 already opened the same ports whenever they were first to use the browser; the
 bridge only makes that master resident.
 
-What the bridge may do: construct `TMWebDriver()` and call `get_status()`. It
-never executes JavaScript in pages (the master only relays the sessions' own
+What the bridge may do: construct `TMWebDriver()` and call `get_status()`; on
+its own master, also read the extension connection's peer address
+(`extension_client.address`) to recognise the browser, and set the
+`_galley_on_browser_wanted` hook that answers GA sessions' requests to open the
+browser (see [Opening the browser when a tool needs it](#opening-the-browser-when-a-tool-needs-it)).
+It never executes JavaScript in pages (the master only relays the sessions' own
 calls), never writes GA files or state, and discards TMWebDriver's stdout
 prints (tab URLs and relayed script results) instead of logging them.
 
@@ -142,9 +146,18 @@ Status protocol (bridge stdout, one camelCase JSON object per line, written on
 start and on change only):
 
 ```text
-{"state":"running","role":"master"|"remote","extensionConnected":bool,"tabCount":n,"updatedAt":...}
+{"state":"running","role":"master"|"remote","extensionConnected":bool,"tabCount":n,"browserApp":"<path>"|null,"browserWantedAt":"<ISO time>"|null,"updatedAt":...}
 {"state":"error","role":null|"remote","errorKind":"...","error":"<zh message>","updatedAt":...}
 ```
+
+`browserApp` and `browserWantedAt` were added on 2026-11-20 (browser
+auto-open, below); a running line always carries both, `null` until set.
+`browserApp` is the browser program the extension last connected from in this
+bridge run (macOS: the outermost `.app`; Windows: the `.exe`).
+`browserWantedAt` moves when a GA web tool asked for the browser, at most once
+per 30 s. Core reads both, keeps them out of `get_browser_bridge_status` and the
+`browser-bridge-updated` event (the GUI sees no change), and acts on them as
+described below.
 
 Core keeps the latest status (`state`: `stopped` / `starting` / `running` /
 `error`, plus role, extension fields, `errorKind`, `error`, `pid`), serves it
@@ -176,6 +189,78 @@ a sticky info toast (「浏览器控制已连接」 + 「试一试」); a manual
 not, since Settings shows the demo button next to it. One attempt per
 connection: it re-arms only after the bridge stops seeing the extension.
 
+### Opening The Browser When A Tool Needs It
+
+Decision 2026-11-20 (`.scratch/browser-auto-open/PRD.md`, JC: default on, no
+switch): in managed mode, when `web_scan` / `web_execute_js` find no tab and the
+extension is not connected, Galley opens the browser the extension lives in,
+waits for it, and the call carries on; the model never sees the step.
+
+- **Recognising the browser.** On every new extension connection to the
+  bridge's own master, the bridge takes the connection's peer port
+  (`extension_client.address`) and finds the process holding the other end:
+  macOS `lsof -iTCP:<port> -sTCP:ESTABLISHED` (the process whose local port it
+  is, not the bridge itself), then that process's executable, then the
+  outermost `*.app` above it (the extension's socket is held by a helper such
+  as `…/Vivaldi.app/Contents/Frameworks/…/Vivaldi Helper.app/…`, and the
+  program to open is `…/Vivaldi.app`); Windows `GetExtendedTcpTable` plus
+  `QueryFullProcessImageNameW` (Edge / Chrome hold it in their network-service
+  process, which runs the browser's own `.exe`). Other platforms, and a lookup
+  that finds nothing, leave `browserApp` as it was. A tab update moves
+  `extension_connected_at` but not the connection, so it looks nothing up.
+  Core stores a new `browserApp` in the pref `browser_control_last_browser_app`
+  (a JSON string) and passes it back as `--known-browser-app` whenever it
+  starts the bridge; until a run recognises a browser of its own, the known one
+  counts. Any Chromium browser works this way (Vivaldi, Brave, Arc, …), not
+  only the Chrome / Edge that the setup page opens. With two browsers carrying
+  the extension, only one can hold the connection: the last one to connect
+  wins.
+- **Asking.** A web tool that finds no tab first checks the extension: still
+  connected, it answers 「浏览器插件已连接，但没有可用网页……」 at once and opens
+  nothing. Otherwise it sends `{"cmd": "galley_browser_wanted"}` to the master
+  over GA's existing `127.0.0.1:18766/link` (managed patch `0035`). The
+  bridge's hook answers `{"r": {"opening": true}}` only while it is the master,
+  the extension is not connected, and it knows the browser; then it moves
+  `browserWantedAt` and writes a status line at once (with
+  `extensionConnected: false`). Requests within 30 s of that still answer
+  `true` without moving it, so the browser is opened once; a new extension
+  connection ends the window. Every other master answers `false` (a GA
+  session's own master, which has no hook) or `ok`, which is not JSON (an
+  upstream or external master): the tool returns 「浏览器当前没有连接……」 at
+  once. So does a bridge in the `remote` role, and a bridge that never saw the
+  extension: no guessing, no waiting.
+- **Waiting.** With `opening: true` the tool checks the tab list every 0.5 s for
+  up to 20 s, then runs the call as usual, or, with still no tab, returns the
+  same message as before (「浏览器插件已连接……」 if the extension came back
+  without an operable tab). On macOS the extension reconnected 1.86 s after
+  `open -a` in the 2026-11-20 probe; Windows has not been measured.
+- **Opening (Core).** When `browserWantedAt` moves on a running line that says
+  `extensionConnected: false`, Core checks whether that browser already runs
+  (macOS: a process whose executable is in `<app>/Contents/MacOS/`, from
+  `ps -axo comm=`; Windows: its image name in `tasklist`). Running: Core does
+  not open it, since starting it again opens a second window on Windows and
+  only takes the foreground on macOS; the extension's own alarm reconnects it
+  within about 30 s, and the tool waits its 20 s. Not running: macOS
+  `open -a <app>`, Windows the `.exe` with no arguments, so the browser
+  restores the user's tabs by its own settings. No address is passed. A
+  failure, or a failed check, is only logged (`[browser-bridge] browser
+  wanted: …`); the status and the GUI do not change. Opening takes the
+  foreground; that is the step the user would otherwise take by hand.
+- **Scope.** Managed runtime only: the bridge runs only there, so attach /
+  external GA is unchanged. IM channels' GA processes run the managed payload
+  and become remote clients of the same master, so a browser task asked over
+  IM opens the browser the same way.
+- **Rule 2.** No listener is added: `galley_browser_wanted` is one more command
+  on GA's own `127.0.0.1:18766/link`, where upstream's `Origin`-header
+  rejection still turns away any request from a web page. Core opens no port;
+  it starts a program, as the setup page's open buttons already do.
+- **First call of a session.** `first_init_driver` used to wait up to 12 s on
+  the first web call for a session or the extension. A remote client no longer
+  waits there (its master has been serving, so the flow above decides); only a
+  process that just became the master itself still waits, because the
+  extension needs a moment to find a server that did not exist a second ago
+  (its in-worker retry is 3 s, its alarm 30 s).
+
 Removed: the per-launch probe (it showed 「浏览器控制 · 检测中」 for 35 s every
 launch with the browser closed, went stale right after, and briefly held the
 ports itself). `ensureLayout()` still runs once per launch.
@@ -205,6 +290,13 @@ baseline upgrade):
   dials `ws://127.0.0.1:18765`).
 - `get_status()` returning `{extension_connected, extension_connected_at,
   tab_count}`: added by Galley patch `0006`, not upstream.
+- `TMWebDriver.extension_client` (patch `0006`) is a `simple_websocket_server`
+  `WebSocket`, whose `address` is the `(host, port)` that `accept()` returned:
+  the extension's end of the connection. The bridge reads the port to
+  recognise the browser. Patch `0035` adds the `/link` command
+  `galley_browser_wanted`, the master hook `_galley_on_browser_wanted`, and the
+  web tools' ask-and-wait in `ga.py` (`galley_wait_for_browser`); it also
+  stops a remote client's 12 s wait in `first_init_driver`.
 - GA's `ga.py` `first_init_driver()` constructs `TMWebDriver()` lazily on the
   first web tool call, which is what makes sessions remote clients.
 - Patch `0028` (`managed-ga/patches/manifest.md`): upstream's remote client
