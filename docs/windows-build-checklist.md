@@ -216,7 +216,7 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 
 Needs the extension to have connected once from Edge since this build was installed (Galley learns the browser from that connection).
 
-- [ ] Edge closed: ask Galley for something that needs the browser. Edge opens by itself **with an `example.com` tab** (Edge starts on its New Tab page by default, which the extension cannot drive; macOS Vivaldi did not show this tab on a cold start), and the task carries on to its answer. Note roughly how many seconds the first step took
+- [ ] Edge closed: ask Galley for something that needs the browser. Edge opens by itself **with an `example.com` tab** (Edge starts on its New Tab page by default, which the extension cannot drive; on macOS, Chrome showed this tab on a cold start and Vivaldi did not), and the task carries on to its answer. Note roughly how many seconds the first step took
 - [ ] Edge already open: the same request does not open a second Edge window
 - [ ] Edge open with only its New Tab page: the request adds an `example.com` tab in that Edge, and the task carries on
 - [ ] Feel: the browser popping up mid-conversation is acceptable
