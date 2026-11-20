@@ -581,6 +581,29 @@
 - **关联**：`.scratch/dedicated-browser/PRD.md`（三种做法对表、代价、探针清单、出处链接）；本台账「浏览器操作抢走前台」
   「浏览器插件上架 Chrome 应用商店 / Edge 加载项」；[浏览器控制](../managed-ga-runtime/browser-control.md)。
 
+## 火狐浏览器扩展
+
+- **状态**：暂缓（2026-11-20 JC 按推荐裁「不做火狐，先做没连上就自动打开浏览器的探针」）。
+- **提出**：2026-11-20，issue #33 回复：主用火狐、备用 Edge，扩展只能装在 Edge 里，Edge 不常开，对话时常忘了先打开。
+  这里是两个问题：「主力浏览器是火狐」只有火狐用户有；「忘了开」所有人都有，另拆成 `.scratch/browser-auto-open/PRD.md`。
+- **启动信号**（任一条）：独立的火狐用户需求累计到 3 位；火狐补上 `debugger` 的等价能力；上游 GA 出了火狐版扩展。
+- **方案**：开工前先跑三项探针：禁止 `eval` 的网站在火狐上能不能执行脚本；不公开（unlisted）签名能不能过；manifest 要改多少。
+- **实施要点**：
+  - 扩展离不开 `chrome.debugger`，火狐没有（MDN「Chrome incompatibilities」：“Chrome's debugger API is not implemented”）。
+    用在两处：页面禁止 `eval` 时的兜底执行（`managed-ga/code/assets/tmwd_cdp_bridge/background.js:345–362`），和模型直接发的
+    调试命令（GA 记忆里的 `tmwebdriver_sop.md` 把它标成「⭐首选」，用于「真人」点击、跨域 iframe）。
+  - 用量（2026-11-20 JC 本机库只读）：1,996 次 `web_execute_js` 里直接发调试命令 4 次，95 个用过浏览器的会话里 2 个。兜底执行
+    发生在扩展内部，库里没有记录。扩展装好时会用 `declarativeNetRequest` 去掉响应头里的 CSP（`background.js` `onInstalled`），
+    写在页面 `<meta>` 里的 CSP 去不掉，兜底仍要用；火狐这条路能不能走通，是第一项探针。
+  - 火狐正式版和测试版只装 Mozilla 签过名的扩展（Extension Workshop「Signing and distribution overview」）；不上架也要走 AMO 的
+    不公开签名，先自动校验、之后随时可能人工复审。要一个 Mozilla 开发者账号，每次改扩展都要重签，发版流程多一步。
+  - 两个扩展不能连同一个 TMWebDriver master（本台账「Galley 专属浏览器」实施要点），用户只能在火狐和 Chromium 浏览器里二选一。
+  - 上游没有火狐扩展，做就是 Galley 自己维护一份分叉；火狐上还要让模型知道当前浏览器不能发调试命令，又是一处补丁。
+  - 外置模式零变化（外置用户装的是自己的上游扩展）。
+- **待定**：火狐版与 Chromium 版放在一个设置页里怎么选。
+- **关联**：[浏览器控制](../managed-ga-runtime/browser-control.md)（第一版不含火狐的原话在「Rules」一节）；
+  `.scratch/browser-auto-open/PRD.md`；本台账「Galley 专属浏览器」。
+
 ## Composer `/` 快路：就地调出常用提示词
 
 - **状态**：暂缓（2026-10-03 JC 选方案 B，＋ 菜单不带快路）
@@ -745,6 +768,20 @@
 - **方案**：把 52 处直写统一改成 `shadow-[var(--shadow-*)]` 形式。机械替换，可脚本化；风险在于改完 dark 阴影会**第一次真正生效**，观感会明显变化（变重），需要连带复核 dark 下各浮层的阴影值是否还合适——很可能当年调 dark 阴影值时就是照着「看不见」调的。
 - **待定**：是否顺带把 `--shadow-*` 改成不进 `@theme`、只做普通 CSS 变量（那样 utility 就不存在，强制所有调用点走 var 写法，杜绝重演）。
 - **关联**：[选中行三通道](./2026-08-21-sidebar-selected-row-three-channels.md) 落地时发现；`docs/design/foundations.md` shadow token 段。
+
+## 主题按日出日落切换
+
+- **状态**：暂缓（2026-11-20 JC 裁：不加功能，回帖教用户用系统的定时切换）。
+- **提出**：2026-11-20，issue #33 回复：「当前的深色和浅色主题，如果可以根据日出日落切换就更完美了」。
+- **启动信号**：Windows 自带的定时切换正式推出后，仍有用户要 Galley 自己按时间切；或「跟随系统」在某个平台上不再实时跟随。
+- **方案**：现在不做。Galley 默认「跟随系统」（`docs/design/foundations.md:132`），系统一切换就实时跟着变（`gui/src/lib/theme.ts`
+  `subscribeSystemTheme`）。macOS 外观选「自动」即按夜览时间表切换，夜览可设「日落到日出」（Apple「在 Mac 上使用浅色或深色外观」）；
+  Windows 自带的还没有（2026-09 起有报道说微软在实验版里测），微软 PowerToys 的 Light Switch 已能按日落到日出切。
+  2026-11-20 JC 在 Windows 机上手动切换系统深浅色，Galley 实时跟随（已补进 [Windows 清单](../windows-build-checklist.md)）。
+- **实施要点**：真要做，「日出日落」要位置（定位权限或让用户填城市），按固定时间切也要两个时间输入；外观偏好只加一行，
+  不加按钮（[layout-and-chrome](../design/layout-and-chrome.md)「外观类偏好控件的标准形态」）。纯界面，两种运行时模式都不受影响。
+- **待定**：无。
+- **关联**：issue #33。
 
 ---
 

@@ -184,6 +184,7 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 ### Settings -> General / Launch at login (2026-07-17)
 
 - [ ] Settings sidebar shows `通用` first (Chinese main label since 2026-09-16, English helper `General`); theme + language moved here from the sidebar footer, plus conversation font-size and reading-width rows (topbar quick controls unchanged)
+- [ ] Theme `跟随系统`: switching Windows Settings → Personalization → Colors → app mode between light and dark flips Galley live, without a restart (first walked by JC on 2026-11-20)
 - [ ] Launch-at-login toggle defaults OFF on a fresh install
 - [ ] Enabling the toggle creates the `Galley` value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (with `--autostart` argument)
 - [ ] Sign out / sign in (or reboot): Galley starts hidden — tray icon present, no window, tray toggle reads `Open Galley`
