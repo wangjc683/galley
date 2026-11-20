@@ -229,8 +229,8 @@ waits for it, and the call carries on; the model never sees the step.
   disconnection, re-armed by the extension connecting again or by Galley
   restarting (a new bridge process), so a disabled extension or a stored
   path that no longer opens does not add a tab and a 20 s wait to every web
-  call. **JC 未裁** (2026-11-20, the main session's amendment, revertible as
-  one commit). Every other master answers `false` (a GA
+  call. Kept by JC on 2026-11-20 (the main session's amendment at
+  acceptance). Every other master answers `false` (a GA
   session's own master, which has no hook) or `ok`, which is not JSON (an
   upstream or external master): the tool returns 「浏览器当前没有连接……」 at
   once. So does a bridge in the `remote` role, and a bridge that never saw the
@@ -248,10 +248,9 @@ waits for it, and the call carries on; the model never sees the step.
   It does so whether or not the browser is already running; there is no
   running check. A failure is only logged (`[browser-bridge] browser wanted:
   …`); the status and the GUI do not change. Opening takes the foreground;
-  that is the step the user would otherwise take by hand. **JC 未裁**
-  (2026-11-20, the main session's amendment of the ticket, which had said
-  "no address" and "do not open a running browser"; revertible as one
-  commit):
+  that is the step the user would otherwise take by hand. Kept by JC on
+  2026-11-20 (the main session's amendment of the ticket, which had said
+  "no address" and "do not open a running browser"):
   - Why an address: the extension lists only http(s) tabs (`isScriptable`,
     `background.js`), and Chrome and Edge start on their New Tab page by
     default, so a launch with no address gives a connected extension with

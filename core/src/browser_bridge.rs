@@ -30,7 +30,7 @@
 //! running: the page gives the extension an http(s) tab to drive and wakes
 //! an extension worker that is asleep. Opening at an address and dropping
 //! the "already running" check are the main session's amendment of
-//! 2026-11-20, not yet ruled by JC (JC 未裁). Managed runtime only, like the
+//! 2026-11-20, kept by JC the same day. Managed runtime only, like the
 //! bridge itself.
 //! See docs/managed-ga-runtime/browser-control.md.
 
