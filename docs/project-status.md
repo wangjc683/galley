@@ -399,7 +399,14 @@ Post-release follow-up:
 ## Unreleased On Main
 
 Release-scope truth is `git log v0.7.10..HEAD`. Merged since `v0.7.10`:
-the release docs. None of that changes the app.
+the release docs, and **browser auto-open** (2026-11-20, issue #33's second
+round, [devlog](./devlog/2026-11-20-browser-auto-open.md)): when a web tool
+finds no tab and the extension is not connected, Core opens the browser the
+extension last connected from, at the setup test page, and the tool waits up
+to 20 s. Managed runtime only; touches `runner/`, `core/` and managed GA
+(new patch `0035`). Walked on the Mac (Vivaldi) by the main session; owed:
+the three Windows steps in the [Windows checklist](./windows-build-checklist.md)
+「Browser auto-open」, which JC set for the next release draft.
 
 **Owed from the `v0.7.10` smoke** (the list is in the release devlog). The
 main session walked the Mac smoke on the installed draft at JC's request.
