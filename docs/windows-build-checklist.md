@@ -212,6 +212,14 @@ Items to verify on the Win machine. Hand back to Mac for any failures.
 - [ ] Closing and reopening Chrome / Edge dims and restores the PuzzlePiece lamp within a few seconds; the first browser step in a new session does not stall
 - [ ] New-user flow on a profile never verified: 浏览器控制 · 待解锁 badge + banner → load the extension → auto-verify completes step 3 → 浏览器控制已连接 toast → 试一试 runs the weather demo
 
+### Browser auto-open (2026-11-20, `.scratch/browser-auto-open/`)
+
+Needs the extension to have connected once from Edge since this build was installed (Galley learns the browser from that connection).
+
+- [ ] Edge closed: ask Galley for something that needs the browser. Edge opens by itself **with an `example.com` tab** (Edge starts on its New Tab page by default, which the extension cannot drive; macOS Vivaldi did not show this tab on a cold start), and the task carries on to its answer. Note roughly how many seconds the first step took
+- [ ] Edge already open: the same request does not open a second Edge window
+- [ ] Feel: the browser popping up mid-conversation is acceptable
+
 ### Tutorial modal
 
 - [ ] "memory-info" tutorial shows BOTH Mac/Linux and Windows command examples (already OS-agnostic in tutorial content)
