@@ -65,8 +65,8 @@ request and walked S1 (the app up, four channels logging in, the main chat
 answering) and S2 (Vivaldi quit, a browser task in a temporary session:
 Vivaldi opened after 5.1 s, the extension connected at 6.5 s, the right
 answer; the first step took about 28 s on a restored tab, upstream's
-behavior seen in dev). JC approved publish; W1, which JC had set for this
-draft, was not reported. Stable promoted and verified the same session (run
+behavior seen in dev). JC approved publish; after it JC reported the
+closed-browser case on Windows passing (the rest of W1 not reported). Stable promoted and verified the same session (run
 44693272694). Full narrative: devlog
 [2026-11-20-v0.7.11-release](./devlog/2026-11-20-v0.7.11-release.md).
 
@@ -197,8 +197,9 @@ windows-x86_64), in the promote run (44693272694) and again locally (channel
 branch at `d439aca6`); a plain `curl` read 0.7.11 on both at 07:14 UTC,
 right after promote. One draft cut (release run 44685554316, tag on
 `625067bf`); the main session installed the Intel DMG and walked S1 and S2
-at JC's request, and JC approved publishing; W1 was not reported and is
-owed under Unreleased On Main. The bundled-runtime gate passed on `mac-x64`;
+at JC's request, and JC approved publishing; after publish JC reported
+the closed-browser case on Windows passing, the rest of W1 is owed under
+Unreleased On Main. The bundled-runtime gate passed on `mac-x64`;
 `check.yml` was green on `625067bf` (run 44682931838), all seven jobs.
 
 `v0.7.10` (2026-11-19): one draft cut (release run 44488026001, tag on
@@ -407,10 +408,13 @@ after 5.1 s, the extension connected at 6.5 s, and the right answer. Not
 seen or not measured:
 
 - W1, the [Windows checklist](./windows-build-checklist.md) 「Browser
-  auto-open」 (Edge closed, Edge open, Edge on its New Tab page, the feel),
-  which JC had set for this draft: not reported. Browser auto-open has never
-  run on Windows: the browser lookup (`GetExtendedTcpTable`) and the Windows
-  launch path have automated tests only.
+  auto-open」: after publish JC reported the closed-browser case on Windows
+  (2026-11-20: 「在没有打开浏览器时，会自动打开浏览器开始浏览器任务」). An
+  open needs a browser learned from the extension's connection, so the
+  Windows lookup (`GetExtendedTcpTable`) and launch path ran on a real
+  machine. Not reported: which browser, whether an `example.com` tab came
+  up, the first step's time, the browser already open (no second window),
+  only a New Tab page open (ticket 02), the feel; and the rest of W1.
 - Whether `https://example.com` came up on the cold Vivaldi start (the
   browser was not looked at; under dev Vivaldi restored its tabs instead).
 - The first step's ~28 s on a restored, not yet loaded tab (「页面变化监控不可用」),
