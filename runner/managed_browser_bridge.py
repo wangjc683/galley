@@ -68,7 +68,11 @@ MASTER_GONE_RETRY_SEC = 0.3
 HTTP_READY_TIMEOUT_SEC = 3.0
 # A web tool asks again on every call while the browser is still coming up:
 # inside this window the hook keeps answering yes without moving
-# browserWantedAt, so Core opens the browser once.
+# browserWantedAt, so Core opens the browser once. Past it, with no extension
+# connection noticed since, the hook answers no: one open per disconnection
+# (a disabled extension or a path that no longer opens must not add a tab and
+# a 20 s wait to every web call). A new connection, or a new bridge process,
+# re-arms it.
 BROWSER_WANTED_REPEAT_SEC = 30.0
 BROWSER_LOOKUP_TIMEOUT_SEC = 5.0
 
@@ -390,7 +394,7 @@ class BridgeLoop:
             return
         self._seen_extension = key
         with self._lock:
-            # The browser came back: a later request is a new one.
+            # The browser came back: a later request may open it again.
             self._wanted_clock = None
         if not isinstance(address, tuple) or len(address) < 2:
             return
@@ -409,7 +413,8 @@ class BridgeLoop:
     def on_browser_wanted(self) -> bool:
         """TMWebDriver's ``galley_browser_wanted`` hook, on the master's
         HTTP thread: a GA web tool found no tab and no extension. Yes while
-        we are the master, the extension is gone and we know the browser."""
+        we are the master, the extension is gone and we know the browser,
+        at most once per disconnection (see ``BROWSER_WANTED_REPEAT_SEC``)."""
         with self._lock:
             driver = self.driver
             if self.role != ROLE_MASTER or driver is None:
@@ -419,11 +424,10 @@ class BridgeLoop:
             if not (self.browser_app or self._known_browser_app):
                 return False
             now = self._clock()
-            if (
-                self._wanted_clock is not None
-                and now - self._wanted_clock < BROWSER_WANTED_REPEAT_SEC
-            ):
-                return True
+            if self._wanted_clock is not None:
+                # Inside the window: the open is under way. Past it with no
+                # connection since: it did not work, give up until one.
+                return now - self._wanted_clock < BROWSER_WANTED_REPEAT_SEC
             self._wanted_clock = now
             self.browser_wanted_at = self._now_iso()
             self._log("browser wanted")

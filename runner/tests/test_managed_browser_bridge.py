@@ -464,10 +464,47 @@ def test_repeated_requests_within_the_window_do_not_move_browser_wanted_at() -> 
     assert h.loop.browser_wanted_at == first
     assert len(h.lines) == lines
 
-    h.now += 1
+
+def test_gives_up_after_the_window_until_the_extension_connects_again() -> None:
+    master = FakeDriver(is_remote=False)
+    h = Harness(master, known_browser_app=VIVALDI, browsers={52427: VIVALDI})
+    h.loop.step()
+    assert master.ask_browser_wanted() is True
+    first = h.loop.browser_wanted_at
+    lines = len(h.lines)
+
+    # The open did not bring the extension back (disabled, or a path that no
+    # longer opens): past the window the answer is no, nothing moves.
+    h.now += bridge.BROWSER_WANTED_REPEAT_SEC
+    h.loop.step()
+    assert master.ask_browser_wanted() is False
+    h.now += 600
+    h.loop.step()
+    assert master.ask_browser_wanted() is False
+    assert h.loop.browser_wanted_at == first
+    assert len(h.lines) == lines
+
+    # The extension connects (and leaves again): the next request opens.
+    master.connect_extension(52427)
+    h.loop.step()
+    master.disconnect_extension()
+    h.loop.step()
     assert master.ask_browser_wanted() is True
     assert h.loop.browser_wanted_at != first
-    assert len(h.lines) == lines + 1
+    assert h.lines[-1]["browserWantedAt"] == h.loop.browser_wanted_at
+
+
+def test_a_new_bridge_process_is_armed_again() -> None:
+    first_run = Harness(FakeDriver(is_remote=False), known_browser_app=VIVALDI)
+    first_run.loop.step()
+    first_run.loop.on_browser_wanted()
+    first_run.now += bridge.BROWSER_WANTED_REPEAT_SEC
+    assert first_run.loop.on_browser_wanted() is False
+
+    master = FakeDriver(is_remote=False)
+    restarted = Harness(master, known_browser_app=VIVALDI)
+    restarted.loop.step()
+    assert master.ask_browser_wanted() is True
 
 
 def test_a_new_connection_ends_the_window() -> None:
