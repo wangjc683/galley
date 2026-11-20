@@ -1,6 +1,6 @@
 # 02 浏览器开着、但没有可用网页时，Galley 也打开一个
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-20 合入 main，efcfc4ac）
 日期：2026-11-20
 背景：[PRD](../PRD.md)、[票 01](./01-open-the-browser-when-needed.md)（已合入）。JC 裁：「这个也做，解决掉」。
 
