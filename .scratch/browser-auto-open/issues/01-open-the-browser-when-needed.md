@@ -172,3 +172,11 @@ git diff --check
 
 JC 定：Windows 三步等发版有了新草稿时一起验，已写进 [Windows 清单](../../../docs/windows-build-checklist.md)「Browser auto-open」。
 票保持 `needs-dogfood`，那三步过了再改 `done`。
+
+### 2026-11-20 macOS Chrome 真机（主会话代验，JC 同意退出 Vivaldi 与 Chrome）
+
+JC 在 Chrome 里装上了扩展。先退出两个浏览器、正常打开 Chrome：扩展 2 秒连上、网页数 0（Chrome 默认只开新标签页），偏好改为
+`Google Chrome.app`。再退出 Chrome，经 CLI 新建临时会话发同一句：发出后 4.9 秒 Chrome 被打开，再 1.8 秒扩展连上，随即出现
+`example.com` 标签页；第一步 12 秒落库，答对，全程 24.8 秒。所以带网址打开在 Chrome 上成立，Vivaldi 冷启动没开出它是 Vivaldi 自己的
+行为；Chrome 第一步不慢，也支持「Vivaldi 慢在恢复出来、还没载入的第一个标签页」的推测。测完退出 Chrome、打开 Vivaldi，偏好改回
+Vivaldi，临时会话已永久删除。

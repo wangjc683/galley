@@ -78,3 +78,9 @@ node scripts/check-ga-baseline-drift.mjs
 Windows 清单「Browser auto-open」加一步：Edge open with only its New Tab page → the request adds an `example.com` tab in that Edge, and the task carries on.
 
 ## Comments
+
+### 2026-11-20 macOS Chrome 真机（主会话代验）
+
+正常打开 Chrome（只有新标签页，扩展连上、网页数 0）后，在同一临时会话里发「再用浏览器看一下 https://www.iana.org/domains 的页面标题」：
+4.3 秒后 Chrome 里出现 `example.com`，第一步 7 秒落库，答对，全程 15.4 秒；Chrome 仍是 1 个窗口（`osascript` 计数），没有多开。
+Windows 的 Edge 那一步仍等下一版草稿。
