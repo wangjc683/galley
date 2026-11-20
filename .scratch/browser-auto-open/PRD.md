@@ -65,6 +65,7 @@ Date: 2026-11-20
 | 票 | 内容 |
 |---|---|
 | [01](./issues/01-open-the-browser-when-needed.md) | 认出浏览器、请求打开、Core 打开、文档 |
+| [02](./issues/02-open-a-page-when-there-is-none.md) | 扩展连上了但没有可用网页时也打开（JC 2026-11-20 裁：做） |
 
 ## 待定
 
