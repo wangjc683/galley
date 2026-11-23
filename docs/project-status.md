@@ -326,7 +326,7 @@ Post-release follow-up:
    Windows machine through the in-app updater (2026-11-20, JC: 「是通过应用内更新从
    0.7.10 升上来的」, and browser auto-open worked on it); whether the update
    went through the update proxy prefix was not said, so a download through
-   the prefix stays unobserved. `v0.7.11` → `v0.7.12`: not yet reported. `v0.7.7` → `v0.7.8` passed on a
+   the prefix stays unobserved. `v0.7.11` → `v0.7.12` passed by JC's report the day of the release (2026-11-23: 「v0.7.11 → v0.7.12 更新我测试了正常」); which machine and platform was not said. `v0.7.7` → `v0.7.8` passed on a
    user's Windows machine the day of the release (JC, 2026-11-11, relaying
    the user: 「windows 用户更新到 0.7.8，更新和使用暂时看一切正常」; the
    user takes every version through the updater, was on 0.7.7 before, and
@@ -413,8 +413,6 @@ path in its answer, with the new wording in the engine log. Not seen:
   project folder all along, do not let the model clean the link up, what
   `v0.7.12` changes, not yet run on Windows. Waiting for the reporter's
   word after updating.
-- The update from `v0.7.11` through the in-app updater (this Mac was again
-  installed straight from the draft).
 - Still open from the fix itself (devlog
   [2026-11-23](./devlog/2026-11-23-project-folder-real-path.md)): a relative
   path or a command with no directory still lands in `temp`; deleting a
