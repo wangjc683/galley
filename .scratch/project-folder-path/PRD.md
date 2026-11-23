@@ -3,6 +3,9 @@
 日期：2026-11-23
 来源：社区 issue #34（Windows，v0.7.11，内置内核）。JC 裁决（2026-11-23）：按方案甲做，注入里加「链接不是副本」那一句；
 回帖等修复发版后再回。
+状态（2026-11-23）：票 01 随 v0.7.12 发出；issue #34 已回帖（issuecomment-7090533295），issue 保持 open。票 01 停在
+`needs-dogfood`，等 Windows 上走过 [Windows 清单](../../docs/windows-build-checklist.md)「Project folder」三项或报告人回报；
+过了就关票、删本目录（devlog 已覆盖全部裁决）。
 
 ## 问题
 
