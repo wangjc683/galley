@@ -1651,6 +1651,25 @@ When auditing a GenericAgent upgrade, focus on these surfaces:
     or the tools from anything else. `runner/tests/test_managed_ga_llmcore.py`
     (the `0034` group) checks the request on the official host and
     elsewhere, and that `session.history` keeps the blocks.
+27. What project mode tells the model about a project's folder
+    (2026-11-23, galley#34, `.scratch/project-folder-path/`; managed
+    runtime; managed patch `0036`). `frontends/workspace_cmd.py`'s
+    `prepare` links `temp/projects/<name>-<hash>` in the state root to the
+    folder the user chose, and `plugins/project_mode.py`'s
+    `_build_injection` names that link in every round's user message.
+    `0036` makes `inject_project_context` read
+    `_ga_project_mode_workspace_path` from `handler.parent` (set by
+    `runner/ga_session.py::set_project_mode`; upstream's TUIs set the same
+    attribute) and, when `os.path.samefile(_project_dir(name), <value>)`
+    holds, name the real folder instead and say the link is not a copy.
+    Re-check by hand on upgrade: (a) whether the attribute still has that
+    name and `prepare` still links at `_project_dir(name)` (a rename makes
+    the injection fall back to upstream's text without an error); (b)
+    whether upstream rewrote `_build_injection`'s rule or memory-path lines
+    (redo `0036`'s hunks on the new text); (c) whether upstream's injection
+    now names the bound folder itself (then `0036` can go; see its removal
+    condition in the patch ledger).
+    `runner/tests/test_managed_ga_project_mode.py` pins both texts in full.
 
 Galley may read GenericAgent public APIs and stable in-memory objects. Galley
 must not write GenericAgent source, memory, venv, PATH, or runtime state.

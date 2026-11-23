@@ -1,6 +1,6 @@
 # 01 项目模式注入改用真实文件夹路径
 
-Status: ready-for-agent
+Status: needs-dogfood（2026-11-23 合入 main，a4e63f72；等 Windows 真机）
 日期：2026-11-23
 背景：[PRD](../PRD.md)（问题、根因、裁决、边界）。先读 [dispatch](../../../docs/agents/dispatch.md) 与
 [code-state-and-patches](../../../docs/managed-ga-runtime/code-state-and-patches.md) 的「How To Add A Patch」。
@@ -120,3 +120,20 @@ git diff --check
 | macOS dev：用 CLI 建一个绑文件夹的项目和会话，文件夹里放一个文件，发「工作目录下有个某某文件，读取并说说它是做什么的，再在工作目录里写一份摘要」。查库：第一步工具调用读的是不是真实文件夹下的路径（不是先查 temp）；回答里报的路径是不是真实路径；摘要文件落在真实文件夹里。测完永久删除测试会话与项目。 | Windows 真机（目录联接、反斜杠路径、盘符与状态目录不同盘）：发版冒烟时走同一句话。 |
 
 ## Comments
+
+### 2026-11-23 验收（主会话）
+
+- 读过 `git diff main...ticket/project-folder-01`；在 worktree 里重跑门禁：补丁栈重放后工作树干净，`pytest` 902 过，新测试 17 过
+  （`TZ=UTC` 同），`mypy`、`ruff`、`check-managed-ga-payload`、`git diff --check` 过。
+- macOS dev 代验（`gpt-6.2-sol`，同一个临时项目、票第 6 节那句话，各一轮）：
+  - 补丁后：第一步直接读真实文件夹下的文件，共 4 步；摘要写在真实文件夹里；回答报的是真实路径。引擎日志确认收到的是新写法。
+  - 补丁前的写法（临时换回、跑完还原）：第一步按相对路径在 temp 读，没读到，再跑代码列目录找，共 7 步；回答报的是状态目录下的
+    链接路径。复现了 issue 的两个现象。
+  - 两个测试会话、临时项目、状态目录里的链接与注册表条目已删除。
+- 执行代理报的未解决风险，原样：
+  - Windows 没验：目录联接、`samefile` 在状态目录与文件夹不同盘时的表现、反斜杠路径，都没在真机上跑过。CI 的 runner 测试只在
+    ubuntu 跑。
+  - 属性名被上游改掉时不会报错，注入会静默回到旧写法（已写进补丁清单与 GA baseline 耦合点 27）。
+  - 一个按规则会出错的边角：属性值恰好就是 `temp/projects/<名字>` 这个真实目录本身（不是链接）时，`samefile` 为真，注入会说它是
+    链接。走 `prepare` 到不了这一步（`validate_path` 拒绝 temp 内的路径），规则本身没挡。
+- 票外发现：删掉项目后，状态目录里的链接和注册表条目留着（见 devlog，未裁）。

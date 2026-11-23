@@ -1050,6 +1050,9 @@
   `file_write` / `file_patch`），并接了 GUI 的写入步骤入口与正文按名解析，见
   [written-file references](./2026-09-17-written-file-references.md)。本项其余
   部分（每 session 目录、软链 + `handler.cwd`、`code_run` 产物）仍暂缓。
+- **2026-11-23 旁证**：issue #34（项目绑了文件夹，模型仍按 temp 找文件、报状态目录下的路径）。当天只改了项目模式注入的
+  说法（补丁 `0036`，见 [项目文件夹](./2026-11-23-project-folder-real-path.md)）；项目会话的工具基准目录仍是 temp，
+  模型写相对路径或不带目录跑命令时还是落在 temp 根。这一半要本项的「`handler.cwd` + 改提示词里的 `cwd` 一句」才解。
 - **实施要点**：`workspace_path` 存 `sessions` 表首次定死（照 v1 Goal 的
   `goals.workspace_path`，代码已随 Goal 退役，做法见 git 历史），改设置只影响新 session；空目录 session 结束时回收，
   **不写标记文件**（会废掉回收）；工具调用的绝对路径**在 bridge 现场解析**

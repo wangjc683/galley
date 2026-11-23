@@ -399,7 +399,13 @@ Post-release follow-up:
 ## Unreleased On Main
 
 Release-scope truth is `git log v0.7.11..HEAD`. Merged since `v0.7.11`:
-the release docs.
+the release docs, and the project folder fix for issue #34 (2026-11-23,
+managed patch `0036`: project mode names the folder the user chose, not the
+link under the state root; devlog
+[2026-11-23](./devlog/2026-11-23-project-folder-real-path.md)). `managed-ga/`
+changed, so the next release runs the bundled-runtime gate. Owed for it: the
+same sentence on a Windows machine (directory junction, drive other than the
+state root's), and the reply on issue #34 after the release.
 
 **Owed from the `v0.7.11` smoke** (the list is in the release devlog). The
 main session installed the Intel DMG and walked S1 and S2 at JC's request.
