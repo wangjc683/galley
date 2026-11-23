@@ -27,6 +27,25 @@ def _active_project(ctx=None):
     return getattr(parent, '_ga_project_mode_name', None) or None
 
 
+def _active_workspace(ctx=None):
+    # Galley: the real folder the session's project is bound to (Galley's
+    # runner and upstream's TUI set it next to the name); None when unset.
+    handler = ctx.get('handler') if isinstance(ctx, dict) else None
+    return getattr(getattr(handler, 'parent', None), '_ga_project_mode_workspace_path', None)
+
+
+def _bound_workspace(name, workspace):
+    # Galley: the folder's absolute path when the project dir (a link) is that
+    # folder, else None and the injection keeps upstream's wording. A model
+    # that enters another project by name leaves the old folder set.
+    if not isinstance(workspace, str) or not workspace:
+        return None
+    try:
+        return os.path.abspath(workspace) if os.path.samefile(_project_dir(name), workspace) else None
+    except (OSError, ValueError):
+        return None
+
+
 def _project_dir(name):
     return os.path.join(_TEMP, 'projects', name)
 
@@ -44,14 +63,15 @@ def _memory_stat(name):
     return False, 0, 0
 
 
-def _build_injection(name):
+def _build_injection(name, workspace=None):
     """构造追加到 user message 末尾的内容（两层设计的 L1 层）。
 
     L1（每轮全量注入）：规范/规则/操作说明 + 记忆文件指针（含行数/大小线索）。
     L2（按需）：project_memory.md 全文不注入，由模型自行判断是否用 file 工具去读。
     """
     pdir = _project_dir(name)
-    mem_path = _mem_path(name)
+    workspace = _bound_workspace(name, workspace)
+    mem_path = os.path.join(workspace, 'project_memory.md') if workspace else _mem_path(name)
     exists, lines, nbytes = _memory_stat(name)
     if exists and nbytes > 0:
         mem_hint = (
@@ -61,12 +81,20 @@ def _build_injection(name):
         )
     else:
         mem_hint = f"项目记忆 {mem_path} 暂为空（本项目尚无沉淀），无需读取。"
+    if workspace:  # Galley: name the real folder; the link is not a copy
+        dir_rule = (
+            f"- 项目文件夹：{workspace}。这是用户为本项目选的文件夹，用户说的「工作目录」「项目文件夹」「项目目录」指的就是它："
+            f"用户提到的文件先在这里找；todo、草稿、产物一律放这里（勿放 temp 根目录）；对用户说路径时用这个路径。\n"
+            f"- {pdir} 是指向这个文件夹的链接，不是副本，不要清理或删除它。\n"
+        )
+    else:
+        dir_rule = f"- 项目私域目录：{pdir}（todo、草稿、产物一律放这里，勿放 temp 根目录）\n"
     return (
         f"\n\n---\n"
         f"[PROJECT MODE: {name}]\n"
         f"你正在「{name}」项目模式中。\n\n"
         f"## 规则\n"
-        f"- 项目私域目录：{pdir}（todo、草稿、产物一律放这里，勿放 temp 根目录）\n"
+        f"{dir_rule}"
         f"- {mem_hint}\n\n"
         f"## 收尾纪律\n"
         f"干完本轮活后自问一个问题：「记忆归零、重新接手本项目的我，缺了本轮哪条信息会重复付出认知代价"
@@ -88,8 +116,9 @@ def inject_project_context(ctx):
                if isinstance(m, dict) and m.get('role') == 'user'), None)
     if um is None:
         return
+    workspace = _active_workspace(ctx)
     content = um.get('content')
     if isinstance(content, str):
-        um['content'] = content + _build_injection(name)
+        um['content'] = content + _build_injection(name, workspace)
     elif isinstance(content, list):  # 多模态：追加 text block
-        content.append({'type': 'text', 'text': _build_injection(name)})
+        content.append({'type': 'text', 'text': _build_injection(name, workspace)})
