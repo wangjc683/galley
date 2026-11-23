@@ -10,17 +10,17 @@ not current rules).
 
 ## Current Target
 
-- Package version: `0.7.11`.
-- Git tag / GitHub Release: `v0.7.11` is the current published stable release
-  (tagged at `625067bf` on 2026-11-20, published 2026-11-20, GitHub Latest).
+- Package version: `0.7.12`.
+- Git tag / GitHub Release: `v0.7.12` is the current published stable release
+  (tagged at `5e921a99` on 2026-11-23, published 2026-11-23, GitHub Latest).
 - Agent API schema: `schemaVersion: 3` (since the Goal removal on
   2026-10-13, first shipped in `v0.7.0`; `2` first shipped in `v0.5.0`). The
   server keeps answering `1` and `2` for every command that did not change;
   every goal command, v1 and v2, is `unknown_command` under every pin.
-- Release tier: stable patch; default update channel points at `v0.7.11`.
+- Release tier: stable patch; default update channel points at `v0.7.12`.
   `beta` is kept as a legacy alias for older builds.
 - Shipped GA baseline: `d66509b` (audited 2026-11-03, shipped in
-  `v0.7.6` … `v0.7.11`; `llmcore.py`'s text protocol split into `legacy_llmcore.py`,
+  `v0.7.6` … `v0.7.12`; `llmcore.py`'s text protocol split into `legacy_llmcore.py`,
   one `0001` hunk so managed memory distillation still reads L0, no Galley
   code change). The previous `a9a36b4` shipped `v0.7.1` … `v0.7.5`,
   `b70079d` `v0.7.0`, on top of `5205f40` (audited 2026-10-18, never
@@ -40,6 +40,35 @@ Release paragraphs (newest first) keep only the latest three releases;
 every older release's narrative lives in its release devlog (the
 [devlog index](./devlog/README.md) lists them). Two older paragraphs stay
 for now, `v0.6.1` and `v0.4.16`: each holds one fact its devlog does not.
+
+`v0.7.12` (2026-11-23) is a patch three days after `v0.7.11`, 9 commits at
+the start. One thing changes the app, from GitHub issue #34 (Windows, a
+project folder "in name only"): in a project bound to a folder, project
+mode's per-round text now names the folder the user chose and says it is
+what the user calls the working directory, where before it named only the
+link under the state root (`temp/projects/<name>-<hash>`: a junction on
+Windows, a symlink elsewhere), so the model searched `temp` first and
+reported link paths; it also says the link is not a copy. Managed runtime
+only (new patch `0036` on `plugins/project_mode.py`, used only when the link
+is the session's bound folder; GA baseline coupling point 27); the tools'
+base directory is still `temp` (deferred "Session Workspace"). No migration,
+no Agent API change, `core/`, `cli/` and `gui/` untouched. GA baseline
+unchanged at `d66509b`: upstream `main` still at `7395dfd`, the batch JC
+ruled not to follow at `v0.7.11`. Pre-flight: the six gate scripts, runner
+pytest / mypy / ruff and `cargo check` on main; the bundled-runtime gate on
+`mac-x64` in a `git archive` copy; `check.yml` green on the bump commit
+`5e921a99` (run 45097869902), all seven jobs. Before the release the main
+session ran the issue's sentence once each way under macOS dev on
+`gpt-6.2-sol`: 4 steps and the real path with the patch, 7 steps and the
+link path without. One draft (release run 45099794121); the main session
+checked the Intel DMG read-only, installed it on the Mac at JC's request and
+walked S1 (the app up, four channels logging in, the main chat answering)
+and S2 (a temporary project bound to a folder: the first step read the file
+in the real folder, the summary was written there, the answer gave the real
+path). JC approved publish; W1's 「Project folder」 steps, the platform the
+issue came from, were not walked. Stable promoted and verified the same
+session (run 45103513973). Full narrative: devlog
+[2026-11-23-v0.7.12-release](./devlog/2026-11-23-v0.7.12-release.md).
 
 `v0.7.11` (2026-11-20) is a patch one day after `v0.7.10`, 26 commits at
 the start. One thing changes the app, from GitHub issue #33's second round:
@@ -99,48 +128,6 @@ through the prefix (nothing newer to download), W1. Stable promoted and
 verified the same session (run 44494723011). Full narrative: devlog
 [2026-11-19-v0.7.10-release](./devlog/2026-11-19-v0.7.10-release.md).
 
-`v0.7.9` (2026-11-17) is a patch six days after `v0.7.8`, 47 commits. IM
-answers carry only the answer: the 过程 button on Telegram and Discord, the
-过程 panel on Feishu and WeChat's `N 步 · 用时 X` last line are gone, the IM
-entry layer tells the agent to retell the process when asked and not run it
-again, and a 过程 button already sent removes itself when tapped. Toward
-the official APIs Galley says it is Galley: no Claude Code identity toward
-`api.anthropic.com`, no Codex identity toward `api.openai.com` (the ChatGPT
-sign-in provider excepted), because both vendors refuse a subscription's
-API credit to a request that carries one (managed patches `0032`, `0033`).
-"Test model" sends what a conversation sends (the engine's headers, held
-by a parity test, GA baseline coupling point 25; the Responses endpoint in
-Responses mode; `[1m]` model ids; the token-cap key for new OpenAI models);
-the official OpenAI preset defaults to Responses and the Anthropic preset
-prefills `claude-opus-5-5`. Found and fixed during release prep, before the
-tag: on an enforcing Anthropic account (created on or after 2026-08-31) a
-long tool task on `claude-opus-5-5` hit 400 "Invalid `signature` in
-`thinking` block … bound to a different conversation" once the engine
-shortened old messages in place, and every later message in that
-conversation got the same 400 (reproduced under dev at request 14). Managed
-patch `0034` (coupling point 26) sends a thinking block back to the official
-host only while the request before it fingerprints as it did when the block
-was produced. The fix was ruled three times the same day: not storing
-blocks, then not sending any back (the IM log restore would have brought
-them back), then, after JC's worry about answer quality (78% of his
-requests sit in runs longer than 6 steps), only the invalid ones dropped.
-Graded patch: no schema change, no migration, nothing with the weight of a
-product line. GA baseline unchanged at `d66509b`: upstream `main` still at
-`68d996a`, judged at `v0.7.7`. Pre-flight: typecheck, lint, `cargo check`,
-the six gate scripts; the bundled-runtime gate on `mac-x64` twice (before
-and after `0034`); `check.yml` green on `bd3f9a79` (run 44064738372), all
-seven jobs. One draft (release run 44068410650); the agent checked the
-Intel DMG read-only (its `llmcore.py` byte-identical to the repo payload,
-32 patches, no process-button send path) and the `latest.json` candidate.
-JC handed the Mac to the main session for the smoke: the draft installed
-over 0.7.8; the main chat answered on the ChatGPT sign-in model; a
-26-step chained task on `claude-opus-5-5` ran 39 requests with no error and
-the right answer; "Test model" passed on the official Anthropic and OpenAI
-models and on one third-party provider per protocol. Not done: the preset
-defaults on the packaged build, a Telegram answer on it, W1. Stable promoted
-and verified the same session (run 44084022327). Full narrative: devlog
-[2026-11-17-v0.7.9-release](./devlog/2026-11-17-v0.7.9-release.md).
-
 `v0.6.1` (2026-10-07) is a patch two days after `v0.6.0`, 16 commits. It
 ships the GA baseline `f308ee7` and three managed prompt rounds: the runtime
 prompt describes Galley from a feature map and points configuration requests
@@ -188,19 +175,24 @@ day. Full narrative: devlog
 
 ## Current Release State
 
-`v0.7.11` is published and promoted as the live stable release (published
-2026-11-20 07:12 UTC). The default `updates/stable/latest.json` channel points
-at `v0.7.11`, with the legacy `updates/beta/latest.json` alias pointing at the
+`v0.7.12` is published and promoted as the live stable release (published
+2026-11-23 03:01 UTC). The default `updates/stable/latest.json` channel points
+at `v0.7.12`, with the legacy `updates/beta/latest.json` alias pointing at the
 same version for older installed builds. The live verifier passed for both
 channels across all three platforms (darwin-aarch64, darwin-x86_64,
-windows-x86_64), in the promote run (44693272694) and again locally (channel
-branch at `d439aca6`); a plain `curl` read 0.7.11 on both at 07:14 UTC,
-right after promote. One draft cut (release run 44685554316, tag on
-`625067bf`); the main session installed the Intel DMG and walked S1 and S2
-at JC's request, and JC approved publishing; after publish JC reported
-the closed-browser case on Windows passing, the rest of W1 is owed under
-Unreleased On Main. The bundled-runtime gate passed on `mac-x64`;
-`check.yml` was green on `625067bf` (run 44682931838), all seven jobs.
+windows-x86_64), in the promote run (45103513973) and again locally (channel
+branch at `688c7a8c`); a plain `curl` read 0.7.12 on both at 03:02 UTC,
+right after promote. One draft cut (release run 45099794121, tag on
+`5e921a99`); the main session installed the Intel DMG and walked S1 and S2
+at JC's request, and JC approved publishing; W1 was not walked and is owed
+under Unreleased On Main. The bundled-runtime gate passed on `mac-x64`;
+`check.yml` was green on `5e921a99` (run 45097869902), all seven jobs.
+
+`v0.7.11` (2026-11-20): one draft cut (release run 44685554316, tag on
+`625067bf`), the main session installed the Intel DMG and walked S1 and S2
+at JC's request and JC approved publishing, W1 not done before publish (JC
+reported the closed-browser case on Windows after it); promote run
+44693272694; the bundled-runtime gate passed on `mac-x64`.
 
 `v0.7.10` (2026-11-19): one draft cut (release run 44488026001, tag on
 `de87a9dd`), the main session walked the Mac smoke at JC's request and JC
@@ -334,7 +326,7 @@ Post-release follow-up:
    Windows machine through the in-app updater (2026-11-20, JC: 「是通过应用内更新从
    0.7.10 升上来的」, and browser auto-open worked on it); whether the update
    went through the update proxy prefix was not said, so a download through
-   the prefix stays unobserved. `v0.7.7` → `v0.7.8` passed on a
+   the prefix stays unobserved. `v0.7.11` → `v0.7.12`: not yet reported. `v0.7.7` → `v0.7.8` passed on a
    user's Windows machine the day of the release (JC, 2026-11-11, relaying
    the user: 「windows 用户更新到 0.7.8，更新和使用暂时看一切正常」; the
    user takes every version through the updater, was on 0.7.7 before, and
@@ -343,9 +335,9 @@ Post-release follow-up:
    database there, 057 in this update. It is the first update through the
    new NSIS pre-install hook, and it did not break the restart. This is a
    user's report passed on, not a walk of the Windows checklist. The macOS hops `v0.7.0` → … → `v0.7.9` stay unobserved, and so does every
-   hop on JC's main Mac: it was installed straight from the draft all eleven
-   times (`v0.7.11` included); the CDN served
-   0.7.11 without cache-bust at 07:14 UTC on 2026-11-20, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
+   hop on JC's main Mac: it was installed straight from the draft all twelve
+   times (`v0.7.12` included); the CDN served
+   0.7.12 without cache-bust at 03:02 UTC on 2026-11-23, right after promote. `v0.6.2` → `v0.7.0` passed on JC's
    Windows machine (2026-10-23, same session as the release; H1 in the
    release devlog): after the restart the app reads 0.7.0, the old sessions
    and model settings are there, and the main chat works, so migrations
@@ -398,14 +390,31 @@ Post-release follow-up:
 
 ## Unreleased On Main
 
-Release-scope truth is `git log v0.7.11..HEAD`. Merged since `v0.7.11`:
-the release docs, and the project folder fix for issue #34 (2026-11-23,
-managed patch `0036`: project mode names the folder the user chose, not the
-link under the state root; devlog
-[2026-11-23](./devlog/2026-11-23-project-folder-real-path.md)). `managed-ga/`
-changed, so the next release runs the bundled-runtime gate. Owed for it: the
-same sentence on a Windows machine (directory junction, drive other than the
-state root's), and the reply on issue #34 after the release.
+Release-scope truth is `git log v0.7.12..HEAD`. Merged since `v0.7.12`:
+the release docs.
+
+**Owed from the `v0.7.12` smoke** (the list is in the release devlog). The
+main session installed the Intel DMG and walked S1 and S2 at JC's request.
+What it shows: the packaged app up with its browser bridge and four IM
+supervisors, each channel logging its start; the main chat answering; in a
+temporary project bound to a folder, the model reading the file from the
+real folder at its first step, writing the summary there and giving the real
+path in its answer, with the new wording in the engine log. Not seen:
+
+- W1, the [Windows checklist](./windows-build-checklist.md) 「Project
+  folder」: all three steps. Issue #34 came from Windows, and the check
+  `0036` uses (`os.path.samefile` on the link and the folder) has run only
+  on macOS and Linux; on a directory junction, with the folder on another
+  drive than the state root, it is read from the documentation (the bundled
+  Python is 3.11, whose `os.stat` goes through a junction), not run. If it
+  does not hold there, the old wording stays with no error.
+- The reply on issue #34: JC set it for after the release; not drafted yet.
+- The update from `v0.7.11` through the in-app updater (this Mac was again
+  installed straight from the draft).
+- Still open from the fix itself (devlog
+  [2026-11-23](./devlog/2026-11-23-project-folder-real-path.md)): a relative
+  path or a command with no directory still lands in `temp`; deleting a
+  project leaves its link and registry entry in the state root (not ruled).
 
 **Owed from the `v0.7.11` smoke** (the list is in the release devlog). The
 main session installed the Intel DMG and walked S1 and S2 at JC's request.
@@ -817,7 +826,8 @@ release devlog), and in `v0.7.11` with upstream 22 commits past it
 (`7395dfd`: those 19 plus three of 11-20, `ui_detect` without template icon
 names and tighter memory-retention wording with one line in `ga.py`'s
 distillation prompt; not followed by JC's ruling, the no-tool retry patch
-still first; reasoning in the `v0.7.11` release devlog).
+still first; reasoning in the `v0.7.11` release devlog), and in `v0.7.12`
+with upstream still at `7395dfd`.
 
 The `30b24ad` baseline bump filed one deferred item of its own — giving
 `api_key_header` a GUI entry point in the Settings -> Models advanced panel,
@@ -863,10 +873,10 @@ config through env and aligns with dcapp's read side. That vote is closed.
 | Data migration | Migrations run through `057_todo_series.sql`; v0.2.16 added managed-model custom `context_win` persistence; v0.2.15 added message telemetry persistence for final-answer footer metadata; v0.2.10 added a safe pre-plugin migration guard through 023 and best-effort child-row recovery from local backups for the v0.2.9 table-rebuild cascade hazard | [B4 M8](./archive/refactor/B4-M8-sub-plan.md) |
 | Process lifecycle | v0.2.11 ships bridge parent watchdogs and duplicate-startup suppression to prevent background process pile-up | [release / update SOP](./release-update-sop.md) |
 | Scheduled tasks | Shipped in v0.4.0: daily / weekly / monthly auto-start sessions, per-task model, approval-blocked notifications (gone with approval, 2026-10-05), missed-run catch-up; v0.4.2 adds the trust surface (failure badge / notifications, next-fire preview, Run now, launch-at-login hint) | [devlog](./devlog/2026-07-30-scheduled-tasks-trust-polish.md) |
-| Release path | v0.7.11 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
+| Release path | v0.7.12 stable patch is published and promoted on the stable update channel | [release / update SOP](./release-update-sop.md) |
 | Channels | Four managed IM channels: WeChat, Feishu, Telegram, Discord. Discord (v0.4.7) is the first parallel-supervision-context channel — one channel = one supervisor context | [Discord shipping devlog](./devlog/2026-08-13-discord-channel-shipped.md) |
 | Windows | Windows x64 remains the supported release target; Windows ARM is deferred until the release workflow and smoke path are added | [Windows checklist](./windows-build-checklist.md) |
-| GA baseline | Audited upstream `d66509b` (2026-11-03), shipped in `v0.7.6` … `v0.7.11` (`a9a36b4` shipped `v0.7.1` … `v0.7.5`, `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
+| GA baseline | Audited upstream `d66509b` (2026-11-03), shipped in `v0.7.6` … `v0.7.12` (`a9a36b4` shipped `v0.7.1` … `v0.7.5`, `b70079d` shipped `v0.7.0`, `f308ee7` shipped `v0.6.1` … `v0.6.2`, `1b6442f` shipped `v0.5.1` … `v0.6.0`, `efb3bc6` shipped `v0.4.11` … `v0.5.0`; pre-rewrite SHAs like `1d3c1a09`/`5257dec` no longer resolve on official `main`) | [GA baseline](./ga-baseline.md) |
 
 ## Compact Timeline
 
@@ -889,7 +899,7 @@ Detailed phase narratives are intentionally not duplicated here. Use:
 
 ## Release Version Rules
 
-- Current package metadata uses `0.7.11`. For the next release, bump every
+- Current package metadata uses `0.7.12`. For the next release, bump every
   file checked by `scripts/check-version-consistency.mjs` and run it with
   `--tag=vX.Y.Z` before tagging; `release.yml` enforces the same gate at tag
   time.
