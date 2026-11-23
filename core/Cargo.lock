@@ -1643,7 +1643,7 @@ dependencies = [
 
 [[package]]
 name = "galley-cli"
-version = "0.7.11"
+version = "0.7.12"
 dependencies = [
  "chrono",
  "clap",
@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "galley-core"
-version = "0.7.11"
+version = "0.7.12"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
