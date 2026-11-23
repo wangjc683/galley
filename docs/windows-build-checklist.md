@@ -221,6 +221,14 @@ Needs the extension to have connected once from Edge since this build was instal
 - [ ] Edge open with only its New Tab page: the request adds an `example.com` tab in that Edge, and the task carries on
 - [ ] Feel: the browser popping up mid-conversation is acceptable
 
+### Project folder (2026-11-23, issue #34, `.scratch/project-folder-path/`)
+
+Bundled GA. On Windows the project's link under the state root is a directory junction; whether the new wording is used there depends on a check that has only run on macOS and Linux, and when it fails the old behaviour stays with no error.
+
+- [ ] Create a project and pick a folder on a drive other than `C:` (the state root is under `%APPDATA%`); put a small text or code file in it
+- [ ] In a new conversation in that project say 「工作目录下有个 <文件名> 文件，读取并说说它是做什么的，再在工作目录里写一份摘要 summary.md」. The first step reads the file from the chosen folder (it does not look in `temp` or search the disk first), and the answer gives the summary's path under the chosen folder, not under `…\app.galley\managed-ga-state\temp\projects\`
+- [ ] `summary.md` is in the chosen folder in Explorer
+
 ### Tutorial modal
 
 - [ ] "memory-info" tutorial shows BOTH Mac/Linux and Windows command examples (already OS-agnostic in tutorial content)
