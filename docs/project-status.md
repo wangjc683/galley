@@ -408,13 +408,18 @@ path in its answer, with the new wording in the engine log. Not seen:
   drive than the state root, it is read from the documentation (the bundled
   Python is 3.11, whose `os.stat` goes through a junction), not run. If it
   does not hold there, the old wording stays with no error.
-- The reply on issue #34: JC set it for after the release; not drafted yet.
+- Issue #34 was answered after the release (2026-11-23,
+  issuecomment-7090533295; the issue stays open): the files were in the
+  project folder all along, do not let the model clean the link up, what
+  `v0.7.12` changes, not yet run on Windows. Waiting for the reporter's
+  word after updating.
 - The update from `v0.7.11` through the in-app updater (this Mac was again
   installed straight from the draft).
 - Still open from the fix itself (devlog
   [2026-11-23](./devlog/2026-11-23-project-folder-real-path.md)): a relative
   path or a command with no directory still lands in `temp`; deleting a
-  project leaves its link and registry entry in the state root (not ruled).
+  project leaves its link and registry entry in the state root (deferred by
+  JC the same day, see the deferred ledger).
 
 **Owed from the `v0.7.11` smoke** (the list is in the release devlog). The
 main session installed the Intel DMG and walked S1 and S2 at JC's request.

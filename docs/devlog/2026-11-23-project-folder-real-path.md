@@ -35,7 +35,7 @@ temp、再查用户目录、再全盘搜，最后才在「项目私域目录」�
 - **不做方案丙**（只回帖解释）：界面文案承诺了「AI 也会把草稿和产物放在这里」，而任何用户说「工作目录下的某某」都会踩到。
 - **回帖**：等修复发版后再回。
 
-主会话在票里补的一条规则（JC 未裁，不要可撤）：只有属性是非空字符串、且 `os.path.samefile(<链接路径>, <属性值>)` 为真时才用
+主会话在票里补的一条规则（JC 同日裁：留）：只有属性是非空字符串、且 `os.path.samefile(<链接路径>, <属性值>)` 为真时才用
 真实路径，否则整段与补丁前逐字节相同。它挡的是这种情况：会话绑着文件夹 A，用户口头让模型
 `handler.enter_project_mode('别的项目')`，名字换了而属性还是 A。
 
@@ -72,9 +72,9 @@ macOS dev 真模型对照（主会话代验，`gpt-6.2-sol`，同一个临时项
 - 种子记忆 `project_mode_sop.md` 仍写着 `./projects/<项目名>/`；补丁后那一轮模型读了它，仍按真实路径做，只此一轮。
 - 上游若改掉 `_ga_project_mode_workspace_path` 这个属性名，注入会静默回到旧写法（已写进补丁清单的 rebase 风险与耦合点 27）。
 
-## 票外发现（未裁）
+## 票外发现
 
-- **删掉项目后，状态目录里的链接和注册表条目留着。** 验收清理时看到：`galley project delete` 之后，
+- **删掉项目后，状态目录里的链接和注册表条目留着（JC 同日裁：先不动，进 [deferred](./deferred.md)）。** 验收清理时看到：`galley project delete` 之后，
   `temp/projects/<名字>-<哈希>` 与 `temp/workspaces.json` 里的条目还在。上游的 `workspace_cmd.cleanup()` 只在它自己的 TUI 启动时
   跑，Galley 不调。留下的只是一个链接，不占空间；但模型列 temp 目录时会看见它。
 - `docs/ga-baseline.md` 07-15 升级记录里「`_ga_project_mode_workspace_path` remains Galley-only」已不成立（上游两个 TUI 现在也设
